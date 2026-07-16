@@ -194,6 +194,78 @@ function displayControlLabel(id){
   const c=controls.find(x=>String(x.id)===String(id));
   return c ? displayControlNumber(id)+' — '+c.name : String(id);
 }
+
+function anomalyBusinessLabel(a){
+  const msg=String((a&&a.msg)||'');
+  const id=Number(a&&a.control);
+  if(id===26 || /Vue\(s\) manquante|vues? manqu/i.test(msg))return 'vues manquantes';
+  if(id===35 || /atypique|en trop|trop de vues|nombre de vues/i.test(msg))return 'vues en trop';
+  if(id===28 || id===29 || /doublon|présent .* fois/i.test(msg))return 'doublon de fichier';
+  if(id===32 || /JPEG sans TIFF/i.test(msg))return 'TIFF manquant';
+  if(id===33 || /TIFF sans JPEG/i.test(msg))return 'JPEG manquant';
+  if(id===34 || /récolement|prestataire/i.test(msg))return 'incohérence récolement/prestataire';
+  if([23,24,25].includes(id) || /dossier d’année|dossier de fascicule|inventaire|disque/i.test(msg))return 'incohérence inventaire/disque';
+  if([7,8,9,10,13,14,15,16,17,19,20,21,22,22.5].includes(id) || /nommage|Date impossible|date.*invalide|underscore|espace|0000|périodicité/i.test(msg))return 'erreur de nommage';
+  if(id===3 || /arborescence/i.test(msg))return 'anomalie d’arborescence';
+  if([30,30.5,41,42,43,44,45,46,47,48,51,52,53].includes(id))return 'anomalie technique image';
+  return 'point d’attention métier';
+}
+function anomalyFasciculeKey(a){
+  const raw=String((a&&a.path)||'').replace(/\\/g,'/').trim();
+  const line=String((a&&a.line)||'').trim();
+  const last=(raw.split('/').pop()||raw).trim();
+  const parsed=parseRefName(last);
+  if(parsed&&parsed.ok&&parsed.fascicule)return parsed.fascicule;
+  const noExt=baseNoExt(last);
+  const parsedBase=parseRefName(noExt);
+  if(parsedBase&&parsedBase.ok&&parsedBase.fascicule)return parsedBase.fascicule;
+  const dateMatch=raw.match(/([^/]*\d{8}(?:_bis)?)(?:\/[^/]*)?$/i);
+  if(dateMatch)return dateMatch[1];
+  if(raw)return raw;
+  return line ? 'Ligne de récolement '+line : 'Livraison';
+}
+function anomalyDetailText(a){
+  const nature=anomalyBusinessLabel(a);
+  const msg=anomalySentence(a);
+  const where=[];
+  if(a.path)where.push('référence : '+a.path);
+  if(a.line)where.push('ligne récolement : '+a.line);
+  const suffix=where.length?' ('+where.join(', ')+')':'';
+  return nature+' — '+msg+suffix;
+}
+function consolidatedAnomalies(){
+  const groups=new Map();
+  anomalies.filter(a=>a.type!=='INFO').forEach(a=>{
+    const key=anomalyFasciculeKey(a);
+    const g=groups.get(key)||{type:'',types:new Set(),lineSet:new Set(),natureSet:new Set(),detailSet:new Set(),path:key,count:0,controls:new Set(),items:[]};
+    g.count++;
+    g.items.push(a);
+    g.types.add(a.type);
+    if(a.line)g.lineSet.add(String(a.line));
+    g.natureSet.add(anomalyBusinessLabel(a));
+    g.detailSet.add(anomalyDetailText(a));
+    g.controls.add(displayControlLabel(a.control));
+    groups.set(key,g);
+  });
+  const severity={ERREUR:3,ALERTE:2,INFO:1};
+  return [...groups.values()].map(g=>{
+    const types=[...g.types].sort((a,b)=>(severity[b]||0)-(severity[a]||0));
+    const natures=[...g.natureSet].sort();
+    const details=[...g.detailSet];
+    return {
+      type:types[0]||'',
+      types:types.join(', '),
+      line:[...g.lineSet].sort((a,b)=>Number(a)-Number(b)||a.localeCompare(b)).join(', '),
+      path:g.path,
+      nature:natures.join(' ; '),
+      details:details.join(' | '),
+      count:g.count,
+      controls:[...g.controls].join(' ; '),
+      items:g.items
+    };
+  }).sort((a,b)=>a.path.localeCompare(b.path,'fr')||a.nature.localeCompare(b.nature,'fr'));
+}
+
 function periodicalFolderName(){
   if(!files || !files.length)return 'sélectionné';
   const firstPath=files[0].webkitRelativePath || files[0].name || '';
@@ -983,12 +1055,14 @@ function anomalySentence(a){
 }
 function topAnomalies(limit=8){
   const groups=new Map();
-  anomalies.filter(a=>a.type!=='INFO').forEach(a=>{
-    const key=displayControlLabel(a.control);
-    const cur=groups.get(key)||{control:key,count:0,types:new Set(),examples:[]};
-    cur.count++; cur.types.add(a.type);
-    if(cur.examples.length<2)cur.examples.push(a.msg);
-    groups.set(key,cur);
+  consolidatedAnomalies().forEach(a=>{
+    String(a.nature||'point d’attention métier').split(/\s*;\s*/).filter(Boolean).forEach(nature=>{
+      const cur=groups.get(nature)||{control:nature,count:0,types:new Set(),examples:[]};
+      cur.count+=a.count||1;
+      String(a.types||a.type||'').split(/\s*,\s*/).filter(Boolean).forEach(t=>cur.types.add(t));
+      if(cur.examples.length<2)cur.examples.push(a.details);
+      groups.set(nature,cur);
+    });
   });
   return [...groups.values()].sort((a,b)=>b.count-a.count).slice(0,limit).map(g=>({control:g.control,count:g.count,types:[...g.types].join(', '),examples:g.examples}));
 }
@@ -1027,7 +1101,7 @@ function buildReportMetierHtml(rows){
       <tr><td>Récolement utilisé</td><td>${validatedReco?esc(validatedReco):'Non validé'}</td></tr>
       <tr><td>Plan d’échantillonnage</td><td>${esc(formatIsoPlan(iso))}</td></tr>
     </table></div>
-    <div class="report-section"><h3>Observations principales</h3>${tops.length?'<table><tr><th>Point de contrôle</th><th>Nombre</th><th>Constat</th></tr>'+tops.map(t=>`<tr><td>${esc(t.control)}</td><td>${t.count}</td><td>${t.examples.map(x=>esc(anomalySentence({msg:x}))).join('<br>')}</td></tr>`).join('')+'</table>':'<p>Aucune observation automatique à signaler.</p>'}</div>
+    <div class="report-section"><h3>Observations principales</h3>${tops.length?'<table><tr><th>Nature métier</th><th>Nombre</th><th>Constat</th></tr>'+tops.map(t=>`<tr><td>${esc(t.control)}</td><td>${t.count}</td><td>${t.examples.map(x=>esc(anomalySentence({msg:x}))).join('<br>')}</td></tr>`).join('')+'</table>':'<p>Aucune observation automatique à signaler.</p>'}</div>
     <div class="report-section"><h3>Qualité des images</h3><table><tr><th>Contrôle</th><th>Résultat</th><th>Points signalés</th></tr>${qualityRows.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.status)}</td><td>${countDisplay(c)}</td></tr>`).join('')}</table></div>
     ${buildRecoObservationsHtml()}
     <div class="report-section"><h3>Suites à donner</h3><div class="recommendations">${recos.map(r=>`<div class="recommendation"><strong>${esc(r.title)}</strong><span>${esc(r.text)}</span></div>`).join('')}</div></div>
@@ -1051,7 +1125,7 @@ $('summary').innerHTML=`<h2>Synthèse du contrôle</h2><div class="summary-grid"
     <div class="metric"><span>Contrôles conformes</span><strong class="status-ok">${ok}</strong></div>
     <div class="metric"><span>Contrôles en alerte</span><strong class="status-warn">${al}</strong></div>
     <div class="metric"><span>Contrôles en erreur</span><strong class="status-err">${er}</strong></div>
-    <div class="metric"><span>Anomalies listées</span><strong>${anomalies.filter(a=>a.type!=='INFO').length}</strong></div>
+    <div class="metric"><span>Fascicules avec anomalie</span><strong>${consolidatedAnomalies().length}</strong></div>
   </div></div>
   <div class="summary-card"><h3>Échantillonnage ISO 2859-1</h3><div class="metric-list">
     <div class="metric"><span>Lot de référence</span><strong>${iso.lotSize} vues</strong></div>
@@ -1070,7 +1144,8 @@ $('summary').innerHTML=`<h2>Synthèse du contrôle</h2><div class="summary-grid"
   </div></div>
 </div>`;
 $('controls').innerHTML='<h2>Contrôles effectués automatiquement</h2>'+groupedControlsHtml();
-$('anomalies').innerHTML='<h2>Points d’attention détaillés</h2><table class="attention-table"><tr><th>Niveau</th><th>Ligne du récolement</th><th>Point de contrôle</th><th>Fichier ou fascicule concerné</th><th>Constat</th></tr>'+anomalies.filter(a=>a.type!=='INFO').slice(0,5000).map(a=>`<tr><td>${a.type}</td><td>${esc(a.line||'')}</td><td>${esc(displayControlLabel(a.control))}</td><td>${esc(a.path)}</td><td>${esc(anomalySentence(a))}</td></tr>`).join('')+'</table>'+(anomalies.length>5000?'<p>Affichage limité à 5000 lignes. L’export CSV contient la liste complète.</p>':'');
+const consolidatedRows=consolidatedAnomalies();
+$('anomalies').innerHTML='<h2>Points d’attention détaillés</h2><p class="small">Une seule ligne est affichée par fascicule. Les natures et les détails concatènent toutes les anomalies détectées pour ce fascicule.</p><table class="attention-table"><tr><th>Niveau</th><th>Ligne du récolement</th><th>Nature métier</th><th>Fichier ou fascicule concerné</th><th>Constat consolidé</th></tr>'+consolidatedRows.slice(0,5000).map(a=>`<tr><td>${esc(a.types||a.type)}</td><td>${esc(a.line||'')}</td><td>${esc(a.nature)}</td><td>${esc(a.path)}</td><td>${esc(a.details)}</td></tr>`).join('')+'</table>'+(consolidatedRows.length>5000?'<p>Affichage limité à 5000 lignes. L’export CSV contient la liste complète consolidée.</p>':'');
 $('rapportMetier').innerHTML=buildReportMetierHtml(rows);
 reportHtml='<!doctype html><meta charset=utf-8><title>MÉLANISOFT — Rapport de contrôle qualité</title><h1>MÉLANISOFT</h1><h2>Rapport de contrôle qualité</h2>'+$('summary').innerHTML+$('rapportMetier').innerHTML+$('controls').innerHTML+$('anomalies').innerHTML;
 GallicaQCState.report.metierHtml=$('rapportMetier').innerHTML;
@@ -1260,17 +1335,18 @@ function buildReportTxt(){
   blank();
 
   push('7. POINTS D’ATTENTION DÉTAILLÉS');
-  const rows=anomalies.filter(a=>a.type!=='INFO');
+  const rows=consolidatedAnomalies();
   if(!rows.length){
     push('Aucun point d’attention détaillé.');
   } else {
     rows.forEach((a,i)=>{
       push('Point d’attention '+(i+1));
-      push('Niveau : '+a.type);
-      push('Point de contrôle : '+displayControlLabel(a.control));
-      if(a.line)push('Ligne du récolement : '+a.line);
+      push('Niveau : '+(a.types||a.type));
+      push('Nature métier : '+a.nature);
+      if(a.line)push('Ligne(s) du récolement : '+a.line);
       if(a.path)push('Fichier ou fascicule concerné : '+a.path);
-      push('Constat : '+(a.msg || ''));
+      push('Constat consolidé : '+(a.details || ''));
+      push('Occurrences regroupées : '+a.count);
       blank();
     });
   }
@@ -1329,7 +1405,7 @@ const GallicaQC = {
 };
 window.GallicaQC = GallicaQC;
 
-$('exportCsv').onclick=()=>{syncGallicaQCState();download('Melanisoft_points_attention_detailles_observations.csv','niveau;ligne_du_recolement;point_de_controle;fichier_ou_fascicule_concerne;constat;observation_prestataire\n'+anomalies.filter(a=>a.type!=='INFO').map(a=>[a.type,a.line||'',displayControlLabel(a.control),a.path,a.msg,recoObservationForLine(a.line)].map(x=>'"'+String(x).replaceAll('"','""')+'"').join(';')).join('\n'),'text/csv');};
+$('exportCsv').onclick=()=>{syncGallicaQCState();download('Melanisoft_points_attention_detailles_observations.csv','niveau;ligne_du_recolement;nature_metier;fichier_ou_fascicule_concerne;constat_consolide;occurrences_regroupees;observation_prestataire\n'+consolidatedAnomalies().map(a=>[a.types||a.type,a.line||'',a.nature,a.path,a.details,a.count,recoObservationForLine(a.line)].map(x=>'"'+String(x).replaceAll('"','""')+'"').join(';')).join('\n'),'text/csv');};
 $('exportHtml').onclick=()=>{syncGallicaQCState();download('Melanisoft_rapport_controle_qualite.txt',buildReportTxt(),'text/plain');};
 $('exportAleaExcel').onclick=()=>{syncGallicaQCState();download('Melanisoft_echantillon_controle_visuel.xlsx',buildAleaExcel(),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');};
 </script>
