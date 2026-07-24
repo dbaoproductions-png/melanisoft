@@ -175,7 +175,7 @@ const controls=[
 [11,'Détection des images de consultation JPEG'],[12,'Détection des images de conservation TIFF'],[13,'Vérification de l’extension des fichiers JPEG'],[14,'Vérification de l’extension des fichiers TIFF'],[15,'Recherche d’espaces dans les noms de fichiers'],[16,'Vérification de l’usage des underscores dans les noms de fichiers'],[17,'Vérification du nommage normalisé des fichiers'],[18,'Détection des fichiers correspondant à un fascicule bis'],[19,'Vérification du numéro de vue sur quatre chiffres'],[20,'Vérification de l’absence de vue numérotée 0000'],
 [21,'Vérification de la validité des dates AAAAMMJJ'],[22,'Signalement des dates impossibles'],[22.5,'Vérification de la périodicité attendue des fascicules'],[23,'Cohérence entre l’année du fichier et le dossier d’année'],[24,'Cohérence entre la date du fichier et le dossier de fascicule'],[25,'Cohérence du suffixe bis'],[26,'Recherche de vues manquantes dans les fascicules'],[27,'Vérification du démarrage de chaque fascicule à la vue 0001'],[28,'Recherche de noms de fichiers en doublon'],[29,'Recherche de chemins complets en doublon'],[30,'Recherche de fichiers vides'],[30.5,'Analyse de cohérence de l’histogramme des images'],
 [31,'Vérification de la correspondance entre JPEG et TIFF'],[32,'Recherche de JPEG sans TIFF correspondant'],[33,'Recherche de TIFF sans JPEG correspondant'],[34,'Cohérence entre récolement initial, saisie prestataire et fichiers livrés'],[35,'Repérage des fascicules avec un nombre de vues atypique'],[36,'Vérification du fichier de récolement sélectionné'],[37,'Inventaire des documents annexes livrés'],[38,'Nombre de titres ou ensembles documentaires détectés'],[39,'Synthèse des contrôles par titre ou ensemble documentaire'],
-[41,'Vérification de l’ouverture des images JPEG'],[42,'Lecture des dimensions des images JPEG'],[43,'Lecture du DPI des images JPEG lorsque l’information existe'],[44,'Signalement des JPEG dont le DPI diffère de 400'],[45,'Vérification partielle de l’ouverture des images TIFF'],[46,'Lecture des dimensions des images TIFF lorsque c’est possible'],[47,'Signalement des images de très petite dimension'],[48,'Signalement des fichiers de taille inhabituelle'],[51,'Vérification des métadonnées EXIF des JPEG'],[52,'Vérification des métadonnées IPTC des JPEG'],[53,'Vérification du profil colorimétrique ICC en RGB'],[49,'Génération de l’échantillon de contrôle visuel'],[50,'Disponibilité du rapport de contrôle']
+[41,'Vérification de l’ouverture des images JPEG'],[42,'Lecture des dimensions des images JPEG'],[43,'Lecture du DPI des images JPEG lorsque l’information existe'],[44,'Signalement des JPEG dont le DPI diffère de 400'],[45,'Vérification partielle de l’ouverture des images TIFF'],[46,'Lecture des dimensions des images TIFF lorsque c’est possible'],[47,'Signalement des images de très petite dimension'],[48,'Signalement des fichiers de taille inhabituelle'],[51,'Vérification des métadonnées EXIF des JPEG'],[52,'Présence et conformité des métadonnées IPTC avec le récolement'],[53,'Vérification du profil colorimétrique ICC en RGB'],[49,'Génération de l’échantillon de contrôle visuel'],[50,'Disponibilité du rapport de contrôle']
 ].map(x=>({id:x[0],name:x[1],status:'Non lancé',count:0}));
 const controlDisplayOrder=[1,2,3,36,37,38,39,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,22.5,23,24,25,26,27,28,29,30,31,32,33,41,42,43,44,45,46,47,48,30.5,51,52,53,34,35,49,50];
 function orderedControls(){
@@ -203,6 +203,7 @@ function anomalyBusinessLabel(a){
   if(id===28 || id===29 || /doublon|présent .* fois/i.test(msg))return 'doublon de fichier';
   if(id===32 || /JPEG sans TIFF/i.test(msg))return 'TIFF manquant';
   if(id===33 || /TIFF sans JPEG/i.test(msg))return 'JPEG manquant';
+  if(id===52)return 'métadonnées IPTC non conformes';
   if(id===34 || /récolement|prestataire/i.test(msg))return 'incohérence récolement/prestataire';
   if([23,24,25].includes(id) || /dossier d’année|dossier de fascicule|inventaire|disque/i.test(msg))return 'incohérence inventaire/disque';
   if([7,8,9,10,13,14,15,16,17,19,20,21,22,22.5].includes(id) || /nommage|Date impossible|date.*invalide|underscore|espace|0000|périodicité/i.test(msg))return 'erreur de nommage';
@@ -387,7 +388,18 @@ async function readJpegTechnicalMetadata(file){
   const buf=await file.arrayBuffer();
   const bytes=new Uint8Array(buf);
   const decLatin=new TextDecoder('latin1');
-  const result={exif:false, iptc:false, iptcSource:false, iptcHeadline:false, icc:false, iccRgb:false, iccColorSpace:''};
+  const result={
+    exif:false,
+    iptc:false,
+    iptcSource:false,
+    iptcHeadline:false,
+    iptcSourceValue:'',
+    iptcHeadlineValue:'',
+    iptcCharset:'latin1',
+    icc:false,
+    iccRgb:false,
+    iccColorSpace:''
+  };
   if(bytes.length<4 || bytes[0]!==0xFF || bytes[1]!==0xD8)throw new Error('JPEG invalide');
   let pos=2;
   while(pos+4<bytes.length){
@@ -432,6 +444,20 @@ async function readJpegTechnicalMetadata(file){
 function parseIptcFromApp13(seg,result,decLatin){
   const txt=decLatin.decode(seg.slice(0,32));
   if(!txt.includes('Photoshop') && !txt.includes('8BIM'))return;
+  let decIptc=decLatin;
+  // IPTC IIM 1:90 contient ESC % G lorsque les textes sont encodés en UTF-8.
+  // Sans cette indication, l’encodage historique Latin-1 reste utilisé.
+  for(let i=0;i+5<seg.length;i++){
+    if(seg[i]===0x1C && seg[i+1]===0x01 && seg[i+2]===90){
+      const len=(seg[i+3]<<8)|seg[i+4];
+      const start=i+5, end=start+len;
+      if(end<=seg.length && decLatin.decode(seg.slice(start,end)).includes('\x1B%G')){
+        decIptc=new TextDecoder('utf-8');
+        result.iptcCharset='utf-8';
+      }
+      break;
+    }
+  }
   let found=false;
   // IPTC IIM : marqueur 0x1C, record 2, dataset 105=headline, 115=source.
   for(let i=0;i+5<seg.length;i++){
@@ -440,9 +466,21 @@ function parseIptcFromApp13(seg,result,decLatin){
       const len=(seg[i+3]<<8)|seg[i+4];
       const start=i+5, end=start+len;
       if(len>=0 && end<=seg.length){
-        const value=decLatin.decode(seg.slice(start,end)).trim();
-        if(dataset===105){found=true; if(value)result.iptcHeadline=true;}
-        if(dataset===115){found=true; if(value)result.iptcSource=true;}
+        const value=decIptc.decode(seg.slice(start,end)).trim();
+        if(dataset===105){
+          found=true;
+          if(value){
+            result.iptcHeadline=true;
+            if(!result.iptcHeadlineValue)result.iptcHeadlineValue=value;
+          }
+        }
+        if(dataset===115){
+          found=true;
+          if(value){
+            result.iptcSource=true;
+            if(!result.iptcSourceValue)result.iptcSourceValue=value;
+          }
+        }
         i=end-1;
       }
     }
@@ -545,12 +583,17 @@ function normHeader(h){return String(h||'').toLowerCase().normalize('NFD').repla
 function findHeaderRow(table){
   for(let i=0;i<Math.min(10,table.length);i++){
     let hs=table[i].map(normHeader).join(' | ');
-    if(/repertoire/.test(hs) && /(nbre|nombre|nb).*(fichiers|fichier).*produits?/.test(hs))return i;
+    const recoTechnique=/repertoire/.test(hs) && /(nbre|nombre|nb).*(fichiers|fichier).*produits?/.test(hs);
+    const recoIptc=/etablissement de conservation/.test(hs) && /cote titre/.test(hs);
+    if(recoTechnique||recoIptc)return i;
   }
   return 0;
 }
 function headerIndex(headers, tests){return headers.findIndex(h=>tests.some(t=>t.test(h)));}
 function cleanRef(v){return String(v||'').trim().replace(/\.[A-Za-z0-9]+$/,'');}
+function normMetadataText(v){
+  return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[’‘]/g,"'").replace(/\s+/g,' ').trim().toLowerCase();
+}
 function recoRowsToMap(table){
   if(!table||table.length<2)return {status:'empty',map:new Map(),entries:[],message:'Récolement vide'};
   const headerRow=findHeaderRow(table);
@@ -565,7 +608,9 @@ function recoRowsToMap(table){
     firstJpeg:headerIndex(headers,[/ref.*1er.*fichier.*numerique.*jpeg/, /1er.*fichier.*jpeg/, /jpeg/]),
     firstTiff:headerIndex(headers,[/ref.*1er.*fichier.*numerique.*tiff/, /1er.*fichier.*tiff/, /tiff/]),
     produced:headerIndex(headers,[/nbre.*fichiers.*produits?/, /nombre.*fichiers.*produits?/, /nb.*fichiers.*produits?/, /fichiers.*produits?/]),
-    observation:headerIndex(headers,[/^observation$/, /^observations$/, /observation.*prestataire/, /observations.*prestataire/, /commentaire.*prestataire/])
+    observation:headerIndex(headers,[/^observation$/, /^observations$/, /observation.*prestataire/, /observations.*prestataire/, /commentaire.*prestataire/]),
+    establishment:headerIndex(headers,[/^etablissement de conservation$/, /etablissement.*conservation/]),
+    coteTitle:headerIndex(headers,[/^cote titre$/])
   };
   if(idx.repertoire<0||idx.produced<0)return {status:'headers',map:new Map(),entries:[],message:'Colonnes récolement non reconnues : attendu au minimum « Répertoire » et « Nbre de fichiers produits »'};
   let map=new Map(), entries=[], ignored=[];
@@ -601,15 +646,17 @@ function recoRowsToMap(table){
       firstJpeg:idx.firstJpeg>=0?String(cols[idx.firstJpeg]||'').trim():'',
       firstTiff:idx.firstTiff>=0?String(cols[idx.firstTiff]||'').trim():'',
       produced:Number.isFinite(produced)?produced:null,
-      observation:idx.observation>=0?String(cols[idx.observation]||'').trim():''
+      observation:idx.observation>=0?String(cols[idx.observation]||'').trim():'',
+      establishment:idx.establishment>=0?String(cols[idx.establishment]||'').trim():'',
+      coteTitle:idx.coteTitle>=0?String(cols[idx.coteTitle]||'').trim():''
     };
     entries.push(entry);
     let keys=[repertoire, repertoire.split(/[\\/]/).pop(), cleanRef(entry.firstJpeg), cleanRef(entry.firstTiff)].map(normKey).filter(Boolean);
     for(let k of keys){ if(!map.has(k))map.set(k, entry); }
   }
   let found=[];
-  ['Année début','Mois début','Jour début','Nb de pages','Pagination','Répertoire','Réf. 1er fichier numérique (JPEG)','Réf. 1er fichier numérique (TIFF)','Nbre de fichiers produits','Observation prestataire'].forEach((label,i)=>{
-    const keys=['annee','mois','jour','nbPages','pagination','repertoire','firstJpeg','firstTiff','produced','observation']; if(idx[keys[i]]>=0)found.push(label);
+  ['Année début','Mois début','Jour début','Nb de pages','Pagination','Répertoire','Réf. 1er fichier numérique (JPEG)','Réf. 1er fichier numérique (TIFF)','Nbre de fichiers produits','Observation prestataire','Etablissement de conservation','Cote titre'].forEach((label,i)=>{
+    const keys=['annee','mois','jour','nbPages','pagination','repertoire','firstJpeg','firstTiff','produced','observation','establishment','coteTitle']; if(idx[keys[i]]>=0)found.push(label);
   });
   return {status:'ok',map,entries,ignored,message:entries.length+' lignes de récolement exploitables, '+ignored.length+' lignes ignorées. Colonnes reconnues : '+found.join(', ')};
 }
@@ -729,6 +776,61 @@ function checkRecurrence(fascEntries){
 
 function findRecoEntryForFasc(map, fascPath){let nk=normKey(fascPath);let last=normKey(String(fascPath).split('/').pop()); if(map.has(nk))return map.get(nk); if(map.has(last))return map.get(last); for(let [k,v] of map){if(nk.endsWith('/'+k)||nk.endsWith(k)||k.endsWith('/'+last)||k===last)return v;} return null;}
 function findRecoCountForFasc(map, fascPath){let e=findRecoEntryForFasc(map,fascPath); return e&&Number.isFinite(e.produced)?e.produced:null;}
+function findRecoEntryForImage(recoResult,row){
+  if(!recoResult || recoResult.status!=='ok' || !recoResult.map)return null;
+  const parsed=row&&row.parsed;
+  const candidates=[
+    cleanRef(row&&row.name),
+    parsed&&parsed.ok?parsed.fascicule:'',
+    row&&row.parts&&row.parts.length>1?row.parts[row.parts.length-2]:'',
+    row&&row.path?row.path:''
+  ].filter(Boolean);
+  for(const candidate of candidates){
+    const key=normKey(candidate);
+    if(recoResult.map.has(key))return recoResult.map.get(key);
+  }
+  for(const candidate of candidates){
+    const entry=findRecoEntryForFasc(recoResult.map,candidate);
+    if(entry)return entry;
+  }
+  return null;
+}
+function iptcConformityIssues(meta,row,recoResult){
+  const issues=[];
+  const entry=findRecoEntryForImage(recoResult,row);
+  if(!entry){
+    issues.push({
+      line:'',
+      message:'Conformité IPTC non vérifiable : aucune ligne du récolement ne correspond à cette image.'
+    });
+    return issues;
+  }
+  const expectedSource=String(entry.establishment||'').trim();
+  const expectedHeadline=String(entry.coteTitle||'').trim();
+  if(!expectedSource){
+    issues.push({
+      line:entry.row,
+      message:'Conformité du champ IPTC Source non vérifiable : la colonne « Etablissement de conservation » est vide dans le récolement.'
+    });
+  }else if(meta.iptcSource && normMetadataText(meta.iptcSourceValue)!==normMetadataText(expectedSource)){
+    issues.push({
+      line:entry.row,
+      message:`Champ IPTC Source non conforme : « ${meta.iptcSourceValue} », attendu « ${expectedSource} » d’après la colonne « Etablissement de conservation » du récolement.`
+    });
+  }
+  if(!expectedHeadline){
+    issues.push({
+      line:entry.row,
+      message:'Conformité du champ IPTC Headline non vérifiable : la colonne « Cote titre » est vide dans le récolement.'
+    });
+  }else if(meta.iptcHeadline && normMetadataText(meta.iptcHeadlineValue)!==normMetadataText(expectedHeadline)){
+    issues.push({
+      line:entry.row,
+      message:`Champ IPTC Headline non conforme : « ${meta.iptcHeadlineValue} », attendu « ${expectedHeadline} » d’après la colonne « Cote titre » du récolement.`
+    });
+  }
+  return issues;
+}
 
 function firstInt(v){
   const m=String(v||'').match(/\d+/);
@@ -936,6 +1038,9 @@ setC(26,anomalies.some(a=>a.control===26)?'ALERTE':'OK',anomalies.filter(a=>a.co
 let basesJ=new Set(jpeg.map(r=>baseNoExt(r.name))), basesT=new Set(tiff.map(r=>baseNoExt(r.name))); basesJ.forEach(b=>{if(!basesT.has(b))add('ALERTE',32,b,'JPEG sans TIFF correspondant')}); basesT.forEach(b=>{if(!basesJ.has(b))add('ALERTE',33,b,'TIFF sans JPEG correspondant')}); setC(31,'OK'); setC(32,anomalies.some(a=>a.control===32)?'ALERTE':'OK',anomalies.filter(a=>a.control===32).length); setC(33,anomalies.some(a=>a.control===33)?'ALERTE':'OK',anomalies.filter(a=>a.control===33).length);
 let rec=recoRows; if(validatedReco){setC(36,anomalies.some(a=>a.control===36)?'ALERTE':'OK',rec.length);} else {setC(36,rec.length?'ALERTE':'ALERTE',rec.length); if(rec.length)add('ALERTE',36,rec.map(r=>r.path).join(' | '),'Fichier(s) de récolement candidat(s) détecté(s), mais aucun n’a été validé dans l’interface'); else add('ALERTE',36,'','Aucun fichier de récolement XLS/XLSX/CSV détecté');} let non=annexRows; setC(37,non.length?'ALERTE':'OK',non.length);
 let aleaSource=jpeg.length?[...jpeg]:[...tiff]; lastIsoPlan=iso2859Plan(aleaSource.length); updateIsoPreview(lastIsoPlan); let requestedAlea=lastIsoPlan.sampleSize; aleaRows=[...aleaSource].sort(()=>Math.random()-0.5).slice(0,Math.min(requestedAlea,aleaSource.length)); let sample=aleaRows; setC(49,'OK',sample.length);
+if(recoViewCounts.status!=='ok'){
+  add('ALERTE',52,'','Conformité du contenu IPTC non vérifiable : le récolement n’a pas pu être exploité. '+recoViewCounts.message);
+}
 let max=Math.min(200,jpeg.length+tiff.length), done=0;
 for(let r of [...jpeg.slice(0,150),...tiff.slice(0,50)]){
   try{
@@ -957,6 +1062,11 @@ for(let r of [...jpeg.slice(0,150),...tiff.slice(0,50)]){
         else {
           if(!meta.iptcSource)add('ALERTE',52,r.path,'Champ IPTC Source absent ou vide');
           if(!meta.iptcHeadline)add('ALERTE',52,r.path,'Champ IPTC Headline absent ou vide');
+          if(recoViewCounts.status==='ok'){
+            iptcConformityIssues(meta,r,recoViewCounts).forEach(issue=>{
+              add('ALERTE',52,r.path,issue.message,issue.line);
+            });
+          }
         }
         if(!meta.icc)add('ALERTE',53,r.path,'Profil ICC absent ou non détecté');
         else if(!meta.iccRgb)add('ALERTE',53,r.path,'Profil ICC détecté mais espace colorimétrique non RGB'+(meta.iccColorSpace?' : '+meta.iccColorSpace:''));
@@ -1042,8 +1152,9 @@ function anomalySentence(a){
   if(/DPI/i.test(msg))return 'La résolution indiquée dans l’image ne correspond pas à la valeur attendue.';
   if(/IPTC.*absent/i.test(msg))return 'Les métadonnées IPTC sont absentes ou illisibles.';
   if(/EXIF.*absent/i.test(msg))return 'Les métadonnées EXIF sont absentes ou illisibles.';
-  if(/Headline/i.test(msg))return 'Le champ IPTC Headline, attendu pour la cote du document, est absent.';
-  if(/Source/i.test(msg))return 'Le champ IPTC Source, attendu pour l’établissement de conservation, est absent.';
+  if(/IPTC.*(?:non conforme|non vérifiable)|Conformité.*IPTC/i.test(msg))return msg;
+  if(/Headline.*absent/i.test(msg))return 'Le champ IPTC Headline, attendu pour la cote du document, est absent.';
+  if(/Source.*absent/i.test(msg))return 'Le champ IPTC Source, attendu pour l’établissement de conservation, est absent.';
   if(/ICC.*absent/i.test(msg))return 'Le profil colorimétrique ICC est absent.';
   if(/non RGB/i.test(msg))return 'Le profil colorimétrique n’est pas identifié comme un profil RGB.';
   if(/très sombre|sous-expos/i.test(msg))return 'L’histogramme indique une image probablement trop sombre.';
