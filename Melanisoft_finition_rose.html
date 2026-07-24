@@ -134,6 +134,22 @@ const GallicaQCState = {
 };
 
 let anomalies=[], files=[], reportHtml='', aleaHtml='', aleaRows=[], recoCandidates=[], validatedReco='', lastIsoPlan=null, lastRecoRead=null, lastRecurrenceSummary=null;
+const MelanisoftPerformance = {
+  heartbeatEvery: 200,
+  async yieldToBrowser(message){
+    if(message)$('status').textContent=message;
+    await new Promise(resolve=>{
+      if(typeof requestAnimationFrame==='function')requestAnimationFrame(()=>resolve());
+      else setTimeout(resolve,0);
+    });
+  },
+  async heartbeat(index,total,message){
+    if(index===total || index%this.heartbeatEvery===0){
+      if(total)$('prog').value=Math.min(100,(index/total)*100);
+      await this.yieldToBrowser(message);
+    }
+  }
+};
 function syncGallicaQCState(){
   GallicaQCState.files=files;
   GallicaQCState.anomalies=anomalies;
@@ -560,10 +576,15 @@ function xlsxCellText(c, shared){
 }
 async function readXlsxRows(file){
   const entries=await unzipXlsxEntries(file); const parser=new DOMParser();
+  await MelanisoftPerformance.yieldToBrowser('Récolement XLSX décompressé. Lecture des chaînes partagées...');
   let shared=[];
   if(entries['xl/sharedStrings.xml']){
     const sx=parser.parseFromString(entries['xl/sharedStrings.xml'],'application/xml');
-    shared=Array.from(sx.getElementsByTagName('si')).map(si=>Array.from(si.getElementsByTagName('t')).map(t=>t.textContent||'').join(''));
+    const siNodes=Array.from(sx.getElementsByTagName('si'));
+    for(let i=0;i<siNodes.length;i++){
+      shared.push(Array.from(siNodes[i].getElementsByTagName('t')).map(t=>t.textContent||'').join(''));
+      await MelanisoftPerformance.heartbeat(i+1,siNodes.length,'Lecture du récolement XLSX : textes partagés '+(i+1)+' / '+siNodes.length+'...');
+    }
   }
   let sheetPath='xl/worksheets/sheet1.xml';
   if(entries['xl/workbook.xml']&&entries['xl/_rels/workbook.xml.rels']){
@@ -576,8 +597,18 @@ async function readXlsxRows(file){
     }
   }
   const xml=entries[sheetPath]||entries['xl/worksheets/sheet1.xml']; if(!xml)throw new Error('Aucune feuille XLSX lisible');
+  await MelanisoftPerformance.yieldToBrowser('Lecture du récolement XLSX : analyse de la feuille...');
   const doc=parser.parseFromString(xml,'application/xml');
-  return Array.from(doc.getElementsByTagName('row')).map(row=>{let arr=[]; Array.from(row.getElementsByTagName('c')).forEach(c=>{arr[colIndexFromRef(c.getAttribute('r'))]=xlsxCellText(c, shared).trim();}); return arr;}).filter(r=>r.some(x=>String(x||'').trim()));
+  const rowNodes=Array.from(doc.getElementsByTagName('row'));
+  const rows=[];
+  for(let i=0;i<rowNodes.length;i++){
+    let arr=[];
+    const cells=Array.from(rowNodes[i].getElementsByTagName('c'));
+    for(const c of cells)arr[colIndexFromRef(c.getAttribute('r'))]=xlsxCellText(c, shared).trim();
+    if(arr.some(x=>String(x||'').trim()))rows.push(arr);
+    await MelanisoftPerformance.heartbeat(i+1,rowNodes.length,'Lecture du récolement XLSX : lignes '+(i+1)+' / '+rowNodes.length+'...');
+  }
+  return rows;
 }
 function normHeader(h){return String(h||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[’']/g,'').replace(/[^a-z0-9]+/g,' ').trim();}
 function findHeaderRow(table){
@@ -594,7 +625,7 @@ function cleanRef(v){return String(v||'').trim().replace(/\.[A-Za-z0-9]+$/,'');}
 function normMetadataText(v){
   return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[’‘]/g,"'").replace(/\s+/g,' ').trim().toLowerCase();
 }
-function recoRowsToMap(table){
+async function recoRowsToMap(table){
   if(!table||table.length<2)return {status:'empty',map:new Map(),entries:[],message:'Récolement vide'};
   const headerRow=findHeaderRow(table);
   let headers=table[headerRow].map(normHeader);
@@ -635,7 +666,11 @@ function recoRowsToMap(table){
     if(!repertoire)reasons.push('répertoire vide');
     if(!date || date==='00000000' || !validDate(date))reasons.push('date vide ou invalide');
     if(repertoire && !/(\d{8})(?:_bis)?$/.test(repertoire))reasons.push('répertoire sans date de fascicule finale');
-    if(reasons.length){ignored.push({row:i+1,repertoire,date,reason:reasons.join(', ')}); continue;}
+    if(reasons.length){
+      ignored.push({row:i+1,repertoire,date,reason:reasons.join(', ')});
+      await MelanisoftPerformance.heartbeat(i+1,table.length,'Indexation du récolement : '+(i+1)+' / '+table.length+' lignes...');
+      continue;
+    }
 
     let entry={
       row:i+1,
@@ -653,6 +688,7 @@ function recoRowsToMap(table){
     entries.push(entry);
     let keys=[repertoire, repertoire.split(/[\\/]/).pop(), cleanRef(entry.firstJpeg), cleanRef(entry.firstTiff)].map(normKey).filter(Boolean);
     for(let k of keys){ if(!map.has(k))map.set(k, entry); }
+    await MelanisoftPerformance.heartbeat(i+1,table.length,'Indexation du récolement : '+(i+1)+' / '+table.length+' lignes...');
   }
   let found=[];
   ['Année début','Mois début','Jour début','Nb de pages','Pagination','Répertoire','Réf. 1er fichier numérique (JPEG)','Réf. 1er fichier numérique (TIFF)','Nbre de fichiers produits','Observation prestataire','Etablissement de conservation','Cote titre'].forEach((label,i)=>{
@@ -666,12 +702,19 @@ async function loadRecoViewCounts(rows, validatedPath){
   if(!r)return {status:'missing',map:new Map(),entries:[],message:'Récolement validé introuvable'};
   try{
     if(r.ext==='.csv'){
-      let text=await r.file.text(); let lines=text.split(/\r?\n/).filter(x=>x.trim());
-      if(lines.length<2)return {status:'empty',map:new Map(),entries:[],message:'CSV de récolement vide'};
-      let sep=guessSep(lines[0]); let result=recoRowsToMap(lines.map(l=>csvSplit(l,sep))); if(result.status==='ok')result.message='Récolement CSV lu : '+result.message; return result;
+      await MelanisoftPerformance.yieldToBrowser('Lecture du récolement CSV...');
+      let text=await r.file.text();
+      let rawLines=text.split(/\r?\n/);
+      if(rawLines.length<2)return {status:'empty',map:new Map(),entries:[],message:'CSV de récolement vide'};
+      let sep=guessSep(rawLines[0]), table=[];
+      for(let i=0;i<rawLines.length;i++){
+        if(rawLines[i].trim())table.push(csvSplit(rawLines[i],sep));
+        await MelanisoftPerformance.heartbeat(i+1,rawLines.length,'Lecture du récolement CSV : '+(i+1)+' / '+rawLines.length+' lignes...');
+      }
+      let result=await recoRowsToMap(table); if(result.status==='ok')result.message='Récolement CSV lu : '+result.message; return result;
     }
     if(r.ext==='.xlsx'){
-      let result=recoRowsToMap(await readXlsxRows(r.file));
+      let result=await recoRowsToMap(await readXlsxRows(r.file));
       if(result.status==='ok')result.message='Récolement XLSX lu : '+result.message;
       return result;
     }
@@ -904,27 +947,45 @@ function countImagesInFolder(rows, folder, exts){
   if(!folder)return null;
   return rows.filter(r=>folderOfPath(r.path)===folder && (!exts || exts.includes(r.ext))).length;
 }
-function diskCountsForRecoEntry(entry, allImageRows){
-  const jpgExts=['.jpg','.jpeg'], tiffExts=['.tif','.tiff'];
-  const jpgRow=findImageRowByBase(allImageRows, entry.firstJpeg);
-  const tiffRow=findImageRowByBase(allImageRows, entry.firstTiff);
-  let folders=[];
-  if(jpgRow)folders.push(folderOfPath(jpgRow.path));
-  if(tiffRow)folders.push(folderOfPath(tiffRow.path));
-  const repLast=normKey(fascLastPart(entry.repertoire));
-  if(repLast){
-    const repRow=allImageRows.find(r=>normKey(folderOfPath(r.path)).endsWith('/'+repLast) || normKey(folderOfPath(r.path)).endsWith(repLast));
-    if(repRow)folders.push(folderOfPath(repRow.path));
+function buildDiskLookup(allImageRows){
+  const byBase=new Map(), byFolder=new Map(), folderByLast=new Map();
+  for(const r of allImageRows){
+    const folder=folderOfPath(r.path);
+    const baseKey=normKey(baseNoExt(r.name));
+    const pathKey=normKey(cleanRef(r.path));
+    if(baseKey && !byBase.has(baseKey))byBase.set(baseKey,r);
+    if(pathKey && !byBase.has(pathKey))byBase.set(pathKey,r);
+    if(!byFolder.has(folder))byFolder.set(folder,{folder,jpeg:0,tiff:0,total:0});
+    const counts=byFolder.get(folder);
+    counts.total++;
+    if(['.jpg','.jpeg'].includes(r.ext))counts.jpeg++;
+    if(['.tif','.tiff'].includes(r.ext))counts.tiff++;
+    const last=normKey(fascLastPart(folder));
+    if(last && !folderByLast.has(last))folderByLast.set(last,folder);
   }
-  folders=[...new Set(folders.filter(Boolean))];
-  const folder=folders[0]||'';
+  return {byBase,byFolder,folderByLast};
+}
+function diskCountsForRecoEntry(entry, allImageRows, lookup=null){
+  if(!lookup)lookup=buildDiskLookup(allImageRows);
+  const jpgKey=normKey(cleanRef(entry.firstJpeg));
+  const tiffKey=normKey(cleanRef(entry.firstTiff));
+  const jpgRow=jpgKey?lookup.byBase.get(jpgKey):null;
+  const tiffRow=tiffKey?lookup.byBase.get(tiffKey):null;
+  let folder='';
+  if(jpgRow)folder=folderOfPath(jpgRow.path);
+  if(!folder && tiffRow)folder=folderOfPath(tiffRow.path);
+  if(!folder){
+    const repLast=normKey(fascLastPart(entry.repertoire));
+    if(repLast)folder=lookup.folderByLast.get(repLast)||'';
+  }
+  const counts=folder?lookup.byFolder.get(folder):null;
   return {
     folder,
     firstJpegFound: !entry.firstJpeg || !!jpgRow,
     firstTiffFound: !entry.firstTiff || !!tiffRow,
-    jpeg: countImagesInFolder(allImageRows, folder, jpgExts),
-    tiff: countImagesInFolder(allImageRows, folder, tiffExts),
-    total: countImagesInFolder(allImageRows, folder, null)
+    jpeg: counts?counts.jpeg:null,
+    tiff: counts?counts.tiff:null,
+    total: counts?counts.total:null
   };
 }
 
@@ -932,6 +993,7 @@ function diskCountsForRecoEntry(entry, allImageRows){
 $('run').onclick=async()=>{try{files=[...$('folder').files]; updateControl1Label(); const C=cfg(); const c3=controls.find(c=>c.id===3); if(c3)c3.name='Arborescence des dossiers conforme ('+C.consult+' / '+C.conserv+')'; anomalies=[]; lastRecurrenceSummary=null; updateRecurrencePreview(null); controls.forEach(c=>{c.status='OK';c.count=0}); updateControl1Label(); $('prog').style.display='block'; $('status').textContent='Analyse en cours...';
 setC(1,files.length?'OK':'ERREUR'); setC(2,files.length?'OK':'ERREUR',files.length); if(!files.length)return;
 const rows=files.map(f=>{let parts=f.webkitRelativePath.split('/');return {file:f,path:f.webkitRelativePath,name:f.name,parts,ext:ext(f.name),size:f.size,parsed:parseName(f.name)}});
+await MelanisoftPerformance.yieldToBrowser('Inventaire des fichiers terminé. Classement en cours...');
 const imageExts=['.jpg','.jpeg','.tif','.tiff'];
 const recoExts=['.xls','.xlsx','.csv'];
 const allImageRows=rows.filter(r=>imageExts.includes(r.ext));
@@ -943,6 +1005,7 @@ const recoRows=rows.filter(r=>recoExts.includes(r.ext));
 const annexRows=rows.filter(r=>!imageExts.includes(r.ext) && !recoExts.includes(r.ext));
 setC(11,jpeg.length?'OK':'ERREUR',jpeg.length); setC(12,tiff.length?'OK':'ALERTE',tiff.length);
 if(calibrationRows.length)add('INFO',37,'',calibrationRows.length+' mire(s) ou charte(s) colorimétrique(s) détectée(s). Ces fichiers sont attendus et exclus des contrôles de nommage, de vues et de correspondance JPEG/TIFF.');
+await MelanisoftPerformance.yieldToBrowser('Classement terminé. Analyse de l’arborescence...');
 let dirs=new Set(); rows.forEach(r=>{let acc=[];r.parts.slice(0,-1).forEach(p=>{acc.push(p);dirs.add(acc.join('/'))})});
 let jpegDirs=[...dirs].filter(d=>d.split('/').some(isConsultDir)), tiffDirs=[...dirs].filter(d=>d.split('/').some(isConservDir));
 let titlePaths=new Map();
@@ -951,18 +1014,24 @@ if(!jpegDirs.length && !tiffDirs.length){add('ERREUR',3,'','Aucun dossier '+C.co
 titlePaths.forEach((title,titlePath)=>{let consultPath=titlePath+'/'+C.consult; let conservPath=titlePath+'/'+C.conserv; if(!dirs.has(consultPath))add('ERREUR',3,titlePath,'Dossier de consultation absent : '+C.consult); if(!dirs.has(conservPath))add('ALERTE',3,titlePath,'Dossier de conservation absent : '+C.conserv);});
 setC(3,anomalies.some(a=>a.control===3&&a.type==='ERREUR')?'ERREUR':(anomalies.some(a=>a.control===3)?'ALERTE':'OK'),anomalies.filter(a=>a.control===3).length);
 let topTitles=new Set(); rows.forEach(r=>{let i=imageDirIndex(r.parts); if(i>0)topTitles.add(r.parts[i-1]);}); setC(38,'OK',topTitles.size); setC(39,'OK',topTitles.size);
-imageRows.forEach(r=>{if(/\s/.test(r.name))add('ERREUR',15,r.path,'Espace dans le nom de fichier'); if((r.ext==='.jpg'||r.ext==='.jpeg')&&r.ext!=='.jpg')add('ALERTE',13,r.path,'Extension JPEG non canonique'); if((r.ext==='.tif'||r.ext==='.tiff')&&r.ext!=='.tif')add('ALERTE',14,r.path,'Extension TIFF non canonique'); if(r.size===0)add('ERREUR',30,r.path,'Fichier de taille nulle (0 octet)'); if(r.size<1024)add('ALERTE',48,r.path,'Fichier très petit');
+for(let imageIndex=0;imageIndex<imageRows.length;imageIndex++){
+ const r=imageRows[imageIndex];
+ if(/\s/.test(r.name))add('ERREUR',15,r.path,'Espace dans le nom de fichier'); if((r.ext==='.jpg'||r.ext==='.jpeg')&&r.ext!=='.jpg')add('ALERTE',13,r.path,'Extension JPEG non canonique'); if((r.ext==='.tif'||r.ext==='.tiff')&&r.ext!=='.tif')add('ALERTE',14,r.path,'Extension TIFF non canonique'); if(r.size===0)add('ERREUR',30,r.path,'Fichier de taille nulle (0 octet)'); if(r.size<1024)add('ALERTE',48,r.path,'Fichier très petit');
  if(['.jpg','.jpeg','.tif','.tiff'].includes(r.ext)){ if(!r.name.includes('_'))add('ERREUR',16,r.path,'Underscore absent'); if(!r.parsed.ok)add('ERREUR',17,r.path,'Nommage non conforme au modèle RCR_COTE_DATE[_bis]_0001' ); else { if(!validDate(r.parsed.date))add('ERREUR',21,r.path,'Date impossible'); if(r.parsed.view==='0000')add('ERREUR',20,r.path,'Vue 0000 interdite'); let ctx=imagePathContext(r.parts); if(ctx.yearFolder && r.parsed.date.slice(0,4)!==ctx.yearFolder)add('ERREUR',23,r.path,'Année fichier différente du dossier année'); if(ctx.fascFolder){let m=ctx.fascFolder.match(/(\d{8})(?:_bis)?$/); if(m && m[1]!==r.parsed.date)add('ERREUR',24,r.path,'Date fichier différente du dossier fascicule');}}
  let ctx=imagePathContext(r.parts); if(ctx.imageDirIndex>=0){let year=ctx.yearFolder, fasc=ctx.fascFolder; if(year&&!/^\d{4}$/.test(year))add('ERREUR',7,r.path,'Dossier année non AAAA'); if(fasc&&!(/^(\d{8}|\d{8}_bis|[^_]+_[^_]+_\d{8}|[^_]+_[^_]+_\d{8}_bis)$/.test(fasc)))add('ERREUR',8,r.path,'Dossier fascicule atypique');}}
-});
+ await MelanisoftPerformance.heartbeat(imageIndex+1,imageRows.length,'Contrôle du nommage : '+(imageIndex+1)+' / '+imageRows.length+' fichiers...');
+}
 [15,16,17,20,21,23,24,30,48,7,8,13,14].forEach(id=>setC(id,anomalies.some(a=>a.control===id)?'ALERTE':'OK',anomalies.filter(a=>a.control===id).length)); setC(18,jpeg.filter(r=>r.parsed.bis).length||tiff.filter(r=>r.parsed.bis).length?'OK':'OK',jpeg.filter(r=>r.parsed.bis).length+tiff.filter(r=>r.parsed.bis).length); setC(19,anomalies.some(a=>a.msg.includes('Vue'))?'ALERTE':'OK'); setC(22,anomalies.some(a=>a.control===21)?'ALERTE':'OK'); setC(25,'OK');
 let nameCount={}; imageRows.forEach(r=>nameCount[r.name]=(nameCount[r.name]||0)+1); Object.entries(nameCount).filter(([k,v])=>v>1).forEach(([k,v])=>add('ALERTE',28,k,`Nom présent ${v} fois`)); setC(28,anomalies.some(a=>a.control===28)?'ALERTE':'OK',anomalies.filter(a=>a.control===28).length); setC(29,'OK');
 let byFasc={}; jpeg.filter(r=>r.parsed.ok).forEach(r=>{let key=r.parts.slice(0,-1).join('/'); (byFasc[key]??=[]).push(r)});
 let byFascTiff={}; tiff.filter(r=>r.parsed.ok).forEach(r=>{let key=r.parts.slice(0,-1).join('/'); (byFascTiff[key]??=[]).push(r)});
 let allImageNameBases=new Set(imageRows.map(r=>normKey(baseNoExt(r.name))));
+const diskLookup=buildDiskLookup(allImageRows);
+await MelanisoftPerformance.yieldToBrowser('Nommage contrôlé. Lecture du récolement...');
 let recoViewCounts=await loadRecoViewCounts(rows, validatedReco); lastRecoRead=recoViewCounts;
 if(recoViewCounts.status==='ok'){
-  recoViewCounts.entries.forEach(e=>{
+  for(let recoIndex=0;recoIndex<recoViewCounts.entries.length;recoIndex++){
+    const e=recoViewCounts.entries[recoIndex];
     const prestDate=entryDateFromRefs(e);
     const manualViews=firstInt(e.nbPages);
     const prestViews=Number.isFinite(e.produced)?e.produced:null;
@@ -979,7 +1048,8 @@ if(recoViewCounts.status==='ok'){
     if(e.firstTiff && !allImageNameBases.has(normKey(cleanRef(e.firstTiff))))add('ALERTE',36,e.firstTiff,'Réf. 1er fichier numérique (TIFF) indiquée par le prestataire mais non trouvée dans la livraison.'+recoObservationNote(e), e.row);
     const cmpManualPrest=compareDefinedValues('récolement manuel',manualViews,'prestataire',prestViews);
     if(cmpManualPrest)add('ALERTE',34,e.repertoire||e.firstJpeg||'',`Écart nombre de vues/pages : ${cmpManualPrest}.`+recoObservationNote(e), e.row);
-  });
+    await MelanisoftPerformance.heartbeat(recoIndex+1,recoViewCounts.entries.length,'Comparaison du récolement : '+(recoIndex+1)+' / '+recoViewCounts.entries.length+' lignes...');
+  }
 }
 let fascEntries=Object.entries(byFasc);
 checkRecurrence(fascEntries);
@@ -1002,7 +1072,8 @@ fascEntries.forEach(([k,arr])=>{
 // 1. cohérence entre le récolement initial des collègues et les colonnes renseignées par le prestataire ;
 // 2. cohérence entre les références prestataire et le listing des fichiers réellement présents sur le disque.
 if(recoViewCounts.status==='ok'){
-  recoViewCounts.entries.forEach(entry=>{
+  for(let recoIndex=0;recoIndex<recoViewCounts.entries.length;recoIndex++){
+    const entry=recoViewCounts.entries[recoIndex];
     recoCompared++;
     const manualExpected=firstInt(entry.nbPages);
     const prestExpected=Number.isFinite(entry.produced)?entry.produced:null;
@@ -1011,7 +1082,7 @@ if(recoViewCounts.status==='ok'){
     const cmpManualPrest=compareDefinedValues('récolement initial',manualExpected,'saisie prestataire',prestExpected);
     if(cmpManualPrest)problems.push('le nombre de vues du récolement initial ne correspond pas au nombre indiqué par le prestataire ('+cmpManualPrest+')');
 
-    const disk=diskCountsForRecoEntry(entry, allImageRows);
+    const disk=diskCountsForRecoEntry(entry, allImageRows, diskLookup);
     if(entry.firstJpeg && !disk.firstJpegFound)problems.push('la première image JPEG indiquée par le prestataire n’a pas été retrouvée sur le disque');
     if(entry.firstTiff && !disk.firstTiffFound)problems.push('la première image TIFF indiquée par le prestataire n’a pas été retrouvée sur le disque');
 
@@ -1030,7 +1101,8 @@ if(recoViewCounts.status==='ok'){
     }else{
       recoOk++;
     }
-  });
+    await MelanisoftPerformance.heartbeat(recoIndex+1,recoViewCounts.entries.length,'Vérification disque/récolement : '+(recoIndex+1)+' / '+recoViewCounts.entries.length+' lignes...');
+  }
 }
 if(recoViewCounts.status==='ok' && recoCompared>0 && recoDiff===0)add('INFO',34,'','Récolement cohérent pour '+recoOk+' ligne(s) exploitée(s).');
 if(recoViewCounts.status!=='ok')add('INFO',34,'',recoViewCounts.message+' La détection statistique des valeurs atypiques reste utilisée comme aide au contrôle.');
@@ -1041,6 +1113,7 @@ let aleaSource=jpeg.length?[...jpeg]:[...tiff]; lastIsoPlan=iso2859Plan(aleaSour
 if(recoViewCounts.status!=='ok'){
   add('ALERTE',52,'','Conformité du contenu IPTC non vérifiable : le récolement n’a pas pu être exploité. '+recoViewCounts.message);
 }
+await MelanisoftPerformance.yieldToBrowser('Contrôles métier terminés. Analyse technique des images...');
 let max=Math.min(200,jpeg.length+tiff.length), done=0;
 for(let r of [...jpeg.slice(0,150),...tiff.slice(0,50)]){
   try{
@@ -1081,6 +1154,7 @@ for(let r of [...jpeg.slice(0,150),...tiff.slice(0,50)]){
     add('ERREUR', r.ext.includes('jp')?41:45, r.path, String(e));
   }
   done++; $('prog').value=max?done/max*100:100;
+  await MelanisoftPerformance.heartbeat(done,max,'Analyse technique des images : '+done+' / '+max+' fichiers...');
 }
 [30.5,41,42,43,44,45,46,47,51,52,53].forEach(id=>setC(id,anomalies.some(a=>a.control===id&&a.type!=='INFO')?'ALERTE':'OK',anomalies.filter(a=>a.control===id&&a.type!=='INFO').length)); setC(50,'OK');
 render(rows, sample); $('exportCsv').disabled=false; $('exportHtml').disabled=false;  $('exportAleaExcel').disabled=false; $('prog').style.display='none'; $('status').textContent='Contrôle terminé.';}catch(e){$('prog').style.display='none'; $('status').innerHTML='<span class=err>Erreur pendant le contrôle : '+esc(e && (e.message||e))+'</span>'; console.error(e);}}
