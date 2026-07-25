@@ -1342,7 +1342,101 @@ function diskCountsForRecoEntry(entry, allImageRows, lookup=null){
 }
 
 
-$('run').onclick=async()=>{try{files=[...$('folder').files]; updateControl1Label(); const C=cfg(); const c3=controls.find(c=>c.id===3); if(c3)c3.name='Arborescence des dossiers conforme ('+C.consult+' / '+C.conserv+')'; anomalies=[]; lastRecurrenceSummary=null; updateRecurrencePreview(null); controls.forEach(c=>{c.status='OK';c.count=0}); updateControl1Label(); $('prog').style.display='block'; $('status').textContent='Analyse en cours...';
+let lastExhaustivitySummary=null;
+function exhaustivityIdentityFromRow(row){
+  if(row&&row.parsed&&row.parsed.ok)return normKey(row.parsed.fascicule);
+  const folder=parseFasciculeIdentity(fascLastPart(folderOfPath(row&&row.path||'')));
+  return folder&&folder.ok?normKey(folder.fascicule):'';
+}
+function buildExhaustivityAudit(imageRows,recoResult){
+  const records=new Map();
+  const ensure=(identity,label='')=>{
+    if(!identity)return null;
+    if(!records.has(identity))records.set(identity,{identity,label:label||identity,reco:[],jpeg:new Map(),tiff:new Map(),paths:new Set(),problems:[]});
+    return records.get(identity);
+  };
+  for(const row of imageRows){
+    const identity=exhaustivityIdentityFromRow(row);
+    const rec=ensure(identity,row.parsed&&row.parsed.ok?row.parsed.fascicule:identity);
+    if(!rec)continue;
+    rec.paths.add(folderOfPath(row.path));
+    const view=row.parsed&&row.parsed.ok?Number(row.parsed.viewNumber):null;
+    if(!Number.isFinite(view))continue;
+    const target=['.jpg','.jpeg'].includes(row.ext)?rec.jpeg:rec.tiff;
+    if(!target.has(view))target.set(view,[]);
+    target.get(view).push(row);
+  }
+  if(recoResult&&recoResult.status==='ok'){
+    for(const entry of recoResult.entries||[]){
+      const identity=recoEntryFasciculeIdentity(entry);
+      const rec=ensure(identity,identity||entry.repertoire||('Ligne '+entry.row));
+      if(rec)rec.reco.push(entry);
+    }
+  }
+  let expectedFascicules=0,foundFascicules=0,missingFascicules=0,extraFascicules=0;
+  let expectedViews=0,logicalViews=0,missingViews=0,extraViews=0,duplicates=0,jpegWithoutTiff=0,tiffWithoutJpeg=0;
+  const diagnostics=[];
+  for(const rec of records.values()){
+    const entry=rec.reco[0]||null;
+    const manual=entry?firstInt(entry.nbPages):null;
+    const prest=entry&&Number.isFinite(entry.produced)?entry.produced:null;
+    const expected=prest!==null?prest:manual;
+    const diskViews=new Set([...rec.jpeg.keys(),...rec.tiff.keys()]);
+    logicalViews+=diskViews.size;
+    if(entry)expectedFascicules++;
+    if(diskViews.size)foundFascicules++;
+    if(entry&&!diskViews.size){missingFascicules++;rec.problems.push('fascicule attendu mais absent du disque');}
+    if(!entry&&diskViews.size){extraFascicules++;rec.problems.push('fascicule présent sur le disque mais absent du récolement');}
+    if(manual!==null&&prest!==null&&manual!==prest)rec.problems.push(`récolement initial ${manual} vues ≠ prestataire ${prest} vues`);
+    if(expected!==null){
+      expectedViews+=expected;
+      for(let n=1;n<=expected;n++){
+        if(!diskViews.has(n)){missingViews++;rec.problems.push('vue '+String(n).padStart(4,'0')+' absente dans les deux formats');}
+      }
+      for(const n of diskViews){if(n<1||n>expected){extraViews++;rec.problems.push('vue supplémentaire '+String(n).padStart(4,'0'));}}
+      if(rec.jpeg.size!==expected)rec.problems.push(`${rec.jpeg.size} JPEG présents au lieu de ${expected}`);
+      if(rec.tiff.size!==expected)rec.problems.push(`${rec.tiff.size} TIFF présents au lieu de ${expected}`);
+    }
+    for(const [n,rows] of rec.jpeg){
+      if(rows.length>1){duplicates+=rows.length-1;rec.problems.push('JPEG dupliqué pour la vue '+String(n).padStart(4,'0'));}
+      if(!rec.tiff.has(n)){jpegWithoutTiff++;rec.problems.push('TIFF absent pour la vue '+String(n).padStart(4,'0'));}
+    }
+    for(const [n,rows] of rec.tiff){
+      if(rows.length>1){duplicates+=rows.length-1;rec.problems.push('TIFF dupliqué pour la vue '+String(n).padStart(4,'0'));}
+      if(!rec.jpeg.has(n)){tiffWithoutJpeg++;rec.problems.push('JPEG absent pour la vue '+String(n).padStart(4,'0'));}
+    }
+    if(rec.reco.length>1)rec.problems.push('plusieurs lignes de récolement correspondent au même fascicule');
+    if(rec.problems.length)diagnostics.push(rec);
+  }
+  return {records,diagnostics,expectedFascicules,foundFascicules,missingFascicules,extraFascicules,expectedViews,logicalViews,missingViews,extraViews,duplicates,jpegWithoutTiff,tiffWithoutJpeg};
+}
+function recordExhaustivityAudit(audit){
+  lastExhaustivitySummary=audit;
+  for(const rec of audit.diagnostics){
+    const unique=[...new Set(rec.problems)];
+    const path=[...rec.paths][0]||rec.label||rec.identity;
+    add('ALERTE',34,path,'Diagnostic d’exhaustivité du fascicule : '+unique.join(' ; ')+'.',rec.reco[0]?.row||'');
+  }
+}
+function exhaustivitySummaryHtml(){
+  const s=lastExhaustivitySummary;
+  if(!s)return '';
+  return `<div class="report-section"><h3>Bilan d’exhaustivité</h3><table><tr><th>Indicateur</th><th>Résultat</th></tr>`+
+    `<tr><td>Fascicules attendus</td><td>${s.expectedFascicules}</td></tr>`+
+    `<tr><td>Fascicules retrouvés</td><td>${s.foundFascicules}</td></tr>`+
+    `<tr><td>Fascicules manquants</td><td>${s.missingFascicules}</td></tr>`+
+    `<tr><td>Fascicules supplémentaires</td><td>${s.extraFascicules}</td></tr>`+
+    `<tr><td>Vues attendues</td><td>${s.expectedViews}</td></tr>`+
+    `<tr><td>Vues logiques présentes</td><td>${s.logicalViews}</td></tr>`+
+    `<tr><td>Vues manquantes</td><td>${s.missingViews}</td></tr>`+
+    `<tr><td>Vues supplémentaires</td><td>${s.extraViews}</td></tr>`+
+    `<tr><td>Doublons</td><td>${s.duplicates}</td></tr>`+
+    `<tr><td>JPEG sans TIFF</td><td>${s.jpegWithoutTiff}</td></tr>`+
+    `<tr><td>TIFF sans JPEG</td><td>${s.tiffWithoutJpeg}</td></tr></table></div>`;
+}
+
+
+$('run').onclick=async()=>{try{files=[...$('folder').files]; updateControl1Label(); const C=cfg(); const c3=controls.find(c=>c.id===3); if(c3)c3.name='Arborescence des dossiers conforme ('+C.consult+' / '+C.conserv+')'; anomalies=[]; lastRecurrenceSummary=null; updateRecurrencePreview(null); controls.forEach(c=>{c.status='OK';c.count=0}); lastExhaustivitySummary=null; updateControl1Label(); $('prog').style.display='block'; $('status').textContent='Analyse en cours...';
 setC(1,files.length?'OK':'ERREUR'); setC(2,files.length?'OK':'ERREUR',files.length); if(!files.length)return;
 const rows=files.map(f=>{let parts=f.webkitRelativePath.split('/');return {file:f,path:f.webkitRelativePath,name:f.name,parts,ext:ext(f.name),size:f.size,parsed:parseName(f.name)}});
 await MelanisoftPerformance.yieldToBrowser('Inventaire des fichiers terminé. Classement en cours...');
@@ -1508,6 +1602,7 @@ if(recoViewCounts.status==='ok'){
 if(recoViewCounts.status==='ok' && recoCompared>0 && recoDiff===0)add('INFO',34,'','Récolement cohérent pour '+recoOk+' ligne(s) exploitée(s).');
 if(recoViewCounts.status!=='ok')add('INFO',34,'',recoViewCounts.message+' La détection statistique des valeurs atypiques reste utilisée comme aide au contrôle.');
 setC(26,anomalies.some(a=>a.control===26)?'ALERTE':'OK',anomalies.filter(a=>a.control===26).length); setC(27,anomalies.some(a=>a.control===27)?'ALERTE':'OK',anomalies.filter(a=>a.control===27).length); setC(34,anomalies.some(a=>a.control===34&&a.type==='ALERTE')?'ALERTE':'OK',new Set(anomalies.filter(a=>a.control===34&&a.type==='ALERTE').map(a=>a.path+'#'+(a.line||''))).size); setC(35,anomalies.some(a=>a.control===35&&a.type==='ALERTE')?'ALERTE':'OK',anomalies.filter(a=>a.control===35&&a.type==='ALERTE').length);
+const exhaustivityAudit=buildExhaustivityAudit(imageRows,recoViewCounts); recordExhaustivityAudit(exhaustivityAudit);
 const pairComparison=compareJpegTiffRows(jpeg,tiff);
 pairComparison.jpegWithoutTiff.forEach(r=>add('ALERTE',32,r.path,'JPEG sans TIFF correspondant dans le même titre'));
 pairComparison.tiffWithoutJpeg.forEach(r=>add('ALERTE',33,r.path,'TIFF sans JPEG correspondant dans le même titre'));
@@ -1763,7 +1858,7 @@ $('summary').innerHTML=`<h2>Synthèse du contrôle</h2><div class="summary-grid"
 $('controls').innerHTML='<h2>Contrôles effectués automatiquement</h2>'+groupedControlsHtml();
 const consolidatedRows=consolidatedAnomalies();
 $('anomalies').innerHTML='<h2>Points d’attention détaillés</h2><p class="small">Une seule ligne est affichée par fascicule. Les natures et les détails concatènent toutes les anomalies détectées pour ce fascicule.</p><table class="attention-table"><tr><th>Niveau</th><th>Ligne du récolement</th><th>Nature métier</th><th>Fichier ou fascicule concerné</th><th>Constat consolidé</th></tr>'+consolidatedRows.slice(0,5000).map(a=>`<tr><td>${esc(a.types||a.type)}</td><td>${esc(a.line||'')}</td><td>${esc(a.nature)}</td><td>${esc(a.path)}</td><td>${esc(a.details)}</td></tr>`).join('')+'</table>'+(consolidatedRows.length>5000?'<p>Affichage limité à 5000 lignes. L’export Excel contient la liste complète consolidée.</p>':'');
-$('rapportMetier').innerHTML=buildReportMetierHtml(rows);
+$('rapportMetier').innerHTML=exhaustivitySummaryHtml()+buildReportMetierHtml(rows);
 reportHtml='<!doctype html><meta charset=utf-8><title>MÉLANISOFT — Rapport de contrôle qualité</title><h1>MÉLANISOFT</h1><h2>Rapport de contrôle qualité</h2>'+$('summary').innerHTML+$('rapportMetier').innerHTML+$('controls').innerHTML+$('anomalies').innerHTML;
 GallicaQCState.report.metierHtml=$('rapportMetier').innerHTML;
 aleaHtml=buildAleaHtml(rows, sample);
