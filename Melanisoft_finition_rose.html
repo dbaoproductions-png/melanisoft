@@ -376,17 +376,29 @@ function buildIsoSampleByTitle(jpegRows,tiffRows){
 function buildTechnicalSampleRows(visualSample,jpegRows,tiffRows){
   const byBase=new Map();
   [...jpegRows,...tiffRows].forEach(r=>{
-    const key=normKey(baseNoExt(r.name));
+    const key=imagePairKey(r);
     if(!byBase.has(key))byBase.set(key,[]);
     byBase.get(key).push(r);
   });
   const selected=new Map();
   visualSample.forEach(sampleRow=>{
-    const key=normKey(baseNoExt(sampleRow.name));
+    const key=imagePairKey(sampleRow);
     const matches=byBase.get(key)||[sampleRow];
     matches.forEach(r=>selected.set(r.path,r));
   });
   return [...selected.values()];
+}
+function imagePairKey(row){
+  return normKey(titlePathForRow(row))+'|'+normKey(baseNoExt(row&&row.name||''));
+}
+function compareJpegTiffRows(jpegRows,tiffRows){
+  const jpegByKey=new Map(),tiffByKey=new Map();
+  jpegRows.forEach(r=>jpegByKey.set(imagePairKey(r),r));
+  tiffRows.forEach(r=>tiffByKey.set(imagePairKey(r),r));
+  return {
+    jpegWithoutTiff:[...jpegByKey].filter(([key])=>!tiffByKey.has(key)).map(([,row])=>row),
+    tiffWithoutJpeg:[...tiffByKey].filter(([key])=>!jpegByKey.has(key)).map(([,row])=>row)
+  };
 }
 function populateReco(){
   files=[...$('folder').files]; validatedReco=''; $('recoStatus').textContent=''; lastIsoPlan=null; updateIsoPreview(null);
@@ -1262,7 +1274,8 @@ function buildDiskLookup(allImageRows){
     if(['.tif','.tiff'].includes(r.ext))counts.tiff++;
     const last=normKey(fascLastPart(folder));
     if(last && !folderByLast.has(last))folderByLast.set(last,folder);
-    const identity=imageFasciculeIdentity(r);
+    const folderIdentity=parseFasciculeIdentity(fascLastPart(folder));
+    const identity=imageFasciculeIdentity(r)||(folderIdentity&&folderIdentity.ok?normKey(folderIdentity.fascicule):'');
     if(identity){
       if(!byFascIdentity.has(identity))byFascIdentity.set(identity,{identity,jpeg:0,tiff:0,total:0,rows:[],folders:new Set()});
       const fasc=byFascIdentity.get(identity);
@@ -1378,7 +1391,7 @@ let pathCount={}; imageRows.forEach(r=>pathCount[r.path]=(pathCount[r.path]||0)+
 let byFasc={}; jpeg.filter(r=>r.parsed.ok).forEach(r=>{let key=r.parts.slice(0,-1).join('/'); (byFasc[key]??=[]).push(r)});
 let byFascTiff={}; tiff.filter(r=>r.parsed.ok).forEach(r=>{let key=r.parts.slice(0,-1).join('/'); (byFascTiff[key]??=[]).push(r)});
 let allImageNameBases=new Set(imageRows.map(r=>normKey(baseNoExt(r.name))));
-const diskLookup=buildDiskLookup(allImageRows);
+const diskLookup=buildDiskLookup(imageRows);
 await MelanisoftPerformance.yieldToBrowser('Nommage contrôlé. Lecture du récolement...');
 let recoViewCounts=await loadRecoViewCounts(rows, validatedReco); lastRecoRead=recoViewCounts;
 if(recoViewCounts.status==='ok'){
@@ -1448,7 +1461,7 @@ if(recoViewCounts.status==='ok'){
       problems.push('aucune donnée prestataire n’est renseignée pour ce fascicule du récolement initial : une omission de numérisation est possible');
     }
 
-    const disk=diskCountsForRecoEntry(entry, allImageRows, diskLookup);
+    const disk=diskCountsForRecoEntry(entry, imageRows, diskLookup);
     if(entry.firstJpeg && !disk.firstJpegFound)problems.push('la première image JPEG indiquée par le prestataire n’a pas été retrouvée sur le disque');
     if(entry.firstTiff && !disk.firstTiffFound)problems.push('la première image TIFF indiquée par le prestataire n’a pas été retrouvée sur le disque');
 
@@ -1478,7 +1491,12 @@ if(recoViewCounts.status==='ok'){
 if(recoViewCounts.status==='ok' && recoCompared>0 && recoDiff===0)add('INFO',34,'','Récolement cohérent pour '+recoOk+' ligne(s) exploitée(s).');
 if(recoViewCounts.status!=='ok')add('INFO',34,'',recoViewCounts.message+' La détection statistique des valeurs atypiques reste utilisée comme aide au contrôle.');
 setC(26,anomalies.some(a=>a.control===26)?'ALERTE':'OK',anomalies.filter(a=>a.control===26).length); setC(27,anomalies.some(a=>a.control===27)?'ALERTE':'OK',anomalies.filter(a=>a.control===27).length); setC(34,anomalies.some(a=>a.control===34&&a.type==='ALERTE')?'ALERTE':'OK',new Set(anomalies.filter(a=>a.control===34&&a.type==='ALERTE').map(a=>a.path+'#'+(a.line||''))).size); setC(35,anomalies.some(a=>a.control===35&&a.type==='ALERTE')?'ALERTE':'OK',anomalies.filter(a=>a.control===35&&a.type==='ALERTE').length);
-let basesJ=new Set(jpeg.map(r=>baseNoExt(r.name))), basesT=new Set(tiff.map(r=>baseNoExt(r.name))); basesJ.forEach(b=>{if(!basesT.has(b))add('ALERTE',32,b,'JPEG sans TIFF correspondant')}); basesT.forEach(b=>{if(!basesJ.has(b))add('ALERTE',33,b,'TIFF sans JPEG correspondant')}); setC(32,anomalies.some(a=>a.control===32)?'ALERTE':'OK',anomalies.filter(a=>a.control===32).length); setC(33,anomalies.some(a=>a.control===33)?'ALERTE':'OK',anomalies.filter(a=>a.control===33).length); setC(31,anomalies.some(a=>a.control===32||a.control===33)?'ALERTE':'OK',anomalies.filter(a=>a.control===32||a.control===33).length);
+const pairComparison=compareJpegTiffRows(jpeg,tiff);
+pairComparison.jpegWithoutTiff.forEach(r=>add('ALERTE',32,r.path,'JPEG sans TIFF correspondant dans le même titre'));
+pairComparison.tiffWithoutJpeg.forEach(r=>add('ALERTE',33,r.path,'TIFF sans JPEG correspondant dans le même titre'));
+setC(32,pairComparison.jpegWithoutTiff.length?'ALERTE':'OK',pairComparison.jpegWithoutTiff.length);
+setC(33,pairComparison.tiffWithoutJpeg.length?'ALERTE':'OK',pairComparison.tiffWithoutJpeg.length);
+setC(31,pairComparison.jpegWithoutTiff.length||pairComparison.tiffWithoutJpeg.length?'ALERTE':'OK',pairComparison.jpegWithoutTiff.length+pairComparison.tiffWithoutJpeg.length);
 let rec=recoRows; if(validatedReco){setC(36,anomalies.some(a=>a.control===36)?'ALERTE':'OK',rec.length);} else {setC(36,rec.length?'ALERTE':'ALERTE',rec.length); if(rec.length)add('ALERTE',36,rec.map(r=>r.path).join(' | '),'Fichier(s) de récolement candidat(s) détecté(s), mais aucun n’a été validé dans l’interface'); else add('ALERTE',36,'','Aucun fichier de récolement XLS/XLSX/CSV détecté');} let non=annexRows; setC(37,non.length?'ALERTE':'OK',non.length);
 const isoSelection=buildIsoSampleByTitle(jpeg,tiff); lastIsoPlan=isoSelection.summary; updateIsoPreview(lastIsoPlan); aleaRows=isoSelection.sample; let sample=aleaRows;
 if(sample.length)setC(49,'OK',sample.length);
@@ -1547,7 +1565,13 @@ if(technicalSample.length&&histogramSuccess===0)add('ALERTE',30.5,'','Plage dyna
 [30.5,41,42,43,44,45,46,47,51,52,53].forEach(id=>{
   const issues=anomalies.filter(a=>a.control===id&&a.type!=='INFO');
   setC(id,issues.some(a=>a.type==='ERREUR')?'ERREUR':(issues.length?'ALERTE':'OK'),issues.length);
-}); setC(50,'OK');
+});
+const technicalJpegCount=technicalSample.filter(r=>['.jpg','.jpeg'].includes(r.ext)).length;
+const technicalTiffCount=technicalSample.filter(r=>['.tif','.tiff'].includes(r.ext)).length;
+if(!technicalSample.length)[30.5,43,44,47,51,52,53].forEach(id=>setC(id,'NON APPLICABLE',0));
+if(!technicalJpegCount)[41,42].forEach(id=>setC(id,'NON APPLICABLE',0));
+if(!technicalTiffCount)[45,46].forEach(id=>setC(id,'NON APPLICABLE',0));
+setC(50,'OK');
 render(rows, sample); $('exportAttentionExcel').disabled=false; $('exportHtml').disabled=false;  $('exportAleaExcel').disabled=false; $('prog').style.display='none'; $('status').textContent='Contrôle terminé.';}catch(e){$('prog').style.display='none'; $('status').innerHTML='<span class=err>Erreur pendant le contrôle : '+esc(e && (e.message||e))+'</span>'; console.error(e);}}
 
 function controlChapter(id){
@@ -1571,7 +1595,7 @@ function groupedControlsHtml(){
     if(!chapter){chapter={name,items:[]};chapters.push(chapter);}
     chapter.items.push(c);
   });
-  return chapters.filter(ch=>ch.items.length).map(ch=>'<h3>'+esc(ch.name)+'</h3><table><tr><th>N°</th><th>Contrôle</th><th>Statut</th><th>Nb</th></tr>'+ch.items.map(c=>`<tr><td>${displayControlNumber(c.id)}</td><td>${c.name}</td><td class="${c.status==='OK'?'ok':c.status==='ERREUR'?'err':'warn'}">${c.status}</td><td>${countDisplay(c)}</td></tr>`).join('')+'</table>').join('');
+  return chapters.filter(ch=>ch.items.length).map(ch=>'<h3>'+esc(ch.name)+'</h3><table><tr><th>N°</th><th>Contrôle</th><th>Statut</th><th>Nb</th></tr>'+ch.items.map(c=>`<tr><td>${displayControlNumber(c.id)}</td><td>${c.name}</td><td class="${c.status==='OK'?'ok':c.status==='ERREUR'?'err':c.status==='NON APPLICABLE'?'small':'warn'}">${c.status}</td><td>${countDisplay(c)}</td></tr>`).join('')+'</table>').join('');
 }
 
 
