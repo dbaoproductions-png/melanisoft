@@ -73,7 +73,7 @@
         <div class="grid-2">
           <div class="field"><span>Échantillonnage ISO 2859-1</span><div id="isoPreview" class="iso-preview">Le nombre de vues sera calculé automatiquement après sélection de la livraison.</div></div>
         </div>
-        <p class="small">Un échantillon ALÉA distinct est calculé automatiquement pour chaque titre, selon le niveau de contrôle général II et un NQA de 1 %. Les TIFF sont utilisés en priorité pour le contrôle visuel ; les JPEG servent de repli lorsqu’aucun TIFF n’est disponible.</p>
+        <p class="small">Un échantillon ALÉA distinct est calculé automatiquement pour chaque titre, selon le niveau de contrôle général II et un NQA de 1 %. Chaque vue ne compte qu’une fois : son TIFF est utilisé en priorité pour le contrôle visuel, et son JPEG sert de repli si le TIFF correspondant manque.</p>
         <div class="actions">
           <button id="run">Analyser la livraison</button>
           <button id="exportAttentionExcel" disabled>Exporter les points d’attention détaillés (Excel)</button>
@@ -1599,10 +1599,10 @@ if(recoViewCounts.status==='ok'){
     }
   }
 }
-if(recoViewCounts.status==='ok' && recoCompared>0 && recoDiff===0)add('INFO',34,'','Récolement cohérent pour '+recoOk+' ligne(s) exploitée(s).');
+const exhaustivityAudit=buildExhaustivityAudit(imageRows,recoViewCounts); recordExhaustivityAudit(exhaustivityAudit);
+if(recoViewCounts.status==='ok' && recoCompared>0 && recoDiff===0 && !exhaustivityAudit.diagnostics.length)add('INFO',34,'','Récolement cohérent pour '+recoOk+' ligne(s) exploitée(s).');
 if(recoViewCounts.status!=='ok')add('INFO',34,'',recoViewCounts.message+' La détection statistique des valeurs atypiques reste utilisée comme aide au contrôle.');
 setC(26,anomalies.some(a=>a.control===26)?'ALERTE':'OK',anomalies.filter(a=>a.control===26).length); setC(27,anomalies.some(a=>a.control===27)?'ALERTE':'OK',anomalies.filter(a=>a.control===27).length); setC(34,anomalies.some(a=>a.control===34&&a.type==='ALERTE')?'ALERTE':'OK',new Set(anomalies.filter(a=>a.control===34&&a.type==='ALERTE').map(a=>a.path+'#'+(a.line||''))).size); setC(35,anomalies.some(a=>a.control===35&&a.type==='ALERTE')?'ALERTE':'OK',anomalies.filter(a=>a.control===35&&a.type==='ALERTE').length);
-const exhaustivityAudit=buildExhaustivityAudit(imageRows,recoViewCounts); recordExhaustivityAudit(exhaustivityAudit);
 const pairComparison=compareJpegTiffRows(jpeg,tiff);
 pairComparison.jpegWithoutTiff.forEach(r=>add('ALERTE',32,r.path,'JPEG sans TIFF correspondant dans le même titre'));
 pairComparison.tiffWithoutJpeg.forEach(r=>add('ALERTE',33,r.path,'TIFF sans JPEG correspondant dans le même titre'));
@@ -1880,7 +1880,7 @@ function buildAleaHtml(rows,sample){
     'Sens de lecture : vérifier que l’image respecte le sens de lecture de l’original.',
     'Redressement : vérifier visuellement que le texte ou la page n’est pas inclinée de manière gênante.',
     'Lisibilité : vérifier netteté, contraste réel et confort de lecture à 100 %, puis à 120 % en cas de doute.',
-    'Exemplarisation, date et suppléments : vérifier que la date et le numéro visibles correspondent au nommage et au récolement, y compris les suppléments, numéros bis et hors-série.',
+    'Date et numéro de fascicule : vérifier que la date et le numéro visibles correspondent au nommage et au récolement, y compris les suppléments, numéros bis et hors-série.',
     'Colorimétrie et rendu : vérifier visuellement la conformité au test validé, notamment en cas de doute sur les couleurs.',
     'Taille conforme à l’original : vérifier à 100 % l’absence de réduction ou d’agrandissement non prévu.',
   ];
@@ -1975,7 +1975,7 @@ function buildAleaExcel(){
     'Sens de lecture',
     'Redressement',
     'Lisibilité',
-    'Exemplarisation / date / suppléments',
+    'Date et numéro de fascicule',
     'Colorimétrie et rendu',
     'Taille conforme à l’original (100 %)'
   ];
@@ -2011,13 +2011,13 @@ function buildAleaExcel(){
   }).join('');
   const endRow=Math.max(1,rows.length+1);
   const consignes=[
-    ['Échantillonnage','Un tirage ISO 2859-1 distinct est constitué pour chaque titre. Les fichiers TIFF sont prioritaires ; les JPEG ne sont utilisés qu’en l’absence de TIFF pour le titre concerné. La décision Ac/Re s’applique séparément à chaque titre.'],
+    ['Échantillonnage','Un tirage ISO 2859-1 distinct est constitué pour chaque titre et porte sur les vues logiques. Chaque vue ne compte qu’une fois : son TIFF est prioritaire et son JPEG n’est utilisé qu’en l’absence du TIFF correspondant. La décision Ac/Re s’applique séparément à chaque titre.'],
     ['Page entière / double page','Vérifier que la page est entière. Une double page doit être numérisée en une seule vue si l’information se poursuit sur les deux pages ; sinon, chaque page doit être une vue distincte.'],
     ['Cadrage','Vérifier l’absence de rognage et de bord parasite. Conserver des marges régulières et suffisantes autour du document, conformément au test validé.'],
     ['Sens de lecture','Vérifier que l’image est orientée dans le sens normal de lecture.'],
     ['Redressement','Vérifier que les lignes du document sont droites et que l’image ne présente pas d’inclinaison gênante.'],
     ['Lisibilité','Contrôler à 100 %, puis à 120 % en cas de doute : netteté, contraste, absence de flou, reflet, moiré ou zone illisible.'],
-    ['Exemplarisation / date / suppléments','Comparer la date et le numéro visibles avec le nom du fichier et le récolement. Vérifier les suppléments, hors-série et numéros bis ; le suffixe « bis » doit être cohérent entre dossier et fichiers.'],
+    ['Date et numéro de fascicule','Comparer la date et le numéro visibles avec le nom du fichier et le récolement. Vérifier les suppléments, hors-série et numéros bis ; le suffixe « bis » doit être cohérent entre dossier et fichiers.'],
     ['Colorimétrie et rendu','Comparer au test validé : teintes, dominante, luminosité, contraste et homogénéité du rendu.'],
     ['Taille conforme à l’original (100 %)','Vérifier que la numérisation restitue le document à sa taille réelle, sans réduction ni agrandissement non prévu.'],
     ['Défauts de l’original','Ne pas déclarer comme défaut de numérisation une dégradation déjà présente sur l’original : tache, déchirure, pli, manque, transparence ou jaunissement. Le signaler seulement en information si nécessaire.'],

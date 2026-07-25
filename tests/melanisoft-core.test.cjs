@@ -74,6 +74,7 @@ vm.runInContext(`
     readTiffMeta,
     recoRowsToMap,
     buildDiskLookup,
+    buildExhaustivityAudit,
     buildAleaExcel,
     setAleaRows(rows) { aleaRows = rows; }
   };
@@ -197,24 +198,26 @@ function syntheticTiff() {
 (async () => {
   const titleAJpeg = Array.from({ length: 10 }, (_, i) => imageRow('Titre A', 'JPEG', i + 1));
   const titleATiff = Array.from({ length: 10 }, (_, i) => imageRow('Titre A', 'TIFF', i + 1));
+  const titleAJpegWithoutTiff = imageRow('Titre A', 'JPEG', 11);
   const titleBJpeg = Array.from({ length: 16 }, (_, i) => imageRow('Titre B', 'JPEG', i + 1));
-  const iso = api.buildIsoSampleByTitle([...titleAJpeg, ...titleBJpeg], titleATiff);
+  const iso = api.buildIsoSampleByTitle(
+    [...titleAJpeg, titleAJpegWithoutTiff, ...titleBJpeg],
+    titleATiff,
+  );
   assert.equal(iso.summary.plans.length, 2);
   assert.equal(iso.summary.sampleSize, 8);
+  assert.equal(iso.summary.plans.find(plan => plan.title === 'Titre A').lotSize, 11);
   assert.equal(iso.sample.filter(row => row.isoTitle === 'Titre A').length, 3);
-  assert.ok(iso.sample.filter(row => row.isoTitle === 'Titre A').every(row => row.ext === '.tif'));
+  assert.ok(iso.sample.filter(row => row.isoTitle === 'Titre A').every(
+    row => row.ext === '.tif' || /_0011\.jpg$/.test(row.name),
+  ));
   assert.equal(iso.sample.filter(row => row.isoTitle === 'Titre B').length, 5);
   assert.ok(iso.sample.filter(row => row.isoTitle === 'Titre B').every(row => row.ext === '.jpg'));
 
-  const duplicateOtherTitle = imageRow('Titre C', 'JPEG', 1);
-  const technical = api.buildTechnicalSampleRows(
-    [titleATiff[0]],
-    [titleAJpeg[0], duplicateOtherTitle],
-    [titleATiff[0]],
-  );
+  const technical = api.buildTechnicalSampleRows([titleATiff[0]]);
   assert.deepEqual(
-    [...technical.map(row => row.path)].sort(),
-    [titleAJpeg[0].path, titleATiff[0].path].sort(),
+    [...technical.map(row => row.path)],
+    [titleATiff[0].path],
   );
 
   const pairResult = api.compareJpegTiffRows(
@@ -260,6 +263,41 @@ function syntheticTiff() {
   const diskLookup = api.buildDiskLookup([folderNamedFascicule]);
   assert.equal(diskLookup.byFascIdentity.size, 1);
 
+  const parsedRow = row => ({ ...row, parsed: api.parseName(row.name) });
+  const auditJpeg1 = parsedRow(imageRow('Titre D', 'JPEG', 1));
+  const auditTiff1 = parsedRow(imageRow('Titre D', 'TIFF', 1));
+  const auditJpeg3 = parsedRow(imageRow('Titre D', 'JPEG', 3));
+  const auditTiff3 = parsedRow(imageRow('Titre D', 'TIFF', 3));
+  const extraOnDisk = parsedRow({
+    ...imageRow('Titre E', 'JPEG', 1),
+    name: 'FRB123456789_AUTRE_20260202_0001.jpg',
+    path: 'Livraison/Titre E/JPEG/2026/20260202/FRB123456789_AUTRE_20260202_0001.jpg',
+    parts: 'Livraison/Titre E/JPEG/2026/20260202/FRB123456789_AUTRE_20260202_0001.jpg'.split('/'),
+  });
+  const exhaustivity = api.buildExhaustivityAudit(
+    [auditJpeg1, auditTiff1, auditJpeg3, auditTiff3, extraOnDisk],
+    {
+      status: 'ok',
+      entries: [{
+        row: 2,
+        nbPages: '3',
+        produced: 3,
+        firstJpeg: auditJpeg1.name,
+        firstTiff: auditTiff1.name,
+        repertoire: '',
+      }],
+    },
+  );
+  assert.equal(exhaustivity.expectedFascicules, 1);
+  assert.equal(exhaustivity.foundFascicules, 2);
+  assert.equal(exhaustivity.missingViews, 1);
+  assert.equal(exhaustivity.extraFascicules, 1);
+  assert.equal(exhaustivity.diagnostics.length, 2);
+
+  const auditCall = html.indexOf('recordExhaustivityAudit(exhaustivityAudit)');
+  const auditStatus = html.indexOf("setC(34,anomalies.some(a=>a.control===34");
+  assert.ok(auditCall >= 0 && auditStatus > auditCall);
+
   const jpeg = fileLike(syntheticJpeg());
   const jpegBasic = await api.readJpegMeta(jpeg);
   assert.deepEqual(
@@ -302,6 +340,8 @@ function syntheticTiff() {
   const sheetXml = execFileSync('unzip', ['-p', workbookPath, 'xl/worksheets/sheet1.xml'], { encoding: 'utf8' });
   assert.match(sheetXml, /Colorimétrie et rendu/);
   assert.match(sheetXml, /Taille conforme à l’original \(100 %\)/);
+  assert.match(sheetXml, /Date et numéro de fascicule/);
+  assert.doesNotMatch(sheetXml, /Exemplarisation/i);
   assert.match(sheetXml, /sqref="I2:P2"/);
   const workbookXml = execFileSync('unzip', ['-p', workbookPath, 'xl/workbook.xml'], { encoding: 'utf8' });
   assert.match(workbookXml, /name="Consignes"/);
