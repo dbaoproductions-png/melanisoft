@@ -328,36 +328,61 @@ function randomSample(rows,size){
   }
   return copy.slice(0,Math.min(size,copy.length));
 }
+function imageLogicalKey(row){
+  const parsed=row&&row.parsed;
+  if(parsed&&parsed.ok){
+    return normKey(parsed.fascicule)+'|'+String(parsed.view||'');
+  }
+  return normKey(baseNoExt(row&&row.name||''));
+}
 function buildIsoSampleByTitle(jpegRows,tiffRows){
   const groups=new Map();
   const addRows=(kind,rows)=>{
     rows.forEach(r=>{
-      const key=titlePathForRow(r);
-      if(!groups.has(key))groups.set(key,{titlePath:key,title:titleLabelForRow(r),jpeg:[],tiff:[]});
-      groups.get(key)[kind].push(r);
+      const titlePath=titlePathForRow(r);
+      if(!groups.has(titlePath))groups.set(titlePath,{titlePath,title:titleLabelForRow(r),views:new Map()});
+      const group=groups.get(titlePath);
+      const viewKey=imageLogicalKey(r);
+      if(!group.views.has(viewKey))group.views.set(viewKey,{key:viewKey,jpeg:[],tiff:[]});
+      group.views.get(viewKey)[kind].push(r);
     });
   };
   addRows('jpeg',jpegRows);
   addRows('tiff',tiffRows);
+
   const plans=[],sample=[];
   [...groups.values()].sort((a,b)=>a.titlePath.localeCompare(b.titlePath,'fr')).forEach(group=>{
-    // Le guide recommande les TIFF pour le contrôle visuel ; les JPEG ne servent
-    // de repli que lorsqu’aucun TIFF n’est disponible pour le titre.
-    const source=group.tiff.length?group.tiff:group.jpeg;
-    const basePlan=iso2859Plan(source.length);
-    const plan={...basePlan,title:group.title,titlePath:group.titlePath,sourceKind:group.tiff.length?'TIFF':'JPEG'};
+    const logicalViews=[...group.views.values()];
+    const basePlan=iso2859Plan(logicalViews.length);
+    const tiffAvailable=logicalViews.filter(v=>v.tiff.length).length;
+    const jpegFallback=logicalViews.filter(v=>!v.tiff.length&&v.jpeg.length).length;
+    const plan={
+      ...basePlan,
+      title:group.title,
+      titlePath:group.titlePath,
+      sourceKind:'TIFF prioritaire, JPEG en repli',
+      tiffAvailable,
+      jpegFallback
+    };
     plans.push(plan);
-    randomSample(source,plan.sampleSize).forEach(r=>sample.push({
-      ...r,
-      isoTitle:plan.title,
-      isoTitlePath:plan.titlePath,
-      isoLotSize:plan.lotSize,
-      isoCode:plan.code,
-      isoAccept:plan.accept,
-      isoReject:plan.reject,
-      isoSourceKind:plan.sourceKind
-    }));
+
+    randomSample(logicalViews,plan.sampleSize).forEach(view=>{
+      const selected=view.tiff[0]||view.jpeg[0];
+      if(!selected)return;
+      sample.push({
+        ...selected,
+        isoTitle:plan.title,
+        isoTitlePath:plan.titlePath,
+        isoLotSize:plan.lotSize,
+        isoCode:plan.code,
+        isoAccept:plan.accept,
+        isoReject:plan.reject,
+        isoSourceKind:view.tiff.length?'TIFF':'JPEG (repli)',
+        isoLogicalView:view.key
+      });
+    });
   });
+
   if(plans.length===1)return {summary:{...plans[0],plans:null},sample};
   return {
     summary:{
@@ -373,18 +398,10 @@ function buildIsoSampleByTitle(jpegRows,tiffRows){
     sample
   };
 }
-function buildTechnicalSampleRows(visualSample,jpegRows,tiffRows){
-  const byBase=new Map();
-  [...jpegRows,...tiffRows].forEach(r=>{
-    const key=imagePairKey(r);
-    if(!byBase.has(key))byBase.set(key,[]);
-    byBase.get(key).push(r);
-  });
+function buildTechnicalSampleRows(visualSample){
   const selected=new Map();
-  visualSample.forEach(sampleRow=>{
-    const key=imagePairKey(sampleRow);
-    const matches=byBase.get(key)||[sampleRow];
-    matches.forEach(r=>selected.set(r.path,r));
+  visualSample.forEach(row=>{
+    if(row&&row.path&&!selected.has(row.path))selected.set(row.path,row);
   });
   return [...selected.values()];
 }
@@ -1505,7 +1522,7 @@ if(recoViewCounts.status!=='ok'){
   add('ALERTE',52,'','Conformité du contenu IPTC non vérifiable : le récolement n’a pas pu être exploité. '+recoViewCounts.message);
 }
 await MelanisoftPerformance.yieldToBrowser('Contrôles métier terminés. Analyse technique des images...');
-const technicalSample=buildTechnicalSampleRows(sample,jpeg,tiff);
+const technicalSample=buildTechnicalSampleRows(sample);
 let max=technicalSample.length,done=0,histogramSuccess=0;
 for(let r of technicalSample){
   try{
