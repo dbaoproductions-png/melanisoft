@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MÉLANISOFT v1.1</title>
+<style>
+body{font-family:Arial,Helvetica,sans-serif;background:#fff1f7;color:#24111d;margin:0;min-height:100vh;display:grid;place-items:center}
+main{max-width:720px;margin:24px;background:#fff;border:1px solid #f3d4e2;border-radius:18px;padding:28px;box-shadow:0 12px 32px rgba(131,24,67,.10)}
+h1{margin:0 0 12px;color:#be185d}.small{color:#7b5368;line-height:1.5}.error{color:#b00020;font-weight:700}
+</style>
+</head>
+<body>
+<main>
+<h1>MÉLANISOFT v1.1</h1>
+<p>Ouverture de l’application…</p>
+<p id="loaderStatus" class="small"></p>
+</main>
+<script>
+(async function(){
+  const status=document.getElementById('loaderStatus');
+  try{
+    const response=await fetch('./Melanisoft_finition_rose.html',{cache:'no-store'});
+    if(!response.ok)throw new Error('source introuvable ('+response.status+')');
+    let source=await response.text();
+
+    const parser=new DOMParser();
+    const doc=parser.parseFromString(source,'text/html');
+    const main=doc.querySelector('main.main');
+    const sidebar=doc.querySelector('.sidebar');
+    if(!main||!sidebar)throw new Error('structure principale introuvable');
+
+    const sections=[
+      ['parametres','Paramètres de livraison','01'],
+      ['controle','Contrôle et exports','02'],
+      ['summary','Synthèse du contrôle','03'],
+      ['rapportMetier','Rapport de contrôle qualité','04'],
+      ['controls','Contrôles effectués automatiquement','05'],
+      ['anomalies','Points d’attention détaillés','06']
+    ];
+
+    sidebar.querySelectorAll('.navlink').forEach(el=>el.remove());
+    sections.forEach(([id,label,num])=>{
+      const a=doc.createElement('a');
+      a.className='navlink';
+      a.href='#'+id;
+      const strong=doc.createElement('strong');
+      strong.textContent=label;
+      const span=doc.createElement('span');
+      span.textContent=num;
+      a.append(strong,span);
+      sidebar.appendChild(a);
+    });
+
+    sections.forEach(([id,label,num])=>{
+      const block=doc.getElementById(id);
+      if(!block)throw new Error('section '+id+' introuvable');
+      block.classList.add('major-section');
+      block.setAttribute('data-section-number',num);
+      main.appendChild(block);
+    });
+
+    const style=doc.createElement('style');
+    style.textContent=`
+      .major-section{position:relative;border:2px solid #efb8d0!important;box-shadow:0 12px 32px rgba(131,24,67,.10);padding-top:24px!important;scroll-margin-top:20px}
+      .major-section::before{content:attr(data-section-number);position:absolute;top:-13px;left:18px;min-width:38px;height:26px;padding:0 9px;border-radius:999px;background:#be185d;color:#fff;border:3px solid #fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;letter-spacing:.05em;box-shadow:0 4px 10px rgba(131,24,67,.18)}
+      .navlink:focus-visible{outline:3px solid #f9a8d4;outline-offset:2px}
+    `;
+    doc.head.appendChild(style);
+
+    source='<!doctype html>\n'+doc.documentElement.outerHTML;
+
+    const iptcReplacement=`function recoGlobalIptcReference(recoResult){
+  if(!recoResult || recoResult.status!=='ok')return null;
+  const informed=(recoResult.entries||[]).filter(function(e){return String(e.establishment||'').trim() || String(e.coteTitle||'').trim();});
+  if(informed.length!==1)return null;
+  const entry=informed[0];
+  if(!String(entry.establishment||'').trim() || !String(entry.coteTitle||'').trim())return null;
+  return entry;
+}
+function recoIptcReferenceForImage(recoResult,row){
+  const globalReference=recoGlobalIptcReference(recoResult);
+  if(globalReference)return {entry:globalReference,global:true};
+  return {entry:findRecoEntryForImage(recoResult,row),global:false};
+}
+function iptcConformityIssues(meta,row,recoResult){
+  const issues=[];
+  const reference=recoIptcReferenceForImage(recoResult,row);
+  const entry=reference.entry;
+  if(!entry){issues.push({line:'',message:'Conformité IPTC non vérifiable : aucune ligne du récolement ne correspond à cette image.'});return issues;}
+  const expectedSource=String(entry.establishment||'').trim();
+  const expectedHeadline=String(entry.coteTitle||'').trim();
+  const globalNote=reference.global?' (référence globale renseignée sur une seule ligne)':'';
+  if(!expectedSource){issues.push({line:entry.row,message:'Conformité du champ IPTC Source non vérifiable : la colonne « Etablissement de conservation » est vide dans le récolement.'});}
+  else if(meta.iptcSource && normMetadataText(meta.iptcSourceValue)!==normMetadataText(expectedSource)){issues.push({line:entry.row,message:'Champ IPTC Source non conforme : « '+meta.iptcSourceValue+' », attendu « '+expectedSource+' » d’après la colonne « Etablissement de conservation » du récolement'+globalNote+'.'});}
+  if(!expectedHeadline){issues.push({line:entry.row,message:'Conformité du champ IPTC Headline non vérifiable : la colonne « Cote titre » est vide dans le récolement.'});}
+  else if(meta.iptcHeadline && normMetadataText(meta.iptcHeadlineValue)!==normMetadataText(expectedHeadline)){issues.push({line:entry.row,message:'Champ IPTC Headline non conforme : « '+meta.iptcHeadlineValue+' », attendu « '+expectedHeadline+' » d’après la colonne « Cote titre » du récolement'+globalNote+'.'});}
+  return issues;
+}`;
+
+    source=source.replace(/function iptcConformityIssues\(meta,row,recoResult\)\{[\s\S]*?\n\}\nfunction recordEmbeddedMetadataIssues/,iptcReplacement+'\nfunction recordEmbeddedMetadataIssues');
+    source=source.replace(/if\(!e\.establishment\)missingFields\.push\('Etablissement de conservation'\);\s*if\(!e\.coteTitle\)missingFields\.push\('Cote titre'\);/,"const globalIptcReference=recoGlobalIptcReference(recoViewCounts);\n    if(!globalIptcReference && !e.establishment)missingFields.push('Etablissement de conservation');\n    if(!globalIptcReference && !e.coteTitle)missingFields.push('Cote titre');");
+
+    const blob=new Blob([source],{type:'text/html;charset=utf-8'});
+    location.replace(URL.createObjectURL(blob));
+  }catch(error){
+    status.className='error';
+    status.textContent='Impossible d’ouvrir Mélanisoft : '+error.message;
+  }
+})();
+</script>
+</body>
+</html>
