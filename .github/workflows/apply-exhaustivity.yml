@@ -1,0 +1,30 @@
+name: Apply exhaustivity patch
+
+on:
+  push:
+    paths:
+      - 'tools/apply_exhaustivity_patch.py'
+      - '.github/workflows/apply-exhaustivity.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply patch
+        run: python tools/apply_exhaustivity_patch.py
+      - name: Commit updated HTML
+        run: |
+          if git diff --quiet -- Melanisoft_finition_rose.html; then
+            echo "No change needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Melanisoft_finition_rose.html
+          git commit -m "Intégrer le moteur d’exhaustivité"
+          git push
