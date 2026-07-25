@@ -73,7 +73,7 @@
         <div class="grid-2">
           <div class="field"><span>Échantillonnage ISO 2859-1</span><div id="isoPreview" class="iso-preview">Le nombre de vues sera calculé automatiquement après sélection de la livraison.</div></div>
         </div>
-        <p class="small">L’échantillon ALÉA est calculé automatiquement à partir du nombre de vues de consultation, selon le niveau de contrôle général II et un NQA de 1 %. Si aucun JPEG n’est détecté, les TIFF servent de base au tirage.</p>
+        <p class="small">Un échantillon ALÉA distinct est calculé automatiquement pour chaque titre, selon le niveau de contrôle général II et un NQA de 1 %. Les TIFF sont utilisés en priorité pour le contrôle visuel ; les JPEG servent de repli lorsqu’aucun TIFF n’est disponible.</p>
         <div class="actions">
           <button id="run">Analyser la livraison</button>
           <button id="exportAttentionExcel" disabled>Exporter les points d’attention détaillés (Excel)</button>
@@ -179,7 +179,16 @@ function iso2859Plan(lotSize){
 }
 function formatIsoPlan(plan){
   if(!plan)return 'Le nombre de vues sera calculé automatiquement après sélection de la livraison.';
+  if(Array.isArray(plan.plans)){
+    const details=plan.plans.map(p=>`${p.title} : lot ${p.lotSize}, code ${p.code}, échantillon ${p.sampleSize}, Ac ${p.accept} / Re ${p.reject}`).join(' · ');
+    return `${plan.plans.length} titre(s) · ${plan.lotSize} vues au total · Niveau ${plan.level} · NQA ${plan.nqa} · Échantillon total : ${plan.sampleSize} vues · Décision appliquée séparément par titre. ${details}`;
+  }
   return `Lot : ${plan.lotSize} vues · Niveau ${plan.level} · NQA ${plan.nqa} · Lettre-code ${plan.code} · Échantillon : ${plan.sampleSize} vues · Acceptation ≤ ${plan.accept} · Rejet ≥ ${plan.reject}`;
+}
+function isoDecisionText(plan){
+  if(!plan)return 'Plan non calculé';
+  if(Array.isArray(plan.plans))return 'Seuils Ac/Re appliqués séparément à chaque titre';
+  return `Acceptation ≤ ${plan.accept} · Rejet ≥ ${plan.reject}`;
 }
 function updateIsoPreview(plan){
   const el=$('isoPreview');
@@ -191,7 +200,7 @@ const controls=[
 [11,'Détection des images de consultation JPEG'],[12,'Détection des images de conservation TIFF'],[13,'Vérification de l’extension des fichiers JPEG'],[14,'Vérification de l’extension des fichiers TIFF'],[15,'Recherche d’espaces dans les noms de fichiers'],[16,'Vérification de l’usage des underscores dans les noms de fichiers'],[17,'Vérification du nommage normalisé des fichiers'],[18,'Détection des fichiers correspondant à un fascicule bis'],[19,'Vérification du numéro de vue sur quatre chiffres'],[20,'Vérification de l’absence de vue numérotée 0000'],
 [21,'Vérification de la validité des dates AAAAMMJJ'],[22,'Signalement des dates impossibles'],[22.5,'Vérification de la périodicité attendue des fascicules'],[23,'Cohérence entre l’année du fichier et le dossier d’année'],[24,'Cohérence entre la date du fichier et le dossier de fascicule'],[25,'Cohérence du suffixe bis'],[26,'Recherche de vues manquantes dans les fascicules'],[27,'Vérification du démarrage de chaque fascicule à la vue 0001'],[28,'Recherche de noms de fichiers en doublon'],[29,'Recherche de chemins complets en doublon'],[30,'Recherche de fichiers vides'],[30.5,'Analyse de cohérence de l’histogramme des images'],
 [31,'Vérification de la correspondance entre JPEG et TIFF'],[32,'Recherche de JPEG sans TIFF correspondant'],[33,'Recherche de TIFF sans JPEG correspondant'],[34,'Cohérence entre récolement initial, saisie prestataire et fichiers livrés'],[35,'Repérage des fascicules avec un nombre de vues atypique'],[36,'Vérification du fichier de récolement sélectionné'],[37,'Inventaire des documents annexes livrés'],[38,'Nombre de titres ou ensembles documentaires détectés'],[39,'Synthèse des contrôles par titre ou ensemble documentaire'],
-[41,'Vérification de l’ouverture des images JPEG'],[42,'Lecture des dimensions des images JPEG'],[43,'Lecture du DPI des images JPEG lorsque l’information existe'],[44,'Signalement des JPEG dont le DPI diffère de 400'],[45,'Vérification partielle de l’ouverture des images TIFF'],[46,'Lecture des dimensions des images TIFF lorsque c’est possible'],[47,'Signalement des images de très petite dimension'],[48,'Signalement des fichiers de taille inhabituelle'],[51,'Vérification des métadonnées EXIF des JPEG'],[52,'Présence et conformité des métadonnées IPTC avec le récolement'],[53,'Vérification du profil colorimétrique ICC en RGB'],[49,'Génération de l’échantillon de contrôle visuel'],[50,'Disponibilité du rapport de contrôle']
+[41,'Vérification de l’ouverture des JPEG de l’échantillon'],[42,'Lecture des dimensions des JPEG de l’échantillon'],[43,'Présence et lecture du DPI des JPEG et TIFF de l’échantillon'],[44,'Signalement des images dont le DPI diffère de 400'],[45,'Vérification de l’ouverture des TIFF de l’échantillon'],[46,'Lecture des dimensions des TIFF de l’échantillon'],[47,'Signalement des images de très petite dimension'],[48,'Signalement des fichiers de taille inhabituelle'],[51,'Présence des métadonnées EXIF sur les JPEG et TIFF de l’échantillon'],[52,'Présence et conformité des métadonnées IPTC JPEG/TIFF avec le récolement'],[53,'Vérification du profil colorimétrique ICC en RGB sur les JPEG et TIFF'],[49,'Génération d’un échantillon ISO distinct par titre, TIFF prioritaire'],[50,'Disponibilité du rapport de contrôle']
 ].map(x=>({id:x[0],name:x[1],status:'Non lancé',count:0}));
 const controlDisplayOrder=[1,2,3,36,37,38,39,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,22.5,23,24,25,26,27,28,29,30,31,32,33,41,42,43,44,45,46,47,48,30.5,51,52,53,34,35,49,50];
 function orderedControls(){
@@ -302,6 +311,83 @@ function isConservDir(p){return String(p).toLowerCase()===cfg().conservNorm}
 function isImageDir(p){return isConsultDir(p)||isConservDir(p)}
 function imageDirIndex(parts){return parts.findIndex(p=>isImageDir(p))}
 function imageKind(p){return isConsultDir(p)?'consultation':(isConservDir(p)?'conservation':'')}
+function titlePathForRow(r){
+  const parts=(r&&r.parts)||[];
+  const i=imageDirIndex(parts);
+  return i>0?parts.slice(0,i).join('/'):(parts[0]||'(titre non identifié)');
+}
+function titleLabelForRow(r){
+  const path=titlePathForRow(r);
+  return path.split('/').pop()||path;
+}
+function randomSample(rows,size){
+  const copy=[...rows];
+  for(let i=copy.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [copy[i],copy[j]]=[copy[j],copy[i]];
+  }
+  return copy.slice(0,Math.min(size,copy.length));
+}
+function buildIsoSampleByTitle(jpegRows,tiffRows){
+  const groups=new Map();
+  const addRows=(kind,rows)=>{
+    rows.forEach(r=>{
+      const key=titlePathForRow(r);
+      if(!groups.has(key))groups.set(key,{titlePath:key,title:titleLabelForRow(r),jpeg:[],tiff:[]});
+      groups.get(key)[kind].push(r);
+    });
+  };
+  addRows('jpeg',jpegRows);
+  addRows('tiff',tiffRows);
+  const plans=[],sample=[];
+  [...groups.values()].sort((a,b)=>a.titlePath.localeCompare(b.titlePath,'fr')).forEach(group=>{
+    // Le guide recommande les TIFF pour le contrôle visuel ; les JPEG ne servent
+    // de repli que lorsqu’aucun TIFF n’est disponible pour le titre.
+    const source=group.tiff.length?group.tiff:group.jpeg;
+    const basePlan=iso2859Plan(source.length);
+    const plan={...basePlan,title:group.title,titlePath:group.titlePath,sourceKind:group.tiff.length?'TIFF':'JPEG'};
+    plans.push(plan);
+    randomSample(source,plan.sampleSize).forEach(r=>sample.push({
+      ...r,
+      isoTitle:plan.title,
+      isoTitlePath:plan.titlePath,
+      isoLotSize:plan.lotSize,
+      isoCode:plan.code,
+      isoAccept:plan.accept,
+      isoReject:plan.reject,
+      isoSourceKind:plan.sourceKind
+    }));
+  });
+  if(plans.length===1)return {summary:{...plans[0],plans:null},sample};
+  return {
+    summary:{
+      plans,
+      lotSize:plans.reduce((sum,p)=>sum+p.lotSize,0),
+      level:'II',
+      nqa:'1 %',
+      code:plans.length+' plans',
+      sampleSize:plans.reduce((sum,p)=>sum+p.sampleSize,0),
+      accept:null,
+      reject:null
+    },
+    sample
+  };
+}
+function buildTechnicalSampleRows(visualSample,jpegRows,tiffRows){
+  const byBase=new Map();
+  [...jpegRows,...tiffRows].forEach(r=>{
+    const key=normKey(baseNoExt(r.name));
+    if(!byBase.has(key))byBase.set(key,[]);
+    byBase.get(key).push(r);
+  });
+  const selected=new Map();
+  visualSample.forEach(sampleRow=>{
+    const key=normKey(baseNoExt(sampleRow.name));
+    const matches=byBase.get(key)||[sampleRow];
+    matches.forEach(r=>selected.set(r.path,r));
+  });
+  return [...selected.values()];
+}
 function populateReco(){
   files=[...$('folder').files]; validatedReco=''; $('recoStatus').textContent=''; lastIsoPlan=null; updateIsoPreview(null);
   recoCandidates=files.filter(f=>['.xls','.xlsx','.csv'].includes(ext(f.name))).map(f=>f.webkitRelativePath);
@@ -368,6 +454,7 @@ function isCalibrationImageRow(r){
 function parseName(n){
   const original=String(n||'');
   const b=baseNoExt(original);
+  if(/\s/.test(b) || /^_|_$|__/.test(b))return {ok:false,rcr:'',cote:'',date:'',view:'',viewNumber:null,bis:false,fascicule:'',base:b,extension:ext(original)};
   const p=b.split('_').filter(x=>x!=='' );
   const out={ok:false,rcr:'',cote:'',date:'',view:'',viewNumber:null,bis:false,fascicule:'',base:b,extension:ext(original)};
   if(p.length<4)return out;
@@ -387,7 +474,7 @@ function parseName(n){
   out.date=p[dateIdx];
   out.rcr=p[0]||'';
   out.cote=p.slice(1,dateIdx).join('_');
-  if(!out.rcr || !out.cote)return out;
+  if(!/^FRB\d{9}$/i.test(out.rcr) || !out.cote)return out;
   out.fascicule=[out.rcr,out.cote,out.date].concat(out.bis?['bis']:[]).join('_');
   out.ok=true;
   return out;
@@ -396,12 +483,81 @@ function parseRefName(v){
   const raw=String(v||'').trim().split(/[\/]/).pop();
   return parseName(raw);
 }
-async function readJpegMeta(file){let buf=await file.slice(0,65536).arrayBuffer();let v=new DataView(buf); if(v.getUint16(0)!==0xFFD8)throw 'JPEG invalide'; let pos=2, dpi=null,w=null,h=null; while(pos+9<v.byteLength){ if(v.getUint8(pos)!==0xFF)break; let marker=v.getUint8(pos+1), len=v.getUint16(pos+2); if(marker===0xE0 && pos+14<v.byteLength){let id=String.fromCharCode(...new Uint8Array(buf,pos+4,5)); if(id==='JFIF\0'){let units=v.getUint8(pos+11),xd=v.getUint16(pos+12),yd=v.getUint16(pos+14); if(units===1)dpi=Math.round((xd+yd)/2); if(units===2)dpi=Math.round(((xd+yd)/2)*2.54);}}
- if([0xC0,0xC1,0xC2,0xC3].includes(marker)){h=v.getUint16(pos+5);w=v.getUint16(pos+7);break;} pos+=2+len;} return {w,h,dpi};}
+function parseFasciculeIdentity(v){
+  const raw=baseNoExt(String(v||'').trim().replace(/\\/g,'/').split('/').pop()||'');
+  if(!raw)return null;
+  const direct=parseName(raw);
+  if(direct.ok)return direct;
+  const withView=parseName(raw+'_0001.jpg');
+  return withView.ok?withView:null;
+}
+function exifDpiFromSegment(seg){
+  if(seg.length<14 || String.fromCharCode(...seg.slice(0,4))!=='Exif')return null;
+  const start=6;
+  const le=seg[start]===0x49&&seg[start+1]===0x49;
+  const be=seg[start]===0x4D&&seg[start+1]===0x4D;
+  if(!le&&!be)return null;
+  const v=new DataView(seg.buffer,seg.byteOffset,seg.byteLength);
+  const ifd=start+v.getUint32(start+4,le);
+  if(ifd+2>seg.length)return null;
+  const count=v.getUint16(ifd,le);
+  let x=null,y=null,unit=2;
+  for(let i=0;i<count;i++){
+    const o=ifd+2+i*12;
+    if(o+12>seg.length)break;
+    const tag=v.getUint16(o,le),type=v.getUint16(o+2,le),n=v.getUint32(o+4,le);
+    const size=({1:1,2:1,3:2,4:4,5:8,7:1})[type]||1;
+    const len=size*n;
+    const dataPos=len<=4?o+8:start+v.getUint32(o+8,le);
+    if(dataPos<0||dataPos+len>seg.length)continue;
+    if((tag===282||tag===283)&&type===5&&len>=8){
+      const den=v.getUint32(dataPos+4,le);
+      const value=den?v.getUint32(dataPos,le)/den:null;
+      if(tag===282)x=value; else y=value;
+    }
+    if(tag===296&&type===3)unit=v.getUint16(dataPos,le);
+  }
+  if(!x&&!y)return null;
+  let dpi=(Number(x)||Number(y));
+  if(x&&y)dpi=(x+y)/2;
+  if(unit===3)dpi*=2.54;
+  return Math.round(dpi);
+}
+async function readJpegMeta(file){
+  let buf=await file.slice(0,262144).arrayBuffer(),v=new DataView(buf);
+  if(v.getUint16(0)!==0xFFD8)throw 'JPEG invalide';
+  let pos=2,dpi=null,w=null,h=null;
+  while(pos+9<v.byteLength){
+    if(v.getUint8(pos)!==0xFF){pos++;continue;}
+    let marker=v.getUint8(pos+1),len=v.getUint16(pos+2);
+    if(len<2||pos+2+len>v.byteLength)break;
+    if(marker===0xE0 && pos+16<v.byteLength){
+      let id=String.fromCharCode(...new Uint8Array(buf,pos+4,5));
+      if(id==='JFIF\0'){
+        let units=v.getUint8(pos+11),xd=v.getUint16(pos+12),yd=v.getUint16(pos+14);
+        if(units===1)dpi=Math.round((xd+yd)/2);
+        if(units===2)dpi=Math.round(((xd+yd)/2)*2.54);
+      }
+    }
+    if(marker===0xE1 && !dpi){
+      const seg=new Uint8Array(buf,pos+4,len-2);
+      dpi=exifDpiFromSegment(seg);
+    }
+    if([0xC0,0xC1,0xC2,0xC3].includes(marker)){
+      h=v.getUint16(pos+5);w=v.getUint16(pos+7);
+      break;
+    }
+    pos+=2+len;
+  }
+  return {w,h,dpi};
+}
 
 
 async function readJpegTechnicalMetadata(file){
-  const buf=await file.arrayBuffer();
+  // Les segments EXIF/IPTC/ICC sont placés avant les données compressées de
+  // l’image. Une lecture bornée évite de charger intégralement chaque JPEG du
+  // grand échantillon et maintient l’interface réactive.
+  const buf=await file.slice(0,Math.min(file.size,2097152)).arrayBuffer();
   const bytes=new Uint8Array(buf);
   const decLatin=new TextDecoder('latin1');
   const result={
@@ -460,6 +616,9 @@ async function readJpegTechnicalMetadata(file){
 function parseIptcFromApp13(seg,result,decLatin){
   const txt=decLatin.decode(seg.slice(0,32));
   if(!txt.includes('Photoshop') && !txt.includes('8BIM'))return;
+  parseIptcDatasets(seg,result,decLatin);
+}
+function parseIptcDatasets(seg,result,decLatin=new TextDecoder('latin1')){
   let decIptc=decLatin;
   // IPTC IIM 1:90 contient ESC % G lorsque les textes sont encodés en UTF-8.
   // Sans cette indication, l’encodage historique Latin-1 reste utilisé.
@@ -534,7 +693,109 @@ async function analyzeJpegHistogram(file){
   if(dark>=0.35 && light>=0.35)issues.push('contraste extrême avec écrêtage possible des noirs et des blancs');
   return {issues, mean, std, spread, dark, light};
 }
-async function readTiffMeta(file){let buf=await file.slice(0,65536).arrayBuffer();let v=new DataView(buf);let le; if(v.getUint16(0,true)===0x4949)le=true; else if(v.getUint16(0,false)===0x4D4D)le=false; else throw 'TIFF invalide'; let magic=v.getUint16(2,le); if(magic!==42)throw 'TIFF non standard'; let ifd=v.getUint32(4,le); if(ifd+2>v.byteLength)return {}; let n=v.getUint16(ifd,le),w=null,h=null; for(let i=0;i<n;i++){let o=ifd+2+i*12;if(o+12>v.byteLength)break;let tag=v.getUint16(o,le),val=v.getUint32(o+8,le); if(tag===256)w=val;if(tag===257)h=val;} return {w,h};}
+function tiffTypeSize(type){return ({1:1,2:1,3:2,4:4,5:8,7:1,9:4,10:8})[type]||1}
+function tiffNumber(bytes,type,le,index=0){
+  const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+  if(type===3&&index*2+2<=bytes.length)return v.getUint16(index*2,le);
+  if(type===4&&index*4+4<=bytes.length)return v.getUint32(index*4,le);
+  if(type===9&&index*4+4<=bytes.length)return v.getInt32(index*4,le);
+  if((type===1||type===7)&&index<bytes.length)return bytes[index];
+  return null;
+}
+function tiffRational(bytes,type,le){
+  if(bytes.length<8)return null;
+  const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+  const signed=type===10;
+  const num=signed?v.getInt32(0,le):v.getUint32(0,le);
+  const den=signed?v.getInt32(4,le):v.getUint32(4,le);
+  return den?num/den:null;
+}
+async function tiffEntryBytes(file,head,v,o,type,count,le){
+  const length=tiffTypeSize(type)*count;
+  if(length<=4)return new Uint8Array(head,o+8,length);
+  const offset=v.getUint32(o+8,le);
+  if(offset+length<=head.byteLength)return new Uint8Array(head,offset,length);
+  return new Uint8Array(await file.slice(offset,offset+length).arrayBuffer());
+}
+async function readTiffMeta(file){
+  const head=await file.slice(0,Math.min(file.size,1048576)).arrayBuffer();
+  const v=new DataView(head);
+  let le;
+  if(v.getUint16(0,true)===0x4949)le=true;
+  else if(v.getUint16(0,false)===0x4D4D)le=false;
+  else throw new Error('TIFF invalide');
+  const magic=v.getUint16(2,le);
+  if(magic!==42)throw new Error(magic===43?'TIFF BigTIFF non pris en charge':'TIFF non standard');
+  const ifd=v.getUint32(4,le);
+  if(ifd+2>v.byteLength)throw new Error('Répertoire IFD TIFF hors de la zone lisible');
+  const n=v.getUint16(ifd,le);
+  const entries=new Map();
+  for(let i=0;i<n;i++){
+    const o=ifd+2+i*12;
+    if(o+12>v.byteLength)break;
+    const tag=v.getUint16(o,le),type=v.getUint16(o+2,le),count=v.getUint32(o+4,le);
+    entries.set(tag,{o,type,count});
+  }
+  const getBytes=async tag=>{
+    const e=entries.get(tag);
+    return e?await tiffEntryBytes(file,head,v,e.o,e.type,e.count,le):null;
+  };
+  const getNumber=async tag=>{
+    const e=entries.get(tag),bytes=await getBytes(tag);
+    return e&&bytes?tiffNumber(bytes,e.type,le):null;
+  };
+  const result={
+    w:await getNumber(256),
+    h:await getNumber(257),
+    dpi:null,
+    exif:entries.has(34665)||entries.has(271)||entries.has(272)||entries.has(306),
+    iptc:false,
+    iptcSource:false,
+    iptcHeadline:false,
+    iptcSourceValue:'',
+    iptcHeadlineValue:'',
+    iptcCharset:'latin1',
+    icc:false,
+    iccRgb:false,
+    iccColorSpace:'',
+    rgb:false
+  };
+  const xEntry=entries.get(282),yEntry=entries.get(283);
+  const xBytes=await getBytes(282),yBytes=await getBytes(283);
+  const x=xEntry&&xBytes?tiffRational(xBytes,xEntry.type,le):null;
+  const y=yEntry&&yBytes?tiffRational(yBytes,yEntry.type,le):null;
+  let dpi=(Number(x)||Number(y)||null);
+  if(x&&y)dpi=(x+y)/2;
+  const unit=await getNumber(296);
+  if(dpi&&unit===3)dpi*=2.54;
+  if(dpi)result.dpi=Math.round(dpi);
+  const photometric=await getNumber(262),samples=await getNumber(277);
+  result.rgb=photometric===2&&(samples===null||samples>=3);
+
+  const iptcEntry=entries.get(33723);
+  const iptcBytes=await getBytes(33723);
+  if(iptcEntry&&iptcBytes){
+    parseIptcDatasets(iptcBytes,result,new TextDecoder('latin1'));
+    if(!result.iptc&&iptcEntry.type===4&&le){
+      const reordered=new Uint8Array(iptcBytes.length);
+      for(let i=0;i<iptcBytes.length;i+=4){
+        const end=Math.min(i+4,iptcBytes.length);
+        for(let j=i;j<end;j++)reordered[i+(end-1-j)]=iptcBytes[j];
+      }
+      parseIptcDatasets(reordered,result,new TextDecoder('latin1'));
+    }
+  }
+  const iccBytes=await getBytes(34675);
+  if(iccBytes&&iccBytes.length){
+    result.icc=true;
+    if(iccBytes.length>=20){
+      result.iccColorSpace=new TextDecoder('latin1').decode(iccBytes.slice(16,20)).trim();
+      result.iccRgb=result.iccColorSpace==='RGB';
+    }
+  }
+  if(result.iccRgb)result.rgb=true;
+  return result;
+}
 
 function csvSplit(line, sep){let out=[],cur='',q=false;for(let i=0;i<line.length;i++){let c=line[i];if(c==='"'){if(q&&line[i+1]==='"'){cur+='"';i++;}else q=!q;}else if(c===sep&&!q){out.push(cur);cur='';}else cur+=c;}out.push(cur);return out.map(x=>x.trim());}
 function guessSep(line){let seps=[';','\t',','];return seps.sort((a,b)=>line.split(b).length-line.split(a).length)[0];}
@@ -643,12 +904,20 @@ async function recoRowsToMap(table){
     establishment:headerIndex(headers,[/^etablissement de conservation$/, /etablissement.*conservation/]),
     coteTitle:headerIndex(headers,[/^cote titre$/])
   };
+  // Certains modèles comportent deux colonnes « Observations » : une sur
+  // l’état initial du document et une autre dans la zone renseignée par le
+  // prestataire. On privilégie celle placée après les colonnes de production.
+  const observationCandidates=headers.map((h,i)=>({h,i})).filter(x=>/^observations?$/.test(x.h)||/observation.*prestataire|commentaire.*prestataire/.test(x.h));
+  const providerObservation=observationCandidates.find(x=>idx.produced>=0&&x.i>idx.produced);
+  if(providerObservation)idx.observation=providerObservation.i;
   if(idx.repertoire<0||idx.produced<0)return {status:'headers',map:new Map(),entries:[],message:'Colonnes récolement non reconnues : attendu au minimum « Répertoire » et « Nbre de fichiers produits »'};
   let map=new Map(), entries=[], ignored=[];
   for(let i=headerRow+1;i<table.length;i++){
     let cols=table[i];
     let repertoire=String(cols[idx.repertoire]||'').trim();
-    let produced=parseInt(String(cols[idx.produced]||'').replace(/\D+/g,''),10);
+    let firstJpeg=idx.firstJpeg>=0?String(cols[idx.firstJpeg]||'').trim():'';
+    let firstTiff=idx.firstTiff>=0?String(cols[idx.firstTiff]||'').trim():'';
+    let produced=firstInt(cols[idx.produced]);
     let annee=idx.annee>=0?String(cols[idx.annee]||'').trim():'';
     let mois=idx.mois>=0?String(cols[idx.mois]||'').trim():'';
     let jour=idx.jour>=0?String(cols[idx.jour]||'').trim():'';
@@ -659,13 +928,18 @@ async function recoRowsToMap(table){
       let d=jour.replace(/\D/g,'').padStart(2,'0').slice(-2);
       if(y&&m&&d)date=y+m+d;
     }
+    if(!validDate(date)){
+      const refs=[repertoire,firstJpeg,firstTiff].join(' ');
+      const found=[...refs.matchAll(/(?:^|[^0-9])(\d{8})(?:[^0-9]|$)/g)].map(m=>m[1]).find(validDate);
+      if(found)date=found;
+    }
 
     // Filtre métier : seules les lignes correspondant à de vrais fascicules sont exploitées.
-    // Cela évite les faux positifs sur des lignes de titre, de prestataire, de total ou de commentaire.
+    // Une ligne du récolement initial reste exploitable même si le prestataire
+    // n’a renseigné ni répertoire ni références : c’est précisément ainsi que
+    // l’on peut repérer un fascicule oublié dans la livraison.
     let reasons=[];
-    if(!repertoire)reasons.push('répertoire vide');
     if(!date || date==='00000000' || !validDate(date))reasons.push('date vide ou invalide');
-    if(repertoire && !/(\d{8})(?:_bis)?$/.test(repertoire))reasons.push('répertoire sans date de fascicule finale');
     if(reasons.length){
       ignored.push({row:i+1,repertoire,date,reason:reasons.join(', ')});
       await MelanisoftPerformance.heartbeat(i+1,table.length,'Indexation du récolement : '+(i+1)+' / '+table.length+' lignes...');
@@ -678,8 +952,8 @@ async function recoRowsToMap(table){
       nbPages:idx.nbPages>=0?String(cols[idx.nbPages]||'').trim():'',
       pagination:idx.pagination>=0?String(cols[idx.pagination]||'').trim():'',
       repertoire,
-      firstJpeg:idx.firstJpeg>=0?String(cols[idx.firstJpeg]||'').trim():'',
-      firstTiff:idx.firstTiff>=0?String(cols[idx.firstTiff]||'').trim():'',
+      firstJpeg,
+      firstTiff,
       produced:Number.isFinite(produced)?produced:null,
       observation:idx.observation>=0?String(cols[idx.observation]||'').trim():'',
       establishment:idx.establishment>=0?String(cols[idx.establishment]||'').trim():'',
@@ -694,7 +968,7 @@ async function recoRowsToMap(table){
   ['Année début','Mois début','Jour début','Nb de pages','Pagination','Répertoire','Réf. 1er fichier numérique (JPEG)','Réf. 1er fichier numérique (TIFF)','Nbre de fichiers produits','Observation prestataire','Etablissement de conservation','Cote titre'].forEach((label,i)=>{
     const keys=['annee','mois','jour','nbPages','pagination','repertoire','firstJpeg','firstTiff','produced','observation','establishment','coteTitle']; if(idx[keys[i]]>=0)found.push(label);
   });
-  return {status:'ok',map,entries,ignored,message:entries.length+' lignes de récolement exploitables, '+ignored.length+' lignes ignorées. Colonnes reconnues : '+found.join(', ')};
+  return {status:'ok',map,entries,ignored,headers:idx,message:entries.length+' lignes de récolement exploitables, '+ignored.length+' lignes ignorées. Colonnes reconnues : '+found.join(', ')};
 }
 async function loadRecoViewCounts(rows, validatedPath){
   if(!validatedPath)return {status:'missing',map:new Map(),entries:[],message:'Aucun récolement validé'};
@@ -874,6 +1148,21 @@ function iptcConformityIssues(meta,row,recoResult){
   }
   return issues;
 }
+function recordEmbeddedMetadataIssues(meta,row,recoResult){
+  if(!meta.exif)add('ALERTE',51,row.path,'Métadonnées EXIF absentes ou non détectées');
+  if(!meta.iptc)add('ALERTE',52,row.path,'Métadonnées IPTC absentes ou non détectées');
+  else {
+    if(!meta.iptcSource)add('ALERTE',52,row.path,'Champ IPTC Source absent ou vide');
+    if(!meta.iptcHeadline)add('ALERTE',52,row.path,'Champ IPTC Headline absent ou vide');
+    if(recoResult.status==='ok'){
+      iptcConformityIssues(meta,row,recoResult).forEach(issue=>{
+        add('ALERTE',52,row.path,issue.message,issue.line);
+      });
+    }
+  }
+  if(!meta.icc)add('ALERTE',53,row.path,'Profil ICC absent ou non détecté');
+  else if(!meta.iccRgb)add('ALERTE',53,row.path,'Profil ICC détecté mais espace colorimétrique non RGB'+(meta.iccColorSpace?' : '+meta.iccColorSpace:''));
+}
 
 function firstInt(v){
   const m=String(v||'').match(/\d+/);
@@ -938,6 +1227,17 @@ function folderOfPath(path){
   const i=p.lastIndexOf('/');
   return i>=0?p.slice(0,i):'';
 }
+function imageFasciculeIdentity(row){
+  return row&&row.parsed&&row.parsed.ok?normKey(row.parsed.fascicule):'';
+}
+function recoEntryFasciculeIdentity(entry){
+  const parsed=[
+    parseRefName(entry&&entry.firstJpeg),
+    parseRefName(entry&&entry.firstTiff),
+    parseFasciculeIdentity(entry&&entry.repertoire)
+  ].find(p=>p&&p.ok);
+  return parsed?normKey(parsed.fascicule):'';
+}
 function findImageRowByBase(rows, ref){
   const key=normKey(cleanRef(ref));
   if(!key)return null;
@@ -948,7 +1248,7 @@ function countImagesInFolder(rows, folder, exts){
   return rows.filter(r=>folderOfPath(r.path)===folder && (!exts || exts.includes(r.ext))).length;
 }
 function buildDiskLookup(allImageRows){
-  const byBase=new Map(), byFolder=new Map(), folderByLast=new Map();
+  const byBase=new Map(), byFolder=new Map(), folderByLast=new Map(), byFascIdentity=new Map();
   for(const r of allImageRows){
     const folder=folderOfPath(r.path);
     const baseKey=normKey(baseNoExt(r.name));
@@ -962,8 +1262,16 @@ function buildDiskLookup(allImageRows){
     if(['.tif','.tiff'].includes(r.ext))counts.tiff++;
     const last=normKey(fascLastPart(folder));
     if(last && !folderByLast.has(last))folderByLast.set(last,folder);
+    const identity=imageFasciculeIdentity(r);
+    if(identity){
+      if(!byFascIdentity.has(identity))byFascIdentity.set(identity,{identity,jpeg:0,tiff:0,total:0,rows:[],folders:new Set()});
+      const fasc=byFascIdentity.get(identity);
+      fasc.total++; fasc.rows.push(r); fasc.folders.add(folder);
+      if(['.jpg','.jpeg'].includes(r.ext))fasc.jpeg++;
+      if(['.tif','.tiff'].includes(r.ext))fasc.tiff++;
+    }
   }
-  return {byBase,byFolder,folderByLast};
+  return {byBase,byFolder,folderByLast,byFascIdentity};
 }
 function diskCountsForRecoEntry(entry, allImageRows, lookup=null){
   if(!lookup)lookup=buildDiskLookup(allImageRows);
@@ -971,6 +1279,19 @@ function diskCountsForRecoEntry(entry, allImageRows, lookup=null){
   const tiffKey=normKey(cleanRef(entry.firstTiff));
   const jpgRow=jpgKey?lookup.byBase.get(jpgKey):null;
   const tiffRow=tiffKey?lookup.byBase.get(tiffKey):null;
+  const identity=recoEntryFasciculeIdentity(entry);
+  const fasc=identity?lookup.byFascIdentity.get(identity):null;
+  if(fasc){
+    return {
+      folder:[...fasc.folders].join(' | '),
+      identity,
+      firstJpegFound:!entry.firstJpeg||!!jpgRow,
+      firstTiffFound:!entry.firstTiff||!!tiffRow,
+      jpeg:fasc.jpeg,
+      tiff:fasc.tiff,
+      total:fasc.total
+    };
+  }
   let folder='';
   if(jpgRow)folder=folderOfPath(jpgRow.path);
   if(!folder && tiffRow)folder=folderOfPath(tiffRow.path);
@@ -981,6 +1302,7 @@ function diskCountsForRecoEntry(entry, allImageRows, lookup=null){
   const counts=folder?lookup.byFolder.get(folder):null;
   return {
     folder,
+    identity,
     firstJpegFound: !entry.firstJpeg || !!jpgRow,
     firstTiffFound: !entry.firstTiff || !!tiffRow,
     jpeg: counts?counts.jpeg:null,
@@ -1017,12 +1339,42 @@ let topTitles=new Set(); rows.forEach(r=>{let i=imageDirIndex(r.parts); if(i>0)t
 for(let imageIndex=0;imageIndex<imageRows.length;imageIndex++){
  const r=imageRows[imageIndex];
  if(/\s/.test(r.name))add('ERREUR',15,r.path,'Espace dans le nom de fichier'); if((r.ext==='.jpg'||r.ext==='.jpeg')&&r.ext!=='.jpg')add('ALERTE',13,r.path,'Extension JPEG non canonique'); if((r.ext==='.tif'||r.ext==='.tiff')&&r.ext!=='.tif')add('ALERTE',14,r.path,'Extension TIFF non canonique'); if(r.size===0)add('ERREUR',30,r.path,'Fichier de taille nulle (0 octet)'); if(r.size<1024)add('ALERTE',48,r.path,'Fichier très petit');
- if(['.jpg','.jpeg','.tif','.tiff'].includes(r.ext)){ if(!r.name.includes('_'))add('ERREUR',16,r.path,'Underscore absent'); if(!r.parsed.ok)add('ERREUR',17,r.path,'Nommage non conforme au modèle RCR_COTE_DATE[_bis]_0001' ); else { if(!validDate(r.parsed.date))add('ERREUR',21,r.path,'Date impossible'); if(r.parsed.view==='0000')add('ERREUR',20,r.path,'Vue 0000 interdite'); let ctx=imagePathContext(r.parts); if(ctx.yearFolder && r.parsed.date.slice(0,4)!==ctx.yearFolder)add('ERREUR',23,r.path,'Année fichier différente du dossier année'); if(ctx.fascFolder){let m=ctx.fascFolder.match(/(\d{8})(?:_bis)?$/); if(m && m[1]!==r.parsed.date)add('ERREUR',24,r.path,'Date fichier différente du dossier fascicule');}}
- let ctx=imagePathContext(r.parts); if(ctx.imageDirIndex>=0){let year=ctx.yearFolder, fasc=ctx.fascFolder; if(year&&!/^\d{4}$/.test(year))add('ERREUR',7,r.path,'Dossier année non AAAA'); if(fasc&&!(/^(\d{8}|\d{8}_bis|[^_]+_[^_]+_\d{8}|[^_]+_[^_]+_\d{8}_bis)$/.test(fasc)))add('ERREUR',8,r.path,'Dossier fascicule atypique');}}
+ if(['.jpg','.jpeg','.tif','.tiff'].includes(r.ext)){
+   const base=baseNoExt(r.name),tokens=base.split('_'),viewToken=tokens[tokens.length-1]||'';
+   if(!r.name.includes('_'))add('ERREUR',16,r.path,'Underscore absent');
+   if(/__/.test(base))add('ERREUR',16,r.path,'Deux underscores consécutifs dans le nom de fichier');
+   if(!/^\d{4}$/.test(viewToken))add('ERREUR',19,r.path,'Le numéro de vue doit comporter exactement quatre chiffres');
+   if(!r.parsed.ok)add('ERREUR',17,r.path,'Nommage non conforme au modèle FRB#########_COTE_DATE[_bis]_0001');
+   else {
+     if(!validDate(r.parsed.date))add('ERREUR',21,r.path,'Date impossible');
+     if(r.parsed.view==='0000')add('ERREUR',20,r.path,'Vue 0000 interdite');
+     let ctx=imagePathContext(r.parts);
+     if(ctx.yearFolder && r.parsed.date.slice(0,4)!==ctx.yearFolder)add('ERREUR',23,r.path,'Année fichier différente du dossier année');
+     if(ctx.fascFolder){
+       let m=ctx.fascFolder.match(/(\d{8})(?:_bis)?$/);
+       if(m && m[1]!==r.parsed.date)add('ERREUR',24,r.path,'Date fichier différente du dossier fascicule');
+       const folderBis=/_bis$/i.test(ctx.fascFolder);
+       if(folderBis!==r.parsed.bis)add('ERREUR',25,r.path,'Suffixe bis incohérent entre le fichier et le dossier de fascicule');
+     }
+   }
+   let ctx=imagePathContext(r.parts);
+   if(ctx.imageDirIndex>=0){
+     let year=ctx.yearFolder,fasc=ctx.fascFolder;
+     if(year&&!/^\d{4}$/.test(year))add('ERREUR',7,r.path,'Dossier année non AAAA');
+     if(fasc){
+       const simple=/^\d{8}(?:_bis)?$/.test(fasc);
+       const full=!!parseFasciculeIdentity(fasc);
+       if(!simple&&!full)add('ERREUR',8,r.path,'Dossier fascicule atypique');
+       if(/bis/i.test(fasc)&&!/_bis$/i.test(fasc))add('ERREUR',9,r.path,'Le suffixe bis doit être placé après la date sous la forme _bis');
+       if(/^FRB/i.test(fasc)&&!full)add('ERREUR',10,r.path,'Dossier fascicule non conforme au modèle RCR_COTE_AAAAMMJJ[_bis]');
+     }
+   }
+ }
  await MelanisoftPerformance.heartbeat(imageIndex+1,imageRows.length,'Contrôle du nommage : '+(imageIndex+1)+' / '+imageRows.length+' fichiers...');
 }
-[15,16,17,20,21,23,24,30,48,7,8,13,14].forEach(id=>setC(id,anomalies.some(a=>a.control===id)?'ALERTE':'OK',anomalies.filter(a=>a.control===id).length)); setC(18,jpeg.filter(r=>r.parsed.bis).length||tiff.filter(r=>r.parsed.bis).length?'OK':'OK',jpeg.filter(r=>r.parsed.bis).length+tiff.filter(r=>r.parsed.bis).length); setC(19,anomalies.some(a=>a.msg.includes('Vue'))?'ALERTE':'OK'); setC(22,anomalies.some(a=>a.control===21)?'ALERTE':'OK'); setC(25,'OK');
+[7,8,9,10,13,14,15,16,17,19,20,21,23,24,25,30,48].forEach(id=>setC(id,anomalies.some(a=>a.control===id)?'ALERTE':'OK',anomalies.filter(a=>a.control===id).length)); setC(18,'OK',jpeg.filter(r=>r.parsed.bis).length+tiff.filter(r=>r.parsed.bis).length); setC(22,anomalies.some(a=>a.control===21)?'ALERTE':'OK',anomalies.filter(a=>a.control===21).length);
 let nameCount={}; imageRows.forEach(r=>nameCount[r.name]=(nameCount[r.name]||0)+1); Object.entries(nameCount).filter(([k,v])=>v>1).forEach(([k,v])=>add('ALERTE',28,k,`Nom présent ${v} fois`)); setC(28,anomalies.some(a=>a.control===28)?'ALERTE':'OK',anomalies.filter(a=>a.control===28).length); setC(29,'OK');
+let pathCount={}; imageRows.forEach(r=>pathCount[r.path]=(pathCount[r.path]||0)+1); Object.entries(pathCount).filter(([k,v])=>v>1).forEach(([k,v])=>add('ALERTE',29,k,`Chemin complet présent ${v} fois`)); setC(29,anomalies.some(a=>a.control===29)?'ALERTE':'OK',anomalies.filter(a=>a.control===29).length);
 let byFasc={}; jpeg.filter(r=>r.parsed.ok).forEach(r=>{let key=r.parts.slice(0,-1).join('/'); (byFasc[key]??=[]).push(r)});
 let byFascTiff={}; tiff.filter(r=>r.parsed.ok).forEach(r=>{let key=r.parts.slice(0,-1).join('/'); (byFascTiff[key]??=[]).push(r)});
 let allImageNameBases=new Set(imageRows.map(r=>normKey(baseNoExt(r.name))));
@@ -1035,6 +1387,14 @@ if(recoViewCounts.status==='ok'){
     const prestDate=entryDateFromRefs(e);
     const manualViews=firstInt(e.nbPages);
     const prestViews=Number.isFinite(e.produced)?e.produced:null;
+    const missingFields=[];
+    if(!e.repertoire)missingFields.push('Répertoire');
+    if(!e.firstJpeg)missingFields.push('Réf. 1er fichier numérique (JPEG)');
+    if(!e.firstTiff)missingFields.push('Réf. 1er fichier numérique (TIFF)');
+    if(prestViews===null)missingFields.push('Nbre de fichiers produits');
+    if(!e.establishment)missingFields.push('Etablissement de conservation');
+    if(!e.coteTitle)missingFields.push('Cote titre');
+    if(missingFields.length)add('ALERTE',36,e.repertoire||e.firstJpeg||('Ligne '+e.row),'Récolement incomplet : '+missingFields.join(', ')+' non renseigné(s).'+recoObservationNote(e),e.row);
 
     // Triple comparaison pertinente sur les métadonnées du récolement :
     // 1. récolement manuel collègue (date, nb de pages),
@@ -1072,25 +1432,29 @@ fascEntries.forEach(([k,arr])=>{
 // 1. cohérence entre le récolement initial des collègues et les colonnes renseignées par le prestataire ;
 // 2. cohérence entre les références prestataire et le listing des fichiers réellement présents sur le disque.
 if(recoViewCounts.status==='ok'){
+  const recoIdentities=new Set();
   for(let recoIndex=0;recoIndex<recoViewCounts.entries.length;recoIndex++){
     const entry=recoViewCounts.entries[recoIndex];
     recoCompared++;
     const manualExpected=firstInt(entry.nbPages);
     const prestExpected=Number.isFinite(entry.produced)?entry.produced:null;
     const problems=[];
+    const identity=recoEntryFasciculeIdentity(entry);
+    if(identity)recoIdentities.add(identity);
 
     const cmpManualPrest=compareDefinedValues('récolement initial',manualExpected,'saisie prestataire',prestExpected);
     if(cmpManualPrest)problems.push('le nombre de vues du récolement initial ne correspond pas au nombre indiqué par le prestataire ('+cmpManualPrest+')');
+    if(!entry.repertoire&&!entry.firstJpeg&&!entry.firstTiff&&prestExpected===null){
+      problems.push('aucune donnée prestataire n’est renseignée pour ce fascicule du récolement initial : une omission de numérisation est possible');
+    }
 
     const disk=diskCountsForRecoEntry(entry, allImageRows, diskLookup);
     if(entry.firstJpeg && !disk.firstJpegFound)problems.push('la première image JPEG indiquée par le prestataire n’a pas été retrouvée sur le disque');
     if(entry.firstTiff && !disk.firstTiffFound)problems.push('la première image TIFF indiquée par le prestataire n’a pas été retrouvée sur le disque');
 
     if(prestExpected!==null && disk.folder){
-      const counts=[disk.jpeg,disk.tiff,disk.total].filter(v=>v!==null);
-      if(counts.length && !counts.includes(prestExpected)){
-        problems.push(`le nombre indiqué par le prestataire (${prestExpected}) ne correspond pas au listing des fichiers du dossier (${disk.jpeg??'n/a'} JPEG, ${disk.tiff??'n/a'} TIFF, ${disk.total??'n/a'} fichier(s) image au total)`);
-      }
+      if(disk.jpeg!==null&&disk.jpeg!==prestExpected)problems.push(`le nombre de JPEG présents sur le disque (${disk.jpeg}) diffère du nombre indiqué par le prestataire (${prestExpected})`);
+      if(disk.tiff!==null&&disk.tiff!==prestExpected)problems.push(`le nombre de TIFF présents sur le disque (${disk.tiff}) diffère du nombre indiqué par le prestataire (${prestExpected})`);
     }else if(prestExpected!==null && !disk.folder){
       problems.push('le dossier correspondant à la ligne du récolement n’a pas été retrouvé dans la livraison');
     }
@@ -1103,60 +1467,87 @@ if(recoViewCounts.status==='ok'){
     }
     await MelanisoftPerformance.heartbeat(recoIndex+1,recoViewCounts.entries.length,'Vérification disque/récolement : '+(recoIndex+1)+' / '+recoViewCounts.entries.length+' lignes...');
   }
+  for(const [identity,diskFasc] of diskLookup.byFascIdentity){
+    if(!recoIdentities.has(identity)){
+      recoDiff++;
+      const path=diskFasc.rows[0]?.parts?.slice(0,-1).join('/')||identity;
+      add('ALERTE',34,path,'Fascicule présent sur le disque mais absent du récolement exploitable : '+(diskFasc.rows[0]?.parsed?.fascicule||identity)+'.');
+    }
+  }
 }
 if(recoViewCounts.status==='ok' && recoCompared>0 && recoDiff===0)add('INFO',34,'','Récolement cohérent pour '+recoOk+' ligne(s) exploitée(s).');
 if(recoViewCounts.status!=='ok')add('INFO',34,'',recoViewCounts.message+' La détection statistique des valeurs atypiques reste utilisée comme aide au contrôle.');
 setC(26,anomalies.some(a=>a.control===26)?'ALERTE':'OK',anomalies.filter(a=>a.control===26).length); setC(27,anomalies.some(a=>a.control===27)?'ALERTE':'OK',anomalies.filter(a=>a.control===27).length); setC(34,anomalies.some(a=>a.control===34&&a.type==='ALERTE')?'ALERTE':'OK',new Set(anomalies.filter(a=>a.control===34&&a.type==='ALERTE').map(a=>a.path+'#'+(a.line||''))).size); setC(35,anomalies.some(a=>a.control===35&&a.type==='ALERTE')?'ALERTE':'OK',anomalies.filter(a=>a.control===35&&a.type==='ALERTE').length);
-let basesJ=new Set(jpeg.map(r=>baseNoExt(r.name))), basesT=new Set(tiff.map(r=>baseNoExt(r.name))); basesJ.forEach(b=>{if(!basesT.has(b))add('ALERTE',32,b,'JPEG sans TIFF correspondant')}); basesT.forEach(b=>{if(!basesJ.has(b))add('ALERTE',33,b,'TIFF sans JPEG correspondant')}); setC(31,'OK'); setC(32,anomalies.some(a=>a.control===32)?'ALERTE':'OK',anomalies.filter(a=>a.control===32).length); setC(33,anomalies.some(a=>a.control===33)?'ALERTE':'OK',anomalies.filter(a=>a.control===33).length);
+let basesJ=new Set(jpeg.map(r=>baseNoExt(r.name))), basesT=new Set(tiff.map(r=>baseNoExt(r.name))); basesJ.forEach(b=>{if(!basesT.has(b))add('ALERTE',32,b,'JPEG sans TIFF correspondant')}); basesT.forEach(b=>{if(!basesJ.has(b))add('ALERTE',33,b,'TIFF sans JPEG correspondant')}); setC(32,anomalies.some(a=>a.control===32)?'ALERTE':'OK',anomalies.filter(a=>a.control===32).length); setC(33,anomalies.some(a=>a.control===33)?'ALERTE':'OK',anomalies.filter(a=>a.control===33).length); setC(31,anomalies.some(a=>a.control===32||a.control===33)?'ALERTE':'OK',anomalies.filter(a=>a.control===32||a.control===33).length);
 let rec=recoRows; if(validatedReco){setC(36,anomalies.some(a=>a.control===36)?'ALERTE':'OK',rec.length);} else {setC(36,rec.length?'ALERTE':'ALERTE',rec.length); if(rec.length)add('ALERTE',36,rec.map(r=>r.path).join(' | '),'Fichier(s) de récolement candidat(s) détecté(s), mais aucun n’a été validé dans l’interface'); else add('ALERTE',36,'','Aucun fichier de récolement XLS/XLSX/CSV détecté');} let non=annexRows; setC(37,non.length?'ALERTE':'OK',non.length);
-let aleaSource=jpeg.length?[...jpeg]:[...tiff]; lastIsoPlan=iso2859Plan(aleaSource.length); updateIsoPreview(lastIsoPlan); let requestedAlea=lastIsoPlan.sampleSize; aleaRows=[...aleaSource].sort(()=>Math.random()-0.5).slice(0,Math.min(requestedAlea,aleaSource.length)); let sample=aleaRows; setC(49,'OK',sample.length);
+const isoSelection=buildIsoSampleByTitle(jpeg,tiff); lastIsoPlan=isoSelection.summary; updateIsoPreview(lastIsoPlan); aleaRows=isoSelection.sample; let sample=aleaRows;
+if(sample.length)setC(49,'OK',sample.length);
+else {add('ALERTE',49,'','Aucun fichier image exploitable pour constituer l’échantillon ISO par titre.');setC(49,'ALERTE',0);}
 if(recoViewCounts.status!=='ok'){
   add('ALERTE',52,'','Conformité du contenu IPTC non vérifiable : le récolement n’a pas pu être exploité. '+recoViewCounts.message);
 }
 await MelanisoftPerformance.yieldToBrowser('Contrôles métier terminés. Analyse technique des images...');
-let max=Math.min(200,jpeg.length+tiff.length), done=0;
-for(let r of [...jpeg.slice(0,150),...tiff.slice(0,50)]){
+const technicalSample=buildTechnicalSampleRows(sample,jpeg,tiff);
+let max=technicalSample.length,done=0,histogramSuccess=0;
+for(let r of technicalSample){
   try{
     if(['.jpg','.jpeg'].includes(r.ext)){
       let m=await readJpegMeta(r.file);
       if(!m.w||!m.h)add('ALERTE',42,r.path,'Dimensions JPEG non lues');
       else if(m.w<500||m.h<500)add('ALERTE',47,r.path,`Image très petite ${m.w}x${m.h}`);
-      if(m.dpi && m.dpi!==400)add('ALERTE',44,r.path,`DPI ${m.dpi}, attendu 400`);
+      if(!m.dpi)add('ALERTE',43,r.path,'DPI JPEG absent ou non détecté : conformité à 400 dpi non vérifiable');
+      else if(m.dpi!==400)add('ALERTE',44,r.path,`DPI ${m.dpi}, attendu 400`);
       try{
         let h=await analyzeJpegHistogram(r.file);
+        histogramSuccess++;
         h.issues.forEach(issue=>add('ALERTE',30.5,r.path,issue));
       }catch(histErr){
         add('INFO',30.5,r.path,'Histogramme non analysé : '+String(histErr.message||histErr));
       }
       try{
         let meta=await readJpegTechnicalMetadata(r.file);
-        if(!meta.exif)add('ALERTE',51,r.path,'Métadonnées EXIF absentes ou non détectées');
-        if(!meta.iptc)add('ALERTE',52,r.path,'Métadonnées IPTC absentes ou non détectées');
-        else {
-          if(!meta.iptcSource)add('ALERTE',52,r.path,'Champ IPTC Source absent ou vide');
-          if(!meta.iptcHeadline)add('ALERTE',52,r.path,'Champ IPTC Headline absent ou vide');
-          if(recoViewCounts.status==='ok'){
-            iptcConformityIssues(meta,r,recoViewCounts).forEach(issue=>{
-              add('ALERTE',52,r.path,issue.message,issue.line);
-            });
-          }
-        }
-        if(!meta.icc)add('ALERTE',53,r.path,'Profil ICC absent ou non détecté');
-        else if(!meta.iccRgb)add('ALERTE',53,r.path,'Profil ICC détecté mais espace colorimétrique non RGB'+(meta.iccColorSpace?' : '+meta.iccColorSpace:''));
+        recordEmbeddedMetadataIssues(meta,r,recoViewCounts);
       }catch(metaErr){
-        add('INFO',51,r.path,'Métadonnées JPEG non analysées : '+String(metaErr.message||metaErr));
+        const msg='Métadonnées JPEG non analysées : '+String(metaErr.message||metaErr);
+        add('ALERTE',51,r.path,msg); add('ALERTE',52,r.path,msg); add('ALERTE',53,r.path,msg);
       }
     } else {
       let m=await readTiffMeta(r.file);
-      if(m.w&&m.h&&(m.w<500||m.h<500))add('ALERTE',47,r.path,`TIFF très petit ${m.w}x${m.h}`);
+      if(!m.w||!m.h)add('ALERTE',46,r.path,'Dimensions TIFF non lues');
+      else if(m.w<500||m.h<500)add('ALERTE',47,r.path,`TIFF très petit ${m.w}x${m.h}`);
+      if(!m.dpi)add('ALERTE',43,r.path,'DPI TIFF absent ou non détecté : conformité à 400 dpi non vérifiable');
+      else if(m.dpi!==400)add('ALERTE',44,r.path,`DPI TIFF ${m.dpi}, attendu 400`);
+      recordEmbeddedMetadataIssues(m,r,recoViewCounts);
+      try{
+        let h=await analyzeJpegHistogram(r.file);
+        histogramSuccess++;
+        h.issues.forEach(issue=>add('ALERTE',30.5,r.path,issue));
+      }catch(histErr){
+        add('INFO',30.5,r.path,'Histogramme TIFF non analysé par le navigateur : '+String(histErr.message||histErr));
+      }
     }
   }catch(e){
-    add('ERREUR', r.ext.includes('jp')?41:45, r.path, String(e));
+    const message='Fichier non analysable : '+String(e&&e.message||e);
+    if(['.jpg','.jpeg'].includes(r.ext)){
+      add('ERREUR',41,r.path,message);
+      add('ALERTE',42,r.path,'Dimensions JPEG non vérifiables');
+    }else{
+      add('ERREUR',45,r.path,message);
+      add('ALERTE',46,r.path,'Dimensions TIFF non vérifiables');
+    }
+    add('ALERTE',43,r.path,'DPI non vérifiable');
+    add('ALERTE',51,r.path,'Métadonnées EXIF non vérifiables');
+    add('ALERTE',52,r.path,'Métadonnées IPTC non vérifiables');
+    add('ALERTE',53,r.path,'Profil ICC non vérifiable');
   }
   done++; $('prog').value=max?done/max*100:100;
   await MelanisoftPerformance.heartbeat(done,max,'Analyse technique des images : '+done+' / '+max+' fichiers...');
 }
-[30.5,41,42,43,44,45,46,47,51,52,53].forEach(id=>setC(id,anomalies.some(a=>a.control===id&&a.type!=='INFO')?'ALERTE':'OK',anomalies.filter(a=>a.control===id&&a.type!=='INFO').length)); setC(50,'OK');
+if(technicalSample.length&&histogramSuccess===0)add('ALERTE',30.5,'','Plage dynamique non vérifiable : aucun fichier de l’échantillon n’a pu être décodé pour l’analyse de l’histogramme.');
+[30.5,41,42,43,44,45,46,47,51,52,53].forEach(id=>{
+  const issues=anomalies.filter(a=>a.control===id&&a.type!=='INFO');
+  setC(id,issues.some(a=>a.type==='ERREUR')?'ERREUR':(issues.length?'ALERTE':'OK'),issues.length);
+}); setC(50,'OK');
 render(rows, sample); $('exportAttentionExcel').disabled=false; $('exportHtml').disabled=false;  $('exportAleaExcel').disabled=false; $('prog').style.display='none'; $('status').textContent='Contrôle terminé.';}catch(e){$('prog').style.display='none'; $('status').innerHTML='<span class=err>Erreur pendant le contrôle : '+esc(e && (e.message||e))+'</span>'; console.error(e);}}
 
 function controlChapter(id){
@@ -1256,7 +1647,7 @@ function buildRecommendations(stats){
   if(!validatedReco)rec.push({title:'Valider le récolement',text:'Sélectionner puis valider le fichier de récolement afin de consolider les comparaisons avec la livraison.'});
   if(stats.errorCount>0)rec.push({title:'Corriger les erreurs',text:'Traiter les erreurs avant toute validation de la livraison.'});
   if(stats.alertCount>0)rec.push({title:'Examiner les alertes',text:'Vérifier les points signalés et décider s’ils nécessitent une correction, une retouche ou une simple mention au rapport.'});
-  if(lastIsoPlan)rec.push({title:'Réaliser le contrôle visuel',text:`Contrôler ${lastIsoPlan.sampleSize} vue(s) dans le fichier ALÉA. Selon le plan ISO 2859-1, l’acceptation est possible jusqu’à ${lastIsoPlan.accept} non-conformité(s) ; le rejet intervient à partir de ${lastIsoPlan.reject}.`});
+  if(lastIsoPlan)rec.push({title:'Réaliser le contrôle visuel',text:`Contrôler ${lastIsoPlan.sampleSize} vue(s) dans le fichier ALÉA. ${Array.isArray(lastIsoPlan.plans)?'Les seuils d’acceptation et de rejet sont indiqués et doivent être appliqués séparément pour chaque titre.':'Selon le plan ISO 2859-1 : '+isoDecisionText(lastIsoPlan)+'.'}`});
   if(lastRecurrenceSummary && lastRecurrenceSummary.status==='alert')rec.push({title:'Vérifier la périodicité',text:'Contrôler les dates des fascicules signalés : il peut s’agir d’un numéro manquant, d’un supplément, d’un numéro bis ou d’une erreur de nommage.'});
   if(!rec.length)rec.push({title:'Poursuivre la validation',text:'Les contrôles automatiques sont favorables. Le contrôle visuel de l’échantillon reste à réaliser.'});
   return rec;
@@ -1317,7 +1708,7 @@ $('summary').innerHTML=`<h2>Synthèse du contrôle</h2><div class="summary-grid"
     <div class="metric"><span>Niveau / NQA</span><strong>${iso.level} / ${iso.nqa}</strong></div>
     <div class="metric"><span>Lettre-code</span><strong>${iso.code}</strong></div>
     <div class="metric"><span>Échantillon à contrôler</span><strong>${iso.sampleSize} vues</strong></div>
-    <div class="metric"><span>Décision</span><strong>Acceptation ≤ ${iso.accept} · Rejet ≥ ${iso.reject}</strong></div>
+    <div class="metric"><span>Décision</span><strong>${esc(isoDecisionText(iso))}</strong></div>
   </div></div>
   <div class="summary-card"><h3>Récolement</h3><div class="metric-list">
     <div class="metric"><span>Fichier utilisé</span><strong>${recoLabel}</strong></div>
@@ -1352,13 +1743,14 @@ function buildAleaHtml(rows,sample){
     'Cadrage : vérifier que la page n’est pas coupée, que les marges demandées sont respectées et que le fond de reliure ne parasite pas l’OCR.',
     'Sens de lecture : vérifier que l’image respecte le sens de lecture de l’original.',
     'Redressement : vérifier visuellement que le texte ou la page n’est pas inclinée de manière gênante.',
-    'Lisibilité : vérifier netteté, transparence, courbure, contraste réel et confort de lecture à 100 %.',
-    'Date et numéro de fascicule : vérifier que la date visible sur le fascicule correspond au nommage du fichier, en tenant compte des suppléments, numéros bis ou hors-série.',
+    'Lisibilité : vérifier netteté, contraste réel et confort de lecture à 100 %, puis à 120 % en cas de doute.',
+    'Exemplarisation, date et suppléments : vérifier que la date et le numéro visibles correspondent au nommage et au récolement, y compris les suppléments, numéros bis et hors-série.',
     'Colorimétrie et rendu : vérifier visuellement la conformité au test validé, notamment en cas de doute sur les couleurs.',
+    'Taille conforme à l’original : vérifier à 100 % l’absence de réduction ou d’agrandissement non prévu.',
   ];
-  const checklist='<h2>Contrôle visuel à effectuer sur l’échantillon</h2><p class="small">Cette liste reprend uniquement les points qui nécessitent une appréciation visuelle du contrôleur.</p><table><tr><th>N°</th><th>Point à vérifier</th><th>Fait</th><th>Commentaire</th></tr>'+manualTasks.map((t,i)=>`<tr><td>${i+1}</td><td>${esc(t)}</td><td>☐</td><td></td></tr>`).join('')+'</table>';
+  const checklist='<h2>Contrôle visuel à effectuer sur l’échantillon</h2><p class="small">Cette liste reprend uniquement les points qui nécessitent une appréciation visuelle du contrôleur.</p><table><tr><th>N°</th><th>Point à vérifier</th><th>Fait</th><th>Commentaire</th></tr>'+manualTasks.map((t,i)=>`<tr><td>${i+1}</td><td>${esc(t)}</td><td>☐</td><td></td></tr>`).join('')+'</table><p class="small"><b>À ne pas classer automatiquement comme non-conformité :</b> défauts déjà présents sur l’original (tache, pli, déchirure, manque, transparence, jaunissement), pages collées et contraintes inévitables d’un ouvrage épais ou de sa reliure. Ces cas peuvent être consignés à titre d’information.</p>';
   const feuille1='<h2>Feuille 1 — Liste complète des fichiers images</h2><table><tr><th>N°</th><th>Chemin</th><th>Nom fichier</th><th>Extension</th><th>Taille octets</th></tr>'+imageList.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.path)}</td><td>${esc(r.name)}</td><td>${esc(r.ext)}</td><td>${r.size}</td></tr>`).join('')+'</table>';
-  const feuille2='<h2>Feuille 2 — Tirage aléatoire ISO 2859-1</h2><p><b>Plan d’échantillonnage :</b> '+esc(formatIsoPlan(lastIsoPlan))+' — <b>Nombre tiré :</b> '+sample.length+'</p><table><tr><th>N° tirage</th><th>Chemin</th><th>Nom fichier</th><th>Extension</th><th>Contrôle visuel réalisé</th><th>Résultat</th><th>Commentaire libre</th></tr>'+sample.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.path)}</td><td>${esc(r.name)}</td><td>${esc(r.ext)}</td><td>☐</td><td></td><td></td></tr>`).join('')+'</table>';
+  const feuille2='<h2>Feuille 2 — Tirage aléatoire ISO 2859-1</h2><p><b>Plan d’échantillonnage :</b> '+esc(formatIsoPlan(lastIsoPlan))+' — <b>Nombre tiré :</b> '+sample.length+'</p><table><tr><th>N° tirage</th><th>Titre</th><th>Lot</th><th>Lettre-code</th><th>Seuil Ac / Re</th><th>Chemin</th><th>Nom fichier</th><th>Extension</th><th>Contrôle visuel réalisé</th><th>Résultat</th><th>Commentaire libre</th></tr>'+sample.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.isoTitle||titleLabelForRow(r))}</td><td>${esc(r.isoLotSize||'')}</td><td>${esc(r.isoCode||'')}</td><td>${r.isoAccept!==undefined?`Ac ${r.isoAccept} / Re ${r.isoReject}`:''}</td><td>${esc(r.path)}</td><td>${esc(r.name)}</td><td>${esc(r.ext)}</td><td>☐</td><td></td><td></td></tr>`).join('')+'</table>';
   return '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>MÉLANISOFT — Échantillon de contrôle</title><style>body{font-family:Arial,Helvetica,sans-serif;margin:24px}table{border-collapse:collapse;width:100%;font-size:12px;margin-bottom:24px}td,th{border:1px solid #ead1dc;padding:5px;text-align:left}th{background:#f5e2eb}.small{font-size:12px;color:#5c3448}.nav{position:sticky;top:0;background:white;padding:8px;border-bottom:1px solid #ead1dc}.app-footer{margin:24px 0 6px;text-align:center;color:#7b5368;font-size:12px}</style></head><body><div class="nav"><button onclick="window.print()">Imprimer / enregistrer en PDF</button> <button onclick="navigator.clipboard&&navigator.clipboard.writeText(document.body.innerText)">Copier le texte</button></div><h1>MÉLANISOFT</h1><h2>Échantillon de contrôle qualité</h2><p class="small">Généré le '+esc(now)+'. Ce fichier reproduit le principe du classeur ALÉA : feuille 1 = liste complète ; feuille 2 = tirage aléatoire de l’échantillon. La check-list est réservée aux contrôles visuels à réaliser manuellement.</p>'+checklist+feuille1+feuille2+'<footer class="app-footer">MÉLANISOFT — Contrôle qualité des campagnes de numérisation patrimoniale</footer></body></html>';
 }
 
@@ -1386,7 +1778,7 @@ function zipStore(fileMap){
   const centralSize=centrals.reduce((a,p)=>a+p.length,0); const end=new Uint8Array([...u32(0x06054b50),...u16(0),...u16(0),...u16(Object.keys(fileMap).length),...u16(Object.keys(fileMap).length),...u32(centralSize),...u32(offset),...u16(0)]);
   return concatBytes([...locals,...centrals,end]);
 }
-function buildAleaExcel(){
+function buildAleaExcelLegacy(){
   const manualTasks=[
     'Page entière / double page',
     'Cadrage',
@@ -1438,6 +1830,122 @@ function buildAleaExcel(){
     'xl/worksheets/sheet2.xml':listXml
   };
   return zipStore(files);
+}
+
+function buildAleaExcel(){
+  const manualTasks=[
+    'Page entière / double page',
+    'Cadrage',
+    'Sens de lecture',
+    'Redressement',
+    'Lisibilité',
+    'Exemplarisation / date / suppléments',
+    'Colorimétrie et rendu',
+    'Taille conforme à l’original (100 %)'
+  ];
+  const headers=[
+    'N° tirage','Titre','Lot du titre','Lettre-code','Seuil Ac / Re',
+    'Répertoire','Fichier','Chemin complet',...manualTasks,
+    'Défaut de l’original ou contrainte matérielle (information)','Commentaire libre'
+  ];
+  const rows=aleaRows.map((r,i)=>{
+    const parts=r.path.split('/');
+    const repertoire=parts.length>=2?parts[parts.length-2]:'';
+    const titre=r.isoTitle||titleLabelForRow(r);
+    const seuil=(r.isoAccept!==undefined&&r.isoReject!==undefined)?`Ac ${r.isoAccept} / Re ${r.isoReject}`:'';
+    return [
+      i+1,titre,r.isoLotSize||'',r.isoCode||'',seuil,repertoire,r.name,r.path,
+      '','','','','','','','','',''
+    ];
+  });
+  const widths=[10,25,13,13,16,28,32,65,20,18,18,18,18,25,22,24,42,42];
+  const rowHeight=row=>{
+    const lines=row.reduce((max,v,i)=>{
+      const text=String(v??'');
+      const estimated=text.split(/\r?\n/).reduce((sum,line)=>sum+Math.max(1,Math.ceil(line.length/Math.max(6,widths[i]-2))),0);
+      return Math.max(max,estimated);
+    },1);
+    return Math.min(160,Math.max(24,lines*15));
+  };
+  const all=[headers,...rows];
+  const sheetRows=all.map((row,ri)=>{
+    const styleId=ri===0?1:(ri%2===1?3:2);
+    const height=ri===0?42:rowHeight(row);
+    return `<row r="${ri+1}" ht="${height}" customHeight="1">${row.map((v,ci)=>xlsxCell(ri+1,ci+1,v,styleId)).join('')}</row>`;
+  }).join('');
+  const endRow=Math.max(1,rows.length+1);
+  const consignes=[
+    ['Échantillonnage','Un tirage ISO 2859-1 distinct est constitué pour chaque titre. Les fichiers TIFF sont prioritaires ; les JPEG ne sont utilisés qu’en l’absence de TIFF pour le titre concerné. La décision Ac/Re s’applique séparément à chaque titre.'],
+    ['Page entière / double page','Vérifier que la page est entière. Une double page doit être numérisée en une seule vue si l’information se poursuit sur les deux pages ; sinon, chaque page doit être une vue distincte.'],
+    ['Cadrage','Vérifier l’absence de rognage et de bord parasite. Conserver des marges régulières et suffisantes autour du document, conformément au test validé.'],
+    ['Sens de lecture','Vérifier que l’image est orientée dans le sens normal de lecture.'],
+    ['Redressement','Vérifier que les lignes du document sont droites et que l’image ne présente pas d’inclinaison gênante.'],
+    ['Lisibilité','Contrôler à 100 %, puis à 120 % en cas de doute : netteté, contraste, absence de flou, reflet, moiré ou zone illisible.'],
+    ['Exemplarisation / date / suppléments','Comparer la date et le numéro visibles avec le nom du fichier et le récolement. Vérifier les suppléments, hors-série et numéros bis ; le suffixe « bis » doit être cohérent entre dossier et fichiers.'],
+    ['Colorimétrie et rendu','Comparer au test validé : teintes, dominante, luminosité, contraste et homogénéité du rendu.'],
+    ['Taille conforme à l’original (100 %)','Vérifier que la numérisation restitue le document à sa taille réelle, sans réduction ni agrandissement non prévu.'],
+    ['Défauts de l’original','Ne pas déclarer comme défaut de numérisation une dégradation déjà présente sur l’original : tache, déchirure, pli, manque, transparence ou jaunissement. Le signaler seulement en information si nécessaire.'],
+    ['Pages collées','Une zone inaccessible parce que des pages sont collées ou ne peuvent pas être séparées sans risque relève d’une contrainte de l’original ; la noter en information, sans la classer NC.'],
+    ['Ouvrages épais / reliure','Les courbures, ombres de fond de cahier ou pertes près de la reliure inévitables sans détérioration sont des contraintes matérielles ; les noter en information, sans les classer NC.']
+  ];
+  const consigneRows=[['Point de contrôle','Consigne'],...consignes].map((row,ri)=>{
+    const styleId=ri===0?1:(ri%2===1?3:2);
+    const height=ri===0?32:Math.min(120,Math.max(30,Math.ceil(String(row[1]).length/85)*15));
+    return `<row r="${ri+1}" ht="${height}" customHeight="1">${row.map((v,ci)=>xlsxCell(ri+1,ci+1,v,styleId)).join('')}</row>`;
+  }).join('');
+  const created=new Date().toISOString();
+  const stylesXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<fonts count="2"><font><sz val="10"/><name val="Arial"/></font><font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Arial"/></font></fonts>
+<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFBE185D"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFF1F7"/><bgColor indexed="64"/></patternFill></fill></fills>
+<borders count="2"><border/><border><left style="thin"><color rgb="FFF3C5D7"/></left><right style="thin"><color rgb="FFF3C5D7"/></right><top style="thin"><color rgb="FFF3C5D7"/></top><bottom style="thin"><color rgb="FFF3C5D7"/></bottom><diagonal/></border></borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="top" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="top" wrapText="1"/></xf></cellXfs>
+<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`;
+  const sheetXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>
+<dimension ref="A1:R${endRow}"/>
+<sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+<sheetFormatPr defaultRowHeight="15"/>
+<cols>${widths.map((width,i)=>`<col min="${i+1}" max="${i+1}" width="${width}" customWidth="1"/>`).join('')}</cols>
+<sheetData>${sheetRows}</sheetData>
+<autoFilter ref="A1:R${endRow}"/>
+<dataValidations count="1"><dataValidation sqref="I2:P${Math.max(2,endRow)}" showDropDown="0" showInputMessage="1" promptTitle="Contrôle visuel" prompt="Choisir Conforme ou NC." showErrorMessage="1" errorTitle="Valeur non valide" error="Choisir Conforme ou NC dans la liste." allowBlank="1" type="list"><formula1>'Listes'!$A$1:$A$2</formula1></dataValidation></dataValidations>
+<pageMargins left="0.2" right="0.2" top="0.4" bottom="0.4" header="0.2" footer="0.2"/>
+<pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/>
+</worksheet>`;
+  const consignesXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>
+<dimension ref="A1:B${consignes.length+1}"/>
+<sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+<sheetFormatPr defaultRowHeight="15"/>
+<cols><col min="1" max="1" width="32" customWidth="1"/><col min="2" max="2" width="105" customWidth="1"/></cols>
+<sheetData>${consigneRows}</sheetData>
+<autoFilter ref="A1:B${consignes.length+1}"/>
+<pageMargins left="0.3" right="0.3" top="0.5" bottom="0.5" header="0.2" footer="0.2"/>
+<pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/>
+</worksheet>`;
+  const listXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<dimension ref="A1:A2"/><sheetData>
+<row r="1"><c r="A1" t="inlineStr"><is><t>Conforme</t></is></c></row>
+<row r="2"><c r="A2" t="inlineStr"><is><t>NC</t></is></c></row>
+</sheetData></worksheet>`;
+  return zipStore({
+    '[Content_Types].xml':`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet3.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>`,
+    '_rels/.rels':`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>`,
+    'docProps/core.xml':`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>Échantillon de contrôle ALÉA</dc:title><dc:creator>MÉLANISOFT</dc:creator><cp:lastModifiedBy>MÉLANISOFT</cp:lastModifiedBy><dcterms:created xsi:type="dcterms:W3CDTF">${created}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${created}</dcterms:modified></cp:coreProperties>`,
+    'docProps/app.xml':`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>MÉLANISOFT</Application></Properties>`,
+    'xl/workbook.xml':`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><workbookPr/><bookViews><workbookView activeTab="0" firstSheet="0"/></bookViews><sheets><sheet name="Echantillon_ALEA" sheetId="1" r:id="rId1"/><sheet name="Consignes" sheetId="2" r:id="rId2"/><sheet name="Listes" sheetId="3" state="hidden" r:id="rId3"/></sheets></workbook>`,
+    'xl/_rels/workbook.xml.rels':`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/><Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
+    'xl/styles.xml':stylesXml,
+    'xl/worksheets/sheet1.xml':sheetXml,
+    'xl/worksheets/sheet2.xml':consignesXml,
+    'xl/worksheets/sheet3.xml':listXml
+  });
 }
 
 function buildAttentionExcel(sourceRows){
@@ -1538,7 +2046,7 @@ function buildReportTxt(){
 
   push('2. ÉCHANTILLONNAGE ISO 2859-1');
   push(formatIsoPlan(iso));
-  push('Règle de décision : acceptation jusqu’à '+iso.accept+' non-conformité(s), rejet à partir de '+iso.reject+'.');
+  push('Règle de décision : '+isoDecisionText(iso)+'.');
   blank();
 
   push('3. RÉCOLEMENT');
