@@ -76,7 +76,7 @@
         <p class="small">L’échantillon ALÉA est calculé automatiquement à partir du nombre de vues de consultation, selon le niveau de contrôle général II et un NQA de 1 %. Si aucun JPEG n’est détecté, les TIFF servent de base au tirage.</p>
         <div class="actions">
           <button id="run">Analyser la livraison</button>
-          <button id="exportCsv" disabled>Exporter les points d’attention détaillés (CSV)</button>
+          <button id="exportAttentionExcel" disabled>Exporter les points d’attention détaillés (Excel)</button>
           <button id="exportHtml" disabled>Exporter le rapport de contrôle (TXT)</button>
           <button id="exportAleaExcel" disabled>Exporter le fichier d’échantillonnage ALÉA (Excel)</button>
         </div>
@@ -1157,7 +1157,7 @@ for(let r of [...jpeg.slice(0,150),...tiff.slice(0,50)]){
   await MelanisoftPerformance.heartbeat(done,max,'Analyse technique des images : '+done+' / '+max+' fichiers...');
 }
 [30.5,41,42,43,44,45,46,47,51,52,53].forEach(id=>setC(id,anomalies.some(a=>a.control===id&&a.type!=='INFO')?'ALERTE':'OK',anomalies.filter(a=>a.control===id&&a.type!=='INFO').length)); setC(50,'OK');
-render(rows, sample); $('exportCsv').disabled=false; $('exportHtml').disabled=false;  $('exportAleaExcel').disabled=false; $('prog').style.display='none'; $('status').textContent='Contrôle terminé.';}catch(e){$('prog').style.display='none'; $('status').innerHTML='<span class=err>Erreur pendant le contrôle : '+esc(e && (e.message||e))+'</span>'; console.error(e);}}
+render(rows, sample); $('exportAttentionExcel').disabled=false; $('exportHtml').disabled=false;  $('exportAleaExcel').disabled=false; $('prog').style.display='none'; $('status').textContent='Contrôle terminé.';}catch(e){$('prog').style.display='none'; $('status').innerHTML='<span class=err>Erreur pendant le contrôle : '+esc(e && (e.message||e))+'</span>'; console.error(e);}}
 
 function controlChapter(id){
   // Les chapitres sont désormais calculés à partir du numéro affiché,
@@ -1330,7 +1330,7 @@ $('summary').innerHTML=`<h2>Synthèse du contrôle</h2><div class="summary-grid"
 </div>`;
 $('controls').innerHTML='<h2>Contrôles effectués automatiquement</h2>'+groupedControlsHtml();
 const consolidatedRows=consolidatedAnomalies();
-$('anomalies').innerHTML='<h2>Points d’attention détaillés</h2><p class="small">Une seule ligne est affichée par fascicule. Les natures et les détails concatènent toutes les anomalies détectées pour ce fascicule.</p><table class="attention-table"><tr><th>Niveau</th><th>Ligne du récolement</th><th>Nature métier</th><th>Fichier ou fascicule concerné</th><th>Constat consolidé</th></tr>'+consolidatedRows.slice(0,5000).map(a=>`<tr><td>${esc(a.types||a.type)}</td><td>${esc(a.line||'')}</td><td>${esc(a.nature)}</td><td>${esc(a.path)}</td><td>${esc(a.details)}</td></tr>`).join('')+'</table>'+(consolidatedRows.length>5000?'<p>Affichage limité à 5000 lignes. L’export CSV contient la liste complète consolidée.</p>':'');
+$('anomalies').innerHTML='<h2>Points d’attention détaillés</h2><p class="small">Une seule ligne est affichée par fascicule. Les natures et les détails concatènent toutes les anomalies détectées pour ce fascicule.</p><table class="attention-table"><tr><th>Niveau</th><th>Ligne du récolement</th><th>Nature métier</th><th>Fichier ou fascicule concerné</th><th>Constat consolidé</th></tr>'+consolidatedRows.slice(0,5000).map(a=>`<tr><td>${esc(a.types||a.type)}</td><td>${esc(a.line||'')}</td><td>${esc(a.nature)}</td><td>${esc(a.path)}</td><td>${esc(a.details)}</td></tr>`).join('')+'</table>'+(consolidatedRows.length>5000?'<p>Affichage limité à 5000 lignes. L’export Excel contient la liste complète consolidée.</p>':'');
 $('rapportMetier').innerHTML=buildReportMetierHtml(rows);
 reportHtml='<!doctype html><meta charset=utf-8><title>MÉLANISOFT — Rapport de contrôle qualité</title><h1>MÉLANISOFT</h1><h2>Rapport de contrôle qualité</h2>'+$('summary').innerHTML+$('rapportMetier').innerHTML+$('controls').innerHTML+$('anomalies').innerHTML;
 GallicaQCState.report.metierHtml=$('rapportMetier').innerHTML;
@@ -1362,9 +1362,9 @@ function buildAleaHtml(rows,sample){
   return '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>MÉLANISOFT — Échantillon de contrôle</title><style>body{font-family:Arial,Helvetica,sans-serif;margin:24px}table{border-collapse:collapse;width:100%;font-size:12px;margin-bottom:24px}td,th{border:1px solid #ead1dc;padding:5px;text-align:left}th{background:#f5e2eb}.small{font-size:12px;color:#5c3448}.nav{position:sticky;top:0;background:white;padding:8px;border-bottom:1px solid #ead1dc}.app-footer{margin:24px 0 6px;text-align:center;color:#7b5368;font-size:12px}</style></head><body><div class="nav"><button onclick="window.print()">Imprimer / enregistrer en PDF</button> <button onclick="navigator.clipboard&&navigator.clipboard.writeText(document.body.innerText)">Copier le texte</button></div><h1>MÉLANISOFT</h1><h2>Échantillon de contrôle qualité</h2><p class="small">Généré le '+esc(now)+'. Ce fichier reproduit le principe du classeur ALÉA : feuille 1 = liste complète ; feuille 2 = tirage aléatoire de l’échantillon. La check-list est réservée aux contrôles visuels à réaliser manuellement.</p>'+checklist+feuille1+feuille2+'<footer class="app-footer">MÉLANISOFT — Contrôle qualité des campagnes de numérisation patrimoniale</footer></body></html>';
 }
 
-function xmlEsc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function xmlEsc(s){return String(s??'').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function colName(n){let s=''; while(n>0){let m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=Math.floor((n-1)/26);} return s;}
-function xlsxCell(r,c,v){let ref=colName(c)+r; if(typeof v==='number')return `<c r="${ref}"><v>${v}</v></c>`; return `<c r="${ref}" t="inlineStr"><is><t>${xmlEsc(v)}</t></is></c>`;}
+function xlsxCell(r,c,v,styleId=null){let ref=colName(c)+r, style=styleId===null?'':` s="${styleId}"`; if(typeof v==='number')return `<c r="${ref}"${style}><v>${v}</v></c>`; return `<c r="${ref}"${style} t="inlineStr"><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`;}
 function crc32(bytes){let table=crc32.table||(crc32.table=(()=>{let t=[]; for(let n=0;n<256;n++){let c=n; for(let k=0;k<8;k++)c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1); t[n]=c>>>0;} return t;})()); let crc=0^(-1); for(let i=0;i<bytes.length;i++)crc=(crc>>>8)^table[(crc^bytes[i])&0xFF]; return (crc^(-1))>>>0;}
 function u16(n){return [n&255,(n>>>8)&255]}
 function u32(n){return [n&255,(n>>>8)&255,(n>>>16)&255,(n>>>24)&255]}
@@ -1438,6 +1438,70 @@ function buildAleaExcel(){
     'xl/worksheets/sheet2.xml':listXml
   };
   return zipStore(files);
+}
+
+function buildAttentionExcel(sourceRows){
+  const headers=['N°','Fichier ou fascicule concerné','Nature du problème','Niveau','Ligne(s) du récolement','Constat consolidé','Occurrences regroupées','Observation prestataire'];
+  const anomaliesRows=(sourceRows===undefined?consolidatedAnomalies():sourceRows)||[];
+  const rows=anomaliesRows.map((a,i)=>[
+    i+1,
+    a.path||'',
+    a.nature||'',
+    a.types||a.type||'',
+    a.line||'',
+    a.details||'',
+    Number.isFinite(Number(a.count))?Number(a.count):'',
+    a.observation!==undefined?a.observation:recoObservationForLine(a.line)
+  ]);
+  const widths=[8,38,30,12,18,80,16,52];
+  const rowHeight=row=>{
+    const lines=row.reduce((max,v,i)=>{
+      const text=String(v??'');
+      const explicit=text.split(/\r?\n/);
+      const estimated=explicit.reduce((sum,line)=>sum+Math.max(1,Math.ceil(line.length/Math.max(6,widths[i]-2))),0);
+      return Math.max(max,estimated);
+    },1);
+    return Math.min(409,Math.max(24,lines*15));
+  };
+  const all=[headers,...rows];
+  const sheetRows=all.map((row,ri)=>{
+    const styleId=ri===0?1:(ri%2===1?3:2);
+    const height=ri===0?32:rowHeight(row);
+    return `<row r="${ri+1}" ht="${height}" customHeight="1">`+row.map((v,ci)=>xlsxCell(ri+1,ci+1,v,styleId)).join('')+'</row>';
+  }).join('');
+  const endRow=Math.max(1,rows.length+1);
+  const created=new Date().toISOString();
+  const sheetXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>
+<dimension ref="A1:H${endRow}"/>
+<sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+<sheetFormatPr defaultRowHeight="15"/>
+<cols>${widths.map((width,i)=>`<col min="${i+1}" max="${i+1}" width="${width}" customWidth="1"/>`).join('')}</cols>
+<sheetData>${sheetRows}</sheetData>
+<autoFilter ref="A1:H${endRow}"/>
+<pageMargins left="0.25" right="0.25" top="0.5" bottom="0.5" header="0.2" footer="0.2"/>
+<pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/>
+</worksheet>`;
+  const stylesXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<fonts count="2"><font><sz val="10"/><name val="Arial"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Arial"/></font></fonts>
+<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFBE185D"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFF1F7"/><bgColor indexed="64"/></patternFill></fill></fills>
+<borders count="2"><border/><border><left style="thin"><color rgb="FFF3C5D7"/></left><right style="thin"><color rgb="FFF3C5D7"/></right><top style="thin"><color rgb="FFF3C5D7"/></top><bottom style="thin"><color rgb="FFF3C5D7"/></bottom><diagonal/></border></borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="top" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="top" wrapText="1"/></xf></cellXfs>
+<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`;
+  return zipStore({
+    '[Content_Types].xml':`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>`,
+    '_rels/.rels':`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>`,
+    'docProps/core.xml':`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>Points d’attention détaillés</dc:title><dc:creator>MÉLANISOFT</dc:creator><cp:lastModifiedBy>MÉLANISOFT</cp:lastModifiedBy><dcterms:created xsi:type="dcterms:W3CDTF">${created}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${created}</dcterms:modified></cp:coreProperties>`,
+    'docProps/app.xml':`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>MÉLANISOFT</Application></Properties>`,
+    'xl/workbook.xml':`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><workbookPr/><bookViews><workbookView activeTab="0" firstSheet="0"/></bookViews><sheets><sheet name="Points_attention" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+    'xl/_rels/workbook.xml.rels':`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
+    'xl/styles.xml':stylesXml,
+    'xl/worksheets/sheet1.xml':sheetXml
+  });
 }
 
 function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
@@ -1584,13 +1648,14 @@ const GallicaQC = {
   },
   reports: {
     buildText: buildReportTxt,
-    buildAleaExcel
+    buildAleaExcel,
+    buildAttentionExcel
   },
   syncState: syncGallicaQCState
 };
 window.GallicaQC = GallicaQC;
 
-$('exportCsv').onclick=()=>{syncGallicaQCState();download('Melanisoft_points_attention_detailles_observations.csv','niveau;ligne_du_recolement;nature_metier;fichier_ou_fascicule_concerne;constat_consolide;occurrences_regroupees;observation_prestataire\n'+consolidatedAnomalies().map(a=>[a.types||a.type,a.line||'',a.nature,a.path,a.details,a.count,recoObservationForLine(a.line)].map(x=>'"'+String(x).replaceAll('"','""')+'"').join(';')).join('\n'),'text/csv');};
+$('exportAttentionExcel').onclick=()=>{syncGallicaQCState();download('Melanisoft_points_attention_detailles.xlsx',buildAttentionExcel(),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');};
 $('exportHtml').onclick=()=>{syncGallicaQCState();download('Melanisoft_rapport_controle_qualite.txt',buildReportTxt(),'text/plain');};
 $('exportAleaExcel').onclick=()=>{syncGallicaQCState();download('Melanisoft_echantillon_controle_visuel.xlsx',buildAleaExcel(),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');};
 </script>
