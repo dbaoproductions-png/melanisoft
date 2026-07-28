@@ -1,0 +1,1281 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>GALLICASOFT — Contrôle de l’intégration dans Gallica</title>
+  <style>
+    :root{
+      --rose:#c2185b;
+      --rose-dark:#8e1244;
+      --rose-soft:#fce4ec;
+      --rose-pale:#fff7fa;
+      --ink:#3e2632;
+      --muted:#765d69;
+      --line:#ead1dc;
+      --ok:#247a52;
+      --ok-bg:#e9f7f0;
+      --warn:#a66000;
+      --warn-bg:#fff4d6;
+      --error:#a92727;
+      --error-bg:#fdeaea;
+      --shadow:0 12px 35px rgba(110,32,70,.09);
+    }
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{margin:0;background:#fffafb;color:var(--ink);font-family:Arial,Helvetica,sans-serif;line-height:1.45}
+    header{background:linear-gradient(135deg,var(--rose-dark),var(--rose));color:#fff;padding:34px 24px 28px}
+    header .wrap{max-width:1320px;margin:auto}
+    h1{margin:0;font-size:clamp(30px,5vw,52px);letter-spacing:.07em}
+    header p{max-width:850px;margin:8px 0 0;font-size:17px}
+    nav{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.97);border-bottom:1px solid var(--line);backdrop-filter:blur(8px)}
+    nav .wrap{display:flex;gap:8px;overflow:auto;padding:10px 18px}
+    nav a{white-space:nowrap;color:var(--rose-dark);text-decoration:none;font-weight:700;padding:7px 11px;border-radius:999px}
+    nav a:hover,nav a:focus{background:var(--rose-soft);outline:none}
+    main{max-width:1320px;margin:0 auto;padding:24px 18px 60px}
+    section{scroll-margin-top:72px;background:#fff;border:1px solid var(--line);border-radius:18px;padding:22px;margin:0 0 20px;box-shadow:var(--shadow)}
+    h2{margin:0 0 15px;color:var(--rose-dark);font-size:23px}
+    h3{margin:20px 0 10px;color:var(--rose-dark)}
+    .small{font-size:13px;color:var(--muted)}
+    .grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+    .source-card{border:1px solid var(--line);border-radius:14px;padding:16px;background:var(--rose-pale)}
+    .source-card strong{display:block;margin-bottom:8px}
+    label{font-weight:700}
+    input[type=file],select,input[type=number],input[type=search],input[type=text],textarea{
+      width:100%;border:1px solid #d8b9c7;border-radius:9px;background:#fff;color:var(--ink);padding:10px;font:inherit
+    }
+    input[type=file]{padding:8px}
+    select:focus,input:focus,textarea:focus{outline:3px solid rgba(194,24,91,.14);border-color:var(--rose)}
+    .field{margin-top:12px}
+    .status-line{min-height:38px;margin-top:9px;padding:9px 11px;background:#fff;border-radius:8px;color:var(--muted);font-size:13px}
+    .status-line.ok{color:var(--ok);background:var(--ok-bg)}
+    .status-line.error{color:var(--error);background:var(--error-bg)}
+    .options{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+    .check{display:flex;gap:8px;align-items:center;font-weight:400}
+    .check input{width:18px;height:18px;accent-color:var(--rose)}
+    .sample-size{display:flex;gap:8px;align-items:center}
+    .sample-size input{width:90px}
+    .actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+    button{border:0;border-radius:10px;padding:11px 15px;font:inherit;font-weight:700;cursor:pointer;background:var(--rose);color:#fff}
+    button.secondary{background:#fff;color:var(--rose-dark);border:1px solid var(--rose)}
+    button:disabled{opacity:.45;cursor:not-allowed}
+    button:hover:not(:disabled){filter:brightness(.96)}
+    .progress-wrap{display:none;margin-top:15px}
+    .progress-track{height:9px;border-radius:99px;background:var(--rose-soft);overflow:hidden}
+    .progress-bar{height:100%;width:0;background:var(--rose);transition:width .2s}
+    .metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+    .metric{border:1px solid var(--line);border-radius:13px;padding:15px;background:#fff}
+    .metric span{display:block;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+    .metric strong{display:block;font-size:25px;margin-top:4px;color:var(--rose-dark)}
+    .metric.ok{background:var(--ok-bg);border-color:#b9e2ce}
+    .metric.warn{background:var(--warn-bg);border-color:#efd69d}
+    .metric.error{background:var(--error-bg);border-color:#efb9b9}
+    .notice{border-left:5px solid var(--warn);background:var(--warn-bg);padding:12px 14px;border-radius:8px;margin:14px 0}
+    .success{border-left-color:var(--ok);background:var(--ok-bg)}
+    .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th{position:sticky;top:0;background:var(--rose);color:#fff;text-align:left;padding:10px;vertical-align:top;z-index:1}
+    td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+    tbody tr:nth-child(even){background:var(--rose-pale)}
+    td.num{text-align:right;white-space:nowrap}
+    .badge{display:inline-block;border-radius:999px;padding:4px 8px;font-size:11px;font-weight:700;white-space:nowrap}
+    .badge.OK{background:var(--ok-bg);color:var(--ok)}
+    .badge.ALERTE{background:var(--warn-bg);color:var(--warn)}
+    .badge.ERREUR{background:var(--error-bg);color:var(--error)}
+    .filters{display:grid;grid-template-columns:240px 1fr;gap:10px;margin-bottom:12px}
+    a.url{color:var(--rose-dark);font-weight:700;word-break:break-all}
+    .empty{padding:24px;text-align:center;color:var(--muted)}
+    .report p{max-width:1000px}
+    .manual-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:0;list-style:none}
+    .manual-list li{border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--rose-pale)}
+    .sample-table select,.sample-table textarea{min-width:150px;font-size:12px;padding:7px}
+    .sample-table textarea{min-height:58px;resize:vertical}
+    footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
+    @media(max-width:850px){
+      .grid-2,.metrics,.manual-list,.filters{grid-template-columns:1fr}
+      section{padding:17px}
+    }
+    @media print{
+      nav,.actions,.filters,.source-card,.progress-wrap{display:none!important}
+      body{background:#fff}
+      section{box-shadow:none;break-inside:avoid}
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>GALLICASOFT</h1>
+      <p>Contrôle local et autonome de l’intégration dans Gallica : comparaison du récolement final du prestataire avec le fichier « état des livraisons » de la BnF.</p>
+    </div>
+  </header>
+  <nav aria-label="Navigation dans le contrôle">
+    <div class="wrap">
+      <a href="#sources">Fichiers à comparer</a>
+      <a href="#parametres">Paramètres du contrôle</a>
+      <a href="#synthese">Synthèse du contrôle</a>
+      <a href="#rapport">Rapport de contrôle qualité</a>
+      <a href="#automatiques">Contrôles effectués automatiquement</a>
+      <a href="#attention">Points d’attention détaillés</a>
+      <a href="#manuel">Contrôle manuel sur échantillon</a>
+    </div>
+  </nav>
+
+  <main>
+    <section id="sources">
+      <h2>Fichiers à comparer</h2>
+      <p class="small">Les fichiers restent sur votre ordinateur. Formats pris en charge : XLSX, CSV et, pour le récolement, ZIP contenant un seul XLSX. Le choix de la feuille est automatique, mais peut être corrigé avant l’analyse.</p>
+      <div class="grid-2">
+        <div class="source-card">
+          <strong>1. Récolement final du prestataire</strong>
+          <input id="recoFile" type="file" accept=".xlsx,.csv,.zip,text/csv,application/zip">
+          <div class="field">
+            <label for="recoSheet">Feuille utilisée</label>
+            <select id="recoSheet" disabled><option>Aucun fichier chargé</option></select>
+          </div>
+          <div id="recoStatus" class="status-line">En attente du récolement.</div>
+        </div>
+        <div class="source-card">
+          <strong>2. État des livraisons Gallica</strong>
+          <input id="gallicaFile" type="file" accept=".xlsx,.csv,text/csv">
+          <div class="field">
+            <label for="gallicaSheet">Feuille utilisée</label>
+            <select id="gallicaSheet" disabled><option>Aucun fichier chargé</option></select>
+          </div>
+          <div id="gallicaStatus" class="status-line">En attente du fichier état.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="parametres">
+      <h2>Paramètres du contrôle</h2>
+      <div class="options">
+        <label class="check"><input id="admissionsOnly" type="checkbox" checked> Comparer uniquement les lignes « Admission partielle »</label>
+        <label class="sample-size" for="sampleSize">Taille de l’échantillon manuel
+          <input id="sampleSize" type="number" min="1" max="100" value="10">
+        </label>
+      </div>
+      <p class="small">Le rapprochement automatique porte sur les fascicules et les pages. Le guide 2024 prévoit ensuite une vérification visuelle du calendrier, puis la concordance titre, date, tomaison et source sur une dizaine de fascicules.</p>
+      <div class="actions">
+        <button id="analyze" disabled>Comparer le récolement et Gallica</button>
+        <button id="exportExcel" disabled>Exporter les résultats (Excel)</button>
+        <button id="exportReport" class="secondary" disabled>Exporter le rapport (HTML)</button>
+        <button id="reset" class="secondary">Réinitialiser</button>
+      </div>
+      <div id="progressWrap" class="progress-wrap" aria-live="polite">
+        <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
+        <div id="progressText" class="small">Préparation…</div>
+      </div>
+    </section>
+
+    <section id="synthese">
+      <h2>Synthèse du contrôle</h2>
+      <div id="metrics" class="metrics">
+        <div class="metric"><span>Fascicules attendus</span><strong>—</strong></div>
+        <div class="metric"><span>Fascicules dans Gallica</span><strong>—</strong></div>
+        <div class="metric"><span>Pages attendues</span><strong>—</strong></div>
+        <div class="metric"><span>Pages valides Gallica</span><strong>—</strong></div>
+      </div>
+      <div id="summaryNote" class="empty">Chargez les deux fichiers puis lancez la comparaison.</div>
+      <div id="titleSummary"></div>
+    </section>
+
+    <section id="rapport">
+      <h2>Rapport de contrôle qualité</h2>
+      <div id="report" class="report empty">Le rapport sera généré après l’analyse.</div>
+    </section>
+
+    <section id="automatiques">
+      <h2>Contrôles effectués automatiquement</h2>
+      <div id="controls" class="empty">Aucun contrôle exécuté.</div>
+    </section>
+
+    <section id="attention">
+      <h2>Points d’attention détaillés</h2>
+      <div class="filters">
+        <select id="anomalyFilter" disabled><option value="">Toutes les natures</option></select>
+        <input id="anomalySearch" type="search" placeholder="Rechercher une date, une cote, un titre, un ID ou un constat…" disabled>
+      </div>
+      <div id="anomalies" class="empty">Aucun résultat à afficher.</div>
+    </section>
+
+    <section id="manuel">
+      <h2>Contrôle manuel sur échantillon</h2>
+      <ul class="manual-list">
+        <li><strong>Calendrier et dates</strong><br>Repérer visuellement les oublis, dates incohérentes et erreurs d’appariement. La périodicité reste une indication, pas une preuve d’erreur.</li>
+        <li><strong>Titre et fascicule</strong><br>Comparer le titre et la date du pavé notice avec l’exemplaire numérisé.</li>
+        <li><strong>Description</strong><br>Vérifier la tomaison : année, édition éventuelle et numéro du fascicule.</li>
+        <li><strong>Source</strong><br>Vérifier l’établissement et la cote. Pour une collection partagée, Gallica peut afficher la source du premier établissement intégré.</li>
+        <li><strong>Erreur du journal</strong><br>Si l’original porte une date manifestement erronée mais fidèlement reproduite, indiquer « Correction BnF » plutôt qu’une erreur prestataire.</li>
+        <li><strong>Date impossible</strong><br>Une date matériellement impossible, par exemple le 31 février, doit être corrigée pour franchir la chaîne d’entrée.</li>
+      </ul>
+      <div class="actions">
+        <button id="regenerateSample" class="secondary" disabled>Regénérer l’échantillon</button>
+      </div>
+      <div id="sample" class="empty">L’échantillon sera créé après l’analyse.</div>
+    </section>
+  </main>
+
+  <footer>GALLICASOFT — Contrôle de l’intégration des campagnes de numérisation dans Gallica</footer>
+
+  <script>
+  'use strict';
+
+  const $=id=>document.getElementById(id);
+  const appState={
+    recoWorkbook:null,
+    gallicaWorkbook:null,
+    result:null,
+    manualSample:[]
+  };
+  const DAY_MS=86400000;
+
+  function escapeHtml(value){
+    return String(value??'').replace(/[&<>"']/g,char=>({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    })[char]);
+  }
+  function normalizeText(value){
+    return String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .replace(/[’‘]/g,"'").toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+  }
+  function normalizeCompact(value){return normalizeText(value).replace(/\s+/g,'')}
+  function normalizeCote(value){return normalizeCompact(value).replace(/^cote/,'')}
+  function asNumber(value){
+    if(typeof value==='number'&&Number.isFinite(value))return value;
+    const cleaned=String(value??'').trim().replace(/\s/g,'').replace(',','.');
+    if(!cleaned||!/^[-+]?\d+(?:\.\d+)?$/.test(cleaned))return null;
+    const parsed=Number(cleaned);
+    return Number.isFinite(parsed)?parsed:null;
+  }
+  function pad2(value){return String(value).padStart(2,'0')}
+  function validYmd(value){
+    const match=String(value??'').match(/^(\d{4})(\d{2})(\d{2})$/);
+    if(!match)return false;
+    const year=Number(match[1]),month=Number(match[2]),day=Number(match[3]);
+    if(month<1||month>12||day<1||day>31)return false;
+    const date=new Date(Date.UTC(year,month-1,day));
+    return date.getUTCFullYear()===year&&date.getUTCMonth()===month-1&&date.getUTCDate()===day;
+  }
+  function ymd(year,month,day){
+    const value=String(year).padStart(4,'0')+pad2(month)+pad2(day);
+    return validYmd(value)?value:'';
+  }
+  function excelSerialToYmd(serial){
+    const number=Number(serial);
+    if(!Number.isFinite(number)||number<=0)return '';
+    const date=new Date(Date.UTC(1899,11,30)+Math.round(number)*DAY_MS);
+    return ymd(date.getUTCFullYear(),date.getUTCMonth()+1,date.getUTCDate());
+  }
+  function parseGallicaDate(value){
+    if(value instanceof Date){
+      return ymd(value.getUTCFullYear(),value.getUTCMonth()+1,value.getUTCDate());
+    }
+    if(typeof value==='number'&&Number.isFinite(value)){
+      const compact=String(Math.trunc(value));
+      if(compact.length===8&&validYmd(compact))return compact;
+      return excelSerialToYmd(value);
+    }
+    const raw=String(value??'').trim();
+    if(!raw)return '';
+    if(/^\d+(?:[.,]\d+)?$/.test(raw)){
+      const compact=raw.replace(/[.,].*$/,'');
+      if(compact.length===8&&validYmd(compact))return compact;
+      return excelSerialToYmd(raw.replace(',','.'));
+    }
+    const dates=[];
+    const datePattern=/(\d{1,4})[\/.-](\d{1,2})[\/.-](\d{1,4})/g;
+    let match;
+    while((match=datePattern.exec(raw))){
+      const a=match[1],b=match[2],c=match[3];
+      const valueYmd=a.length===4?ymd(a,b,c):(c.length===4?ymd(c,b,a):'');
+      if(valueYmd)dates.push(valueYmd);
+    }
+    if(dates.length)return dates.slice(0,2).join('-');
+    const compactMatches=raw.match(/(?:^|\D)(\d{8})(?!\d)/g)||[];
+    const compactDates=compactMatches.map(item=>(item.match(/(\d{8})/)||[])[1]).filter(validYmd);
+    return compactDates.slice(0,2).join('-');
+  }
+  function formatDateKey(key){
+    return String(key??'').split('-').filter(Boolean).map(part=>
+      validYmd(part)?part.slice(6,8)+'/'+part.slice(4,6)+'/'+part.slice(0,4):part
+    ).join(' – ');
+  }
+  function parseProviderRef(value){
+    const raw=String(value??'').trim();
+    if(!raw||/^#?n\/?a$/i.test(raw))return null;
+    const base=raw.replace(/^.*[\\/]/,'').replace(/\.[A-Za-z0-9]+$/,'');
+    const bis=/_bis$/i.test(base);
+    const match=base.match(/(\d{8})(?:-(\d{8}))?(?:_bis)?$/i);
+    if(!match||!validYmd(match[1])||(match[2]&&!validYmd(match[2])))return null;
+    const dateKey=[match[1],match[2]].filter(Boolean).join('-');
+    const prefix=base.slice(0,match.index).replace(/_+$/,'');
+    const parts=prefix.split('_').filter(Boolean);
+    const sourceCode=parts[0]||'';
+    const firstDateYear=match[1].slice(0,4);
+    let yearIndex=parts.findIndex((part,index)=>index>0&&part===firstDateYear);
+    if(yearIndex<0)yearIndex=parts.findIndex((part,index)=>index>0&&/^(17|18|19|20)\d{2}$/.test(part));
+    const coteParts=parts.slice(1,yearIndex>1?yearIndex:parts.length);
+    return {
+      raw,base,dateKey,bis,sourceCode,
+      cote:coteParts.join(' '),
+      collectionKey:normalizeCote(coteParts.join(' '))
+    };
+  }
+
+  function guessSeparator(line){
+    const candidates=[';','\t',','];
+    return candidates.sort((a,b)=>line.split(b).length-line.split(a).length)[0];
+  }
+  function splitCsvLine(line,separator){
+    const result=[];let current='',quoted=false;
+    for(let i=0;i<line.length;i++){
+      const char=line[i];
+      if(char==='"'){
+        if(quoted&&line[i+1]==='"'){current+='"';i++}else quoted=!quoted;
+      }else if(char===separator&&!quoted){result.push(current);current=''}
+      else current+=char;
+    }
+    result.push(current);
+    return result;
+  }
+  function parseCsv(text){
+    const lines=String(text??'').replace(/^\uFEFF/,'').split(/\r?\n/);
+    const first=lines.find(line=>line.trim())||'';
+    const separator=guessSeparator(first);
+    return lines.filter(line=>line.trim()).map(line=>splitCsvLine(line,separator));
+  }
+
+  function columnIndexFromRef(ref){
+    const match=String(ref??'').match(/[A-Z]+/i);
+    if(!match)return 0;
+    let result=0;
+    for(const char of match[0].toUpperCase())result=result*26+char.charCodeAt(0)-64;
+    return result-1;
+  }
+  function decodeXml(value){
+    return String(value??'')
+      .replace(/&#x([0-9a-f]+);/gi,(_,hex)=>String.fromCodePoint(parseInt(hex,16)))
+      .replace(/&#(\d+);/g,(_,number)=>String.fromCodePoint(Number(number)))
+      .replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"')
+      .replace(/&apos;/g,"'").replace(/&amp;/g,'&');
+  }
+  function xmlAttribute(attributes,name){
+    const escaped=name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    const match=String(attributes??'').match(new RegExp(`(?:^|\\s)${escaped}=(?:"([^"]*)"|'([^']*)')`));
+    return decodeXml(match?(match[1]??match[2]??''):'');
+  }
+  function normalizeZipPath(target){
+    let path=String(target??'').replace(/\\/g,'/');
+    if(path.startsWith('/'))path=path.slice(1);
+    else if(!path.startsWith('xl/'))path='xl/'+path;
+    const parts=[];
+    path.split('/').forEach(part=>{
+      if(!part||part==='.')return;
+      if(part==='..')parts.pop();else parts.push(part);
+    });
+    return parts.join('/');
+  }
+  async function inflateZip(bytes){
+    if(typeof DecompressionStream==='undefined')throw new Error('Ce navigateur ne permet pas de décompresser les fichiers XLSX.');
+    try{
+      const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+      return new Uint8Array(await new Response(stream).arrayBuffer());
+    }catch(error){
+      const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'));
+      return new Uint8Array(await new Response(stream).arrayBuffer());
+    }
+  }
+  async function unzipXmlEntries(file){
+    const buffer=await file.arrayBuffer();
+    const view=new DataView(buffer);
+    const bytes=new Uint8Array(buffer);
+    const decoder=new TextDecoder('utf-8');
+    let eocd=-1;
+    for(let index=bytes.length-22;index>=Math.max(0,bytes.length-66000);index--){
+      if(view.getUint32(index,true)===0x06054b50){eocd=index;break}
+    }
+    if(eocd<0)throw new Error('Structure XLSX non reconnue.');
+    const total=view.getUint16(eocd+10,true);
+    const centralOffset=view.getUint32(eocd+16,true);
+    let position=centralOffset;
+    const entries={};
+    for(let index=0;index<total;index++){
+      if(view.getUint32(position,true)!==0x02014b50)break;
+      const method=view.getUint16(position+10,true);
+      const compressedSize=view.getUint32(position+20,true);
+      const nameLength=view.getUint16(position+28,true);
+      const extraLength=view.getUint16(position+30,true);
+      const commentLength=view.getUint16(position+32,true);
+      const localOffset=view.getUint32(position+42,true);
+      const name=decoder.decode(bytes.slice(position+46,position+46+nameLength));
+      const useful=/\.(?:xml|rels)$/i.test(name);
+      if(useful){
+        const localNameLength=view.getUint16(localOffset+26,true);
+        const localExtraLength=view.getUint16(localOffset+28,true);
+        const dataStart=localOffset+30+localNameLength+localExtraLength;
+        const compressed=bytes.slice(dataStart,dataStart+compressedSize);
+        let data;
+        if(method===0)data=compressed;
+        else if(method===8)data=await inflateZip(compressed);
+        else throw new Error('Méthode de compression XLSX non prise en charge : '+method);
+        entries[name]=decoder.decode(data);
+      }
+      position+=46+nameLength+extraLength+commentLength;
+    }
+    return entries;
+  }
+  async function unzipSelectedBinaryEntries(file,predicate){
+    const buffer=await file.arrayBuffer();
+    const view=new DataView(buffer);
+    const bytes=new Uint8Array(buffer);
+    const decoder=new TextDecoder('utf-8');
+    let eocd=-1;
+    for(let index=bytes.length-22;index>=Math.max(0,bytes.length-66000);index--){
+      if(view.getUint32(index,true)===0x06054b50){eocd=index;break}
+    }
+    if(eocd<0)throw new Error('Structure ZIP non reconnue.');
+    const total=view.getUint16(eocd+10,true);
+    const centralOffset=view.getUint32(eocd+16,true);
+    let position=centralOffset;
+    const entries={};
+    for(let index=0;index<total;index++){
+      if(view.getUint32(position,true)!==0x02014b50)break;
+      const method=view.getUint16(position+10,true);
+      const compressedSize=view.getUint32(position+20,true);
+      const nameLength=view.getUint16(position+28,true);
+      const extraLength=view.getUint16(position+30,true);
+      const commentLength=view.getUint16(position+32,true);
+      const localOffset=view.getUint32(position+42,true);
+      const name=decoder.decode(bytes.slice(position+46,position+46+nameLength));
+      if(predicate(name)){
+        const localNameLength=view.getUint16(localOffset+26,true);
+        const localExtraLength=view.getUint16(localOffset+28,true);
+        const dataStart=localOffset+30+localNameLength+localExtraLength;
+        const compressed=bytes.slice(dataStart,dataStart+compressedSize);
+        if(method===0)entries[name]=compressed;
+        else if(method===8)entries[name]=await inflateZip(compressed);
+        else throw new Error('Méthode de compression ZIP non prise en charge : '+method);
+      }
+      position+=46+nameLength+extraLength+commentLength;
+    }
+    return entries;
+  }
+  function parseSharedStrings(xml){
+    if(!xml)return [];
+    const result=[];
+    const itemPattern=/<si\b[^>]*>([\s\S]*?)<\/si>/gi;
+    let item;
+    while((item=itemPattern.exec(xml))){
+      let text='';
+      const textPattern=/<t\b[^>]*>([\s\S]*?)<\/t>/gi;
+      let part;
+      while((part=textPattern.exec(item[1])))text+=decodeXml(part[1].replace(/<[^>]+>/g,''));
+      result.push(text);
+    }
+    return result;
+  }
+  function parseWorksheet(xml,sharedStrings){
+    const rows=[];
+    if(!xml)return rows;
+    const rowPattern=/<row\b([^>]*)>([\s\S]*?)<\/row>/gi;
+    let rowMatch,sequentialRow=0;
+    while((rowMatch=rowPattern.exec(xml))){
+      sequentialRow++;
+      const rowNumber=Number(xmlAttribute(rowMatch[1],'r'))||sequentialRow;
+      const values=[];
+      const cellPattern=/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/gi;
+      let cellMatch;
+      while((cellMatch=cellPattern.exec(rowMatch[2]))){
+        const attributes=cellMatch[1]||'';
+        const body=cellMatch[2]||'';
+        const ref=xmlAttribute(attributes,'r');
+        const type=xmlAttribute(attributes,'t');
+        const column=columnIndexFromRef(ref);
+        let value='';
+        if(type==='inlineStr'){
+          const pieces=[];const textPattern=/<t\b[^>]*>([\s\S]*?)<\/t>/gi;let textMatch;
+          while((textMatch=textPattern.exec(body)))pieces.push(decodeXml(textMatch[1].replace(/<[^>]+>/g,'')));
+          value=pieces.join('');
+        }else{
+          const valueMatch=body.match(/<v\b[^>]*>([\s\S]*?)<\/v>/i);
+          const raw=valueMatch?decodeXml(valueMatch[1]):'';
+          if(type==='s')value=sharedStrings[Number(raw)]??'';
+          else if(type==='b')value=raw==='1';
+          else if(raw!==''&&Number.isFinite(Number(raw)))value=Number(raw);
+          else value=raw;
+        }
+        values[column]=value;
+      }
+      while(rows.length<rowNumber-1)rows.push([]);
+      rows[rowNumber-1]=values;
+    }
+    return rows;
+  }
+  async function readXlsxWorkbook(file){
+    const entries=await unzipXmlEntries(file);
+    const shared=parseSharedStrings(entries['xl/sharedStrings.xml']);
+    const workbookXml=entries['xl/workbook.xml'];
+    const relsXml=entries['xl/_rels/workbook.xml.rels'];
+    if(!workbookXml)throw new Error('Le classeur ne contient pas de description de feuilles.');
+    const relationships=new Map();
+    const relationshipPattern=/<Relationship\b([^>]*?)\/?>/gi;
+    let relationship;
+    while((relationship=relationshipPattern.exec(relsXml||''))){
+      relationships.set(xmlAttribute(relationship[1],'Id'),normalizeZipPath(xmlAttribute(relationship[1],'Target')));
+    }
+    const sheets=[];
+    const sheetPattern=/<sheet\b([^>]*?)\/?>/gi;
+    let sheet;
+    while((sheet=sheetPattern.exec(workbookXml))){
+      const attributes=sheet[1];
+      const name=xmlAttribute(attributes,'name')||'Feuille '+(sheets.length+1);
+      const relationId=xmlAttribute(attributes,'r:id')||xmlAttribute(attributes,'id');
+      const target=relationships.get(relationId)||`xl/worksheets/sheet${sheets.length+1}.xml`;
+      sheets.push({name,rows:parseWorksheet(entries[target],shared)});
+    }
+    if(!sheets.length&&entries['xl/worksheets/sheet1.xml']){
+      sheets.push({name:'Feuille 1',rows:parseWorksheet(entries['xl/worksheets/sheet1.xml'],shared)});
+    }
+    if(!sheets.length)throw new Error('Aucune feuille exploitable n’a été trouvée.');
+    return {name:file.name||'Classeur XLSX',sheets};
+  }
+  async function readWorkbookFile(file){
+    const extension=(String(file.name||'').match(/\.[^.]+$/)||[''])[0].toLowerCase();
+    if(extension==='.csv')return {name:file.name,sheets:[{name:'CSV',rows:parseCsv(await file.text())}]};
+    if(extension==='.xlsx')return readXlsxWorkbook(file);
+    if(extension==='.zip'){
+      const entries=await unzipSelectedBinaryEntries(file,name=>/\.xlsx$/i.test(name)&&!/^__MACOSX\//.test(name));
+      const names=Object.keys(entries);
+      if(names.length!==1)throw new Error(`L’archive ZIP doit contenir un seul fichier XLSX exploitable ; ${names.length} trouvé(s).`);
+      const name=names[0].split('/').pop();
+      const bytes=entries[names[0]];
+      const nestedFile={
+        name,
+        async arrayBuffer(){return bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength)}
+      };
+      const workbook=await readXlsxWorkbook(nestedFile);
+      workbook.name=`${file.name} → ${name}`;
+      return workbook;
+    }
+    throw new Error('Format non pris en charge. Utilisez un fichier XLSX, CSV ou une archive ZIP contenant un seul XLSX.');
+  }
+
+  function rowHeaderScore(row,kind){
+    const joined=row.map(normalizeText).join(' | ');
+    if(kind==='gallica'){
+      return (/id doc num/.test(joined)?5:0)+(/date edition/.test(joined)?5:0)+
+        (/nb pages valides/.test(joined)?5:0)+(/url gallica/.test(joined)?3:0)+(/cote original/.test(joined)?2:0);
+    }
+    return (/nbre de fichiers produits|nombre de fichiers produits|nb de fichiers produits/.test(joined)?6:0)+
+      (/ref fichier numerique|nommage.*arkh/.test(joined)?5:0)+(/annee debut/.test(joined)?2:0);
+  }
+  function compactRecoMatches(rows){
+    let matches=0;
+    for(const row of rows.slice(0,400)){
+      if(row.some(value=>parseProviderRef(value)))matches++;
+    }
+    return matches;
+  }
+  function detectSheetIndex(workbook,kind){
+    let bestIndex=0,bestScore=-1;
+    workbook.sheets.forEach((sheet,index)=>{
+      let score=0;
+      for(const row of sheet.rows.slice(0,12))score=Math.max(score,rowHeaderScore(row,kind));
+      if(kind==='reco'){
+        const compact=compactRecoMatches(sheet.rows);
+        const maxColumns=Math.max(0,...sheet.rows.slice(0,100).map(row=>row.length));
+        const compactListBonus=maxColumns<=5?25:0;
+        if(compact>=5)score=Math.max(score,20+Math.min(50,compact)+compactListBonus);
+      }
+      if(score>bestScore){bestScore=score;bestIndex=index}
+    });
+    return bestIndex;
+  }
+  function findHeaderRow(rows,kind){
+    let best={index:0,score:-1};
+    rows.slice(0,15).forEach((row,index)=>{
+      const score=rowHeaderScore(row,kind);
+      if(score>best.score)best={index,score};
+    });
+    return best;
+  }
+  function findHeaderIndex(headers,patterns){
+    return headers.findIndex(header=>patterns.some(pattern=>pattern.test(header)));
+  }
+  function chooseReferenceColumn(rows){
+    const maxColumns=Math.min(100,Math.max(0,...rows.slice(0,200).map(row=>row.length)));
+    let best={index:-1,count:0};
+    for(let column=0;column<maxColumns;column++){
+      let count=0;
+      for(const row of rows)if(parseProviderRef(row[column]))count++;
+      if(count>best.count)best={index:column,count};
+    }
+    return best;
+  }
+  function columnLabels(rows){
+    const maxColumns=Math.max(0,...rows.slice(0,6).map(row=>row.length));
+    return Array.from({length:maxColumns},(_,column)=>
+      normalizeText(rows.slice(0,6).map(row=>row[column]).filter(value=>value!==undefined&&value!==null&&value!=='').join(' '))
+    );
+  }
+  function choosePagesColumn(rows,referenceColumn,labels){
+    let index=findHeaderIndex(labels,[/nbre de fichiers produits/,/nombre de fichiers produits/,/nb de fichiers produits/,/fichiers produits/]);
+    if(index>=0)return index;
+    const maxColumns=Math.max(0,...rows.slice(0,200).map(row=>row.length));
+    let best={index:-1,count:0,distance:Infinity};
+    for(let column=0;column<maxColumns;column++){
+      if(column===referenceColumn)continue;
+      let count=0;
+      for(const row of rows){
+        if(parseProviderRef(row[referenceColumn])&&asNumber(row[column])!==null)count++;
+      }
+      const distance=column>referenceColumn?column-referenceColumn:1000+referenceColumn-column;
+      if(count>best.count||(count===best.count&&distance<best.distance))best={index:column,count,distance};
+    }
+    return best.index;
+  }
+  function parseRecoSheet(sheet){
+    const rows=sheet.rows;
+    const referenceChoice=chooseReferenceColumn(rows);
+    if(referenceChoice.index<0||referenceChoice.count===0)throw new Error('Aucune référence prestataire terminée par une date AAAAMMJJ n’a été reconnue dans cette feuille.');
+    const labels=columnLabels(rows);
+    const pagesColumn=choosePagesColumn(rows,referenceChoice.index,labels);
+    if(pagesColumn<0)throw new Error('La colonne du nombre de fichiers/pages produits n’a pas été reconnue.');
+    const titleColumn=findHeaderIndex(labels,[/^titre du periodique/,/titre du document/]);
+    const coteColumn=findHeaderIndex(labels,[/^cote titre/,/cote original/]);
+    const establishmentColumn=findHeaderIndex(labels,[/etablissement de conservation/,/origine collection/]);
+    let currentTitle='',currentCote='',currentEstablishment='';
+    const entries=[];
+    rows.forEach((row,index)=>{
+      if(titleColumn>=0&&String(row[titleColumn]??'').trim())currentTitle=String(row[titleColumn]).trim();
+      if(coteColumn>=0&&String(row[coteColumn]??'').trim())currentCote=String(row[coteColumn]).trim();
+      if(establishmentColumn>=0&&String(row[establishmentColumn]??'').trim())currentEstablishment=String(row[establishmentColumn]).trim();
+      const parsed=parseProviderRef(row[referenceChoice.index]);
+      if(!parsed)return;
+      const pages=asNumber(row[pagesColumn]);
+      entries.push({
+        line:index+1,
+        reference:parsed.raw,
+        dateKey:parsed.dateKey,
+        bis:parsed.bis,
+        pages,
+        sourceCode:parsed.sourceCode,
+        cote:currentCote||parsed.cote,
+        title:currentTitle,
+        establishment:currentEstablishment,
+        collectionKey:normalizeCote(currentCote||parsed.cote)
+      });
+    });
+    return {
+      entries,
+      diagnostics:{
+        sheetName:sheet.name,
+        referenceColumn:referenceChoice.index,
+        pagesColumn,
+        referencesFound:entries.length
+      }
+    };
+  }
+  function parseGallicaSheet(sheet,admissionsOnly=true){
+    const header=findHeaderRow(sheet.rows,'gallica');
+    if(header.score<10)throw new Error('Les colonnes essentielles de l’état Gallica n’ont pas été reconnues.');
+    const headers=sheet.rows[header.index].map(normalizeText);
+    const index={
+      id:findHeaderIndex(headers,[/^id doc num/,/liv02/]),
+      origin:findHeaderIndex(headers,[/origine collection/,/doc111/]),
+      sourceArk:findHeaderIndex(headers,[/identifiant perenne.*doc source/,/doc121/]),
+      cote:findHeaderIndex(headers,[/cote original/,/doc130/]),
+      title:findHeaderIndex(headers,[/^titre/,/doc160/]),
+      author:findHeaderIndex(headers,[/^auteur/,/doc170/]),
+      date:findHeaderIndex(headers,[/date edition/,/doc181/]),
+      tomaison:findHeaderIndex(headers,[/tomaisons?/,/liv240/]),
+      decision:findHeaderIndex(headers,[/decision doc num/,/liv250/]),
+      deliveredDocuments:findHeaderIndex(headers,[/nb doc num livres/,/liv260/]),
+      validDocuments:findHeaderIndex(headers,[/nb doc num valides/,/liv270/]),
+      deliveredPages:findHeaderIndex(headers,[/nb pages livrees/,/liv280/]),
+      validPages:findHeaderIndex(headers,[/nb pages valides/,/liv290/]),
+      onlineDate:findHeaderIndex(headers,[/date mise en ligne/,/liv314/]),
+      url:findHeaderIndex(headers,[/url gallica/,/liv360/])
+    };
+    if(index.date<0||index.validPages<0)throw new Error('Les colonnes « Date édition » et « Nb pages valides » sont requises.');
+    const allEntries=[];
+    for(let rowIndex=header.index+1;rowIndex<sheet.rows.length;rowIndex++){
+      const row=sheet.rows[rowIndex]||[];
+      const hasData=[index.id,index.date,index.url,index.title].some(column=>column>=0&&String(row[column]??'').trim());
+      if(!hasData)continue;
+      const decision=index.decision>=0?String(row[index.decision]??'').trim():'';
+      const admission=normalizeCompact(decision)==='admissionpartielle';
+      allEntries.push({
+        line:rowIndex+1,
+        id:index.id>=0?String(row[index.id]??'').trim():'',
+        origin:index.origin>=0?String(row[index.origin]??'').trim():'',
+        sourceArk:index.sourceArk>=0?String(row[index.sourceArk]??'').trim():'',
+        cote:index.cote>=0?String(row[index.cote]??'').trim():'',
+        title:index.title>=0?String(row[index.title]??'').trim():'',
+        author:index.author>=0?String(row[index.author]??'').trim():'',
+        rawDate:index.date>=0?row[index.date]:'',
+        dateKey:index.date>=0?parseGallicaDate(row[index.date]):'',
+        tomaison:index.tomaison>=0?String(row[index.tomaison]??'').trim():'',
+        decision,
+        deliveredDocuments:index.deliveredDocuments>=0?asNumber(row[index.deliveredDocuments]):null,
+        validDocuments:index.validDocuments>=0?asNumber(row[index.validDocuments]):null,
+        deliveredPages:index.deliveredPages>=0?asNumber(row[index.deliveredPages]):null,
+        validPages:index.validPages>=0?asNumber(row[index.validPages]):null,
+        onlineDate:index.onlineDate>=0?String(row[index.onlineDate]??'').trim():'',
+        url:index.url>=0?String(row[index.url]??'').trim():'',
+        admission,
+        collectionKey:normalizeCote(index.cote>=0?row[index.cote]:'')
+      });
+    }
+    return {
+      entries:admissionsOnly?allEntries.filter(entry=>entry.admission):allEntries,
+      excluded:admissionsOnly?allEntries.filter(entry=>!entry.admission).length:0,
+      diagnostics:{sheetName:sheet.name,headerLine:header.index+1,columns:index,rowsFound:allEntries.length}
+    };
+  }
+
+  function groupBy(items,keyFunction){
+    const result=new Map();
+    items.forEach(item=>{
+      const key=keyFunction(item);
+      if(!result.has(key))result.set(key,[]);
+      result.get(key).push(item);
+    });
+    return result;
+  }
+  function safeCollectionKey(item,fallback){
+    return item.collectionKey||normalizeCote(item.cote)||normalizeText(item.title)||fallback;
+  }
+  function sumNumbers(items,field){
+    return items.reduce((sum,item)=>sum+(Number.isFinite(item[field])?item[field]:0),0);
+  }
+  function makeAnomaly(type,nature,level,data={}){
+    return {
+      type,nature,level,
+      title:data.title||data.state?.title||data.expected?.title||'',
+      cote:data.cote||data.state?.cote||data.expected?.cote||'',
+      dateExpected:data.expected?.dateKey||data.dateKey||'',
+      dateGallica:data.state?.dateKey||'',
+      pagesExpected:data.expected?.pages??'',
+      pagesGallica:data.state?.validPages??'',
+      providerRef:data.expected?.reference||'',
+      id:data.state?.id||'',
+      url:data.state?.url||'',
+      recoLine:data.expected?.line||'',
+      stateLine:data.state?.line||'',
+      finding:data.finding||''
+    };
+  }
+  function compareData(recoParsed,gallicaParsed){
+    const expected=recoParsed.entries;
+    const integrated=gallicaParsed.entries;
+    const anomalies=[];
+    const stateGroups=groupBy(integrated,item=>safeCollectionKey(item,'gallica-inconnu'));
+    const uniqueStateKeys=[...stateGroups.keys()];
+    const mappedExpected=expected.map(item=>{
+      let key=safeCollectionKey(item,'attendu-inconnu');
+      if(!stateGroups.has(key)&&uniqueStateKeys.length===1)key=uniqueStateKeys[0];
+      return {...item,mappedCollectionKey:key};
+    });
+    const expectedGroups=groupBy(mappedExpected,item=>item.mappedCollectionKey);
+    const allKeys=[...new Set([...stateGroups.keys(),...expectedGroups.keys()])];
+    const titleSummaries=[];
+    let missingCount=0,unexpectedCount=0,pageMismatchCount=0,blankStateDates=0,duplicateDates=0,metadataIssues=0;
+
+    for(const key of allKeys){
+      const wanted=expectedGroups.get(key)||[];
+      const found=stateGroups.get(key)||[];
+      const representative=found[0]||wanted[0]||{};
+      const title=representative.title||wanted.find(item=>item.title)?.title||('Collection '+(representative.cote||wanted[0]?.cote||key));
+      const cote=representative.cote||wanted.find(item=>item.cote)?.cote||'';
+      const before=anomalies.length;
+      let groupMissing=0,groupUnexpected=0,groupPageMismatch=0,groupBlankDates=0;
+
+      wanted.filter(item=>!item.dateKey).forEach(item=>{
+        anomalies.push(makeAnomaly('DATE_ATTENDUE_INVALIDE','Référence prestataire sans date exploitable','ERREUR',{
+          expected:item,title,cote,finding:'La référence prestataire ne se termine pas par une date AAAAMMJJ valide.'
+        }));
+      });
+      found.filter(item=>!item.dateKey).forEach(item=>{
+        groupBlankDates++;blankStateDates++;
+        anomalies.push(makeAnomaly('DATE_GALLICA_ABSENTE','Date d’édition Gallica absente ou illisible','ALERTE',{
+          state:item,title,cote,finding:'Le fascicule est présent dans l’état Gallica, mais sa date d’édition ne permet pas le rapprochement automatique.'
+        }));
+      });
+      found.forEach(item=>{
+        const missing=[];
+        if(!item.id)missing.push('ID document numérique');
+        if(!item.url)missing.push('URL Gallica');
+        if(!item.title)missing.push('titre');
+        if(!item.cote)missing.push('cote');
+        if(!item.origin)missing.push('origine de la collection');
+        if(item.url&&!/^https?:\/\/(?:www\.)?gallica\.bnf\.fr\/ark:\//i.test(item.url))missing.push('URL Gallica valide');
+        if(missing.length){
+          metadataIssues++;
+          anomalies.push(makeAnomaly('METADONNEES_GALLICA_INCOMPLETES','Métadonnées essentielles Gallica incomplètes','ALERTE',{
+            state:item,title,cote,finding:'Champ(s) à vérifier : '+missing.join(', ')+'.'
+          }));
+        }
+      });
+
+      const wantedByDate=groupBy(wanted.filter(item=>item.dateKey),item=>item.dateKey);
+      const foundByDate=groupBy(found.filter(item=>item.dateKey),item=>item.dateKey);
+      const dates=[...new Set([...wantedByDate.keys(),...foundByDate.keys()])].sort();
+      for(const dateKey of dates){
+        const expectedAtDate=[...(wantedByDate.get(dateKey)||[])];
+        const stateAtDate=[...(foundByDate.get(dateKey)||[])];
+        if(expectedAtDate.length>1||stateAtDate.length>1){
+          duplicateDates++;
+          anomalies.push(makeAnomaly('DATE_MULTIPLE','Plusieurs fascicules associés à la même date','ALERTE',{
+            expected:expectedAtDate[0],state:stateAtDate[0],title,cote,dateKey,
+            finding:`${expectedAtDate.length} fascicule(s) attendu(s) et ${stateAtDate.length} ligne(s) Gallica pour cette date. Vérification manuelle nécessaire.`
+          }));
+        }
+        const remainingState=[...stateAtDate];
+        const remainingExpected=[];
+        for(const expectedItem of expectedAtDate){
+          const exactIndex=remainingState.findIndex(stateItem=>
+            Number.isFinite(expectedItem.pages)&&Number.isFinite(stateItem.validPages)&&expectedItem.pages===stateItem.validPages
+          );
+          if(exactIndex>=0)remainingState.splice(exactIndex,1);
+          else remainingExpected.push(expectedItem);
+        }
+        while(remainingExpected.length&&remainingState.length){
+          const expectedItem=remainingExpected.shift();
+          const stateItem=remainingState.shift();
+          if(expectedItem.pages!==stateItem.validPages){
+            groupPageMismatch++;pageMismatchCount++;
+            anomalies.push(makeAnomaly('ECART_PAGES','Nombre de pages différent','ALERTE',{
+              expected:expectedItem,state:stateItem,title,cote,
+              finding:`${expectedItem.pages??'—'} page(s) produite(s) selon le récolement, ${stateItem.validPages??'—'} page(s) valide(s) dans Gallica.`
+            }));
+          }
+        }
+        remainingExpected.forEach(expectedItem=>{
+          groupMissing++;missingCount++;
+          anomalies.push(makeAnomaly('ATTENDU_NON_INTEGRE','Fascicule attendu non retrouvé à cette date','ALERTE',{
+            expected:expectedItem,title,cote,
+            finding:'Aucune ligne datée correspondante n’a été trouvée dans l’état Gallica. Une ligne Gallica sans date peut toutefois empêcher l’appariement.'
+          }));
+        });
+        remainingState.forEach(stateItem=>{
+          groupUnexpected++;unexpectedCount++;
+          anomalies.push(makeAnomaly('INTEGRE_NON_ATTENDU','Fascicule intégré mais absent du récolement','ALERTE',{
+            state:stateItem,title,cote,
+            finding:'Une ligne datée figure dans l’état Gallica sans référence correspondante dans le récolement prestataire.'
+          }));
+        });
+      }
+      titleSummaries.push({
+        key,title,cote,
+        expectedCount:wanted.length,
+        integratedCount:found.length,
+        expectedPages:sumNumbers(wanted,'pages'),
+        validPages:sumNumbers(found,'validPages'),
+        missing:groupMissing,
+        unexpected:groupUnexpected,
+        blankDates:groupBlankDates,
+        pageMismatches:groupPageMismatch,
+        anomalies:anomalies.length-before
+      });
+    }
+
+    const idDuplicates=[...groupBy(integrated.filter(item=>item.id),item=>item.id)].filter(([,items])=>items.length>1);
+    idDuplicates.forEach(([id,items])=>{
+      anomalies.push(makeAnomaly('ID_DOC_NUM_DUPLIQUE','ID document numérique dupliqué','ALERTE',{
+        state:items[0],finding:`L’ID ${id} apparaît ${items.length} fois dans l’état Gallica.`
+      }));
+    });
+    const urlDuplicates=[...groupBy(integrated.filter(item=>item.url),item=>item.url)].filter(([,items])=>items.length>1);
+    urlDuplicates.forEach(([url,items])=>{
+      anomalies.push(makeAnomaly('URL_GALLICA_DUPLIQUEE','URL Gallica dupliquée','ALERTE',{
+        state:items[0],finding:`L’URL ${url} apparaît ${items.length} fois dans l’état Gallica.`
+      }));
+    });
+
+    anomalies.forEach((anomaly,index)=>anomaly.number=index+1);
+    titleSummaries.sort((a,b)=>a.title.localeCompare(b.title,'fr')||a.cote.localeCompare(b.cote,'fr'));
+    const summary={
+      expectedCount:expected.length,
+      integratedCount:integrated.length,
+      documentDelta:integrated.length-expected.length,
+      expectedPages:sumNumbers(expected,'pages'),
+      validPages:sumNumbers(integrated,'validPages'),
+      pageDelta:sumNumbers(integrated,'validPages')-sumNumbers(expected,'pages'),
+      missingCount,unexpectedCount,pageMismatchCount,blankStateDates,duplicateDates,metadataIssues,
+      excludedByDecision:gallicaParsed.excluded,
+      anomalyCount:anomalies.length
+    };
+    const controls=[
+      {domain:'Sources',name:'Lecture du récolement prestataire',status:expected.length?'OK':'ERREUR',count:expected.length,detail:`${expected.length} référence(s) exploitable(s), feuille « ${recoParsed.diagnostics.sheetName} ».`},
+      {domain:'Sources',name:'Lecture de l’état Gallica',status:integrated.length?'OK':'ERREUR',count:integrated.length,detail:`${integrated.length} ligne(s) comparée(s), feuille « ${gallicaParsed.diagnostics.sheetName} ».`},
+      {domain:'Exhaustivité',name:'Même nombre de fascicules attendus et intégrés',status:summary.documentDelta===0?'OK':'ALERTE',count:Math.abs(summary.documentDelta),detail:`Écart global : ${summary.documentDelta>0?'+':''}${summary.documentDelta}.`},
+      {domain:'Exhaustivité',name:'Tous les fascicules attendus retrouvés par date',status:missingCount===0?'OK':'ALERTE',count:missingCount,detail:`${missingCount} fascicule(s) attendu(s) sans correspondance datée.`},
+      {domain:'Exhaustivité',name:'Aucun fascicule daté intégré hors récolement',status:unexpectedCount===0?'OK':'ALERTE',count:unexpectedCount,detail:`${unexpectedCount} ligne(s) Gallica datée(s) sans correspondance attendue.`},
+      {domain:'Dates',name:'Dates d’édition Gallica présentes et exploitables',status:blankStateDates===0?'OK':'ALERTE',count:blankStateDates,detail:`${blankStateDates} date(s) vide(s) ou illisible(s).`},
+      {domain:'Dates',name:'Dates uniques ou multiplicités explicitement vérifiées',status:duplicateDates===0?'OK':'ALERTE',count:duplicateDates,detail:`${duplicateDates} date(s) avec plusieurs fascicules à vérifier.`},
+      {domain:'Pages',name:'Même total de pages produites et valides',status:summary.pageDelta===0?'OK':'ALERTE',count:Math.abs(summary.pageDelta),detail:`Écart global : ${summary.pageDelta>0?'+':''}${summary.pageDelta} page(s).`},
+      {domain:'Pages',name:'Concordance du nombre de pages par fascicule apparié',status:pageMismatchCount===0?'OK':'ALERTE',count:pageMismatchCount,detail:`${pageMismatchCount} écart(s) certain(s) après appariement par date.`},
+      {domain:'Métadonnées',name:'ID, URL, titre, cote et origine renseignés',status:metadataIssues===0?'OK':'ALERTE',count:metadataIssues,detail:`${metadataIssues} ligne(s) avec métadonnées essentielles incomplètes ou URL atypique.`},
+      {domain:'Métadonnées',name:'ID document numérique non dupliqué',status:idDuplicates.length===0?'OK':'ALERTE',count:idDuplicates.length,detail:`${idDuplicates.length} ID dupliqué(s).`},
+      {domain:'Métadonnées',name:'URL Gallica non dupliquée',status:urlDuplicates.length===0?'OK':'ALERTE',count:urlDuplicates.length,detail:`${urlDuplicates.length} URL dupliquée(s).`}
+    ];
+    return {summary,titleSummaries,controls,anomalies,expected,integrated,recoDiagnostics:recoParsed.diagnostics,gallicaDiagnostics:gallicaParsed.diagnostics};
+  }
+
+  function fisherYates(items){
+    const copy=[...items];
+    for(let index=copy.length-1;index>0;index--){
+      const other=Math.floor(Math.random()*(index+1));
+      [copy[index],copy[other]]=[copy[other],copy[index]];
+    }
+    return copy;
+  }
+  function createManualSample(items,size){
+    const usable=items.filter(item=>item.url||item.id);
+    const groups=groupBy(usable,item=>safeCollectionKey(item,'collection'));
+    const selected=[],selectedLines=new Set();
+    for(const rows of groups.values()){
+      if(selected.length>=size)break;
+      const item=fisherYates(rows)[0];
+      if(item){selected.push(item);selectedLines.add(item.line)}
+    }
+    for(const item of fisherYates(usable)){
+      if(selected.length>=size)break;
+      if(!selectedLines.has(item.line)){selected.push(item);selectedLines.add(item.line)}
+    }
+    return selected.map((item,index)=>({...item,sampleNumber:index+1,result:'Non vérifié',comment:''}));
+  }
+
+  function setProgress(percent,text){
+    $('progressWrap').style.display='block';
+    $('progressBar').style.width=Math.max(0,Math.min(100,percent))+'%';
+    $('progressText').textContent=text;
+  }
+  function hideProgress(){setTimeout(()=>{$('progressWrap').style.display='none'},350)}
+  function updateAnalyzeAvailability(){
+    $('analyze').disabled=!(appState.recoWorkbook&&appState.gallicaWorkbook);
+  }
+  function populateSheetSelect(kind,workbook){
+    const select=$(kind+'Sheet');
+    select.innerHTML=workbook.sheets.map((sheet,index)=>`<option value="${index}">${escapeHtml(sheet.name)} — ${sheet.rows.length} ligne(s)</option>`).join('');
+    select.value=String(detectSheetIndex(workbook,kind==='gallica'?'gallica':'reco'));
+    select.disabled=false;
+  }
+  async function loadSource(kind,file){
+    const status=$(kind+'Status');
+    status.className='status-line';
+    status.textContent='Lecture de '+file.name+'…';
+    try{
+      setProgress(15,'Lecture de '+file.name+'…');
+      const workbook=await readWorkbookFile(file);
+      appState[kind+'Workbook']=workbook;
+      populateSheetSelect(kind,workbook);
+      status.className='status-line ok';
+      status.textContent=`${file.name} : ${workbook.sheets.length} feuille(s) détectée(s). Vérifiez la feuille proposée.`;
+      setProgress(100,'Fichier chargé.');
+      hideProgress();
+    }catch(error){
+      appState[kind+'Workbook']=null;
+      status.className='status-line error';
+      status.textContent=String(error.message||error);
+      $(kind+'Sheet').disabled=true;
+      hideProgress();
+    }
+    updateAnalyzeAvailability();
+  }
+  function selectedSheet(kind){
+    const workbook=appState[kind+'Workbook'];
+    const index=Number($(kind+'Sheet').value);
+    return workbook&&workbook.sheets[index];
+  }
+  function formatNumber(value){return Number(value||0).toLocaleString('fr-FR')}
+  function metric(label,value,kind=''){
+    return `<div class="metric ${kind}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
+  }
+  function renderResult(){
+    const result=appState.result,summary=result.summary;
+    $('metrics').innerHTML=[
+      metric('Fascicules attendus',formatNumber(summary.expectedCount)),
+      metric('Fascicules dans Gallica',formatNumber(summary.integratedCount),summary.documentDelta===0?'ok':'warn'),
+      metric('Pages attendues',formatNumber(summary.expectedPages)),
+      metric('Pages valides Gallica',formatNumber(summary.validPages),summary.pageDelta===0?'ok':'warn')
+    ].join('');
+    const ambiguity=summary.blankStateDates&&summary.missingCount
+      ?` ${summary.blankStateDates} ligne(s) Gallica sans date empêchent un rapprochement direct ; une partie des ${summary.missingCount} dates attendues non retrouvées peut leur correspondre.`
+      :'';
+    $('summaryNote').className=summary.anomalyCount?'notice':'notice success';
+    $('summaryNote').innerHTML=`<strong>${summary.anomalyCount?formatNumber(summary.anomalyCount)+' point(s) d’attention':'Aucun écart automatique détecté'}.</strong> Écart global : ${summary.documentDelta>0?'+':''}${summary.documentDelta} fascicule(s) et ${summary.pageDelta>0?'+':''}${summary.pageDelta} page(s).${escapeHtml(ambiguity)}`;
+    $('titleSummary').innerHTML='<h3>Synthèse par titre ou cote</h3><div class="table-wrap"><table><thead><tr><th>Titre</th><th>Cote</th><th>Attendus</th><th>Gallica</th><th>Pages attendues</th><th>Pages valides</th><th>Dates non retrouvées</th><th>Dates Gallica absentes</th><th>Écarts de pages</th><th>Statut</th></tr></thead><tbody>'+
+      result.titleSummaries.map(item=>`<tr><td>${escapeHtml(item.title)}</td><td>${escapeHtml(item.cote)}</td><td class="num">${item.expectedCount}</td><td class="num">${item.integratedCount}</td><td class="num">${item.expectedPages}</td><td class="num">${item.validPages}</td><td class="num">${item.missing}</td><td class="num">${item.blankDates}</td><td class="num">${item.pageMismatches}</td><td><span class="badge ${item.anomalies?'ALERTE':'OK'}">${item.anomalies?'À vérifier':'Conforme'}</span></td></tr>`).join('')+
+      '</tbody></table></div>';
+    $('report').className='report';
+    $('report').innerHTML=`<p><strong>Périmètre.</strong> ${formatNumber(summary.expectedCount)} fascicule(s) du récolement ont été comparés à ${formatNumber(summary.integratedCount)} ligne(s) de l’état Gallica${summary.excludedByDecision?`, après exclusion de ${formatNumber(summary.excludedByDecision)} ligne(s) dont la décision n’est pas « Admission partielle »`:''}.</p>
+      <p><strong>Exhaustivité.</strong> L’écart global est de ${summary.documentDelta>0?'+':''}${summary.documentDelta} fascicule(s). Le rapprochement par cote et date identifie ${summary.missingCount} date(s) attendue(s) sans correspondance et ${summary.unexpectedCount} ligne(s) Gallica datée(s) absente(s) du récolement.</p>
+      <p><strong>Dates.</strong> ${summary.blankStateDates} ligne(s) Gallica ne comportent pas de date exploitable et ${summary.duplicateDates} date(s) regroupent plusieurs fascicules. Ces cas nécessitent une revue manuelle du calendrier.</p>
+      <p><strong>Pages.</strong> Le total Gallica diffère de ${summary.pageDelta>0?'+':''}${summary.pageDelta} page(s) par rapport au récolement. ${summary.pageMismatchCount} écart(s) de pages sont établis sur des fascicules appariés par date.</p>
+      <p><strong>Conclusion.</strong> Les écarts automatiques doivent être examinés avant de conclure sur la bonne intégration. La qualité des dates, l’appariement, le titre, la tomaison et la source doivent ensuite être vérifiés visuellement sur l’échantillon proposé.</p>`;
+    $('controls').className='';
+    $('controls').innerHTML='<div class="table-wrap"><table><thead><tr><th>Domaine</th><th>Contrôle automatique</th><th>Statut</th><th>Nombre</th><th>Détail</th></tr></thead><tbody>'+
+      result.controls.map(control=>`<tr><td>${escapeHtml(control.domain)}</td><td>${escapeHtml(control.name)}</td><td><span class="badge ${control.status}">${control.status}</span></td><td class="num">${control.count}</td><td>${escapeHtml(control.detail)}</td></tr>`).join('')+
+      '</tbody></table></div>';
+    populateAnomalyFilters();
+    renderAnomalies();
+    renderSample();
+  }
+  function populateAnomalyFilters(){
+    const values=[...new Set(appState.result.anomalies.map(item=>item.nature))].sort((a,b)=>a.localeCompare(b,'fr'));
+    $('anomalyFilter').innerHTML='<option value="">Toutes les natures</option>'+values.map(value=>`<option>${escapeHtml(value)}</option>`).join('');
+    $('anomalyFilter').disabled=false;
+    $('anomalySearch').disabled=false;
+  }
+  function filteredAnomalies(){
+    const nature=$('anomalyFilter').value;
+    const search=normalizeText($('anomalySearch').value);
+    return appState.result.anomalies.filter(item=>{
+      if(nature&&item.nature!==nature)return false;
+      if(!search)return true;
+      return normalizeText(Object.values(item).join(' ')).includes(search);
+    });
+  }
+  function renderAnomalies(){
+    if(!appState.result)return;
+    const rows=filteredAnomalies();
+    if(!rows.length){
+      $('anomalies').className='empty';
+      $('anomalies').textContent='Aucun point d’attention correspondant au filtre.';
+      return;
+    }
+    $('anomalies').className='table-wrap';
+    $('anomalies').innerHTML='<table><thead><tr><th>N°</th><th>Niveau</th><th>Nature du problème</th><th>Titre / cote</th><th>Date</th><th>Pages</th><th>Référence ou ID</th><th>Constat consolidé</th></tr></thead><tbody>'+
+      rows.slice(0,5000).map(item=>`<tr><td>${item.number}</td><td><span class="badge ${item.level}">${item.level}</span></td><td>${escapeHtml(item.nature)}</td><td>${escapeHtml(item.title)}<br><span class="small">${escapeHtml(item.cote)}</span></td><td>${escapeHtml(formatDateKey(item.dateExpected||item.dateGallica))}</td><td>${item.pagesExpected!==''?escapeHtml(item.pagesExpected):'—'} / ${item.pagesGallica!==''?escapeHtml(item.pagesGallica):'—'}</td><td>${escapeHtml(item.providerRef||item.id||'')}${item.url?`<br><a class="url" href="${escapeHtml(item.url)}" target="_blank" rel="noopener">Ouvrir dans Gallica</a>`:''}</td><td>${escapeHtml(item.finding)}</td></tr>`).join('')+
+      '</tbody></table>'+(rows.length>5000?'<p class="small">Affichage limité à 5 000 lignes. L’export Excel contient la liste complète.</p>':'');
+  }
+  function renderSample(){
+    const sample=appState.manualSample;
+    if(!sample.length){
+      $('sample').className='empty';
+      $('sample').textContent='Aucun fascicule disponible pour l’échantillon.';
+      return;
+    }
+    $('sample').className='table-wrap';
+    $('sample').innerHTML='<table class="sample-table"><thead><tr><th>N°</th><th>Titre</th><th>Cote</th><th>Date</th><th>Tomaison</th><th>ID DOC NUM</th><th>URL Gallica</th><th>Résultat manuel</th><th>Commentaire</th></tr></thead><tbody>'+
+      sample.map((item,index)=>`<tr><td>${index+1}</td><td>${escapeHtml(item.title)}</td><td>${escapeHtml(item.cote)}</td><td>${escapeHtml(formatDateKey(item.dateKey))}</td><td>${escapeHtml(item.tomaison)}</td><td>${escapeHtml(item.id)}</td><td>${item.url?`<a class="url" href="${escapeHtml(item.url)}" target="_blank" rel="noopener">Ouvrir</a>`:'—'}</td><td><select data-sample-result="${index}"><option${item.result==='Non vérifié'?' selected':''}>Non vérifié</option><option${item.result==='Conforme'?' selected':''}>Conforme</option><option${item.result==='À corriger'?' selected':''}>À corriger</option><option${item.result==='Correction BnF'?' selected':''}>Correction BnF</option></select></td><td><textarea data-sample-comment="${index}">${escapeHtml(item.comment)}</textarea></td></tr>`).join('')+
+      '</tbody></table>';
+    document.querySelectorAll('[data-sample-result]').forEach(element=>element.addEventListener('change',event=>{
+      appState.manualSample[Number(event.target.dataset.sampleResult)].result=event.target.value;
+    }));
+    document.querySelectorAll('[data-sample-comment]').forEach(element=>element.addEventListener('input',event=>{
+      appState.manualSample[Number(event.target.dataset.sampleComment)].comment=event.target.value;
+    }));
+  }
+
+  function downloadBlob(content,name,type){
+    const blob=content instanceof Blob?content:new Blob([content],{type});
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement('a');
+    link.href=url;link.download=name;document.body.appendChild(link);link.click();link.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
+  function reportHtml(result,sample){
+    const generated=new Date().toLocaleString('fr-FR');
+    const rows=result.anomalies.map(item=>`<tr><td>${item.number}</td><td>${escapeHtml(item.level)}</td><td>${escapeHtml(item.nature)}</td><td>${escapeHtml(item.title)}</td><td>${escapeHtml(item.cote)}</td><td>${escapeHtml(formatDateKey(item.dateExpected||item.dateGallica))}</td><td>${escapeHtml(item.pagesExpected)} / ${escapeHtml(item.pagesGallica)}</td><td>${escapeHtml(item.providerRef||item.id)}</td><td>${escapeHtml(item.finding)}</td></tr>`).join('');
+    const sampleRows=sample.map(item=>`<tr><td>${item.sampleNumber}</td><td>${escapeHtml(item.title)}</td><td>${escapeHtml(item.cote)}</td><td>${escapeHtml(formatDateKey(item.dateKey))}</td><td>${escapeHtml(item.tomaison)}</td><td>${escapeHtml(item.id)}</td><td>${item.url?`<a href="${escapeHtml(item.url)}">${escapeHtml(item.url)}</a>`:''}</td><td>${escapeHtml(item.result)}</td><td>${escapeHtml(item.comment)}</td></tr>`).join('');
+    return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>GALLICASOFT — Rapport</title><style>body{font-family:Arial;margin:24px;color:#3e2632}h1,h2{color:#8e1244}table{width:100%;border-collapse:collapse;font-size:11px;margin:14px 0 24px}th{background:#c2185b;color:white;text-align:left}th,td{border:1px solid #ead1dc;padding:6px;vertical-align:top}tr:nth-child(even){background:#fff7fa}.small{color:#765d69;font-size:12px}</style></head><body><h1>GALLICASOFT</h1><h2>Rapport de contrôle de l’intégration dans Gallica</h2><p class="small">Généré le ${escapeHtml(generated)}.</p><p>${result.summary.expectedCount} fascicules attendus ; ${result.summary.integratedCount} lignes Gallica ; écart global ${result.summary.documentDelta}. ${result.summary.expectedPages} pages attendues ; ${result.summary.validPages} pages valides ; écart ${result.summary.pageDelta}.</p><h2>Points d’attention détaillés</h2><table><tr><th>N°</th><th>Niveau</th><th>Nature</th><th>Titre</th><th>Cote</th><th>Date</th><th>Pages attendu / Gallica</th><th>Référence ou ID</th><th>Constat</th></tr>${rows}</table><h2>Contrôle manuel sur échantillon</h2><table><tr><th>N°</th><th>Titre</th><th>Cote</th><th>Date</th><th>Tomaison</th><th>ID DOC NUM</th><th>URL</th><th>Résultat</th><th>Commentaire</th></tr>${sampleRows}</table></body></html>`;
+  }
+
+  function xmlEscape(value){
+    return String(value??'').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,'').replace(/[&<>"]/g,char=>({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'
+    })[char]);
+  }
+  function columnName(number){let result='';while(number>0){const mod=(number-1)%26;result=String.fromCharCode(65+mod)+result;number=Math.floor((number-1)/26)}return result}
+  function xlsxCell(row,column,value,style=2){
+    const ref=columnName(column)+row;
+    if(typeof value==='number'&&Number.isFinite(value))return `<c r="${ref}" s="${style}"><v>${value}</v></c>`;
+    return `<c r="${ref}" s="${style}" t="inlineStr"><is><t xml:space="preserve">${xmlEscape(value)}</t></is></c>`;
+  }
+  function rowHeight(values,widths){
+    let lines=1;
+    values.forEach((value,index)=>{
+      const width=Math.max(8,widths[index]||16);
+      const text=String(value??'');
+      lines=Math.max(lines,text.split(/\r?\n/).reduce((sum,line)=>sum+Math.max(1,Math.ceil(line.length/(width-2))),0));
+    });
+    return Math.min(150,Math.max(22,lines*14));
+  }
+  function worksheetXml(rows,widths,options={}){
+    const maxColumns=Math.max(1,...rows.map(row=>row.length));
+    const endRow=Math.max(1,rows.length);
+    const headerRows=new Set(options.headerRows||[1]);
+    const titleRows=new Set(options.titleRows||[]);
+    const data=rows.map((values,index)=>{
+      const row=index+1;
+      const style=titleRows.has(row)?5:(headerRows.has(row)?1:(row%2===0?3:2));
+      const height=titleRows.has(row)?32:(headerRows.has(row)?38:rowHeight(values,widths));
+      return `<row r="${row}" ht="${height}" customHeight="1">${values.map((value,column)=>xlsxCell(row,column+1,value,style)).join('')}</row>`;
+    }).join('');
+    const columns=widths.map((width,index)=>`<col min="${index+1}" max="${index+1}" width="${width}" customWidth="1"/>`).join('');
+    const merges=(options.merges||[]).length?`<mergeCells count="${options.merges.length}">${options.merges.map(ref=>`<mergeCell ref="${ref}"/>`).join('')}</mergeCells>`:'';
+    const filter=options.filterRef?`<autoFilter ref="${options.filterRef}"/>`:'';
+    const validation=options.validation?`<dataValidations count="1"><dataValidation type="list" allowBlank="1" showErrorMessage="1" sqref="${options.validation.range}"><formula1>${xmlEscape(options.validation.formula)}</formula1></dataValidation></dataValidations>`:'';
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:${columnName(maxColumns)}${endRow}"/><sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane ySplit="${options.freezeRows||1}" topLeftCell="A${(options.freezeRows||1)+1}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>${columns}</cols><sheetData>${data}</sheetData>${merges}${filter}${validation}</worksheet>`;
+  }
+  function crc32(bytes){
+    const table=crc32.table||(crc32.table=(()=>{const values=[];for(let number=0;number<256;number++){let current=number;for(let bit=0;bit<8;bit++)current=(current&1)?0xEDB88320^(current>>>1):current>>>1;values[number]=current>>>0}return values})());
+    let crc=0^(-1);for(const byte of bytes)crc=(crc>>>8)^table[(crc^byte)&0xFF];return(crc^(-1))>>>0;
+  }
+  function uint16(value){return[value&255,(value>>>8)&255]}
+  function uint32(value){return[value&255,(value>>>8)&255,(value>>>16)&255,(value>>>24)&255]}
+  function concatenate(parts){const length=parts.reduce((sum,part)=>sum+part.length,0);const result=new Uint8Array(length);let offset=0;for(const part of parts){result.set(part,offset);offset+=part.length}return result}
+  function zipStore(files){
+    const encoder=new TextEncoder();const locals=[],centrals=[];let offset=0;
+    const now=new Date(),time=((now.getHours()&31)<<11)|((now.getMinutes()&63)<<5)|(Math.floor(now.getSeconds()/2)&31),date=(((now.getFullYear()-1980)&127)<<9)|(((now.getMonth()+1)&15)<<5)|(now.getDate()&31);
+    for(const [name,content] of Object.entries(files)){
+      const nameBytes=encoder.encode(name),data=typeof content==='string'?encoder.encode(content):content,crc=crc32(data),size=data.length;
+      const local=new Uint8Array([...uint32(0x04034b50),...uint16(20),...uint16(0),...uint16(0),...uint16(time),...uint16(date),...uint32(crc),...uint32(size),...uint32(size),...uint16(nameBytes.length),...uint16(0)]);
+      locals.push(local,nameBytes,data);
+      const central=new Uint8Array([...uint32(0x02014b50),...uint16(20),...uint16(20),...uint16(0),...uint16(0),...uint16(time),...uint16(date),...uint32(crc),...uint32(size),...uint32(size),...uint16(nameBytes.length),...uint16(0),...uint16(0),...uint16(0),...uint16(0),...uint32(0),...uint32(offset)]);
+      centrals.push(central,nameBytes);offset+=local.length+nameBytes.length+data.length;
+    }
+    const centralSize=centrals.reduce((sum,part)=>sum+part.length,0);
+    const end=new Uint8Array([...uint32(0x06054b50),...uint16(0),...uint16(0),...uint16(Object.keys(files).length),...uint16(Object.keys(files).length),...uint32(centralSize),...uint32(offset),...uint16(0)]);
+    return concatenate([...locals,...centrals,end]);
+  }
+  function buildResultsWorkbook(result,sample){
+    const summary=result.summary;
+    const summaryRows=[
+      ['GALLICASOFT — Synthèse du contrôle','','','','','','','','','','',''],
+      ['Généré le',new Date().toLocaleString('fr-FR')],
+      [],
+      ['Indicateur','Résultat'],
+      ['Fascicules attendus',summary.expectedCount],
+      ['Lignes Gallica comparées',summary.integratedCount],
+      ['Écart global de fascicules',summary.documentDelta],
+      ['Pages attendues',summary.expectedPages],
+      ['Pages valides Gallica',summary.validPages],
+      ['Écart global de pages',summary.pageDelta],
+      ['Dates attendues non retrouvées',summary.missingCount],
+      ['Lignes Gallica sans date exploitable',summary.blankStateDates],
+      ['Écarts certains de pages',summary.pageMismatchCount],
+      [],
+      ['Titre','Cote','Fascicules attendus','Fascicules Gallica','Pages attendues','Pages valides','Dates non retrouvées','Intégrés non attendus','Dates Gallica absentes','Écarts de pages','Points d’attention','Statut'],
+      ...result.titleSummaries.map(item=>[item.title,item.cote,item.expectedCount,item.integratedCount,item.expectedPages,item.validPages,item.missing,item.unexpected,item.blankDates,item.pageMismatches,item.anomalies,item.anomalies?'À vérifier':'Conforme'])
+    ];
+    const anomalyHeaders=['N°','Niveau','Nature du problème','Titre','Cote','Date attendue','Date Gallica','Pages attendues','Pages valides Gallica','Référence prestataire','ID DOC NUM','URL Gallica','Ligne récolement','Ligne état','Constat consolidé','Commentaire de contrôle'];
+    const anomalyRows=[anomalyHeaders,...result.anomalies.map(item=>[
+      item.number,item.level,item.nature,item.title,item.cote,formatDateKey(item.dateExpected),formatDateKey(item.dateGallica),
+      item.pagesExpected,item.pagesGallica,item.providerRef,item.id,item.url,item.recoLine,item.stateLine,item.finding,''
+    ])];
+    const sampleHeaders=['N°','Titre','Cote','Date','Tomaison','ID DOC NUM','URL Gallica','Origine de la collection','ARK du titre','Résultat manuel','Commentaire'];
+    const sampleRows=[sampleHeaders,...sample.map(item=>[
+      item.sampleNumber,item.title,item.cote,formatDateKey(item.dateKey),item.tomaison,item.id,item.url,item.origin,item.sourceArk,item.result,item.comment
+    ])];
+    const instructionRows=[
+      ['Point de contrôle','Consigne'],
+      ['Exhaustivité','Comparer le nombre total de fascicules du récolement et de l’état Gallica, puis examiner chaque date attendue non retrouvée.'],
+      ['Dates Gallica absentes','Une ligne Gallica sans date ne peut pas être appariée automatiquement. La rechercher par ID, URL, tomaison et consultation du calendrier.'],
+      ['Dates multiples','Plusieurs fascicules peuvent être attendus le même jour. Vérifier chaque exemplaire et ne pas conclure à un doublon sans contrôle visuel.'],
+      ['Pages','Comparer le nombre de fichiers/pages produits avec le nombre de pages valides dans Gallica.'],
+      ['Calendrier','Repérer visuellement les oublis, dates incohérentes et erreurs d’appariement. La périodicité est indicative.'],
+      ['Concordance','Sur l’échantillon, comparer titre, date, tomaison, établissement de conservation et cote avec l’exemplaire numérisé.'],
+      ['Collections partagées','La source affichée dans Gallica peut être celle du premier établissement intégré conservant le fascicule.'],
+      ['Correction BnF','Si le journal porte lui-même une date erronée fidèlement reproduite, renseigner « Correction BnF ».'],
+      ['Date impossible','Une date impossible, par exemple le 31 février, doit être corrigée pour franchir la chaîne d’entrée.']
+    ];
+    const listRows=[['Non vérifié'],['Conforme'],['À corriger'],['Correction BnF']];
+    const sheets=[
+      {name:'Synthese',xml:worksheetXml(summaryRows,[34,18,18,18,18,18,19,19,20,17,18,16],{headerRows:[4,15],titleRows:[1],merges:['A1:L1'],filterRef:`A15:L${summaryRows.length}`,freezeRows:1})},
+      {name:'Points_attention',xml:worksheetXml(anomalyRows,[8,12,34,28,16,16,16,15,18,42,16,42,14,12,70,42],{headerRows:[1],filterRef:`A1:P${anomalyRows.length}`,freezeRows:1})},
+      {name:'Echantillon_manuel',xml:worksheetXml(sampleRows,[8,30,16,16,28,16,42,32,32,18,45],{headerRows:[1],filterRef:`A1:K${sampleRows.length}`,freezeRows:1,validation:{range:`J2:J${Math.max(2,sampleRows.length)}`,formula:"'Listes'!$A$1:$A$4"}})},
+      {name:'Consignes',xml:worksheetXml(instructionRows,[30,100],{headerRows:[1],freezeRows:1})},
+      {name:'Listes',xml:worksheetXml(listRows,[22],{headerRows:[],freezeRows:0})}
+    ];
+    const created=new Date().toISOString();
+    const files={
+      '[Content_Types].xml':`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${sheets.map((_,index)=>`<Override PartName="/xl/worksheets/sheet${index+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>`,
+      '_rels/.rels':'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>',
+      'docProps/core.xml':`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:creator>GALLICASOFT</dc:creator><cp:lastModifiedBy>GALLICASOFT</cp:lastModifiedBy><dcterms:created xsi:type="dcterms:W3CDTF">${created}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${created}</dcterms:modified></cp:coreProperties>`,
+      'docProps/app.xml':'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>GALLICASOFT</Application></Properties>',
+      'xl/workbook.xml':`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView activeTab="0"/></bookViews><sheets>${sheets.map((sheet,index)=>`<sheet name="${sheet.name}" sheetId="${index+1}"${sheet.name==='Listes'?' state="hidden"':''} r:id="rId${index+1}"/>`).join('')}</sheets></workbook>`,
+      'xl/_rels/workbook.xml.rels':`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets.map((_,index)=>`<Relationship Id="rId${index+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${index+1}.xml"/>`).join('')}<Relationship Id="rId${sheets.length+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
+      'xl/styles.xml':'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="3"><font><sz val="10"/><name val="Arial"/></font><font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Arial"/></font><font><b/><sz val="16"/><color rgb="FFFFFFFF"/><name val="Arial"/></font></fonts><fills count="5"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFC2185B"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFF7FA"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFF0F5"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border/><border><left style="thin"><color rgb="FFEAD1DC"/></left><right style="thin"><color rgb="FFEAD1DC"/></right><top style="thin"><color rgb="FFEAD1DC"/></top><bottom style="thin"><color rgb="FFEAD1DC"/></bottom></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="6"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="4" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>'
+    };
+    sheets.forEach((sheet,index)=>files[`xl/worksheets/sheet${index+1}.xml`]=sheet.xml);
+    return zipStore(files);
+  }
+
+  async function analyze(){
+    try{
+      $('analyze').disabled=true;
+      setProgress(10,'Lecture des feuilles sélectionnées…');
+      await new Promise(resolve=>setTimeout(resolve,0));
+      const reco=parseRecoSheet(selectedSheet('reco'));
+      setProgress(40,`${reco.entries.length} références prestataire reconnues…`);
+      await new Promise(resolve=>setTimeout(resolve,0));
+      const gallica=parseGallicaSheet(selectedSheet('gallica'),$('admissionsOnly').checked);
+      setProgress(65,`${gallica.entries.length} lignes Gallica reconnues…`);
+      await new Promise(resolve=>setTimeout(resolve,0));
+      appState.result=compareData(reco,gallica);
+      const size=Math.max(1,Math.min(100,Number($('sampleSize').value)||10));
+      appState.manualSample=createManualSample(appState.result.integrated,size);
+      setProgress(90,'Construction du rapport et de l’échantillon…');
+      renderResult();
+      $('exportExcel').disabled=false;
+      $('exportReport').disabled=false;
+      $('regenerateSample').disabled=false;
+      setProgress(100,'Contrôle terminé.');
+      hideProgress();
+    }catch(error){
+      $('report').className='notice';
+      $('report').innerHTML='<strong>Analyse interrompue.</strong> '+escapeHtml(error.message||error);
+      setProgress(100,'Erreur : '+String(error.message||error));
+    }finally{
+      updateAnalyzeAvailability();
+    }
+  }
+  function resetApplication(){
+    appState.recoWorkbook=null;appState.gallicaWorkbook=null;appState.result=null;appState.manualSample=[];
+    ['recoFile','gallicaFile'].forEach(id=>$(id).value='');
+    ['recoSheet','gallicaSheet'].forEach(id=>{$(id).innerHTML='<option>Aucun fichier chargé</option>';$(id).disabled=true});
+    $('recoStatus').className='status-line';$('recoStatus').textContent='En attente du récolement.';
+    $('gallicaStatus').className='status-line';$('gallicaStatus').textContent='En attente du fichier état.';
+    $('metrics').innerHTML=[metric('Fascicules attendus','—'),metric('Fascicules dans Gallica','—'),metric('Pages attendues','—'),metric('Pages valides Gallica','—')].join('');
+    $('summaryNote').className='empty';$('summaryNote').textContent='Chargez les deux fichiers puis lancez la comparaison.';
+    $('titleSummary').innerHTML='';$('report').className='report empty';$('report').textContent='Le rapport sera généré après l’analyse.';
+    $('controls').className='empty';$('controls').textContent='Aucun contrôle exécuté.';
+    $('anomalies').className='empty';$('anomalies').textContent='Aucun résultat à afficher.';
+    $('sample').className='empty';$('sample').textContent='L’échantillon sera créé après l’analyse.';
+    $('anomalyFilter').innerHTML='<option value="">Toutes les natures</option>';$('anomalyFilter').disabled=true;
+    $('anomalySearch').value='';$('anomalySearch').disabled=true;
+    $('exportExcel').disabled=true;$('exportReport').disabled=true;$('regenerateSample').disabled=true;
+    updateAnalyzeAvailability();
+  }
+
+  globalThis.__GallicasoftTest={
+    parseGallicaDate,parseProviderRef,parseRecoSheet,parseGallicaSheet,compareData,
+    detectSheetIndex,readWorkbookFile,buildResultsWorkbook,createManualSample
+  };
+
+  $('recoFile').addEventListener('change',event=>event.target.files[0]&&loadSource('reco',event.target.files[0]));
+  $('gallicaFile').addEventListener('change',event=>event.target.files[0]&&loadSource('gallica',event.target.files[0]));
+  $('analyze').addEventListener('click',analyze);
+  $('reset').addEventListener('click',resetApplication);
+  $('anomalyFilter').addEventListener('change',renderAnomalies);
+  $('anomalySearch').addEventListener('input',renderAnomalies);
+  $('regenerateSample').addEventListener('click',()=>{
+    if(!appState.result)return;
+    const size=Math.max(1,Math.min(100,Number($('sampleSize').value)||10));
+    appState.manualSample=createManualSample(appState.result.integrated,size);
+    renderSample();
+  });
+  $('exportReport').addEventListener('click',()=>{
+    if(appState.result)downloadBlob(reportHtml(appState.result,appState.manualSample),'Gallicasoft_rapport_controle.html','text/html;charset=utf-8');
+  });
+  $('exportExcel').addEventListener('click',()=>{
+    if(appState.result)downloadBlob(buildResultsWorkbook(appState.result,appState.manualSample),'Gallicasoft_resultats_controle.xlsx','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  });
+  </script>
+</body>
+</html>
