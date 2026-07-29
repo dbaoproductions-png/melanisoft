@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>BudgetSoft</title>
   <?!= inclure('Styles'); ?>
+  <?!= inclure('ImportStyles'); ?>
 </head>
 <body>
   <div class="app-shell">
@@ -23,7 +24,7 @@
         <button class="nav-item" data-view="ia">🤖 <span>Conseiller IA</span></button>
         <button class="nav-item" data-view="parametres">⚙️ <span>Paramètres</span></button>
       </nav>
-      <div class="sidebar-footer">Version <span id="version">0.5.1</span></div>
+      <div class="sidebar-footer">Version <span id="version">0.6</span></div>
     </aside>
 
     <main class="main">
@@ -62,7 +63,7 @@
       <section id="operations" class="view">
         <div class="section-toolbar">
           <p class="section-intro">Enregistrez vos revenus et dépenses, puis automatisez vos charges mensuelles.</p>
-          <div class="toolbar-buttons"><button class="secondary-button" id="add-fixed-charge-button">↻ Charge fixe</button><button class="primary-button" id="add-operation-button">＋ Ajouter une opération</button></div>
+          <div class="toolbar-buttons"><button class="secondary-button" id="import-fixed-charges-button">📥 Importer</button><button class="secondary-button" id="add-fixed-charge-button">↻ Charge fixe</button><button class="primary-button" id="add-operation-button">＋ Ajouter une opération</button></div>
         </div>
         <div class="cards operations-summary">
           <article class="card metric-card"><span>Revenus affichés</span><strong id="operations-income">0,00 €</strong><small>Selon les filtres actifs</small></article>
@@ -108,6 +109,16 @@
     </div>
   </div>
 
+  <div class="modal hidden" id="import-modal" role="dialog" aria-modal="true" aria-labelledby="import-modal-title">
+    <div class="modal-card wide-modal"><div class="modal-heading"><div><p class="panel-kicker">Import intelligent</p><h2 id="import-modal-title">Importer des charges fixes</h2></div><button class="modal-close" id="close-import-modal">×</button></div>
+      <div class="import-help">Copiez les colonnes <strong>Libellé, Montant, Jour, Catégorie, Compte, Fréquence</strong> depuis Excel, puis collez-les ci-dessous.</div>
+      <label>Tableau à importer<textarea id="import-text" class="import-area" rows="10"></textarea></label>
+      <div id="import-results" class="hidden"><div id="import-summary" class="import-summary"></div><div id="import-preview" class="import-preview"></div><p id="new-categories-note" class="helper-text"></p><label class="checkbox-line"><input type="checkbox" id="create-import-categories" checked> Créer automatiquement les catégories manquantes</label></div>
+      <div class="form-actions"><button type="button" class="secondary-button" id="cancel-import">Annuler</button><button type="button" class="secondary-button" id="analyze-import">Analyser</button><button type="button" class="primary-button hidden" id="confirm-import">Importer</button></div>
+    </div>
+  </div>
+
   <?!= inclure('Scripts'); ?>
+  <?!= inclure('ImportScripts'); ?>
 </body>
 </html>
