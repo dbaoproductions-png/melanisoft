@@ -1,75 +1,61 @@
 <!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>BudgetSoft — Budget familial partagé</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js"></script>
-  <link rel="stylesheet" href="styles.css" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#125f4b">
+  <title>BudgetSoft — Copilote financier familial</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div id="authScreen" class="auth-screen hidden">
-    <form id="authForm" class="auth-card">
-      <div class="auth-logo">€</div>
-      <h1>BudgetSoft</h1>
-      <p>Connexion au budget familial partagé</p>
-      <label>Adresse électronique<input id="authEmail" type="email" required autocomplete="email"></label>
-      <label>Mot de passe<input id="authPassword" type="password" required minlength="6" autocomplete="current-password"></label>
-      <button type="submit">Se connecter</button>
-      <button type="button" id="signUp" class="secondary">Créer mon compte</button>
-      <small id="authMessage"></small>
-    </form>
-  </div>
   <aside class="sidebar">
-    <div class="brand"><span>€</span><strong>BudgetSoft</strong></div>
-    <nav>
+    <div class="brand"><span>€</span><div><strong>BudgetSoft</strong><small>Budget familial</small></div></div>
+    <nav aria-label="Navigation principale">
       <button class="nav active" data-view="dashboard">Tableau de bord</button>
+      <button class="nav" data-view="operations">Opérations</button>
       <button class="nav" data-view="budget">Budget mensuel</button>
       <button class="nav" data-view="patrimoine">Patrimoine</button>
       <button class="nav" data-view="credits">Crédits</button>
+      <button class="nav" data-view="objectifs">Objectifs</button>
       <button class="nav" data-view="settings">Paramètres</button>
     </nav>
-    <div class="privacy" id="syncStatus">Mode local</div>
+    <div class="sync"><span id="syncDot"></span><span id="syncStatus">Mode démonstration</span></div>
   </aside>
+
   <main>
     <header>
-      <div><p class="eyebrow">Budget familial</p><h1 id="viewTitle">Tableau de bord</h1></div>
-      <div class="header-actions"><div class="month"><label for="month">Mois</label><input id="month" type="month" /></div><button id="logout" class="ghost hidden">Déconnexion</button></div>
+      <div><p class="eyebrow">Copilote financier familial</p><h1 id="viewTitle">Tableau de bord</h1></div>
+      <div class="header-actions"><label class="month">Mois<input id="month" type="month"></label><button id="addOperation" class="primary">+ Nouvelle opération</button></div>
     </header>
+
     <section id="dashboard" class="view active">
       <div class="kpis">
-        <article><small>Revenus mensuels</small><strong id="kpiIncome"></strong></article>
-        <article><small>Dépenses prévues</small><strong id="kpiExpenses"></strong></article>
-        <article class="accent"><small>Marge mensuelle</small><strong id="kpiBalance"></strong></article>
-        <article><small>Patrimoine net</small><strong id="kpiNetWorth"></strong></article>
+        <article><small>Trésorerie</small><strong id="kpiCash">0,00 €</strong><em>Comptes disponibles</em></article>
+        <article><small>Revenus du mois</small><strong id="kpiIncome">0,00 €</strong><em>Encaissés et attendus</em></article>
+        <article><small>Dépenses prévues</small><strong id="kpiExpenses">0,00 €</strong><em>Budget du mois</em></article>
+        <article class="accent"><small>Solde prévisionnel</small><strong id="kpiForecast">0,00 €</strong><em>À la fin du mois</em></article>
       </div>
       <div class="grid two">
-        <article class="panel"><h2>Répartition des dépenses</h2><div id="expenseBars" class="bars"></div></article>
-        <article class="panel"><h2>Situation patrimoniale</h2><div id="wealthSummary"></div></article>
+        <article class="panel"><div class="panel-title"><div><p class="eyebrow">Pilotage</p><h2>Répartition du budget</h2></div></div><div id="expenseBars" class="bars empty">Aucune donnée.</div></article>
+        <article class="panel"><div class="panel-title"><div><p class="eyebrow">Situation globale</p><h2>Patrimoine</h2></div></div><div id="wealthSummary" class="summary"></div></article>
       </div>
+      <article class="panel insight"><div class="insight-icon">✦</div><div><p class="eyebrow">Conseil BudgetSoft</p><h2 id="dailyAdvice">Ajoutez vos premières données pour obtenir un conseil personnalisé.</h2></div></article>
     </section>
-    <section id="budget" class="view">
-      <div class="panel toolbar"><button id="addBudget">+ Ajouter une ligne</button><span>Les montants sont modifiables directement.</span></div>
-      <article class="panel"><div class="table-wrap"><table><thead><tr><th>Type</th><th>Poste</th><th>Prévu</th><th>Réel</th><th>Écart</th><th></th></tr></thead><tbody id="budgetRows"></tbody></table></div></article>
-    </section>
-    <section id="patrimoine" class="view">
-      <div class="grid two">
-        <article class="panel"><h2>Actifs</h2><div id="assetRows"></div><button class="secondary" id="addAsset">+ Ajouter</button></article>
-        <article class="panel"><h2>Dettes</h2><div id="debtRows"></div><button class="secondary" id="addDebt">+ Ajouter</button></article>
-      </div>
-    </section>
-    <section id="credits" class="view">
-      <article class="panel"><h2>Mensualités de crédits</h2><div id="creditRows"></div><button class="secondary" id="addCredit">+ Ajouter un crédit</button></article>
-    </section>
-    <section id="settings" class="view">
-      <div class="grid two">
-        <article class="panel"><h2>Sauvegarder</h2><p>Téléchargez une copie complète de vos données.</p><button id="exportData">Exporter en JSON</button></article>
-        <article class="panel"><h2>Restaurer</h2><p>Rechargez une sauvegarde précédemment exportée.</p><input id="importData" type="file" accept="application/json" /></article>
-      </div>
-      <article class="panel warning"><h2>Synchronisation</h2><p id="connectionHelp">En mode local, les données restent sur cet appareil. Après configuration de Supabase, chaque modification est enregistrée dans le foyer partagé.</p><button id="syncNow" class="secondary">Synchroniser maintenant</button></article>
-    </section>
+
+    <section id="operations" class="view"><article class="panel"><div class="panel-title"><div><p class="eyebrow">Journal</p><h2>Opérations</h2></div><button class="secondary" data-open-operation>Ajouter</button></div><div class="table-wrap"><table><thead><tr><th>Date</th><th>Libellé</th><th>Catégorie</th><th>Compte</th><th>Montant</th><th></th></tr></thead><tbody id="operationRows"></tbody></table></div></article></section>
+
+    <section id="budget" class="view"><article class="panel"><div class="panel-title"><div><p class="eyebrow">Prévu et réel</p><h2>Budget mensuel</h2></div><button id="addBudget" class="secondary">Ajouter une ligne</button></div><div class="table-wrap"><table><thead><tr><th>Type</th><th>Poste</th><th>Prévu</th><th>Réel</th><th>Écart</th><th></th></tr></thead><tbody id="budgetRows"></tbody></table></div></article></section>
+
+    <section id="patrimoine" class="view"><div class="grid two"><article class="panel"><div class="panel-title"><h2>Actifs</h2><button id="addAsset" class="secondary">Ajouter</button></div><div id="assetRows"></div></article><article class="panel"><div class="panel-title"><h2>Dettes</h2><button id="addDebt" class="secondary">Ajouter</button></div><div id="debtRows"></div></article></div></section>
+
+    <section id="credits" class="view"><article class="panel"><div class="panel-title"><div><p class="eyebrow">Engagements</p><h2>Crédits</h2></div><button id="addCredit" class="secondary">Ajouter</button></div><div id="creditRows"></div></article></section>
+    <section id="objectifs" class="view"><article class="panel"><div class="panel-title"><div><p class="eyebrow">Projets</p><h2>Objectifs d’épargne</h2></div><button id="addGoal" class="secondary">Ajouter</button></div><div id="goalRows"></div></article></section>
+
+    <section id="settings" class="view"><div class="grid two"><article class="panel"><h2>Sauvegarde locale</h2><p>Exportez une copie JSON complète avant toute modification importante.</p><button id="exportData">Exporter les données</button></article><article class="panel"><h2>Restauration</h2><p>Importez une sauvegarde BudgetSoft.</p><input id="importData" type="file" accept="application/json"></article></div><article class="panel connection"><h2>Connexion Google Sheets</h2><p id="connectionHelp">Cette page GitHub fonctionne en mode démonstration. La version Apps Script utilisera un Google Sheet privé et partagé.</p><button id="syncNow" class="secondary">Actualiser les données</button></article></section>
   </main>
+
+  <dialog id="operationDialog"><form id="operationForm" method="dialog"><div class="modal-head"><div><p class="eyebrow">Saisie rapide</p><h2>Nouvelle opération</h2></div><button type="button" class="close" data-close>×</button></div><div class="form-grid"><label>Date<input id="opDate" type="date" required></label><label>Montant<input id="opAmount" type="number" step="0.01" required></label><label class="wide">Libellé<input id="opLabel" type="text" required></label><label>Catégorie<input id="opCategory" type="text" list="categories"></label><label>Compte<input id="opAccount" type="text" list="accounts"></label><label class="wide">Commentaire<textarea id="opNote" rows="3"></textarea></label></div><div class="modal-actions"><button type="button" class="ghost" data-close>Annuler</button><button type="submit">Enregistrer</button></div></form></dialog>
+  <datalist id="categories"></datalist><datalist id="accounts"></datalist>
   <script src="app.js"></script>
 </body>
 </html>
