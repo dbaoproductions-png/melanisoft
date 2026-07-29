@@ -1,4 +1,4 @@
-const BUDGETSOFT_VERSION = '0.4.0';
+const BUDGETSOFT_VERSION = '0.5.0';
 
 const TABLES = {
   Parametres: ['cle', 'valeur'],
@@ -23,10 +23,7 @@ function doGet() {
   return HtmlService.createTemplateFromFile('Index').evaluate().setTitle('BudgetSoft')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
-
-function inclure(nomFichier) {
-  return HtmlService.createHtmlOutputFromFile(nomFichier).getContent();
-}
+function inclure(nomFichier) { return HtmlService.createHtmlOutputFromFile(nomFichier).getContent(); }
 
 function initialiserBudgetSoft() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -51,7 +48,6 @@ function verifierConfiguration() {
   SpreadsheetApp.getUi().alert(manquantes.length ? 'Onglets manquants : ' + manquantes.join(', ') : 'Configuration valide. BudgetSoft est prêt.');
   return { ok: manquantes.length === 0, manquantes };
 }
-
 function chargerToutesLesDonnees() {
   verifierInitialisation_();
   const resultat = {};
@@ -59,18 +55,11 @@ function chargerToutesLesDonnees() {
   resultat.meta = { version: BUDGETSOFT_VERSION, chargeLe: new Date().toISOString() };
   return resultat;
 }
-
-function lireTable(nom) {
-  verifierNomTable_(nom);
-  verifierInitialisation_();
-  return lireTable_(nom);
-}
+function lireTable(nom) { verifierNomTable_(nom); verifierInitialisation_(); return lireTable_(nom); }
 
 function enregistrerLigne(nom, ligne) {
-  verifierNomTable_(nom);
-  verifierInitialisation_();
+  verifierNomTable_(nom); verifierInitialisation_();
   if (!ligne || typeof ligne !== 'object') throw new Error('Donnée invalide.');
-
   const feuille = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(nom);
   const entetes = TABLES[nom];
   const maintenant = new Date().toISOString();
@@ -79,14 +68,24 @@ function enregistrerLigne(nom, ligne) {
     copie.nom = String(copie.nom || '').trim();
     if (!copie.nom) throw new Error('Le nom du compte est obligatoire.');
     copie.type = String(copie.type || 'courant').trim();
-    copie.solde_initial = Number(String(copie.solde_initial || 0).replace(',', '.'));
-    if (!Number.isFinite(copie.solde_initial)) throw new Error('Le solde initial est invalide.');
+    copie.solde_initial = convertirNombre_(copie.solde_initial);
     copie.actif = copie.actif !== false && String(copie.actif).toLowerCase() !== 'false';
+  }
+  if (nom === 'Operations') {
+    copie.libelle = String(copie.libelle || '').trim();
+    copie.compte = String(copie.compte || '').trim();
+    copie.categorie = String(copie.categorie || '').trim();
+    copie.type = String(copie.type || 'depense').toLowerCase();
+    copie.date = copie.date ? new Date(copie.date) : new Date();
+    if (!copie.libelle) throw new Error('Le libellé est obligatoire.');
+    if (!copie.compte) throw new Error('Le compte est obligatoire.');
+    if (isNaN(copie.date.getTime())) throw new Error('La date est invalide.');
+    const montant = Math.abs(convertirNombre_(copie.montant));
+    copie.montant = copie.type === 'depense' ? -montant : montant;
   }
   if (entetes.includes('id') && !copie.id) copie.id = Utilities.getUuid();
   if (entetes.includes('cree_le') && !copie.cree_le) copie.cree_le = maintenant;
   if (entetes.includes('modifie_le')) copie.modifie_le = maintenant;
-
   const verrou = LockService.getDocumentLock();
   verrou.waitLock(10000);
   try {
@@ -100,17 +99,13 @@ function enregistrerLigne(nom, ligne) {
     const valeurs = entetes.map(cle => normaliserValeur_(copie[cle]));
     if (ligneCible > 0) feuille.getRange(ligneCible, 1, 1, entetes.length).setValues([valeurs]);
     else feuille.appendRow(valeurs);
-  } finally {
-    verrou.releaseLock();
-  }
+  } finally { verrou.releaseLock(); }
   return copie;
 }
 
 function supprimerLigne(nom, id) {
-  verifierNomTable_(nom);
-  verifierInitialisation_();
-  const entetes = TABLES[nom];
-  const idIndex = entetes.indexOf('id');
+  verifierNomTable_(nom); verifierInitialisation_();
+  const entetes = TABLES[nom], idIndex = entetes.indexOf('id');
   if (idIndex < 0) throw new Error('Cette table ne comporte pas d’identifiant.');
   const feuille = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(nom);
   if (feuille.getLastRow() < 2) return false;
@@ -144,20 +139,20 @@ function ajouterDonneesInitiales_() {
     parametres.appendRow(['locale', 'fr-FR']);
   }
 }
-
 function verifierInitialisation_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const manquantes = Object.keys(TABLES).filter(nom => !ss.getSheetByName(nom));
   if (manquantes.length) throw new Error('BudgetSoft n’est pas initialisé. Lancez initialiserBudgetSoft().');
 }
-function verifierNomTable_(nom) {
-  if (!Object.prototype.hasOwnProperty.call(TABLES, nom)) throw new Error('Table inconnue : ' + nom);
+function verifierNomTable_(nom) { if (!Object.prototype.hasOwnProperty.call(TABLES, nom)) throw new Error('Table inconnue : ' + nom); }
+function convertirNombre_(valeur) {
+  const n = Number(String(valeur == null ? 0 : valeur).replace(/\s/g, '').replace(',', '.'));
+  if (!Number.isFinite(n)) throw new Error('Le montant est invalide.');
+  return n;
 }
 function normaliserValeur_(valeur) {
   if (valeur === undefined || valeur === null) return '';
   if (typeof valeur === 'object' && !(valeur instanceof Date)) return JSON.stringify(valeur);
   return valeur;
 }
-function serialiserValeur_(valeur) {
-  return valeur instanceof Date ? valeur.toISOString() : valeur;
-}
+function serialiserValeur_(valeur) { return valeur instanceof Date ? valeur.toISOString() : valeur; }
