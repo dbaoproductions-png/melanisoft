@@ -10,14 +10,7 @@
 <body>
   <div class="app-shell">
     <aside class="sidebar">
-      <div class="brand">
-        <div class="brand-mark">B</div>
-        <div>
-          <strong>BudgetSoft</strong>
-          <span>Gestion budgétaire</span>
-        </div>
-      </div>
-
+      <div class="brand"><div class="brand-mark">B</div><div><strong>BudgetSoft</strong><span>Gestion budgétaire</span></div></div>
       <nav class="nav" aria-label="Navigation principale">
         <button class="nav-item active" data-view="dashboard">📊 <span>Tableau de bord</span></button>
         <button class="nav-item" data-view="comptes">💳 <span>Comptes</span></button>
@@ -30,22 +23,14 @@
         <button class="nav-item" data-view="ia">🤖 <span>Conseiller IA</span></button>
         <button class="nav-item" data-view="parametres">⚙️ <span>Paramètres</span></button>
       </nav>
-
-      <div class="sidebar-footer">Version <span id="version">0.3.0</span></div>
+      <div class="sidebar-footer">Version <span id="version">0.4.0</span></div>
     </aside>
 
     <main class="main">
       <header class="topbar">
-        <div>
-          <p class="eyebrow">Vue d’ensemble</p>
-          <h1 id="page-title">Tableau de bord</h1>
-        </div>
-        <div class="topbar-actions">
-          <button class="icon-button" id="refresh-button" title="Actualiser">↻</button>
-          <div class="user-chip">PH</div>
-        </div>
+        <div><p class="eyebrow" id="page-eyebrow">Vue d’ensemble</p><h1 id="page-title">Tableau de bord</h1></div>
+        <div class="topbar-actions"><button class="icon-button" id="refresh-button" title="Actualiser">↻</button><div class="user-chip">PH</div></div>
       </header>
-
       <section id="loading" class="loading">Chargement des données…</section>
       <section id="error" class="error hidden"></section>
 
@@ -56,39 +41,46 @@
           <article class="card metric-card"><span>Dépenses du mois</span><strong id="depenses-mois">0,00 €</strong><small>Sorties enregistrées</small></article>
           <article class="card metric-card"><span>Épargne du mois</span><strong id="epargne-mois">0,00 €</strong><small>Revenus moins dépenses</small></article>
         </div>
-
         <div class="dashboard-grid">
-          <article class="card panel">
-            <div class="panel-heading"><div><span class="panel-kicker">Activité</span><h2>Évolution mensuelle</h2></div></div>
-            <div class="chart-placeholder" id="monthly-bars"><span>Aucune opération pour le moment</span></div>
-          </article>
-
-          <article class="card panel health-panel">
-            <div class="panel-heading"><div><span class="panel-kicker">Pilotage</span><h2>Santé financière</h2></div></div>
-            <div class="health-score"><strong id="health-score">—</strong><span id="health-label">Données insuffisantes</span></div>
-            <div class="health-list" id="health-list"></div>
-          </article>
-
-          <article class="card panel operations-panel">
-            <div class="panel-heading"><div><span class="panel-kicker">Derniers mouvements</span><h2>Opérations récentes</h2></div></div>
-            <div id="recent-operations" class="empty-state">Aucune opération enregistrée.</div>
-          </article>
-
-          <article class="card panel alerts-panel">
-            <div class="panel-heading"><div><span class="panel-kicker">À surveiller</span><h2>Alertes</h2></div></div>
-            <div id="alerts" class="empty-state">Aucune alerte pour le moment.</div>
-          </article>
+          <article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Activité</span><h2>Évolution mensuelle</h2></div></div><div class="chart-placeholder" id="monthly-bars"><span>Aucune opération pour le moment</span></div></article>
+          <article class="card panel health-panel"><div class="panel-heading"><div><span class="panel-kicker">Pilotage</span><h2>Santé financière</h2></div></div><div class="health-score"><strong id="health-score">—</strong><span id="health-label">Données insuffisantes</span></div><div class="health-list" id="health-list"></div></article>
+          <article class="card panel operations-panel"><div class="panel-heading"><div><span class="panel-kicker">Derniers mouvements</span><h2>Opérations récentes</h2></div></div><div id="recent-operations" class="empty-state">Aucune opération enregistrée.</div></article>
+          <article class="card panel alerts-panel"><div class="panel-heading"><div><span class="panel-kicker">À surveiller</span><h2>Alertes</h2></div></div><div id="alerts" class="empty-state">Aucune alerte pour le moment.</div></article>
         </div>
       </section>
 
-      <section id="generic-view" class="view">
-        <article class="card coming-soon">
-          <div class="coming-icon" id="coming-icon">🧩</div>
-          <h2 id="coming-title">Module en préparation</h2>
-          <p id="coming-text">Cette rubrique sera reliée aux données du classeur lors du prochain sprint.</p>
+      <section id="comptes" class="view">
+        <div class="section-toolbar">
+          <div><p class="section-intro">Gérez vos comptes et suivez leur solde réel.</p></div>
+          <button class="primary-button" id="add-account-button">＋ Ajouter un compte</button>
+        </div>
+        <div class="cards accounts-summary">
+          <article class="card metric-card"><span>Comptes actifs</span><strong id="accounts-count">0</strong><small>Hors comptes archivés</small></article>
+          <article class="card metric-card"><span>Solde disponible</span><strong id="accounts-balance">0,00 €</strong><small>Solde actuel cumulé</small></article>
+          <article class="card metric-card"><span>Épargne</span><strong id="savings-balance">0,00 €</strong><small>Livrets et placements liquides</small></article>
+        </div>
+        <article class="card panel accounts-panel">
+          <div class="panel-heading"><div><span class="panel-kicker">Vos comptes</span><h2>Liste des comptes</h2></div><label class="toggle-label"><input type="checkbox" id="show-archived"> Afficher les archivés</label></div>
+          <div id="accounts-list" class="empty-state">Aucun compte enregistré.</div>
         </article>
       </section>
+
+      <section id="generic-view" class="view"><article class="card coming-soon"><div class="coming-icon" id="coming-icon">🧩</div><h2 id="coming-title">Module en préparation</h2><p id="coming-text">Cette rubrique sera reliée aux données du classeur lors du prochain sprint.</p></article></section>
     </main>
+  </div>
+
+  <div class="modal hidden" id="account-modal" role="dialog" aria-modal="true" aria-labelledby="account-modal-title">
+    <div class="modal-card">
+      <div class="modal-heading"><div><p class="panel-kicker">Compte</p><h2 id="account-modal-title">Ajouter un compte</h2></div><button class="modal-close" id="close-account-modal" aria-label="Fermer">×</button></div>
+      <form id="account-form">
+        <input type="hidden" id="account-id">
+        <label>Nom du compte<input id="account-name" required maxlength="80" placeholder="Ex. Compte courant"></label>
+        <label>Type<select id="account-type"><option value="courant">Compte courant</option><option value="epargne">Épargne</option><option value="especes">Espèces</option><option value="carte">Carte</option><option value="placement">Placement</option><option value="autre">Autre</option></select></label>
+        <label>Solde initial<input id="account-balance-input" inputmode="decimal" value="0,00" required></label>
+        <label class="checkbox-line"><input type="checkbox" id="account-active" checked> Compte actif</label>
+        <div class="form-actions"><button type="button" class="secondary-button" id="cancel-account">Annuler</button><button type="submit" class="primary-button" id="save-account">Enregistrer</button></div>
+      </form>
+    </div>
   </div>
 
   <?!= inclure('Scripts'); ?>
