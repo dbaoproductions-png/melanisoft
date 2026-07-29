@@ -4,7 +4,7 @@ GALLICASOFT compare le récolement final d’un prestataire de numérisation ave
 
 ## Utilisation
 
-1. Ouvrir `Gallicasoft.html` dans un navigateur récent.
+1. Ouvrir `Gallicasoft_VERT.html` dans un navigateur récent. Ce nom distinct évite la réutilisation en cache de l’ancienne interface rose.
 2. Sélectionner le récolement prestataire au format XLSX, CSV ou ZIP contenant un seul XLSX.
 3. Sélectionner l’état Gallica au format XLSX ou CSV.
 4. Vérifier les feuilles détectées automatiquement.

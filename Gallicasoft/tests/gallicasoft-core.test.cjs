@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const { execFileSync } = require('node:child_process');
 const { TextDecoder, TextEncoder } = require('node:util');
 
-const htmlPath = path.join(__dirname, '..', 'Gallicasoft.html');
+const htmlPath = path.join(__dirname, '..', 'Gallicasoft_VERT.html');
 const html = fs.readFileSync(htmlPath, 'utf8');
 const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
 assert.ok(scriptMatch, 'Le script principal doit être présent.');
