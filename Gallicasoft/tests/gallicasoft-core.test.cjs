@@ -91,6 +91,19 @@ function fileLike(filePath, forcedName = path.basename(filePath)) {
   assert.equal(provider.sourceCode, 'FRB315556101');
   assert.equal(api.parseProviderRef('FRB315556101_P015_1910_1_19100101_bis').bis, true);
 
+  const datedItems = dates => dates.map(dateKey => ({ dateKey }));
+  assert.equal(api.inferPeriodicity(datedItems(['19100101', '19100102', '19100103', '19100104'])).label, 'Quotidien');
+  assert.equal(api.inferPeriodicity(datedItems(['19100101', '19100104', '19100108', '19100111'])).label, 'Bihebdomadaire');
+  assert.equal(api.inferPeriodicity(datedItems(['19100101', '19100108', '19100115', '19100122'])).label, 'Hebdomadaire');
+  assert.equal(api.inferPeriodicity(datedItems(['19100101', '19100201', '19100301', '19100401'])).label, 'Mensuel');
+  const regularity = api.analyzeRegularity(
+    datedItems(['19100101', '19100102', '19100103', '19100104', '19100105']),
+    datedItems(['19100101', '19100102', '19100104', '19100105']),
+  );
+  assert.equal(regularity.label, 'Quotidien');
+  assert.equal(regularity.missingIssues, 1);
+  assert.equal(regularity.breakCount, 1);
+
   const syntheticReco = {
     entries: [
       { line: 2, reference: 'A_19100101', dateKey: '19100101', pages: 6, cote: 'P 015', title: 'Titre test', collectionKey: 'p015' },
@@ -112,6 +125,7 @@ function fileLike(filePath, forcedName = path.basename(filePath)) {
   assert.equal(syntheticResult.summary.blankStateDates, 1);
   assert.equal(syntheticResult.summary.missingCount, 0);
   assert.equal(syntheticResult.summary.unexpectedCount, 0);
+  assert.equal(syntheticResult.summary.regularityBreakCount, 0);
   assert.ok(syntheticResult.anomalies.some(item => item.type === 'ECART_PAGES'));
   assert.ok(syntheticResult.anomalies.some(item => item.type === 'DATE_GALLICA_ABSENTE'));
 
@@ -149,6 +163,8 @@ function fileLike(filePath, forcedName = path.basename(filePath)) {
     assert.equal(result.summary.validPages, 26092);
     assert.equal(result.summary.pageDelta, -14);
     assert.equal(result.summary.anomalyCount, 71);
+    assert.equal(result.titleSummaries[0].periodicity, 'Quotidien');
+    assert.ok(result.summary.regularityBreakCount > 0);
     const mismatchDates = [...result.anomalies]
       .filter(item => item.type === 'ECART_PAGES')
       .map(item => item.dateExpected)

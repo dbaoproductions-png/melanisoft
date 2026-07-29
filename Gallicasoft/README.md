@@ -21,6 +21,8 @@ Les fichiers sont traités localement dans le navigateur et ne sont pas envoyés
 - comparaison du nombre de fascicules ;
 - comparaison du nombre total de pages ;
 - recherche bidirectionnelle des dates attendues et intégrées ;
+- déduction de la périodicité probable de chaque titre (quotidienne, hebdomadaire, mensuelle, etc.) ;
+- regroupement des fascicules attendus non retrouvés en ruptures de régularité du calendrier ;
 - signalement des dates Gallica absentes ou illisibles ;
 - signalement des dates associées à plusieurs fascicules ;
 - comparaison des pages produites et des pages valides par fascicule apparié ;
@@ -39,7 +41,7 @@ Le guide 2024 demande une revue visuelle du calendrier et, sur une dizaine de fa
 - de l’établissement de conservation ;
 - de la cote.
 
-Le classeur exporté contient les feuilles `Synthese`, `Points_attention`, `Echantillon_manuel` et `Consignes`.
+Le classeur exporté contient les feuilles `Synthese`, `Regularite`, `Points_attention`, `Echantillon_manuel` et `Consignes`.
 
 ## Jeu de référence 2022
 

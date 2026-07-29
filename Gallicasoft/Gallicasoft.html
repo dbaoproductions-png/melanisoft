@@ -3,27 +3,28 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>GALLICASOFT — Contrôle de l’intégration dans Gallica</title>
+  <meta name="theme-color" content="#0a6b3b">
+  <title>GALLICASOFT — Édition verte — Contrôle de l’intégration dans Gallica</title>
   <style>
     :root{
-      --vert:#1f6f50;
-      --vert-dark:#124734;
-      --vert-soft:#e4f2eb;
-      --vert-pale:#f5faf7;
-      --ink:#24372f;
-      --muted:#5d7469;
-      --line:#c5ddd1;
+      --vert:#0a6b3b;
+      --vert-dark:#064426;
+      --vert-soft:#dcefe3;
+      --vert-pale:#f1f8f4;
+      --ink:#183328;
+      --muted:#516f61;
+      --line:#b8d8c5;
       --ok:#247a52;
       --ok-bg:#e9f7f0;
       --warn:#a66000;
       --warn-bg:#fff4d6;
       --error:#a92727;
       --error-bg:#fdeaea;
-      --shadow:0 12px 35px rgba(18,71,52,.10);
+      --shadow:0 12px 35px rgba(6,68,38,.10);
     }
     *{box-sizing:border-box}
     html{scroll-behavior:smooth}
-    body{margin:0;background:#f8fbf9;color:var(--ink);font-family:Arial,Helvetica,sans-serif;line-height:1.45}
+    body{margin:0;background:#f6faf7;color:var(--ink);font-family:Arial,Helvetica,sans-serif;line-height:1.45}
     header{background:linear-gradient(135deg,var(--vert-dark),var(--vert));color:#fff;padding:34px 24px 28px}
     header .wrap{max-width:1320px;margin:auto}
     h1{margin:0;font-size:clamp(30px,5vw,52px);letter-spacing:.07em}
@@ -42,10 +43,10 @@
     .source-card strong{display:block;margin-bottom:8px}
     label{font-weight:700}
     input[type=file],select,input[type=number],input[type=search],input[type=text],textarea{
-      width:100%;border:1px solid #afcfbe;border-radius:9px;background:#fff;color:var(--ink);padding:10px;font:inherit
+      width:100%;border:1px solid #9dc9af;border-radius:9px;background:#fff;color:var(--ink);padding:10px;font:inherit
     }
     input[type=file]{padding:8px}
-    select:focus,input:focus,textarea:focus{outline:3px solid rgba(31,111,80,.16);border-color:var(--vert)}
+    select:focus,input:focus,textarea:focus{outline:3px solid rgba(10,107,59,.16);border-color:var(--vert)}
     .field{margin-top:12px}
     .status-line{min-height:38px;margin-top:9px;padding:9px 11px;background:#fff;border-radius:8px;color:var(--muted);font-size:13px}
     .status-line.ok{color:var(--ok);background:var(--ok-bg)}
@@ -216,7 +217,7 @@
     </section>
   </main>
 
-  <footer>GALLICASOFT — Contrôle de l’intégration des campagnes de numérisation dans Gallica</footer>
+  <footer>GALLICASOFT — Édition verte — contrôle de l’intégration et de la régularité des parutions dans Gallica</footer>
 
   <script>
   'use strict';
@@ -750,6 +751,89 @@
   function sumNumbers(items,field){
     return items.reduce((sum,item)=>sum+(Number.isFinite(item[field])?item[field]:0),0);
   }
+  function firstDateKey(value){
+    const match=String(value??'').match(/^(\d{8})/);
+    return match&&validYmd(match[1])?match[1]:'';
+  }
+  function dateKeyTimestamp(value){
+    const key=firstDateKey(value);
+    return key?Date.UTC(Number(key.slice(0,4)),Number(key.slice(4,6))-1,Number(key.slice(6,8))):NaN;
+  }
+  function uniqueChronologicalDates(items){
+    return [...new Set(items.map(item=>firstDateKey(item.dateKey)).filter(Boolean))].sort();
+  }
+  function median(values){
+    if(!values.length)return null;
+    const sorted=[...values].sort((a,b)=>a-b);
+    const middle=Math.floor(sorted.length/2);
+    return sorted.length%2?sorted[middle]:(sorted[middle-1]+sorted[middle])/2;
+  }
+  function inferPeriodicity(items){
+    const dates=uniqueChronologicalDates(items);
+    if(dates.length<4){
+      return {label:'Indéterminée',typicalDays:null,confidence:'Faible',confidenceRate:0,dateCount:dates.length,intervalCount:Math.max(0,dates.length-1)};
+    }
+    const gaps=dates.slice(1).map((date,index)=>
+      Math.round((dateKeyTimestamp(date)-dateKeyTimestamp(dates[index]))/DAY_MS)
+    ).filter(gap=>gap>0&&gap<=400);
+    if(gaps.length<3){
+      return {label:'Indéterminée',typicalDays:null,confidence:'Faible',confidenceRate:0,dateCount:dates.length,intervalCount:gaps.length};
+    }
+    const typicalDays=median(gaps);
+    const profiles=[
+      {maxTypical:1.5,label:'Quotidien',minGap:1,maxGap:2},
+      {maxTypical:2.75,label:'Trihebdomadaire',minGap:2,maxGap:3},
+      {maxTypical:4.5,label:'Bihebdomadaire',minGap:3,maxGap:5},
+      {maxTypical:9.5,label:'Hebdomadaire',minGap:6,maxGap:8},
+      {maxTypical:18.5,label:'Bimensuel (deux fois par mois)',minGap:11,maxGap:19},
+      {maxTypical:45,label:'Mensuel',minGap:24,maxGap:38},
+      {maxTypical:75,label:'Bimestriel',minGap:50,maxGap:75},
+      {maxTypical:120,label:'Trimestriel',minGap:76,maxGap:110},
+      {maxTypical:240,label:'Semestriel',minGap:150,maxGap:220},
+      {maxTypical:Infinity,label:'Annuel',minGap:300,maxGap:400}
+    ];
+    const profile=profiles.find(item=>typicalDays<=item.maxTypical);
+    const directMatches=gaps.filter(gap=>gap>=profile.minGap&&gap<=profile.maxGap).length;
+    const confidenceRate=directMatches/gaps.length;
+    const confidence=confidenceRate>=.75?'Élevée':(confidenceRate>=.5?'Moyenne':'Faible');
+    return {
+      label:confidenceRate>=.35?profile.label:'Irrégulière ou indéterminée',
+      typicalDays:Math.round(typicalDays*10)/10,
+      confidence,confidenceRate,dateCount:dates.length,intervalCount:gaps.length
+    };
+  }
+  function analyzeRegularity(wanted,found){
+    const periodicity=inferPeriodicity(wanted);
+    const wantedByDate=groupBy(wanted.filter(item=>item.dateKey),item=>item.dateKey);
+    const foundByDate=groupBy(found.filter(item=>item.dateKey),item=>item.dateKey);
+    const expectedDates=[...wantedByDate.keys()].sort();
+    const segments=[];
+    let current=null,missingIssues=0;
+    expectedDates.forEach(dateKey=>{
+      const deficit=Math.max(0,(wantedByDate.get(dateKey)||[]).length-(foundByDate.get(dateKey)||[]).length);
+      if(deficit){
+        missingIssues+=deficit;
+        if(!current)current={start:dateKey,end:dateKey,missing:0};
+        current.end=dateKey;
+        current.missing+=deficit;
+      }else if(current){
+        segments.push(current);
+        current=null;
+      }
+    });
+    if(current)segments.push(current);
+    return {
+      ...periodicity,
+      expectedDates:expectedDates.length,
+      integratedDated:found.filter(item=>item.dateKey).length,
+      missingIssues,
+      breakCount:segments.length,
+      breakDetails:segments.map(segment=>{
+        const range=segment.start===segment.end?formatDateKey(segment.start):`${formatDateKey(segment.start)} au ${formatDateKey(segment.end)}`;
+        return `${range} (${segment.missing} fascicule${segment.missing>1?'s':''})`;
+      })
+    };
+  }
   function makeAnomaly(type,nature,level,data={}){
     return {
       type,nature,level,
@@ -782,6 +866,7 @@
     const allKeys=[...new Set([...stateGroups.keys(),...expectedGroups.keys()])];
     const titleSummaries=[];
     let missingCount=0,unexpectedCount=0,pageMismatchCount=0,blankStateDates=0,duplicateDates=0,metadataIssues=0;
+    let regularityBreakCount=0,periodicityDeterminedCount=0;
 
     for(const key of allKeys){
       const wanted=expectedGroups.get(key)||[];
@@ -867,6 +952,9 @@
           }));
         });
       }
+      const regularity=analyzeRegularity(wanted,found);
+      regularityBreakCount+=regularity.breakCount;
+      if(regularity.label!=='Indéterminée'&&regularity.label!=='Irrégulière ou indéterminée')periodicityDeterminedCount++;
       titleSummaries.push({
         key,title,cote,
         expectedCount:wanted.length,
@@ -877,6 +965,13 @@
         unexpected:groupUnexpected,
         blankDates:groupBlankDates,
         pageMismatches:groupPageMismatch,
+        periodicity:regularity.label,
+        typicalDays:regularity.typicalDays,
+        periodicityConfidence:regularity.confidence,
+        periodicityConfidenceRate:regularity.confidenceRate,
+        regularityBreaks:regularity.breakCount,
+        regularityMissingIssues:regularity.missingIssues,
+        regularityDetails:regularity.breakDetails,
         anomalies:anomalies.length-before
       });
     }
@@ -904,9 +999,13 @@
       validPages:sumNumbers(integrated,'validPages'),
       pageDelta:sumNumbers(integrated,'validPages')-sumNumbers(expected,'pages'),
       missingCount,unexpectedCount,pageMismatchCount,blankStateDates,duplicateDates,metadataIssues,
+      regularityBreakCount,periodicityDeterminedCount,
       excludedByDecision:gallicaParsed.excluded,
       anomalyCount:anomalies.length
     };
+    const periodicityCounts=new Map();
+    titleSummaries.forEach(item=>periodicityCounts.set(item.periodicity,(periodicityCounts.get(item.periodicity)||0)+1));
+    const periodicityDetail=[...periodicityCounts].map(([label,count])=>`${count} ${label.toLowerCase()}`).join(' ; ');
     const controls=[
       {domain:'Sources',name:'Lecture du récolement prestataire',status:expected.length?'OK':'ERREUR',count:expected.length,detail:`${expected.length} référence(s) exploitable(s), feuille « ${recoParsed.diagnostics.sheetName} ».`},
       {domain:'Sources',name:'Lecture de l’état Gallica',status:integrated.length?'OK':'ERREUR',count:integrated.length,detail:`${integrated.length} ligne(s) comparée(s), feuille « ${gallicaParsed.diagnostics.sheetName} ».`},
@@ -915,6 +1014,7 @@
       {domain:'Exhaustivité',name:'Aucun fascicule daté intégré hors récolement',status:unexpectedCount===0?'OK':'ALERTE',count:unexpectedCount,detail:`${unexpectedCount} ligne(s) Gallica datée(s) sans correspondance attendue.`},
       {domain:'Dates',name:'Dates d’édition Gallica présentes et exploitables',status:blankStateDates===0?'OK':'ALERTE',count:blankStateDates,detail:`${blankStateDates} date(s) vide(s) ou illisible(s).`},
       {domain:'Dates',name:'Dates uniques ou multiplicités explicitement vérifiées',status:duplicateDates===0?'OK':'ALERTE',count:duplicateDates,detail:`${duplicateDates} date(s) avec plusieurs fascicules à vérifier.`},
+      {domain:'Calendrier',name:'Périodicité déduite et régularité des parutions',status:regularityBreakCount===0?'OK':'ALERTE',count:regularityBreakCount,detail:`${periodicityDeterminedCount} titre(s) avec une périodicité probable (${periodicityDetail||'aucune périodicité déterminée'}). ${regularityBreakCount} rupture(s) regroupant ${missingCount} fascicule(s) attendu(s) non retrouvé(s).`},
       {domain:'Pages',name:'Même total de pages produites et valides',status:summary.pageDelta===0?'OK':'ALERTE',count:Math.abs(summary.pageDelta),detail:`Écart global : ${summary.pageDelta>0?'+':''}${summary.pageDelta} page(s).`},
       {domain:'Pages',name:'Concordance du nombre de pages par fascicule apparié',status:pageMismatchCount===0?'OK':'ALERTE',count:pageMismatchCount,detail:`${pageMismatchCount} écart(s) certain(s) après appariement par date.`},
       {domain:'Métadonnées',name:'ID, URL, titre, cote et origine renseignés',status:metadataIssues===0?'OK':'ALERTE',count:metadataIssues,detail:`${metadataIssues} ligne(s) avec métadonnées essentielles incomplètes ou URL atypique.`},
@@ -1006,14 +1106,14 @@
       ?` ${summary.blankStateDates} ligne(s) Gallica sans date empêchent un rapprochement direct ; une partie des ${summary.missingCount} dates attendues non retrouvées peut leur correspondre.`
       :'';
     $('summaryNote').className=summary.anomalyCount?'notice':'notice success';
-    $('summaryNote').innerHTML=`<strong>${summary.anomalyCount?formatNumber(summary.anomalyCount)+' point(s) d’attention':'Aucun écart automatique détecté'}.</strong> Écart global : ${summary.documentDelta>0?'+':''}${summary.documentDelta} fascicule(s) et ${summary.pageDelta>0?'+':''}${summary.pageDelta} page(s).${escapeHtml(ambiguity)}`;
-    $('titleSummary').innerHTML='<h3>Synthèse par titre ou cote</h3><div class="table-wrap"><table><thead><tr><th>Titre</th><th>Cote</th><th>Attendus</th><th>Gallica</th><th>Pages attendues</th><th>Pages valides</th><th>Dates non retrouvées</th><th>Dates Gallica absentes</th><th>Écarts de pages</th><th>Statut</th></tr></thead><tbody>'+
-      result.titleSummaries.map(item=>`<tr><td>${escapeHtml(item.title)}</td><td>${escapeHtml(item.cote)}</td><td class="num">${item.expectedCount}</td><td class="num">${item.integratedCount}</td><td class="num">${item.expectedPages}</td><td class="num">${item.validPages}</td><td class="num">${item.missing}</td><td class="num">${item.blankDates}</td><td class="num">${item.pageMismatches}</td><td><span class="badge ${item.anomalies?'ALERTE':'OK'}">${item.anomalies?'À vérifier':'Conforme'}</span></td></tr>`).join('')+
+    $('summaryNote').innerHTML=`<strong>${summary.anomalyCount?formatNumber(summary.anomalyCount)+' point(s) d’attention':'Aucun écart automatique détecté'}.</strong> Écart global : ${summary.documentDelta>0?'+':''}${summary.documentDelta} fascicule(s) et ${summary.pageDelta>0?'+':''}${summary.pageDelta} page(s). Le calendrier présente ${summary.regularityBreakCount} rupture(s) de régularité.${escapeHtml(ambiguity)}`;
+    $('titleSummary').innerHTML='<h3>Synthèse par titre ou cote</h3><div class="table-wrap"><table><thead><tr><th>Titre</th><th>Cote</th><th>Périodicité probable</th><th>Attendus</th><th>Gallica</th><th>Pages attendues</th><th>Pages valides</th><th>Dates non retrouvées</th><th>Dates Gallica absentes</th><th>Écarts de pages</th><th>Ruptures du calendrier</th><th>Statut</th></tr></thead><tbody>'+
+      result.titleSummaries.map(item=>`<tr><td>${escapeHtml(item.title)}</td><td>${escapeHtml(item.cote)}</td><td>${escapeHtml(item.periodicity)}<br><span class="small">${item.typicalDays===null?'Intervalle insuffisant':`Intervalle type : ${item.typicalDays} jour(s)`} — confiance ${escapeHtml(item.periodicityConfidence.toLowerCase())}</span></td><td class="num">${item.expectedCount}</td><td class="num">${item.integratedCount}</td><td class="num">${item.expectedPages}</td><td class="num">${item.validPages}</td><td class="num">${item.missing}</td><td class="num">${item.blankDates}</td><td class="num">${item.pageMismatches}</td><td class="num">${item.regularityBreaks}</td><td><span class="badge ${item.anomalies?'ALERTE':'OK'}">${item.anomalies?'À vérifier':'Conforme'}</span></td></tr>`).join('')+
       '</tbody></table></div>';
     $('report').className='report';
     $('report').innerHTML=`<p><strong>Périmètre.</strong> ${formatNumber(summary.expectedCount)} fascicule(s) du récolement ont été comparés à ${formatNumber(summary.integratedCount)} ligne(s) de l’état Gallica${summary.excludedByDecision?`, après exclusion de ${formatNumber(summary.excludedByDecision)} ligne(s) dont la décision n’est pas « Admission partielle »`:''}.</p>
       <p><strong>Exhaustivité.</strong> L’écart global est de ${summary.documentDelta>0?'+':''}${summary.documentDelta} fascicule(s). Le rapprochement par cote et date identifie ${summary.missingCount} date(s) attendue(s) sans correspondance et ${summary.unexpectedCount} ligne(s) Gallica datée(s) absente(s) du récolement.</p>
-      <p><strong>Dates.</strong> ${summary.blankStateDates} ligne(s) Gallica ne comportent pas de date exploitable et ${summary.duplicateDates} date(s) regroupent plusieurs fascicules. Ces cas nécessitent une revue manuelle du calendrier.</p>
+      <p><strong>Dates et régularité.</strong> ${summary.blankStateDates} ligne(s) Gallica ne comportent pas de date exploitable et ${summary.duplicateDates} date(s) regroupent plusieurs fascicules. La périodicité probable a été déterminée pour ${summary.periodicityDeterminedCount} titre(s) à partir du récolement ; ${summary.regularityBreakCount} rupture(s) du calendrier Gallica regroupent ${summary.missingCount} fascicule(s) attendu(s) non retrouvé(s). Ces cas nécessitent une revue manuelle du calendrier.</p>
       <p><strong>Pages.</strong> Le total Gallica diffère de ${summary.pageDelta>0?'+':''}${summary.pageDelta} page(s) par rapport au récolement. ${summary.pageMismatchCount} écart(s) de pages sont établis sur des fascicules appariés par date.</p>
       <p><strong>Conclusion.</strong> Les écarts automatiques doivent être examinés avant de conclure sur la bonne intégration. La qualité des dates, l’appariement, le titre, la tomaison et la source doivent ensuite être vérifiés visuellement sur l’échantillon proposé.</p>`;
     $('controls').className='';
@@ -1081,8 +1181,9 @@
   function reportHtml(result,sample){
     const generated=new Date().toLocaleString('fr-FR');
     const rows=result.anomalies.map(item=>`<tr><td>${item.number}</td><td>${escapeHtml(item.level)}</td><td>${escapeHtml(item.nature)}</td><td>${escapeHtml(item.title)}</td><td>${escapeHtml(item.cote)}</td><td>${escapeHtml(formatDateKey(item.dateExpected||item.dateGallica))}</td><td>${escapeHtml(item.pagesExpected)} / ${escapeHtml(item.pagesGallica)}</td><td>${escapeHtml(item.providerRef||item.id)}</td><td>${escapeHtml(item.finding)}</td></tr>`).join('');
+    const regularityRows=result.titleSummaries.map(item=>`<tr><td>${escapeHtml(item.title)}</td><td>${escapeHtml(item.cote)}</td><td>${escapeHtml(item.periodicity)}</td><td>${item.typicalDays??'—'}</td><td>${escapeHtml(item.periodicityConfidence)}</td><td>${item.regularityMissingIssues}</td><td>${item.regularityBreaks}</td><td>${escapeHtml(item.regularityDetails.join(' ; '))}</td></tr>`).join('');
     const sampleRows=sample.map(item=>`<tr><td>${item.sampleNumber}</td><td>${escapeHtml(item.title)}</td><td>${escapeHtml(item.cote)}</td><td>${escapeHtml(formatDateKey(item.dateKey))}</td><td>${escapeHtml(item.tomaison)}</td><td>${escapeHtml(item.id)}</td><td>${item.url?`<a href="${escapeHtml(item.url)}">${escapeHtml(item.url)}</a>`:''}</td><td>${escapeHtml(item.result)}</td><td>${escapeHtml(item.comment)}</td></tr>`).join('');
-    return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>GALLICASOFT — Rapport</title><style>body{font-family:Arial;margin:24px;color:#24372f}h1,h2{color:#124734}table{width:100%;border-collapse:collapse;font-size:11px;margin:14px 0 24px}th{background:#1f6f50;color:white;text-align:left}th,td{border:1px solid #c5ddd1;padding:6px;vertical-align:top}tr:nth-child(even){background:#f5faf7}.small{color:#5d7469;font-size:12px}</style></head><body><h1>GALLICASOFT</h1><h2>Rapport de contrôle de l’intégration dans Gallica</h2><p class="small">Généré le ${escapeHtml(generated)}.</p><p>${result.summary.expectedCount} fascicules attendus ; ${result.summary.integratedCount} lignes Gallica ; écart global ${result.summary.documentDelta}. ${result.summary.expectedPages} pages attendues ; ${result.summary.validPages} pages valides ; écart ${result.summary.pageDelta}.</p><h2>Points d’attention détaillés</h2><table><tr><th>N°</th><th>Niveau</th><th>Nature</th><th>Titre</th><th>Cote</th><th>Date</th><th>Pages attendu / Gallica</th><th>Référence ou ID</th><th>Constat</th></tr>${rows}</table><h2>Contrôle manuel sur échantillon</h2><table><tr><th>N°</th><th>Titre</th><th>Cote</th><th>Date</th><th>Tomaison</th><th>ID DOC NUM</th><th>URL</th><th>Résultat</th><th>Commentaire</th></tr>${sampleRows}</table></body></html>`;
+    return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>GALLICASOFT — Rapport</title><style>body{font-family:Arial;margin:24px;color:#183328}h1,h2{color:#064426}table{width:100%;border-collapse:collapse;font-size:11px;margin:14px 0 24px}th{background:#0a6b3b;color:white;text-align:left}th,td{border:1px solid #b8d8c5;padding:6px;vertical-align:top}tr:nth-child(even){background:#f1f8f4}.small{color:#516f61;font-size:12px}</style></head><body><h1>GALLICASOFT</h1><h2>Rapport de contrôle de l’intégration dans Gallica</h2><p class="small">Généré le ${escapeHtml(generated)}.</p><p>${result.summary.expectedCount} fascicules attendus ; ${result.summary.integratedCount} lignes Gallica ; écart global ${result.summary.documentDelta}. ${result.summary.expectedPages} pages attendues ; ${result.summary.validPages} pages valides ; écart ${result.summary.pageDelta}. ${result.summary.regularityBreakCount} rupture(s) de régularité du calendrier.</p><h2>Régularité des parutions</h2><table><tr><th>Titre</th><th>Cote</th><th>Périodicité probable</th><th>Intervalle type (jours)</th><th>Confiance</th><th>Fascicules manquants</th><th>Ruptures</th><th>Détail</th></tr>${regularityRows}</table><h2>Points d’attention détaillés</h2><table><tr><th>N°</th><th>Niveau</th><th>Nature</th><th>Titre</th><th>Cote</th><th>Date</th><th>Pages attendu / Gallica</th><th>Référence ou ID</th><th>Constat</th></tr>${rows}</table><h2>Contrôle manuel sur échantillon</h2><table><tr><th>N°</th><th>Titre</th><th>Cote</th><th>Date</th><th>Tomaison</th><th>ID DOC NUM</th><th>URL</th><th>Résultat</th><th>Commentaire</th></tr>${sampleRows}</table></body></html>`;
   }
 
   function xmlEscape(value){
@@ -1146,7 +1247,7 @@
   function buildResultsWorkbook(result,sample){
     const summary=result.summary;
     const summaryRows=[
-      ['GALLICASOFT — Synthèse du contrôle','','','','','','','','','','',''],
+      ['GALLICASOFT — Synthèse du contrôle','','','','','','','','','','','','',''],
       ['Généré le',new Date().toLocaleString('fr-FR')],
       [],
       ['Indicateur','Résultat'],
@@ -1159,10 +1260,16 @@
       ['Dates attendues non retrouvées',summary.missingCount],
       ['Lignes Gallica sans date exploitable',summary.blankStateDates],
       ['Écarts certains de pages',summary.pageMismatchCount],
+      ['Ruptures de régularité du calendrier',summary.regularityBreakCount],
       [],
-      ['Titre','Cote','Fascicules attendus','Fascicules Gallica','Pages attendues','Pages valides','Dates non retrouvées','Intégrés non attendus','Dates Gallica absentes','Écarts de pages','Points d’attention','Statut'],
-      ...result.titleSummaries.map(item=>[item.title,item.cote,item.expectedCount,item.integratedCount,item.expectedPages,item.validPages,item.missing,item.unexpected,item.blankDates,item.pageMismatches,item.anomalies,item.anomalies?'À vérifier':'Conforme'])
+      ['Titre','Cote','Périodicité probable','Fascicules attendus','Fascicules Gallica','Pages attendues','Pages valides','Dates non retrouvées','Intégrés non attendus','Dates Gallica absentes','Écarts de pages','Ruptures calendrier','Points d’attention','Statut'],
+      ...result.titleSummaries.map(item=>[item.title,item.cote,item.periodicity,item.expectedCount,item.integratedCount,item.expectedPages,item.validPages,item.missing,item.unexpected,item.blankDates,item.pageMismatches,item.regularityBreaks,item.anomalies,item.anomalies?'À vérifier':'Conforme'])
     ];
+    const regularityHeaders=['Titre','Cote','Périodicité probable','Intervalle type (jours)','Confiance','Dates attendues','Lignes Gallica datées','Fascicules attendus non retrouvés','Ruptures de régularité','Détail des ruptures'];
+    const regularityRows=[regularityHeaders,...result.titleSummaries.map(item=>[
+      item.title,item.cote,item.periodicity,item.typicalDays??'',item.periodicityConfidence,
+      item.expectedCount,item.integratedCount-item.blankDates,item.regularityMissingIssues,item.regularityBreaks,item.regularityDetails.join(' ; ')
+    ])];
     const anomalyHeaders=['N°','Niveau','Nature du problème','Titre','Cote','Date attendue','Date Gallica','Pages attendues','Pages valides Gallica','Référence prestataire','ID DOC NUM','URL Gallica','Ligne récolement','Ligne état','Constat consolidé','Commentaire de contrôle'];
     const anomalyRows=[anomalyHeaders,...result.anomalies.map(item=>[
       item.number,item.level,item.nature,item.title,item.cote,formatDateKey(item.dateExpected),formatDateKey(item.dateGallica),
@@ -1178,15 +1285,17 @@
       ['Dates Gallica absentes','Une ligne Gallica sans date ne peut pas être appariée automatiquement. La rechercher par ID, URL, tomaison et consultation du calendrier.'],
       ['Dates multiples','Plusieurs fascicules peuvent être attendus le même jour. Vérifier chaque exemplaire et ne pas conclure à un doublon sans contrôle visuel.'],
       ['Pages','Comparer le nombre de fichiers/pages produits avec le nombre de pages valides dans Gallica.'],
-      ['Calendrier','Repérer visuellement les oublis, dates incohérentes et erreurs d’appariement. La périodicité est indicative.'],
+      ['Calendrier','La périodicité probable est déduite des intervalles entre les dates du récolement, titre par titre. Les absences consécutives dans Gallica sont regroupées en ruptures de régularité. Cette périodicité reste indicative et chaque rupture doit être vérifiée visuellement dans le calendrier.'],
       ['Concordance','Sur l’échantillon, comparer titre, date, tomaison, établissement de conservation et cote avec l’exemplaire numérisé.'],
       ['Collections partagées','La source affichée dans Gallica peut être celle du premier établissement intégré conservant le fascicule.'],
       ['Correction BnF','Si le journal porte lui-même une date erronée fidèlement reproduite, renseigner « Correction BnF ».'],
       ['Date impossible','Une date impossible, par exemple le 31 février, doit être corrigée pour franchir la chaîne d’entrée.']
     ];
     const listRows=[['Non vérifié'],['Conforme'],['À corriger'],['Correction BnF']];
+    const summaryHeaderRow=summaryRows.findIndex(row=>row[0]==='Titre')+1;
     const sheets=[
-      {name:'Synthese',xml:worksheetXml(summaryRows,[34,18,18,18,18,18,19,19,20,17,18,16],{headerRows:[4,15],titleRows:[1],merges:['A1:L1'],filterRef:`A15:L${summaryRows.length}`,freezeRows:1})},
+      {name:'Synthese',xml:worksheetXml(summaryRows,[34,18,30,18,18,18,18,19,19,20,17,18,18,16],{headerRows:[4,summaryHeaderRow],titleRows:[1],merges:['A1:N1'],filterRef:`A${summaryHeaderRow}:N${summaryRows.length}`,freezeRows:1})},
+      {name:'Regularite',xml:worksheetXml(regularityRows,[32,18,30,20,14,18,20,22,20,75],{headerRows:[1],filterRef:`A1:J${regularityRows.length}`,freezeRows:1})},
       {name:'Points_attention',xml:worksheetXml(anomalyRows,[8,12,34,28,16,16,16,15,18,42,16,42,14,12,70,42],{headerRows:[1],filterRef:`A1:P${anomalyRows.length}`,freezeRows:1})},
       {name:'Echantillon_manuel',xml:worksheetXml(sampleRows,[8,30,16,16,28,16,42,32,32,18,45],{headerRows:[1],filterRef:`A1:K${sampleRows.length}`,freezeRows:1,validation:{range:`J2:J${Math.max(2,sampleRows.length)}`,formula:"'Listes'!$A$1:$A$4"}})},
       {name:'Consignes',xml:worksheetXml(instructionRows,[30,100],{headerRows:[1],freezeRows:1})},
@@ -1200,7 +1309,7 @@
       'docProps/app.xml':'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>GALLICASOFT</Application></Properties>',
       'xl/workbook.xml':`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView activeTab="0"/></bookViews><sheets>${sheets.map((sheet,index)=>`<sheet name="${sheet.name}" sheetId="${index+1}"${sheet.name==='Listes'?' state="hidden"':''} r:id="rId${index+1}"/>`).join('')}</sheets></workbook>`,
       'xl/_rels/workbook.xml.rels':`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets.map((_,index)=>`<Relationship Id="rId${index+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${index+1}.xml"/>`).join('')}<Relationship Id="rId${sheets.length+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
-      'xl/styles.xml':'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="3"><font><sz val="10"/><name val="Arial"/></font><font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Arial"/></font><font><b/><sz val="16"/><color rgb="FFFFFFFF"/><name val="Arial"/></font></fonts><fills count="5"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1F6F50"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF5FAF7"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEAF5EF"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border/><border><left style="thin"><color rgb="FFC5DDD1"/></left><right style="thin"><color rgb="FFC5DDD1"/></right><top style="thin"><color rgb="FFC5DDD1"/></top><bottom style="thin"><color rgb="FFC5DDD1"/></bottom></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="6"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="4" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>'
+      'xl/styles.xml':'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="3"><font><sz val="10"/><name val="Arial"/></font><font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Arial"/></font><font><b/><sz val="16"/><color rgb="FFFFFFFF"/><name val="Arial"/></font></fonts><fills count="5"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF0A6B3B"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF1F8F4"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE3F2E8"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border/><border><left style="thin"><color rgb="FFB8D8C5"/></left><right style="thin"><color rgb="FFB8D8C5"/></right><top style="thin"><color rgb="FFB8D8C5"/></top><bottom style="thin"><color rgb="FFB8D8C5"/></bottom></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="6"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="4" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>'
     };
     sheets.forEach((sheet,index)=>files[`xl/worksheets/sheet${index+1}.xml`]=sheet.xml);
     return zipStore(files);
@@ -1255,7 +1364,8 @@
 
   globalThis.__GallicasoftTest={
     parseGallicaDate,parseProviderRef,parseRecoSheet,parseGallicaSheet,compareData,
-    detectSheetIndex,readWorkbookFile,buildResultsWorkbook,createManualSample
+    detectSheetIndex,readWorkbookFile,buildResultsWorkbook,createManualSample,
+    inferPeriodicity,analyzeRegularity
   };
 
   $('recoFile').addEventListener('change',event=>event.target.files[0]&&loadSource('reco',event.target.files[0]));
