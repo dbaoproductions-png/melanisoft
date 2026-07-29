@@ -1,0 +1,84 @@
+<script>
+const state={data:null};
+const money=new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'});
+const titles={dashboard:['Tableau de bord','📊'],comptes:['Comptes','💳'],operations:['Opérations','💶'],budget:['Budget','📅'],patrimoine:['Patrimoine','🏠'],credits:['Crédits','💼'],objectifs:['Objectifs','🎯'],analyses:['Analyses','📈'],ia:['Conseiller IA','🤖'],parametres:['Paramètres','⚙️']};
+
+document.addEventListener('DOMContentLoaded',()=>{
+  document.querySelectorAll('.nav-item').forEach(button=>button.addEventListener('click',()=>ouvrirVue(button.dataset.view)));
+  document.getElementById('refresh-button').addEventListener('click',charger);
+  charger();
+});
+
+function ouvrirVue(view){
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
+  document.getElementById('page-title').textContent=titles[view][0];
+  document.getElementById('dashboard').classList.toggle('active',view==='dashboard');
+  document.getElementById('generic-view').classList.toggle('active',view!=='dashboard');
+  if(view!=='dashboard'){
+    document.getElementById('coming-icon').textContent=titles[view][1];
+    document.getElementById('coming-title').textContent=titles[view][0];
+    document.getElementById('coming-text').textContent='Le module « '+titles[view][0]+' » est prêt à être développé et sera relié aux données du classeur lors du prochain sprint.';
+  }
+}
+
+function charger(){
+  afficherChargement(true);
+  google.script.run
+    .withSuccessHandler(data=>{state.data=data; afficherChargement(false); rendreDashboard(data);})
+    .withFailureHandler(err=>{afficherChargement(false); afficherErreur(err.message||String(err));})
+    .chargerToutesLesDonnees();
+}
+
+function afficherChargement(visible){document.getElementById('loading').classList.toggle('hidden',!visible);document.getElementById('error').classList.add('hidden');}
+function afficherErreur(message){const box=document.getElementById('error');box.textContent=message;box.classList.remove('hidden');}
+function nombre(v){const n=Number(String(v??'').replace(',','.'));return Number.isFinite(n)?n:0;}
+
+function rendreDashboard(data){
+  document.getElementById('version').textContent=data.meta?.version||'0.3.0';
+  const comptes=(data.Comptes||[]).filter(c=>String(c.actif).toLowerCase()!=='false');
+  const operations=data.Operations||[];
+  const now=new Date();
+  const mois=operations.filter(o=>{const d=new Date(o.date);return !isNaN(d)&&d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();});
+  const revenus=mois.filter(o=>String(o.type).toLowerCase()==='revenu'||nombre(o.montant)>0).reduce((s,o)=>s+Math.abs(nombre(o.montant)),0);
+  const depenses=mois.filter(o=>String(o.type).toLowerCase()==='depense'||nombre(o.montant)<0).reduce((s,o)=>s+Math.abs(nombre(o.montant)),0);
+  const solde=comptes.reduce((s,c)=>s+nombre(c.solde_initial),0)+operations.reduce((s,o)=>s+nombre(o.montant),0);
+  document.getElementById('solde-global').textContent=money.format(solde);
+  document.getElementById('revenus-mois').textContent=money.format(revenus);
+  document.getElementById('depenses-mois').textContent=money.format(depenses);
+  document.getElementById('epargne-mois').textContent=money.format(revenus-depenses);
+  rendreOperations(operations);
+  rendreGraphique(operations);
+  rendreSante(revenus,depenses,solde,data);
+  rendreAlertes(revenus,depenses,solde,data);
+}
+
+function rendreOperations(operations){
+  const zone=document.getElementById('recent-operations');
+  const rows=[...operations].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,6);
+  if(!rows.length){zone.className='empty-state';zone.textContent='Aucune opération enregistrée.';return;}
+  zone.className='';zone.innerHTML=rows.map(o=>{const m=nombre(o.montant);return `<div class="operation-row"><div><strong>${echapper(o.libelle||'Opération')}</strong><small>${formaterDate(o.date)} · ${echapper(o.categorie||'Sans catégorie')}</small></div><div class="${m>=0?'amount-positive':'amount-negative'}">${money.format(m)}</div></div>`}).join('');
+}
+
+function rendreGraphique(operations){
+  const zone=document.getElementById('monthly-bars');
+  const mois=[];const now=new Date();
+  for(let i=5;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);const total=operations.filter(o=>{const od=new Date(o.date);return !isNaN(od)&&od.getMonth()===d.getMonth()&&od.getFullYear()===d.getFullYear();}).reduce((s,o)=>s+nombre(o.montant),0);mois.push({label:d.toLocaleDateString('fr-FR',{month:'short'}),total});}
+  const max=Math.max(1,...mois.map(m=>Math.abs(m.total)));
+  zone.innerHTML=mois.map(m=>`<div class="bar ${m.total<0?'negative':''}" title="${money.format(m.total)}" style="height:${Math.max(4,Math.abs(m.total)/max*150)}px"><span class="bar-label">${m.label}</span></div>`).join('');
+}
+
+function rendreSante(revenus,depenses,solde,data){
+  let score=50; if(revenus>depenses)score+=20;if(solde>0)score+=20;if((data.Objectifs||[]).length)score+=10;score=Math.min(100,score);
+  document.getElementById('health-score').textContent=score+'/100';
+  document.getElementById('health-label').textContent=score>=75?'Situation saine':score>=55?'À surveiller':'Situation fragile';
+  const lignes=[['Trésorerie',solde>0?'Bon niveau':'À surveiller',solde>0?'good':'bad'],['Équilibre mensuel',revenus>=depenses?'Équilibré':'Déficitaire',revenus>=depenses?'good':'bad'],['Objectifs',(data.Objectifs||[]).length?'Suivis':'À définir',(data.Objectifs||[]).length?'good':'watch']];
+  document.getElementById('health-list').innerHTML=lignes.map(l=>`<div class="health-row"><span>${l[0]}</span><strong class="status-${l[2]}">${l[1]}</strong></div>`).join('');
+}
+
+function rendreAlertes(revenus,depenses,solde,data){
+  const alertes=[];if(solde<0)alertes.push('Le solde global est négatif.');if(depenses>revenus&&revenus>0)alertes.push('Les dépenses du mois dépassent les revenus.');if(!(data.Comptes||[]).length)alertes.push('Aucun compte n’est encore enregistré.');
+  const zone=document.getElementById('alerts');zone.className=alertes.length?'health-list':'empty-state';zone.innerHTML=alertes.length?alertes.map(a=>`<div class="health-row"><span>⚠️ ${echapper(a)}</span></div>`).join(''):'Aucune alerte pour le moment.';
+}
+function formaterDate(value){const d=new Date(value);return isNaN(d)?'Date inconnue':d.toLocaleDateString('fr-FR');}
+function echapper(value){return String(value).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
+</script>
