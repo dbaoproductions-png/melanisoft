@@ -6,67 +6,67 @@
   <title>GALLICASOFT — Contrôle de l’intégration dans Gallica</title>
   <style>
     :root{
-      --rose:#c2185b;
-      --rose-dark:#8e1244;
-      --rose-soft:#fce4ec;
-      --rose-pale:#fff7fa;
-      --ink:#3e2632;
-      --muted:#765d69;
-      --line:#ead1dc;
+      --vert:#1f6f50;
+      --vert-dark:#124734;
+      --vert-soft:#e4f2eb;
+      --vert-pale:#f5faf7;
+      --ink:#24372f;
+      --muted:#5d7469;
+      --line:#c5ddd1;
       --ok:#247a52;
       --ok-bg:#e9f7f0;
       --warn:#a66000;
       --warn-bg:#fff4d6;
       --error:#a92727;
       --error-bg:#fdeaea;
-      --shadow:0 12px 35px rgba(110,32,70,.09);
+      --shadow:0 12px 35px rgba(18,71,52,.10);
     }
     *{box-sizing:border-box}
     html{scroll-behavior:smooth}
-    body{margin:0;background:#fffafb;color:var(--ink);font-family:Arial,Helvetica,sans-serif;line-height:1.45}
-    header{background:linear-gradient(135deg,var(--rose-dark),var(--rose));color:#fff;padding:34px 24px 28px}
+    body{margin:0;background:#f8fbf9;color:var(--ink);font-family:Arial,Helvetica,sans-serif;line-height:1.45}
+    header{background:linear-gradient(135deg,var(--vert-dark),var(--vert));color:#fff;padding:34px 24px 28px}
     header .wrap{max-width:1320px;margin:auto}
     h1{margin:0;font-size:clamp(30px,5vw,52px);letter-spacing:.07em}
     header p{max-width:850px;margin:8px 0 0;font-size:17px}
     nav{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.97);border-bottom:1px solid var(--line);backdrop-filter:blur(8px)}
     nav .wrap{display:flex;gap:8px;overflow:auto;padding:10px 18px}
-    nav a{white-space:nowrap;color:var(--rose-dark);text-decoration:none;font-weight:700;padding:7px 11px;border-radius:999px}
-    nav a:hover,nav a:focus{background:var(--rose-soft);outline:none}
+    nav a{white-space:nowrap;color:var(--vert-dark);text-decoration:none;font-weight:700;padding:7px 11px;border-radius:999px}
+    nav a:hover,nav a:focus{background:var(--vert-soft);outline:none}
     main{max-width:1320px;margin:0 auto;padding:24px 18px 60px}
     section{scroll-margin-top:72px;background:#fff;border:1px solid var(--line);border-radius:18px;padding:22px;margin:0 0 20px;box-shadow:var(--shadow)}
-    h2{margin:0 0 15px;color:var(--rose-dark);font-size:23px}
-    h3{margin:20px 0 10px;color:var(--rose-dark)}
+    h2{margin:0 0 15px;color:var(--vert-dark);font-size:23px}
+    h3{margin:20px 0 10px;color:var(--vert-dark)}
     .small{font-size:13px;color:var(--muted)}
     .grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
-    .source-card{border:1px solid var(--line);border-radius:14px;padding:16px;background:var(--rose-pale)}
+    .source-card{border:1px solid var(--line);border-radius:14px;padding:16px;background:var(--vert-pale)}
     .source-card strong{display:block;margin-bottom:8px}
     label{font-weight:700}
     input[type=file],select,input[type=number],input[type=search],input[type=text],textarea{
-      width:100%;border:1px solid #d8b9c7;border-radius:9px;background:#fff;color:var(--ink);padding:10px;font:inherit
+      width:100%;border:1px solid #afcfbe;border-radius:9px;background:#fff;color:var(--ink);padding:10px;font:inherit
     }
     input[type=file]{padding:8px}
-    select:focus,input:focus,textarea:focus{outline:3px solid rgba(194,24,91,.14);border-color:var(--rose)}
+    select:focus,input:focus,textarea:focus{outline:3px solid rgba(31,111,80,.16);border-color:var(--vert)}
     .field{margin-top:12px}
     .status-line{min-height:38px;margin-top:9px;padding:9px 11px;background:#fff;border-radius:8px;color:var(--muted);font-size:13px}
     .status-line.ok{color:var(--ok);background:var(--ok-bg)}
     .status-line.error{color:var(--error);background:var(--error-bg)}
     .options{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
     .check{display:flex;gap:8px;align-items:center;font-weight:400}
-    .check input{width:18px;height:18px;accent-color:var(--rose)}
+    .check input{width:18px;height:18px;accent-color:var(--vert)}
     .sample-size{display:flex;gap:8px;align-items:center}
     .sample-size input{width:90px}
     .actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
-    button{border:0;border-radius:10px;padding:11px 15px;font:inherit;font-weight:700;cursor:pointer;background:var(--rose);color:#fff}
-    button.secondary{background:#fff;color:var(--rose-dark);border:1px solid var(--rose)}
+    button{border:0;border-radius:10px;padding:11px 15px;font:inherit;font-weight:700;cursor:pointer;background:var(--vert);color:#fff}
+    button.secondary{background:#fff;color:var(--vert-dark);border:1px solid var(--vert)}
     button:disabled{opacity:.45;cursor:not-allowed}
     button:hover:not(:disabled){filter:brightness(.96)}
     .progress-wrap{display:none;margin-top:15px}
-    .progress-track{height:9px;border-radius:99px;background:var(--rose-soft);overflow:hidden}
-    .progress-bar{height:100%;width:0;background:var(--rose);transition:width .2s}
+    .progress-track{height:9px;border-radius:99px;background:var(--vert-soft);overflow:hidden}
+    .progress-bar{height:100%;width:0;background:var(--vert);transition:width .2s}
     .metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
     .metric{border:1px solid var(--line);border-radius:13px;padding:15px;background:#fff}
     .metric span{display:block;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
-    .metric strong{display:block;font-size:25px;margin-top:4px;color:var(--rose-dark)}
+    .metric strong{display:block;font-size:25px;margin-top:4px;color:var(--vert-dark)}
     .metric.ok{background:var(--ok-bg);border-color:#b9e2ce}
     .metric.warn{background:var(--warn-bg);border-color:#efd69d}
     .metric.error{background:var(--error-bg);border-color:#efb9b9}
@@ -74,20 +74,20 @@
     .success{border-left-color:var(--ok);background:var(--ok-bg)}
     .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px}
     table{width:100%;border-collapse:collapse;font-size:13px}
-    th{position:sticky;top:0;background:var(--rose);color:#fff;text-align:left;padding:10px;vertical-align:top;z-index:1}
+    th{position:sticky;top:0;background:var(--vert);color:#fff;text-align:left;padding:10px;vertical-align:top;z-index:1}
     td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
-    tbody tr:nth-child(even){background:var(--rose-pale)}
+    tbody tr:nth-child(even){background:var(--vert-pale)}
     td.num{text-align:right;white-space:nowrap}
     .badge{display:inline-block;border-radius:999px;padding:4px 8px;font-size:11px;font-weight:700;white-space:nowrap}
     .badge.OK{background:var(--ok-bg);color:var(--ok)}
     .badge.ALERTE{background:var(--warn-bg);color:var(--warn)}
     .badge.ERREUR{background:var(--error-bg);color:var(--error)}
     .filters{display:grid;grid-template-columns:240px 1fr;gap:10px;margin-bottom:12px}
-    a.url{color:var(--rose-dark);font-weight:700;word-break:break-all}
+    a.url{color:var(--vert-dark);font-weight:700;word-break:break-all}
     .empty{padding:24px;text-align:center;color:var(--muted)}
     .report p{max-width:1000px}
     .manual-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:0;list-style:none}
-    .manual-list li{border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--rose-pale)}
+    .manual-list li{border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--vert-pale)}
     .sample-table select,.sample-table textarea{min-width:150px;font-size:12px;padding:7px}
     .sample-table textarea{min-height:58px;resize:vertical}
     footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
@@ -1082,7 +1082,7 @@
     const generated=new Date().toLocaleString('fr-FR');
     const rows=result.anomalies.map(item=>`<tr><td>${item.number}</td><td>${escapeHtml(item.level)}</td><td>${escapeHtml(item.nature)}</td><td>${escapeHtml(item.title)}</td><td>${escapeHtml(item.cote)}</td><td>${escapeHtml(formatDateKey(item.dateExpected||item.dateGallica))}</td><td>${escapeHtml(item.pagesExpected)} / ${escapeHtml(item.pagesGallica)}</td><td>${escapeHtml(item.providerRef||item.id)}</td><td>${escapeHtml(item.finding)}</td></tr>`).join('');
     const sampleRows=sample.map(item=>`<tr><td>${item.sampleNumber}</td><td>${escapeHtml(item.title)}</td><td>${escapeHtml(item.cote)}</td><td>${escapeHtml(formatDateKey(item.dateKey))}</td><td>${escapeHtml(item.tomaison)}</td><td>${escapeHtml(item.id)}</td><td>${item.url?`<a href="${escapeHtml(item.url)}">${escapeHtml(item.url)}</a>`:''}</td><td>${escapeHtml(item.result)}</td><td>${escapeHtml(item.comment)}</td></tr>`).join('');
-    return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>GALLICASOFT — Rapport</title><style>body{font-family:Arial;margin:24px;color:#3e2632}h1,h2{color:#8e1244}table{width:100%;border-collapse:collapse;font-size:11px;margin:14px 0 24px}th{background:#c2185b;color:white;text-align:left}th,td{border:1px solid #ead1dc;padding:6px;vertical-align:top}tr:nth-child(even){background:#fff7fa}.small{color:#765d69;font-size:12px}</style></head><body><h1>GALLICASOFT</h1><h2>Rapport de contrôle de l’intégration dans Gallica</h2><p class="small">Généré le ${escapeHtml(generated)}.</p><p>${result.summary.expectedCount} fascicules attendus ; ${result.summary.integratedCount} lignes Gallica ; écart global ${result.summary.documentDelta}. ${result.summary.expectedPages} pages attendues ; ${result.summary.validPages} pages valides ; écart ${result.summary.pageDelta}.</p><h2>Points d’attention détaillés</h2><table><tr><th>N°</th><th>Niveau</th><th>Nature</th><th>Titre</th><th>Cote</th><th>Date</th><th>Pages attendu / Gallica</th><th>Référence ou ID</th><th>Constat</th></tr>${rows}</table><h2>Contrôle manuel sur échantillon</h2><table><tr><th>N°</th><th>Titre</th><th>Cote</th><th>Date</th><th>Tomaison</th><th>ID DOC NUM</th><th>URL</th><th>Résultat</th><th>Commentaire</th></tr>${sampleRows}</table></body></html>`;
+    return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>GALLICASOFT — Rapport</title><style>body{font-family:Arial;margin:24px;color:#24372f}h1,h2{color:#124734}table{width:100%;border-collapse:collapse;font-size:11px;margin:14px 0 24px}th{background:#1f6f50;color:white;text-align:left}th,td{border:1px solid #c5ddd1;padding:6px;vertical-align:top}tr:nth-child(even){background:#f5faf7}.small{color:#5d7469;font-size:12px}</style></head><body><h1>GALLICASOFT</h1><h2>Rapport de contrôle de l’intégration dans Gallica</h2><p class="small">Généré le ${escapeHtml(generated)}.</p><p>${result.summary.expectedCount} fascicules attendus ; ${result.summary.integratedCount} lignes Gallica ; écart global ${result.summary.documentDelta}. ${result.summary.expectedPages} pages attendues ; ${result.summary.validPages} pages valides ; écart ${result.summary.pageDelta}.</p><h2>Points d’attention détaillés</h2><table><tr><th>N°</th><th>Niveau</th><th>Nature</th><th>Titre</th><th>Cote</th><th>Date</th><th>Pages attendu / Gallica</th><th>Référence ou ID</th><th>Constat</th></tr>${rows}</table><h2>Contrôle manuel sur échantillon</h2><table><tr><th>N°</th><th>Titre</th><th>Cote</th><th>Date</th><th>Tomaison</th><th>ID DOC NUM</th><th>URL</th><th>Résultat</th><th>Commentaire</th></tr>${sampleRows}</table></body></html>`;
   }
 
   function xmlEscape(value){
@@ -1200,7 +1200,7 @@
       'docProps/app.xml':'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>GALLICASOFT</Application></Properties>',
       'xl/workbook.xml':`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView activeTab="0"/></bookViews><sheets>${sheets.map((sheet,index)=>`<sheet name="${sheet.name}" sheetId="${index+1}"${sheet.name==='Listes'?' state="hidden"':''} r:id="rId${index+1}"/>`).join('')}</sheets></workbook>`,
       'xl/_rels/workbook.xml.rels':`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets.map((_,index)=>`<Relationship Id="rId${index+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${index+1}.xml"/>`).join('')}<Relationship Id="rId${sheets.length+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
-      'xl/styles.xml':'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="3"><font><sz val="10"/><name val="Arial"/></font><font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Arial"/></font><font><b/><sz val="16"/><color rgb="FFFFFFFF"/><name val="Arial"/></font></fonts><fills count="5"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFC2185B"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFF7FA"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFF0F5"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border/><border><left style="thin"><color rgb="FFEAD1DC"/></left><right style="thin"><color rgb="FFEAD1DC"/></right><top style="thin"><color rgb="FFEAD1DC"/></top><bottom style="thin"><color rgb="FFEAD1DC"/></bottom></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="6"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="4" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>'
+      'xl/styles.xml':'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="3"><font><sz val="10"/><name val="Arial"/></font><font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Arial"/></font><font><b/><sz val="16"/><color rgb="FFFFFFFF"/><name val="Arial"/></font></fonts><fills count="5"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1F6F50"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF5FAF7"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEAF5EF"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border/><border><left style="thin"><color rgb="FFC5DDD1"/></left><right style="thin"><color rgb="FFC5DDD1"/></right><top style="thin"><color rgb="FFC5DDD1"/></top><bottom style="thin"><color rgb="FFC5DDD1"/></bottom></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="6"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="4" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>'
     };
     sheets.forEach((sheet,index)=>files[`xl/worksheets/sheet${index+1}.xml`]=sheet.xml);
     return zipStore(files);
