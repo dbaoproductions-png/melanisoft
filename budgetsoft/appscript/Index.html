@@ -23,7 +23,7 @@
         <button class="nav-item" data-view="ia">🤖 <span>Conseiller IA</span></button>
         <button class="nav-item" data-view="parametres">⚙️ <span>Paramètres</span></button>
       </nav>
-      <div class="sidebar-footer">Version <span id="version">0.4.0</span></div>
+      <div class="sidebar-footer">Version <span id="version">0.5.0</span></div>
     </aside>
 
     <main class="main">
@@ -50,18 +50,31 @@
       </section>
 
       <section id="comptes" class="view">
-        <div class="section-toolbar">
-          <div><p class="section-intro">Gérez vos comptes et suivez leur solde réel.</p></div>
-          <button class="primary-button" id="add-account-button">＋ Ajouter un compte</button>
-        </div>
+        <div class="section-toolbar"><p class="section-intro">Gérez vos comptes et suivez leur solde réel.</p><button class="primary-button" id="add-account-button">＋ Ajouter un compte</button></div>
         <div class="cards accounts-summary">
           <article class="card metric-card"><span>Comptes actifs</span><strong id="accounts-count">0</strong><small>Hors comptes archivés</small></article>
           <article class="card metric-card"><span>Solde disponible</span><strong id="accounts-balance">0,00 €</strong><small>Solde actuel cumulé</small></article>
           <article class="card metric-card"><span>Épargne</span><strong id="savings-balance">0,00 €</strong><small>Livrets et placements liquides</small></article>
         </div>
-        <article class="card panel accounts-panel">
-          <div class="panel-heading"><div><span class="panel-kicker">Vos comptes</span><h2>Liste des comptes</h2></div><label class="toggle-label"><input type="checkbox" id="show-archived"> Afficher les archivés</label></div>
-          <div id="accounts-list" class="empty-state">Aucun compte enregistré.</div>
+        <article class="card panel accounts-panel"><div class="panel-heading"><div><span class="panel-kicker">Vos comptes</span><h2>Liste des comptes</h2></div><label class="toggle-label"><input type="checkbox" id="show-archived"> Afficher les archivés</label></div><div id="accounts-list" class="empty-state">Aucun compte enregistré.</div></article>
+      </section>
+
+      <section id="operations" class="view">
+        <div class="section-toolbar"><p class="section-intro">Enregistrez vos revenus et dépenses, puis retrouvez-les instantanément.</p><button class="primary-button" id="add-operation-button">＋ Ajouter une opération</button></div>
+        <div class="cards operations-summary">
+          <article class="card metric-card"><span>Revenus affichés</span><strong id="operations-income">0,00 €</strong><small>Selon les filtres actifs</small></article>
+          <article class="card metric-card"><span>Dépenses affichées</span><strong id="operations-expenses">0,00 €</strong><small>Selon les filtres actifs</small></article>
+          <article class="card metric-card"><span>Solde affiché</span><strong id="operations-net">0,00 €</strong><small>Revenus moins dépenses</small></article>
+        </div>
+        <article class="card panel operations-page-panel">
+          <div class="filters">
+            <input id="operation-search" placeholder="Rechercher un libellé ou une catégorie">
+            <select id="operation-account-filter"><option value="">Tous les comptes</option></select>
+            <select id="operation-type-filter"><option value="">Tous les types</option><option value="depense">Dépenses</option><option value="revenu">Revenus</option></select>
+            <input type="month" id="operation-month-filter">
+            <button class="secondary-button" id="reset-operation-filters">Réinitialiser</button>
+          </div>
+          <div id="operations-list" class="empty-state">Aucune opération enregistrée.</div>
         </article>
       </section>
 
@@ -70,16 +83,14 @@
   </div>
 
   <div class="modal hidden" id="account-modal" role="dialog" aria-modal="true" aria-labelledby="account-modal-title">
-    <div class="modal-card">
-      <div class="modal-heading"><div><p class="panel-kicker">Compte</p><h2 id="account-modal-title">Ajouter un compte</h2></div><button class="modal-close" id="close-account-modal" aria-label="Fermer">×</button></div>
-      <form id="account-form">
-        <input type="hidden" id="account-id">
-        <label>Nom du compte<input id="account-name" required maxlength="80" placeholder="Ex. Compte courant"></label>
-        <label>Type<select id="account-type"><option value="courant">Compte courant</option><option value="epargne">Épargne</option><option value="especes">Espèces</option><option value="carte">Carte</option><option value="placement">Placement</option><option value="autre">Autre</option></select></label>
-        <label>Solde initial<input id="account-balance-input" inputmode="decimal" value="0,00" required></label>
-        <label class="checkbox-line"><input type="checkbox" id="account-active" checked> Compte actif</label>
-        <div class="form-actions"><button type="button" class="secondary-button" id="cancel-account">Annuler</button><button type="submit" class="primary-button" id="save-account">Enregistrer</button></div>
-      </form>
+    <div class="modal-card"><div class="modal-heading"><div><p class="panel-kicker">Compte</p><h2 id="account-modal-title">Ajouter un compte</h2></div><button class="modal-close" id="close-account-modal">×</button></div>
+      <form id="account-form"><input type="hidden" id="account-id"><label>Nom du compte<input id="account-name" required maxlength="80" placeholder="Ex. Compte courant"></label><label>Type<select id="account-type"><option value="courant">Compte courant</option><option value="epargne">Épargne</option><option value="especes">Espèces</option><option value="carte">Carte</option><option value="placement">Placement</option><option value="autre">Autre</option></select></label><label>Solde initial<input id="account-balance-input" inputmode="decimal" value="0,00" required></label><label class="checkbox-line"><input type="checkbox" id="account-active" checked> Compte actif</label><div class="form-actions"><button type="button" class="secondary-button" id="cancel-account">Annuler</button><button type="submit" class="primary-button" id="save-account">Enregistrer</button></div></form>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="operation-modal" role="dialog" aria-modal="true" aria-labelledby="operation-modal-title">
+    <div class="modal-card wide-modal"><div class="modal-heading"><div><p class="panel-kicker">Mouvement</p><h2 id="operation-modal-title">Ajouter une opération</h2></div><button class="modal-close" id="close-operation-modal">×</button></div>
+      <form id="operation-form"><input type="hidden" id="operation-id"><div class="form-grid"><label>Date<input type="date" id="operation-date" required></label><label>Type<select id="operation-type"><option value="depense">Dépense</option><option value="revenu">Revenu</option></select></label><label class="full-field">Libellé<input id="operation-label" required maxlength="120" placeholder="Ex. Courses Carrefour"></label><label>Montant<input id="operation-amount" inputmode="decimal" required placeholder="0,00"></label><label>Compte<select id="operation-account" required></select></label><label>Catégorie<select id="operation-category"><option value="">Sans catégorie</option></select></label><label class="full-field">Commentaire<textarea id="operation-comment" rows="3" maxlength="500" placeholder="Facultatif"></textarea></label></div><div class="form-actions"><button type="button" class="secondary-button" id="cancel-operation">Annuler</button><button type="submit" class="primary-button" id="save-operation">Enregistrer</button></div></form>
     </div>
   </div>
 
