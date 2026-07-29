@@ -10,6 +10,20 @@ const htmlPath = path.join(__dirname, '..', 'Gallicasoft_VERT.html');
 const html = fs.readFileSync(htmlPath, 'utf8');
 const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
 assert.ok(scriptMatch, 'Le script principal doit être présent.');
+assert.match(html, /<aside class="sidebar">[\s\S]*?<nav aria-label="Navigation dans le contrôle">/);
+const navigationLabels = [...html.matchAll(/<a class="navlink" href="#[^"]+"><strong>([^<]+)<\/strong><span>\d{2}<\/span><\/a>/g)]
+  .map(match => match[1]);
+assert.deepEqual(navigationLabels, [
+  'Fichiers à comparer',
+  'Paramètres du contrôle',
+  'Synthèse du contrôle',
+  'Rapport de contrôle qualité',
+  'Contrôles effectués automatiquement',
+  'Points d’attention détaillés',
+  'Contrôle manuel sur échantillon',
+]);
+assert.match(html, /\.layout\{display:grid;grid-template-columns:245px minmax\(0,1fr\)/);
+assert.match(html, /@media\(max-width:850px\)\{[\s\S]*?\.sidebar\{position:static\}/);
 
 const elements = new Map();
 function element(id) {
