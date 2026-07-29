@@ -1,4 +1,4 @@
-const BUDGETSOFT_VERSION = '0.2.0';
+const BUDGETSOFT_VERSION = '0.3.0';
 
 const TABLES = {
   Parametres: ['cle', 'valeur'],
@@ -20,9 +20,14 @@ function onOpen() {
 }
 
 function doGet() {
-  return HtmlService.createHtmlOutput(
-    '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BudgetSoft</title></head><body style="font-family:Arial,sans-serif;padding:40px"><h1>BudgetSoft</h1><p>Le serveur Google Apps Script est opérationnel.</p><p>Version ' + BUDGETSOFT_VERSION + '</p></body></html>'
-  ).setTitle('BudgetSoft');
+  return HtmlService.createTemplateFromFile('Index')
+    .evaluate()
+    .setTitle('BudgetSoft')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function inclure(nomFichier) {
+  return HtmlService.createHtmlOutputFromFile(nomFichier).getContent();
 }
 
 function initialiserBudgetSoft() {
