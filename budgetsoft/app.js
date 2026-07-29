@@ -1,15 +1,16 @@
 const money = new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'});
 const initialData = {
-  month:'2026-07',
+  month:new Date().toISOString().slice(0,7),
   budget:[
-    ['Charge fixe','Freebox',46.39,46.39],['Charge fixe','Bouygues 1',13.99,13.99],['Charge fixe','RED SFR',21.95,21.95],['Charge fixe','Assurances',53.21,53.21],['Charge fixe','Assurance Myrtille',18.57,18.57],['Charge fixe','Cotisation bancaire',17,17],['Charge fixe','Mutuelle',188.10,188.10],['Charge fixe','Gaz',220,220],['Charge fixe','Électricité',61,61],['Charge fixe','Square 1',252,252],['Charge fixe','Square 2',195,195],['Charge fixe','Taxe foncière 1',167,167],['Charge fixe','Taxe foncière 2',191,191],['Charge fixe','Impôts',96,96],
-    ['Dépense variable','Carte bleue',1500,0],['Dépense variable','Abonnements carte',5,0],['Dépense variable','Divers',0,0],['Dépense variable','Loisirs',40,0],['Épargne','Économie',80,0],
-    ['Crédit','Créatis',865,865],['Crédit','Cofidis',186,186],['Crédit','Casden',576,576],['Crédit','Assurances crédit',34.76,34.76]
+    ['Charge fixe','Logement',0,0],
+    ['Dépense variable','Courses',0,0],
+    ['Épargne','Épargne mensuelle',0,0],
+    ['Crédit','Mensualités de crédits',0,0]
   ],
-  incomes:[['Garage',30],['Morgane',750],['Salaire',2550],['Pôle',1000],['IIMM',250],['Compagnie Pulcinella',250],['SACEM et salaires',100],['Cours de guzheng',75]],
-  assets:[['Compte chèques Hello',248],['Livret Hello',6261],['Appartement 1',290000],['Appartement 2',250000]],
-  debts:[['Prêt Cetelem',9702],['Prêt Casden',43278],['Prêt Créatis',61137],['Pass',5855],['Floa',1700],['Oney',2742],['Square',300]],
-  credits:[['Créatis',865],['Cofidis',186],['Casden',576],['Assurances crédit',34.76]]
+  incomes:[['Revenus du foyer',0]],
+  assets:[['Comptes et épargne',0],['Patrimoine immobilier',0]],
+  debts:[['Emprunts et crédits',0]],
+  credits:[['Crédits',0]]
 };
 let data = JSON.parse(localStorage.getItem('budgetsoft-data')||'null') || structuredClone(initialData);
 let sb=null, householdId=null, saveTimer=null;
@@ -57,7 +58,7 @@ function renderDashboard(){
   $('#kpiNetWorth').textContent=money.format(assets-debts);
   const groups={};data.budget.forEach(x=>groups[x[0]]=(groups[x[0]]||0)+num(x[2]));const max=Math.max(...Object.values(groups),1);
   $('#expenseBars').innerHTML=Object.entries(groups).map(([k,v])=>`<div><div class="bar-head"><span>${k}</span><strong>${money.format(v)}</strong></div><div class="bar-track"><div class="bar-fill" style="width:${v/max*100}%"></div></div></div>`).join('');
-  $('#wealthSummary').innerHTML=`<div class="wealth-line"><span>Actifs</span><strong>${money.format(assets)}</strong></div><div class="wealth-line"><span>Dettes</span><strong>${money.format(debts)}</strong></div><div class="wealth-line"><span>Patrimoine net</span><strong>${money.format(assets-debts)}</strong></div><div class="wealth-line"><span>Liquidités disponibles</span><strong>${money.format(sum(data.assets.filter(x=>!x[0].toLowerCase().includes('appartement')).map(x=>x[1])))}</strong></div>`;
+  $('#wealthSummary').innerHTML=`<div class="wealth-line"><span>Actifs</span><strong>${money.format(assets)}</strong></div><div class="wealth-line"><span>Dettes</span><strong>${money.format(debts)}</strong></div><div class="wealth-line"><span>Patrimoine net</span><strong>${money.format(assets-debts)}</strong></div><div class="wealth-line"><span>Liquidités disponibles</span><strong>${money.format(sum(data.assets.filter(x=>!x[0].toLowerCase().includes('immobilier')).map(x=>x[1])))}</strong></div>`;
 }
 function renderBudget(){const body=$('#budgetRows');body.innerHTML='';data.budget.forEach((r,i)=>{const tr=document.createElement('tr'),type=document.createElement('select');['Charge fixe','Dépense variable','Épargne','Crédit'].forEach(v=>{const o=document.createElement('option');o.value=o.textContent=v;o.selected=r[0]===v;type.append(o)});type.onchange=()=>{r[0]=type.value;save()};[type,input(r[1],v=>{r[1]=v;save()},'text'),input(r[2],v=>{r[2]=num(v);save()}),input(r[3],v=>{r[3]=num(v);save()})].forEach(c=>{const td=document.createElement('td');td.append(c);tr.append(td)});const diff=document.createElement('td'),d=num(r[2])-num(r[3]);diff.textContent=money.format(d);diff.className='amount '+(d>=0?'positive':'negative');tr.append(diff);const del=document.createElement('td'),b=document.createElement('button');b.className='delete';b.textContent='×';b.onclick=()=>{data.budget.splice(i,1);save()};del.append(b);tr.append(del);body.append(tr);});}
 function renderEditable(id,arr){const c=$(id);c.innerHTML='';arr.forEach((r,i)=>{const line=document.createElement('div');line.className='editable-line';line.append(input(r[0],v=>{r[0]=v;save()},'text'),input(r[1],v=>{r[1]=num(v);save()}));const b=document.createElement('button');b.className='delete';b.textContent='×';b.onclick=()=>{arr.splice(i,1);save()};line.append(b);c.append(line)});}
