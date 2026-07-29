@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BudgetSoft — Budget familial partagé</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="authScreen" class="auth-screen hidden">
+    <form id="authForm" class="auth-card">
+      <div class="auth-logo">€</div>
+      <h1>BudgetSoft</h1>
+      <p>Connexion au budget familial partagé</p>
+      <label>Adresse électronique<input id="authEmail" type="email" required autocomplete="email"></label>
+      <label>Mot de passe<input id="authPassword" type="password" required minlength="6" autocomplete="current-password"></label>
+      <button type="submit">Se connecter</button>
+      <button type="button" id="signUp" class="secondary">Créer mon compte</button>
+      <small id="authMessage"></small>
+    </form>
+  </div>
+  <aside class="sidebar">
+    <div class="brand"><span>€</span><strong>BudgetSoft</strong></div>
+    <nav>
+      <button class="nav active" data-view="dashboard">Tableau de bord</button>
+      <button class="nav" data-view="budget">Budget mensuel</button>
+      <button class="nav" data-view="patrimoine">Patrimoine</button>
+      <button class="nav" data-view="credits">Crédits</button>
+      <button class="nav" data-view="settings">Paramètres</button>
+    </nav>
+    <div class="privacy" id="syncStatus">Mode local</div>
+  </aside>
+  <main>
+    <header>
+      <div><p class="eyebrow">Budget familial</p><h1 id="viewTitle">Tableau de bord</h1></div>
+      <div class="header-actions"><div class="month"><label for="month">Mois</label><input id="month" type="month" /></div><button id="logout" class="ghost hidden">Déconnexion</button></div>
+    </header>
+    <section id="dashboard" class="view active">
+      <div class="kpis">
+        <article><small>Revenus mensuels</small><strong id="kpiIncome"></strong></article>
+        <article><small>Dépenses prévues</small><strong id="kpiExpenses"></strong></article>
+        <article class="accent"><small>Marge mensuelle</small><strong id="kpiBalance"></strong></article>
+        <article><small>Patrimoine net</small><strong id="kpiNetWorth"></strong></article>
+      </div>
+      <div class="grid two">
+        <article class="panel"><h2>Répartition des dépenses</h2><div id="expenseBars" class="bars"></div></article>
+        <article class="panel"><h2>Situation patrimoniale</h2><div id="wealthSummary"></div></article>
+      </div>
+    </section>
+    <section id="budget" class="view">
+      <div class="panel toolbar"><button id="addBudget">+ Ajouter une ligne</button><span>Les montants sont modifiables directement.</span></div>
+      <article class="panel"><div class="table-wrap"><table><thead><tr><th>Type</th><th>Poste</th><th>Prévu</th><th>Réel</th><th>Écart</th><th></th></tr></thead><tbody id="budgetRows"></tbody></table></div></article>
+    </section>
+    <section id="patrimoine" class="view">
+      <div class="grid two">
+        <article class="panel"><h2>Actifs</h2><div id="assetRows"></div><button class="secondary" id="addAsset">+ Ajouter</button></article>
+        <article class="panel"><h2>Dettes</h2><div id="debtRows"></div><button class="secondary" id="addDebt">+ Ajouter</button></article>
+      </div>
+    </section>
+    <section id="credits" class="view">
+      <article class="panel"><h2>Mensualités de crédits</h2><div id="creditRows"></div><button class="secondary" id="addCredit">+ Ajouter un crédit</button></article>
+    </section>
+    <section id="settings" class="view">
+      <div class="grid two">
+        <article class="panel"><h2>Sauvegarder</h2><p>Téléchargez une copie complète de vos données.</p><button id="exportData">Exporter en JSON</button></article>
+        <article class="panel"><h2>Restaurer</h2><p>Rechargez une sauvegarde précédemment exportée.</p><input id="importData" type="file" accept="application/json" /></article>
+      </div>
+      <article class="panel warning"><h2>Synchronisation</h2><p id="connectionHelp">En mode local, les données restent sur cet appareil. Après configuration de Supabase, chaque modification est enregistrée dans le foyer partagé.</p><button id="syncNow" class="secondary">Synchroniser maintenant</button></article>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
