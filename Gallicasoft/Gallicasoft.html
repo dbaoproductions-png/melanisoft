@@ -158,7 +158,7 @@
           <input id="sampleSize" type="number" min="1" max="100" value="10">
         </label>
       </div>
-      <p class="small">Le rapprochement automatique porte sur les fascicules et les pages. Le guide 2024 prévoit ensuite une vérification visuelle du calendrier, puis la concordance titre, date, tomaison et source sur une dizaine de fascicules.</p>
+      <p class="small">Le rapprochement automatique porte sur les fascicules, les pages, le calendrier et la cohérence des tomaisons. Le guide 2024 prévoit ensuite une vérification visuelle du calendrier et la concordance titre, date, tomaison et source sur une dizaine de fascicules.</p>
       <div class="actions">
         <button id="analyze" disabled>Comparer le récolement et Gallica</button>
         <button id="exportExcel" disabled>Exporter les résultats (Excel)</button>
@@ -207,7 +207,7 @@
       <ul class="manual-list">
         <li><strong>Calendrier et dates</strong><br>Repérer visuellement les oublis, dates incohérentes et erreurs d’appariement. La périodicité reste une indication, pas une preuve d’erreur.</li>
         <li><strong>Titre et fascicule</strong><br>Comparer le titre et la date du pavé notice avec l’exemplaire numérisé.</li>
-        <li><strong>Description</strong><br>Vérifier la tomaison : année, édition éventuelle et numéro du fascicule.</li>
+        <li><strong>Description</strong><br>Le contrôle automatique vérifie la structure et la chronologie de la tomaison. Confirmer visuellement l’année, l’édition éventuelle et le numéro sur le fascicule.</li>
         <li><strong>Source</strong><br>Vérifier l’établissement et la cote. Pour une collection partagée, Gallica peut afficher la source du premier établissement intégré.</li>
         <li><strong>Erreur du journal</strong><br>Si l’original porte une date manifestement erronée mais fidèlement reproduite, indiquer « Correction BnF » plutôt qu’une erreur prestataire.</li>
         <li><strong>Date impossible</strong><br>Une date matériellement impossible, par exemple le 31 février, doit être corrigée pour franchir la chaîne d’entrée.</li>
@@ -219,7 +219,7 @@
     </section>
   </main>
 
-  <footer>GALLICASOFT — Édition verte — contrôle de l’intégration et de la régularité des parutions dans Gallica</footer>
+  <footer>GALLICASOFT — Édition verte — contrôle de l’intégration, de la régularité et des tomaisons dans Gallica</footer>
 
   <script>
   'use strict';
@@ -836,6 +836,91 @@
       })
     };
   }
+  function parseTomaison(value){
+    const raw=String(value??'').trim();
+    const normalized=normalizeText(raw);
+    const labelCount=label=>(normalized.match(new RegExp(`\\b${label}\\b`,'g'))||[]).length;
+    const yearMatch=normalized.match(/\bannee\s+(\d+(?:\s+\d+)?)/);
+    const editionMatch=normalized.match(/\bedition\s+(.+?)(?=\s+(?:annee|edition|numero)\b|$)/);
+    const numberMatch=normalized.match(/\bnumero\s+(\d+(?:\s+\d+)?)/);
+    const year=yearMatch?yearMatch[1].replace(/\s+/g,'-'):'';
+    const edition=editionMatch?editionMatch[1].trim().replace(/\s+/g,'-'):'';
+    const number=numberMatch?numberMatch[1].replace(/\s+/g,'-'):'';
+    const yearNumber=/^\d+$/.test(year)?Number(year):null;
+    const issueNumber=/^\d+$/.test(number)?Number(number):null;
+    const issues=[];
+    if(!raw)issues.push('Tomaison absente.');
+    if(raw&&!year)issues.push('Année de tomaison absente ou illisible.');
+    if(raw&&!number)issues.push('Numéro de fascicule absent ou illisible.');
+    if(labelCount('annee')>1)issues.push('Libellé « Année » répété.');
+    if(labelCount('edition')>1)issues.push('Libellé « Édition » répété.');
+    if(labelCount('numero')>1)issues.push('Libellé « Numéro » répété.');
+    if(yearNumber!==null&&yearNumber>500)issues.push(`Année de tomaison improbable (${yearNumber}).`);
+    return {
+      raw,normalized,year,edition,number,yearNumber,issueNumber,
+      hasEdition:Boolean(edition),issues
+    };
+  }
+  function analyzeTomaisonEntries(found){
+    const checks=found.map(item=>{
+      const parsed=parseTomaison(item.tomaison);
+      return {item,...parsed,issues:[...parsed.issues],structureIssue:parsed.issues.length>0,chronologyIssue:false};
+    });
+    const addChronologyIssue=(check,message)=>{
+      if(!check.issues.includes(message))check.issues.push(message);
+      check.chronologyIssue=true;
+    };
+    const comparable=checks.filter(check=>
+      check.item.dateKey&&check.yearNumber!==null&&check.issueNumber!==null&&!check.structureIssue
+    );
+    const chronologyGroups=groupBy(comparable,check=>
+      `${check.yearNumber}|${normalizeText(check.edition)||'sans-edition'}`
+    );
+    for(const rows of chronologyGroups.values()){
+      rows.sort((a,b)=>dateKeyTimestamp(a.item.dateKey)-dateKeyTimestamp(b.item.dateKey)||(a.item.line||0)-(b.item.line||0));
+      let previous=null;
+      const seenNumbers=new Map();
+      rows.forEach(check=>{
+        const date=firstDateKey(check.item.dateKey);
+        const earlier=seenNumbers.get(check.issueNumber);
+        if(earlier&&earlier!==date){
+          addChronologyIssue(check,`Numéro ${check.issueNumber} déjà observé le ${formatDateKey(earlier)} dans la même année et la même édition.`);
+        }else if(date){
+          seenNumbers.set(check.issueNumber,date);
+        }
+        if(previous&&date&&firstDateKey(previous.item.dateKey)!==date&&check.issueNumber<previous.issueNumber){
+          addChronologyIssue(check,`Numéro ${check.issueNumber} inférieur au numéro ${previous.issueNumber} observé à la date précédente dans la même année et la même édition.`);
+        }
+        previous=check;
+      });
+    }
+    const datedByCollection=[...comparable].sort((a,b)=>
+      dateKeyTimestamp(a.item.dateKey)-dateKeyTimestamp(b.item.dateKey)||(a.item.line||0)-(b.item.line||0)
+    );
+    let previousYear=null;
+    datedByCollection.forEach(check=>{
+      if(previousYear&&firstDateKey(previousYear.item.dateKey)!==firstDateKey(check.item.dateKey)&&check.yearNumber<previousYear.yearNumber){
+        addChronologyIssue(check,`Année ${check.yearNumber} inférieure à l’année ${previousYear.yearNumber} observée à la date précédente.`);
+      }
+      previousYear=check;
+    });
+    return {
+      checks,
+      issueCount:checks.filter(check=>check.issues.length).length,
+      blankCount:checks.filter(check=>!check.raw).length,
+      structureCount:checks.filter(check=>check.structureIssue).length,
+      chronologyCount:checks.filter(check=>check.chronologyIssue).length
+    };
+  }
+  function sortTomaisonChecks(checks){
+    return [...checks].sort((a,b)=>{
+      const aTimestamp=dateKeyTimestamp(a.item.dateKey);
+      const bTimestamp=dateKeyTimestamp(b.item.dateKey);
+      return a.item.title.localeCompare(b.item.title,'fr')||a.item.cote.localeCompare(b.item.cote,'fr')||
+        (Number.isFinite(aTimestamp)?aTimestamp:Infinity)-(Number.isFinite(bTimestamp)?bTimestamp:Infinity)||
+        (a.item.line||0)-(b.item.line||0);
+    });
+  }
   function makeAnomaly(type,nature,level,data={}){
     return {
       type,nature,level,
@@ -867,8 +952,10 @@
     const expectedGroups=groupBy(mappedExpected,item=>item.mappedCollectionKey);
     const allKeys=[...new Set([...stateGroups.keys(),...expectedGroups.keys()])];
     const titleSummaries=[];
+    const tomaisonChecks=[];
     let missingCount=0,unexpectedCount=0,pageMismatchCount=0,blankStateDates=0,duplicateDates=0,metadataIssues=0;
     let regularityBreakCount=0,periodicityDeterminedCount=0;
+    let tomaisonIssueCount=0,blankTomaisonCount=0,tomaisonStructureCount=0,tomaisonChronologyCount=0;
 
     for(const key of allKeys){
       const wanted=expectedGroups.get(key)||[];
@@ -904,6 +991,18 @@
             state:item,title,cote,finding:'Champ(s) à vérifier : '+missing.join(', ')+'.'
           }));
         }
+      });
+      const tomaisonAnalysis=analyzeTomaisonEntries(found);
+      tomaisonChecks.push(...tomaisonAnalysis.checks);
+      tomaisonIssueCount+=tomaisonAnalysis.issueCount;
+      blankTomaisonCount+=tomaisonAnalysis.blankCount;
+      tomaisonStructureCount+=tomaisonAnalysis.structureCount;
+      tomaisonChronologyCount+=tomaisonAnalysis.chronologyCount;
+      tomaisonAnalysis.checks.filter(check=>check.issues.length).forEach(check=>{
+        anomalies.push(makeAnomaly('TOMAISON_INCOHERENTE','Tomaison absente, mal structurée ou incohérente','ALERTE',{
+          state:check.item,title,cote,
+          finding:`Tomaison Gallica : « ${check.raw||'—'} » — ${check.issues.join(' ')}`
+        }));
       });
 
       const wantedByDate=groupBy(wanted.filter(item=>item.dateKey),item=>item.dateKey);
@@ -974,6 +1073,7 @@
         regularityBreaks:regularity.breakCount,
         regularityMissingIssues:regularity.missingIssues,
         regularityDetails:regularity.breakDetails,
+        tomaisonIssues:tomaisonAnalysis.issueCount,
         anomalies:anomalies.length-before
       });
     }
@@ -1002,6 +1102,7 @@
       pageDelta:sumNumbers(integrated,'validPages')-sumNumbers(expected,'pages'),
       missingCount,unexpectedCount,pageMismatchCount,blankStateDates,duplicateDates,metadataIssues,
       regularityBreakCount,periodicityDeterminedCount,
+      tomaisonIssueCount,blankTomaisonCount,tomaisonStructureCount,tomaisonChronologyCount,
       excludedByDecision:gallicaParsed.excluded,
       anomalyCount:anomalies.length
     };
@@ -1017,13 +1118,14 @@
       {domain:'Dates',name:'Dates d’édition Gallica présentes et exploitables',status:blankStateDates===0?'OK':'ALERTE',count:blankStateDates,detail:`${blankStateDates} date(s) vide(s) ou illisible(s).`},
       {domain:'Dates',name:'Dates uniques ou multiplicités explicitement vérifiées',status:duplicateDates===0?'OK':'ALERTE',count:duplicateDates,detail:`${duplicateDates} date(s) avec plusieurs fascicules à vérifier.`},
       {domain:'Calendrier',name:'Périodicité déduite et régularité des parutions',status:regularityBreakCount===0?'OK':'ALERTE',count:regularityBreakCount,detail:`${periodicityDeterminedCount} titre(s) avec une périodicité probable (${periodicityDetail||'aucune périodicité déterminée'}). ${regularityBreakCount} rupture(s) regroupant ${missingCount} fascicule(s) attendu(s) non retrouvé(s).`},
+      {domain:'Tomaison',name:'Année, édition éventuelle et numéro du fascicule',status:tomaisonIssueCount===0?'OK':'ALERTE',count:tomaisonIssueCount,detail:`${tomaisonStructureCount} tomaison(s) avec défaut de structure, dont ${blankTomaisonCount} absente(s), et ${tomaisonChronologyCount} avec incohérence chronologique. La concordance avec le fascicule numérisé reste à contrôler visuellement.`},
       {domain:'Pages',name:'Même total de pages produites et valides',status:summary.pageDelta===0?'OK':'ALERTE',count:Math.abs(summary.pageDelta),detail:`Écart global : ${summary.pageDelta>0?'+':''}${summary.pageDelta} page(s).`},
       {domain:'Pages',name:'Concordance du nombre de pages par fascicule apparié',status:pageMismatchCount===0?'OK':'ALERTE',count:pageMismatchCount,detail:`${pageMismatchCount} écart(s) certain(s) après appariement par date.`},
       {domain:'Métadonnées',name:'ID, URL, titre, cote et origine renseignés',status:metadataIssues===0?'OK':'ALERTE',count:metadataIssues,detail:`${metadataIssues} ligne(s) avec métadonnées essentielles incomplètes ou URL atypique.`},
       {domain:'Métadonnées',name:'ID document numérique non dupliqué',status:idDuplicates.length===0?'OK':'ALERTE',count:idDuplicates.length,detail:`${idDuplicates.length} ID dupliqué(s).`},
       {domain:'Métadonnées',name:'URL Gallica non dupliquée',status:urlDuplicates.length===0?'OK':'ALERTE',count:urlDuplicates.length,detail:`${urlDuplicates.length} URL dupliquée(s).`}
     ];
-    return {summary,titleSummaries,controls,anomalies,expected,integrated,recoDiagnostics:recoParsed.diagnostics,gallicaDiagnostics:gallicaParsed.diagnostics};
+    return {summary,titleSummaries,controls,anomalies,tomaisonChecks,expected,integrated,recoDiagnostics:recoParsed.diagnostics,gallicaDiagnostics:gallicaParsed.diagnostics};
   }
 
   function fisherYates(items){
@@ -1108,14 +1210,15 @@
       ?` ${summary.blankStateDates} ligne(s) Gallica sans date empêchent un rapprochement direct ; une partie des ${summary.missingCount} dates attendues non retrouvées peut leur correspondre.`
       :'';
     $('summaryNote').className=summary.anomalyCount?'notice':'notice success';
-    $('summaryNote').innerHTML=`<strong>${summary.anomalyCount?formatNumber(summary.anomalyCount)+' point(s) d’attention':'Aucun écart automatique détecté'}.</strong> Écart global : ${summary.documentDelta>0?'+':''}${summary.documentDelta} fascicule(s) et ${summary.pageDelta>0?'+':''}${summary.pageDelta} page(s). Le calendrier présente ${summary.regularityBreakCount} rupture(s) de régularité.${escapeHtml(ambiguity)}`;
-    $('titleSummary').innerHTML='<h3>Synthèse par titre ou cote</h3><div class="table-wrap"><table><thead><tr><th>Titre</th><th>Cote</th><th>Périodicité probable</th><th>Attendus</th><th>Gallica</th><th>Pages attendues</th><th>Pages valides</th><th>Dates non retrouvées</th><th>Dates Gallica absentes</th><th>Écarts de pages</th><th>Ruptures du calendrier</th><th>Statut</th></tr></thead><tbody>'+
-      result.titleSummaries.map(item=>`<tr><td>${escapeHtml(item.title)}</td><td>${escapeHtml(item.cote)}</td><td>${escapeHtml(item.periodicity)}<br><span class="small">${item.typicalDays===null?'Intervalle insuffisant':`Intervalle type : ${item.typicalDays} jour(s)`} — confiance ${escapeHtml(item.periodicityConfidence.toLowerCase())}</span></td><td class="num">${item.expectedCount}</td><td class="num">${item.integratedCount}</td><td class="num">${item.expectedPages}</td><td class="num">${item.validPages}</td><td class="num">${item.missing}</td><td class="num">${item.blankDates}</td><td class="num">${item.pageMismatches}</td><td class="num">${item.regularityBreaks}</td><td><span class="badge ${item.anomalies?'ALERTE':'OK'}">${item.anomalies?'À vérifier':'Conforme'}</span></td></tr>`).join('')+
+    $('summaryNote').innerHTML=`<strong>${summary.anomalyCount?formatNumber(summary.anomalyCount)+' point(s) d’attention':'Aucun écart automatique détecté'}.</strong> Écart global : ${summary.documentDelta>0?'+':''}${summary.documentDelta} fascicule(s) et ${summary.pageDelta>0?'+':''}${summary.pageDelta} page(s). Le calendrier présente ${summary.regularityBreakCount} rupture(s) de régularité et ${summary.tomaisonIssueCount} tomaison(s) sont à vérifier.${escapeHtml(ambiguity)}`;
+    $('titleSummary').innerHTML='<h3>Synthèse par titre ou cote</h3><div class="table-wrap"><table><thead><tr><th>Titre</th><th>Cote</th><th>Périodicité probable</th><th>Attendus</th><th>Gallica</th><th>Pages attendues</th><th>Pages valides</th><th>Dates non retrouvées</th><th>Dates Gallica absentes</th><th>Écarts de pages</th><th>Ruptures du calendrier</th><th>Tomaisons à vérifier</th><th>Statut</th></tr></thead><tbody>'+
+      result.titleSummaries.map(item=>`<tr><td>${escapeHtml(item.title)}</td><td>${escapeHtml(item.cote)}</td><td>${escapeHtml(item.periodicity)}<br><span class="small">${item.typicalDays===null?'Intervalle insuffisant':`Intervalle type : ${item.typicalDays} jour(s)`} — confiance ${escapeHtml(item.periodicityConfidence.toLowerCase())}</span></td><td class="num">${item.expectedCount}</td><td class="num">${item.integratedCount}</td><td class="num">${item.expectedPages}</td><td class="num">${item.validPages}</td><td class="num">${item.missing}</td><td class="num">${item.blankDates}</td><td class="num">${item.pageMismatches}</td><td class="num">${item.regularityBreaks}</td><td class="num">${item.tomaisonIssues}</td><td><span class="badge ${item.anomalies?'ALERTE':'OK'}">${item.anomalies?'À vérifier':'Conforme'}</span></td></tr>`).join('')+
       '</tbody></table></div>';
     $('report').className='report';
     $('report').innerHTML=`<p><strong>Périmètre.</strong> ${formatNumber(summary.expectedCount)} fascicule(s) du récolement ont été comparés à ${formatNumber(summary.integratedCount)} ligne(s) de l’état Gallica${summary.excludedByDecision?`, après exclusion de ${formatNumber(summary.excludedByDecision)} ligne(s) dont la décision n’est pas « Admission partielle »`:''}.</p>
       <p><strong>Exhaustivité.</strong> L’écart global est de ${summary.documentDelta>0?'+':''}${summary.documentDelta} fascicule(s). Le rapprochement par cote et date identifie ${summary.missingCount} date(s) attendue(s) sans correspondance et ${summary.unexpectedCount} ligne(s) Gallica datée(s) absente(s) du récolement.</p>
       <p><strong>Dates et régularité.</strong> ${summary.blankStateDates} ligne(s) Gallica ne comportent pas de date exploitable et ${summary.duplicateDates} date(s) regroupent plusieurs fascicules. La périodicité probable a été déterminée pour ${summary.periodicityDeterminedCount} titre(s) à partir du récolement ; ${summary.regularityBreakCount} rupture(s) du calendrier Gallica regroupent ${summary.missingCount} fascicule(s) attendu(s) non retrouvé(s). Ces cas nécessitent une revue manuelle du calendrier.</p>
+      <p><strong>Tomaison.</strong> Le contrôle automatique relève ${summary.tomaisonIssueCount} tomaison(s) absente(s), mal structurée(s) ou incohérente(s), dont ${summary.tomaisonStructureCount} avec défaut de structure (${summary.blankTomaisonCount} valeur(s) vide(s)) et ${summary.tomaisonChronologyCount} avec incohérence chronologique. L’année, l’édition éventuelle et le numéro sont extraits automatiquement ; leur concordance avec les mentions imprimées reste à confirmer sur l’échantillon.</p>
       <p><strong>Pages.</strong> Le total Gallica diffère de ${summary.pageDelta>0?'+':''}${summary.pageDelta} page(s) par rapport au récolement. ${summary.pageMismatchCount} écart(s) de pages sont établis sur des fascicules appariés par date.</p>
       <p><strong>Conclusion.</strong> Les écarts automatiques doivent être examinés avant de conclure sur la bonne intégration. La qualité des dates, l’appariement, le titre, la tomaison et la source doivent ensuite être vérifiés visuellement sur l’échantillon proposé.</p>`;
     $('controls').className='';
@@ -1184,8 +1287,10 @@
     const generated=new Date().toLocaleString('fr-FR');
     const rows=result.anomalies.map(item=>`<tr><td>${item.number}</td><td>${escapeHtml(item.level)}</td><td>${escapeHtml(item.nature)}</td><td>${escapeHtml(item.title)}</td><td>${escapeHtml(item.cote)}</td><td>${escapeHtml(formatDateKey(item.dateExpected||item.dateGallica))}</td><td>${escapeHtml(item.pagesExpected)} / ${escapeHtml(item.pagesGallica)}</td><td>${escapeHtml(item.providerRef||item.id)}</td><td>${escapeHtml(item.finding)}</td></tr>`).join('');
     const regularityRows=result.titleSummaries.map(item=>`<tr><td>${escapeHtml(item.title)}</td><td>${escapeHtml(item.cote)}</td><td>${escapeHtml(item.periodicity)}</td><td>${item.typicalDays??'—'}</td><td>${escapeHtml(item.periodicityConfidence)}</td><td>${item.regularityMissingIssues}</td><td>${item.regularityBreaks}</td><td>${escapeHtml(item.regularityDetails.join(' ; '))}</td></tr>`).join('');
+    const sortedTomaisonChecks=sortTomaisonChecks(result.tomaisonChecks);
+    const tomaisonRows=sortedTomaisonChecks.map(check=>`<tr><td>${escapeHtml(check.item.title)}</td><td>${escapeHtml(check.item.cote)}</td><td>${escapeHtml(formatDateKey(check.item.dateKey))}</td><td>${escapeHtml(check.raw)}</td><td>${escapeHtml(check.year)}</td><td>${escapeHtml(check.edition||'—')}</td><td>${escapeHtml(check.number)}</td><td>${check.issues.length?'À vérifier':'Conforme'}</td><td>${escapeHtml(check.issues.join(' '))}</td></tr>`).join('');
     const sampleRows=sample.map(item=>`<tr><td>${item.sampleNumber}</td><td>${escapeHtml(item.title)}</td><td>${escapeHtml(item.cote)}</td><td>${escapeHtml(formatDateKey(item.dateKey))}</td><td>${escapeHtml(item.tomaison)}</td><td>${escapeHtml(item.id)}</td><td>${item.url?`<a href="${escapeHtml(item.url)}">${escapeHtml(item.url)}</a>`:''}</td><td>${escapeHtml(item.result)}</td><td>${escapeHtml(item.comment)}</td></tr>`).join('');
-    return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>GALLICASOFT — Rapport</title><style>body{font-family:Arial;margin:24px;color:#183328}h1,h2{color:#064426}table{width:100%;border-collapse:collapse;font-size:11px;margin:14px 0 24px}th{background:#0a6b3b;color:white;text-align:left}th,td{border:1px solid #b8d8c5;padding:6px;vertical-align:top}tr:nth-child(even){background:#f1f8f4}.small{color:#516f61;font-size:12px}</style></head><body><h1>GALLICASOFT</h1><h2>Rapport de contrôle de l’intégration dans Gallica</h2><p class="small">Généré le ${escapeHtml(generated)}.</p><p>${result.summary.expectedCount} fascicules attendus ; ${result.summary.integratedCount} lignes Gallica ; écart global ${result.summary.documentDelta}. ${result.summary.expectedPages} pages attendues ; ${result.summary.validPages} pages valides ; écart ${result.summary.pageDelta}. ${result.summary.regularityBreakCount} rupture(s) de régularité du calendrier.</p><h2>Régularité des parutions</h2><table><tr><th>Titre</th><th>Cote</th><th>Périodicité probable</th><th>Intervalle type (jours)</th><th>Confiance</th><th>Fascicules manquants</th><th>Ruptures</th><th>Détail</th></tr>${regularityRows}</table><h2>Points d’attention détaillés</h2><table><tr><th>N°</th><th>Niveau</th><th>Nature</th><th>Titre</th><th>Cote</th><th>Date</th><th>Pages attendu / Gallica</th><th>Référence ou ID</th><th>Constat</th></tr>${rows}</table><h2>Contrôle manuel sur échantillon</h2><table><tr><th>N°</th><th>Titre</th><th>Cote</th><th>Date</th><th>Tomaison</th><th>ID DOC NUM</th><th>URL</th><th>Résultat</th><th>Commentaire</th></tr>${sampleRows}</table></body></html>`;
+    return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>GALLICASOFT — Rapport</title><style>body{font-family:Arial;margin:24px;color:#183328}h1,h2{color:#064426}table{width:100%;border-collapse:collapse;font-size:11px;margin:14px 0 24px}th{background:#0a6b3b;color:white;text-align:left}th,td{border:1px solid #b8d8c5;padding:6px;vertical-align:top}tr:nth-child(even){background:#f1f8f4}.small{color:#516f61;font-size:12px}</style></head><body><h1>GALLICASOFT</h1><h2>Rapport de contrôle de l’intégration dans Gallica</h2><p class="small">Généré le ${escapeHtml(generated)}.</p><p>${result.summary.expectedCount} fascicules attendus ; ${result.summary.integratedCount} lignes Gallica ; écart global ${result.summary.documentDelta}. ${result.summary.expectedPages} pages attendues ; ${result.summary.validPages} pages valides ; écart ${result.summary.pageDelta}. ${result.summary.regularityBreakCount} rupture(s) de régularité du calendrier ; ${result.summary.tomaisonIssueCount} tomaison(s) à vérifier.</p><h2>Régularité des parutions</h2><table><tr><th>Titre</th><th>Cote</th><th>Périodicité probable</th><th>Intervalle type (jours)</th><th>Confiance</th><th>Fascicules manquants</th><th>Ruptures</th><th>Détail</th></tr>${regularityRows}</table><h2>Tomaisons</h2><p>La structure et la cohérence chronologique sont contrôlées automatiquement. La concordance avec les mentions imprimées reste manuelle.</p><table><tr><th>Titre</th><th>Cote</th><th>Date</th><th>Tomaison Gallica</th><th>Année</th><th>Édition</th><th>Numéro</th><th>Statut</th><th>Constat</th></tr>${tomaisonRows}</table><h2>Points d’attention détaillés</h2><table><tr><th>N°</th><th>Niveau</th><th>Nature</th><th>Titre</th><th>Cote</th><th>Date</th><th>Pages attendu / Gallica</th><th>Référence ou ID</th><th>Constat</th></tr>${rows}</table><h2>Contrôle manuel sur échantillon</h2><table><tr><th>N°</th><th>Titre</th><th>Cote</th><th>Date</th><th>Tomaison</th><th>ID DOC NUM</th><th>URL</th><th>Résultat</th><th>Commentaire</th></tr>${sampleRows}</table></body></html>`;
   }
 
   function xmlEscape(value){
@@ -1248,8 +1353,9 @@
   }
   function buildResultsWorkbook(result,sample){
     const summary=result.summary;
+    const sortedTomaisonChecks=sortTomaisonChecks(result.tomaisonChecks);
     const summaryRows=[
-      ['GALLICASOFT — Synthèse du contrôle','','','','','','','','','','','','',''],
+      ['GALLICASOFT — Synthèse du contrôle','','','','','','','','','','','','','',''],
       ['Généré le',new Date().toLocaleString('fr-FR')],
       [],
       ['Indicateur','Résultat'],
@@ -1263,14 +1369,20 @@
       ['Lignes Gallica sans date exploitable',summary.blankStateDates],
       ['Écarts certains de pages',summary.pageMismatchCount],
       ['Ruptures de régularité du calendrier',summary.regularityBreakCount],
+      ['Tomaisons à vérifier',summary.tomaisonIssueCount],
       [],
-      ['Titre','Cote','Périodicité probable','Fascicules attendus','Fascicules Gallica','Pages attendues','Pages valides','Dates non retrouvées','Intégrés non attendus','Dates Gallica absentes','Écarts de pages','Ruptures calendrier','Points d’attention','Statut'],
-      ...result.titleSummaries.map(item=>[item.title,item.cote,item.periodicity,item.expectedCount,item.integratedCount,item.expectedPages,item.validPages,item.missing,item.unexpected,item.blankDates,item.pageMismatches,item.regularityBreaks,item.anomalies,item.anomalies?'À vérifier':'Conforme'])
+      ['Titre','Cote','Périodicité probable','Fascicules attendus','Fascicules Gallica','Pages attendues','Pages valides','Dates non retrouvées','Intégrés non attendus','Dates Gallica absentes','Écarts de pages','Ruptures calendrier','Tomaisons à vérifier','Points d’attention','Statut'],
+      ...result.titleSummaries.map(item=>[item.title,item.cote,item.periodicity,item.expectedCount,item.integratedCount,item.expectedPages,item.validPages,item.missing,item.unexpected,item.blankDates,item.pageMismatches,item.regularityBreaks,item.tomaisonIssues,item.anomalies,item.anomalies?'À vérifier':'Conforme'])
     ];
     const regularityHeaders=['Titre','Cote','Périodicité probable','Intervalle type (jours)','Confiance','Dates attendues','Lignes Gallica datées','Fascicules attendus non retrouvés','Ruptures de régularité','Détail des ruptures'];
     const regularityRows=[regularityHeaders,...result.titleSummaries.map(item=>[
       item.title,item.cote,item.periodicity,item.typicalDays??'',item.periodicityConfidence,
       item.expectedCount,item.integratedCount-item.blankDates,item.regularityMissingIssues,item.regularityBreaks,item.regularityDetails.join(' ; ')
+    ])];
+    const tomaisonHeaders=['Titre','Cote','Date','Tomaison Gallica','Année extraite','Édition extraite','Numéro extrait','Statut','Constat','ID DOC NUM','URL Gallica','Ligne état'];
+    const tomaisonRows=[tomaisonHeaders,...sortedTomaisonChecks.map(check=>[
+      check.item.title,check.item.cote,formatDateKey(check.item.dateKey),check.raw,check.year,check.edition,check.number,
+      check.issues.length?'À vérifier':'Conforme',check.issues.join(' '),check.item.id,check.item.url,check.item.line
     ])];
     const anomalyHeaders=['N°','Niveau','Nature du problème','Titre','Cote','Date attendue','Date Gallica','Pages attendues','Pages valides Gallica','Référence prestataire','ID DOC NUM','URL Gallica','Ligne récolement','Ligne état','Constat consolidé','Commentaire de contrôle'];
     const anomalyRows=[anomalyHeaders,...result.anomalies.map(item=>[
@@ -1288,6 +1400,7 @@
       ['Dates multiples','Plusieurs fascicules peuvent être attendus le même jour. Vérifier chaque exemplaire et ne pas conclure à un doublon sans contrôle visuel.'],
       ['Pages','Comparer le nombre de fichiers/pages produits avec le nombre de pages valides dans Gallica.'],
       ['Calendrier','La périodicité probable est déduite des intervalles entre les dates du récolement, titre par titre. Les absences consécutives dans Gallica sont regroupées en ruptures de régularité. Cette périodicité reste indicative et chaque rupture doit être vérifiée visuellement dans le calendrier.'],
+      ['Tomaison','GALLICASOFT extrait l’année, l’édition éventuelle et le numéro, puis signale les valeurs absentes, mal structurées, répétées ou chronologiquement incohérentes. Comparer ensuite la tomaison Gallica aux mentions réellement imprimées sur le fascicule de l’échantillon.'],
       ['Concordance','Sur l’échantillon, comparer titre, date, tomaison, établissement de conservation et cote avec l’exemplaire numérisé.'],
       ['Collections partagées','La source affichée dans Gallica peut être celle du premier établissement intégré conservant le fascicule.'],
       ['Correction BnF','Si le journal porte lui-même une date erronée fidèlement reproduite, renseigner « Correction BnF ».'],
@@ -1296,8 +1409,9 @@
     const listRows=[['Non vérifié'],['Conforme'],['À corriger'],['Correction BnF']];
     const summaryHeaderRow=summaryRows.findIndex(row=>row[0]==='Titre')+1;
     const sheets=[
-      {name:'Synthese',xml:worksheetXml(summaryRows,[34,18,30,18,18,18,18,19,19,20,17,18,18,16],{headerRows:[4,summaryHeaderRow],titleRows:[1],merges:['A1:N1'],filterRef:`A${summaryHeaderRow}:N${summaryRows.length}`,freezeRows:1})},
+      {name:'Synthese',xml:worksheetXml(summaryRows,[34,18,30,18,18,18,18,19,19,20,17,18,20,18,16],{headerRows:[4,summaryHeaderRow],titleRows:[1],merges:['A1:O1'],filterRef:`A${summaryHeaderRow}:O${summaryRows.length}`,freezeRows:1})},
       {name:'Regularite',xml:worksheetXml(regularityRows,[32,18,30,20,14,18,20,22,20,75],{headerRows:[1],filterRef:`A1:J${regularityRows.length}`,freezeRows:1})},
+      {name:'Tomaisons',xml:worksheetXml(tomaisonRows,[30,16,16,34,16,18,16,16,75,16,42,12],{headerRows:[1],filterRef:`A1:L${tomaisonRows.length}`,freezeRows:1})},
       {name:'Points_attention',xml:worksheetXml(anomalyRows,[8,12,34,28,16,16,16,15,18,42,16,42,14,12,70,42],{headerRows:[1],filterRef:`A1:P${anomalyRows.length}`,freezeRows:1})},
       {name:'Echantillon_manuel',xml:worksheetXml(sampleRows,[8,30,16,16,28,16,42,32,32,18,45],{headerRows:[1],filterRef:`A1:K${sampleRows.length}`,freezeRows:1,validation:{range:`J2:J${Math.max(2,sampleRows.length)}`,formula:"'Listes'!$A$1:$A$4"}})},
       {name:'Consignes',xml:worksheetXml(instructionRows,[30,100],{headerRows:[1],freezeRows:1})},
@@ -1367,7 +1481,7 @@
   globalThis.__GallicasoftTest={
     parseGallicaDate,parseProviderRef,parseRecoSheet,parseGallicaSheet,compareData,
     detectSheetIndex,readWorkbookFile,buildResultsWorkbook,createManualSample,
-    inferPeriodicity,analyzeRegularity
+    inferPeriodicity,analyzeRegularity,parseTomaison,analyzeTomaisonEntries
   };
 
   $('recoFile').addEventListener('change',event=>event.target.files[0]&&loadSource('reco',event.target.files[0]));

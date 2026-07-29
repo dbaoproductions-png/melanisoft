@@ -23,6 +23,8 @@ Les fichiers sont traités localement dans le navigateur et ne sont pas envoyés
 - recherche bidirectionnelle des dates attendues et intégrées ;
 - déduction de la périodicité probable de chaque titre (quotidienne, hebdomadaire, mensuelle, etc.) ;
 - regroupement des fascicules attendus non retrouvés en ruptures de régularité du calendrier ;
+- extraction de l’année de tomaison, de l’édition éventuelle et du numéro de fascicule ;
+- signalement des tomaisons absentes, mal structurées, répétées ou chronologiquement incohérentes ;
 - signalement des dates Gallica absentes ou illisibles ;
 - signalement des dates associées à plusieurs fascicules ;
 - comparaison des pages produites et des pages valides par fascicule apparié ;
@@ -41,7 +43,9 @@ Le guide 2024 demande une revue visuelle du calendrier et, sur une dizaine de fa
 - de l’établissement de conservation ;
 - de la cote.
 
-Le classeur exporté contient les feuilles `Synthese`, `Regularite`, `Points_attention`, `Echantillon_manuel` et `Consignes`.
+Le contrôle automatique de la tomaison vérifie sa structure et sa cohérence interne. La concordance exacte de l’année, de l’édition et du numéro avec les mentions imprimées sur le fascicule reste un contrôle visuel.
+
+Le classeur exporté contient les feuilles `Synthese`, `Regularite`, `Tomaisons`, `Points_attention`, `Echantillon_manuel` et `Consignes`.
 
 ## Jeu de référence 2022
 
@@ -53,7 +57,8 @@ Avec les fichiers fournis pour la campagne Arkhenum 2022, le résultat attendu e
 - 26 092 pages valides ;
 - 34 lignes Gallica sans date exploitable ;
 - 2 écarts certains de pagination ;
-- 71 points d’attention au total.
+- 307 tomaisons à vérifier, dont 75 avec défaut de structure (45 valeurs absentes) et 232 présentant au moins une incohérence chronologique ;
+- 378 points d’attention au total.
 
 ## Test
 

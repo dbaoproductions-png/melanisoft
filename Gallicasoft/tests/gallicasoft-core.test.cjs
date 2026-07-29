@@ -104,6 +104,26 @@ function fileLike(filePath, forcedName = path.basename(filePath)) {
   assert.equal(regularity.missingIssues, 1);
   assert.equal(regularity.breakCount, 1);
 
+  const completeTomaison = api.parseTomaison('Année 19 Edition 14 Numéro 4679');
+  assert.equal(completeTomaison.yearNumber, 19);
+  assert.equal(completeTomaison.edition, '14');
+  assert.equal(completeTomaison.issueNumber, 4679);
+  assert.deepEqual([...completeTomaison.issues], []);
+  const tomaisonWithoutEdition = api.parseTomaison('Année 16 Numéro 3598');
+  assert.equal(tomaisonWithoutEdition.yearNumber, 16);
+  assert.equal(tomaisonWithoutEdition.hasEdition, false);
+  assert.equal(tomaisonWithoutEdition.issueNumber, 3598);
+  assert.deepEqual([...tomaisonWithoutEdition.issues], []);
+  const malformedTomaison = api.parseTomaison('Année 22 Edition 13-15 Edition 5948');
+  assert.ok(malformedTomaison.issues.some(issue => issue.includes('Numéro')));
+  assert.ok(malformedTomaison.issues.some(issue => issue.includes('Édition')));
+  assert.ok(api.parseTomaison('').issues.some(issue => issue.includes('absente')));
+  const chronologicalTomaisons = api.analyzeTomaisonEntries([
+    { line: 2, dateKey: '19100101', tomaison: 'Année 1 Numéro 10' },
+    { line: 3, dateKey: '19100102', tomaison: 'Année 1 Numéro 9' },
+  ]);
+  assert.equal(chronologicalTomaisons.chronologyCount, 1);
+
   const syntheticReco = {
     entries: [
       { line: 2, reference: 'A_19100101', dateKey: '19100101', pages: 6, cote: 'P 015', title: 'Titre test', collectionKey: 'p015' },
@@ -113,9 +133,9 @@ function fileLike(filePath, forcedName = path.basename(filePath)) {
   };
   const syntheticState = {
     entries: [
-      { line: 2, id: '1', dateKey: '19100101', validPages: 6, cote: 'P 015', title: 'Titre test', origin: 'Bibliothèque', url: 'https://gallica.bnf.fr/ark:/12148/test1', collectionKey: 'p015' },
-      { line: 3, id: '2', dateKey: '19100102', validPages: 4, cote: 'P 015', title: 'Titre test', origin: 'Bibliothèque', url: 'https://gallica.bnf.fr/ark:/12148/test2', collectionKey: 'p015' },
-      { line: 4, id: '3', dateKey: '', validPages: 2, cote: 'P 015', title: 'Titre test', origin: 'Bibliothèque', url: 'https://gallica.bnf.fr/ark:/12148/test3', collectionKey: 'p015' },
+      { line: 2, id: '1', dateKey: '19100101', tomaison: 'Année 1 Numéro 1', validPages: 6, cote: 'P 015', title: 'Titre test', origin: 'Bibliothèque', url: 'https://gallica.bnf.fr/ark:/12148/test1', collectionKey: 'p015' },
+      { line: 3, id: '2', dateKey: '19100102', tomaison: 'Année 1 Numéro 2', validPages: 4, cote: 'P 015', title: 'Titre test', origin: 'Bibliothèque', url: 'https://gallica.bnf.fr/ark:/12148/test2', collectionKey: 'p015' },
+      { line: 4, id: '3', dateKey: '', tomaison: 'Année 1 Numéro 3', validPages: 2, cote: 'P 015', title: 'Titre test', origin: 'Bibliothèque', url: 'https://gallica.bnf.fr/ark:/12148/test3', collectionKey: 'p015' },
     ],
     excluded: 0,
     diagnostics: { sheetName: 'État test' },
@@ -126,6 +146,7 @@ function fileLike(filePath, forcedName = path.basename(filePath)) {
   assert.equal(syntheticResult.summary.missingCount, 0);
   assert.equal(syntheticResult.summary.unexpectedCount, 0);
   assert.equal(syntheticResult.summary.regularityBreakCount, 0);
+  assert.equal(syntheticResult.summary.tomaisonIssueCount, 0);
   assert.ok(syntheticResult.anomalies.some(item => item.type === 'ECART_PAGES'));
   assert.ok(syntheticResult.anomalies.some(item => item.type === 'DATE_GALLICA_ABSENTE'));
 
@@ -162,7 +183,11 @@ function fileLike(filePath, forcedName = path.basename(filePath)) {
     assert.equal(result.summary.expectedPages, 26106);
     assert.equal(result.summary.validPages, 26092);
     assert.equal(result.summary.pageDelta, -14);
-    assert.equal(result.summary.anomalyCount, 71);
+    assert.equal(result.summary.tomaisonIssueCount, 307);
+    assert.equal(result.summary.blankTomaisonCount, 45);
+    assert.equal(result.summary.tomaisonStructureCount, 75);
+    assert.equal(result.summary.tomaisonChronologyCount, 232);
+    assert.equal(result.summary.anomalyCount, 378);
     assert.equal(result.titleSummaries[0].periodicity, 'Quotidien');
     assert.ok(result.summary.regularityBreakCount > 0);
     const mismatchDates = [...result.anomalies]
