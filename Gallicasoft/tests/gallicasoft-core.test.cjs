@@ -10,6 +10,7 @@ const htmlPath = path.join(__dirname, '..', 'Gallicasoft_VERT.html');
 const html = fs.readFileSync(htmlPath, 'utf8');
 const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
 assert.ok(scriptMatch, 'Le script principal doit être présent.');
+assert.doesNotMatch(html, /ÉDITION VERTE — 29 JUILLET 2026/);
 assert.match(html, /<aside class="sidebar">[\s\S]*?<nav aria-label="Navigation dans le contrôle">/);
 const navigationLabels = [...html.matchAll(/<a class="navlink" href="#[^"]+"><strong>([^<]+)<\/strong><span>\d{2}<\/span><\/a>/g)]
   .map(match => match[1]);
