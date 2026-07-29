@@ -1,9 +1,10 @@
-const BUDGETSOFT_VERSION = '0.5.0';
+const BUDGETSOFT_VERSION = '0.5.1';
 
 const TABLES = {
   Parametres: ['cle', 'valeur'],
   Comptes: ['id', 'nom', 'type', 'solde_initial', 'actif'],
   Operations: ['id', 'date', 'libelle', 'categorie', 'compte', 'montant', 'type', 'commentaire', 'cree_le', 'modifie_le'],
+  Charges_fixes: ['id', 'libelle', 'categorie', 'compte', 'montant', 'type', 'jour_execution', 'date_debut', 'date_fin', 'actif', 'commentaire'],
   Budget: ['id', 'mois', 'type', 'poste', 'prevu', 'reel'],
   Actifs: ['id', 'nom', 'type', 'valeur', 'date_valeur'],
   Dettes: ['id', 'nom', 'capital_restant', 'mensualite', 'taux', 'date_fin'],
@@ -14,7 +15,8 @@ const TABLES = {
 
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('BudgetSoft')
-    .addItem('Initialiser le classeur', 'initialiserBudgetSoft')
+    .addItem('Initialiser / mettre à jour', 'initialiserBudgetSoft')
+    .addItem('Générer les charges fixes', 'genererChargesFixes')
     .addItem('Vérifier la configuration', 'verifierConfiguration')
     .addToUi();
 }
@@ -39,7 +41,7 @@ function initialiserBudgetSoft() {
   });
   ajouterDonneesInitiales_();
   PropertiesService.getDocumentProperties().setProperty('BUDGETSOFT_INITIALISE', 'true');
-  SpreadsheetApp.getUi().alert('BudgetSoft est initialisé. Les onglets ont été créés.');
+  SpreadsheetApp.getUi().alert('BudgetSoft est initialisé et à jour.');
 }
 
 function verifierConfiguration() {
@@ -48,8 +50,10 @@ function verifierConfiguration() {
   SpreadsheetApp.getUi().alert(manquantes.length ? 'Onglets manquants : ' + manquantes.join(', ') : 'Configuration valide. BudgetSoft est prêt.');
   return { ok: manquantes.length === 0, manquantes };
 }
+
 function chargerToutesLesDonnees() {
   verifierInitialisation_();
+  genererChargesFixes();
   const resultat = {};
   Object.keys(TABLES).forEach(nom => resultat[nom] = lireTable_(nom));
   resultat.meta = { version: BUDGETSOFT_VERSION, chargeLe: new Date().toISOString() };
@@ -64,28 +68,34 @@ function enregistrerLigne(nom, ligne) {
   const entetes = TABLES[nom];
   const maintenant = new Date().toISOString();
   const copie = Object.assign({}, ligne);
+
   if (nom === 'Comptes') {
     copie.nom = String(copie.nom || '').trim();
     if (!copie.nom) throw new Error('Le nom du compte est obligatoire.');
     copie.type = String(copie.type || 'courant').trim();
     copie.solde_initial = convertirNombre_(copie.solde_initial);
-    copie.actif = copie.actif !== false && String(copie.actif).toLowerCase() !== 'false';
+    copie.actif = convertirBooleen_(copie.actif);
   }
-  if (nom === 'Operations') {
+  if (nom === 'Operations') normaliserOperation_(copie);
+  if (nom === 'Charges_fixes') {
     copie.libelle = String(copie.libelle || '').trim();
     copie.compte = String(copie.compte || '').trim();
     copie.categorie = String(copie.categorie || '').trim();
     copie.type = String(copie.type || 'depense').toLowerCase();
-    copie.date = copie.date ? new Date(copie.date) : new Date();
-    if (!copie.libelle) throw new Error('Le libellé est obligatoire.');
-    if (!copie.compte) throw new Error('Le compte est obligatoire.');
-    if (isNaN(copie.date.getTime())) throw new Error('La date est invalide.');
-    const montant = Math.abs(convertirNombre_(copie.montant));
-    copie.montant = copie.type === 'depense' ? -montant : montant;
+    copie.montant = Math.abs(convertirNombre_(copie.montant));
+    copie.jour_execution = Math.max(1, Math.min(31, parseInt(copie.jour_execution, 10) || 1));
+    copie.date_debut = copie.date_debut ? new Date(copie.date_debut) : new Date();
+    copie.date_fin = copie.date_fin ? new Date(copie.date_fin) : '';
+    copie.actif = convertirBooleen_(copie.actif);
+    if (!copie.libelle || !copie.compte) throw new Error('Le libellé et le compte sont obligatoires.');
+    if (isNaN(copie.date_debut.getTime())) throw new Error('La date de début est invalide.');
+    if (copie.date_fin instanceof Date && isNaN(copie.date_fin.getTime())) throw new Error('La date de fin est invalide.');
   }
+
   if (entetes.includes('id') && !copie.id) copie.id = Utilities.getUuid();
   if (entetes.includes('cree_le') && !copie.cree_le) copie.cree_le = maintenant;
   if (entetes.includes('modifie_le')) copie.modifie_le = maintenant;
+
   const verrou = LockService.getDocumentLock();
   verrou.waitLock(10000);
   try {
@@ -101,6 +111,43 @@ function enregistrerLigne(nom, ligne) {
     else feuille.appendRow(valeurs);
   } finally { verrou.releaseLock(); }
   return copie;
+}
+
+function genererChargesFixes() {
+  verifierInitialisation_();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const charges = lireTable_('Charges_fixes').filter(c => convertirBooleen_(c.actif));
+  if (!charges.length) return { creees: 0 };
+  const operations = lireTable_('Operations');
+  const maintenant = new Date();
+  const annee = maintenant.getFullYear();
+  const mois = maintenant.getMonth();
+  const cleMois = Utilities.formatDate(new Date(annee, mois, 1), Session.getScriptTimeZone(), 'yyyy-MM');
+  const marqueurs = new Set(operations.map(o => String(o.commentaire || '')).filter(v => v.indexOf('[RECURRENCE:') >= 0));
+  let creees = 0;
+  charges.forEach(charge => {
+    const debut = new Date(charge.date_debut);
+    const fin = charge.date_fin ? new Date(charge.date_fin) : null;
+    const debutMois = new Date(debut.getFullYear(), debut.getMonth(), 1);
+    const moisCourant = new Date(annee, mois, 1);
+    if (isNaN(debut.getTime()) || moisCourant < debutMois || (fin && !isNaN(fin.getTime()) && moisCourant > new Date(fin.getFullYear(), fin.getMonth(), 1))) return;
+    const marqueur = '[RECURRENCE:' + charge.id + ':' + cleMois + ']';
+    if ([...marqueurs].some(v => v.indexOf(marqueur) >= 0)) return;
+    const dernierJour = new Date(annee, mois + 1, 0).getDate();
+    const dateOperation = new Date(annee, mois, Math.min(Number(charge.jour_execution) || 1, dernierJour));
+    enregistrerLigne('Operations', {
+      date: dateOperation,
+      libelle: charge.libelle,
+      categorie: charge.categorie,
+      compte: charge.compte,
+      montant: charge.montant,
+      type: charge.type || 'depense',
+      commentaire: [charge.commentaire || '', marqueur].filter(Boolean).join(' ')
+    });
+    marqueurs.add(marqueur);
+    creees++;
+  });
+  return { creees };
 }
 
 function supprimerLigne(nom, id) {
@@ -125,6 +172,18 @@ function lireTable_(nom) {
     .map(ligne => Object.fromEntries(entetes.map((cle, i) => [cle, serialiserValeur_(ligne[i])])));
 }
 
+function normaliserOperation_(copie) {
+  copie.libelle = String(copie.libelle || '').trim();
+  copie.compte = String(copie.compte || '').trim();
+  copie.categorie = String(copie.categorie || '').trim();
+  copie.type = String(copie.type || 'depense').toLowerCase();
+  copie.date = copie.date ? new Date(copie.date) : new Date();
+  if (!copie.libelle) throw new Error('Le libellé est obligatoire.');
+  if (!copie.compte) throw new Error('Le compte est obligatoire.');
+  if (isNaN(copie.date.getTime())) throw new Error('La date est invalide.');
+  const montant = Math.abs(convertirNombre_(copie.montant));
+  copie.montant = copie.type === 'depense' ? -montant : montant;
+}
 function ajouterDonneesInitiales_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const categories = ss.getSheetByName('Categories');
@@ -142,7 +201,7 @@ function ajouterDonneesInitiales_() {
 function verifierInitialisation_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const manquantes = Object.keys(TABLES).filter(nom => !ss.getSheetByName(nom));
-  if (manquantes.length) throw new Error('BudgetSoft n’est pas initialisé. Lancez initialiserBudgetSoft().');
+  if (manquantes.length) throw new Error('BudgetSoft n’est pas à jour. Lancez initialiserBudgetSoft(). Onglets manquants : ' + manquantes.join(', '));
 }
 function verifierNomTable_(nom) { if (!Object.prototype.hasOwnProperty.call(TABLES, nom)) throw new Error('Table inconnue : ' + nom); }
 function convertirNombre_(valeur) {
@@ -150,6 +209,7 @@ function convertirNombre_(valeur) {
   if (!Number.isFinite(n)) throw new Error('Le montant est invalide.');
   return n;
 }
+function convertirBooleen_(valeur) { return valeur !== false && String(valeur).toLowerCase() !== 'false' && String(valeur) !== '0'; }
 function normaliserValeur_(valeur) {
   if (valeur === undefined || valeur === null) return '';
   if (typeof valeur === 'object' && !(valeur instanceof Date)) return JSON.stringify(valeur);
