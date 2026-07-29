@@ -1,0 +1,38 @@
+<script>
+let analyseImport=null;
+document.addEventListener('DOMContentLoaded',()=>{
+  document.getElementById('import-fixed-charges-button').addEventListener('click',ouvrirImportCharges);
+  document.getElementById('close-import-modal').addEventListener('click',fermerImportCharges);
+  document.getElementById('cancel-import').addEventListener('click',fermerImportCharges);
+  document.getElementById('analyze-import').addEventListener('click',analyserImport);
+  document.getElementById('confirm-import').addEventListener('click',confirmerImport);
+  document.getElementById('import-modal').addEventListener('click',e=>{if(e.target.id==='import-modal')fermerImportCharges();});
+});
+function ouvrirImportCharges(){
+  analyseImport=null;
+  document.getElementById('import-text').value='Libellé\tMontant\tJour\tCatégorie\tCompte\tFréquence\n';
+  document.getElementById('import-results').classList.add('hidden');
+  document.getElementById('confirm-import').classList.add('hidden');
+  document.getElementById('import-modal').classList.remove('hidden');
+  setTimeout(()=>document.getElementById('import-text').focus(),50);
+}
+function fermerImportCharges(){document.getElementById('import-modal').classList.add('hidden');}
+function analyserImport(){
+  const bouton=document.getElementById('analyze-import');bouton.disabled=true;
+  google.script.run.withSuccessHandler(resultat=>{bouton.disabled=false;analyseImport=resultat;rendreAnalyseImport(resultat);}).withFailureHandler(err=>{bouton.disabled=false;afficherErreur(err.message||String(err));}).analyserImportChargesFixes(document.getElementById('import-text').value);
+}
+function rendreAnalyseImport(r){
+  const zone=document.getElementById('import-results');zone.classList.remove('hidden');
+  document.getElementById('import-summary').innerHTML=`<div class="import-stat"><span>Lignes</span><strong>${r.total}</strong></div><div class="import-stat"><span>Valides</span><strong>${r.valides}</strong></div><div class="import-stat"><span>Doublons</span><strong>${r.doublons}</strong></div><div class="import-stat"><span>Erreurs</span><strong>${r.invalides}</strong></div>`;
+  const preview=document.getElementById('import-preview');
+  preview.innerHTML='<div class="import-row header"><span>Libellé</span><span>Montant</span><span>Jour</span><span class="import-hide">Compte</span><span class="import-hide">Catégorie</span><span>Action</span></div>'+r.lignes.map((l,i)=>`<div class="import-row ${l.valide?'':'invalid'}"><div><strong>${echapper(l.libelle||'—')}</strong>${l.erreurs.length?'<small>'+echapper(l.erreurs.join(' · '))+'</small>':''}${l.avertissements.length?'<small class="warning-text">'+echapper(l.avertissements.join(' · '))+'</small>':''}</div><span>${money.format(nombre(l.montant))}</span><span>${l.jour_execution||'—'}</span><span class="import-hide">${echapper(l.compte_nom||'—')}</span><span class="import-hide">${echapper(l.categorie||'Sans catégorie')}</span><select onchange="changerActionImport(${i},this.value)" ${l.valide?'':'disabled'}><option value="creer" ${l.action==='creer'?'selected':''}>Créer</option><option value="mettre_a_jour" ${l.action==='mettre_a_jour'?'selected':''} ${l.doublon_id?'':'disabled'}>Mettre à jour</option><option value="ignorer">Ignorer</option></select></div>`).join('');
+  document.getElementById('new-categories-note').textContent=r.nouvellesCategories.length?'Nouvelles catégories proposées : '+r.nouvellesCategories.join(', '):'Aucune nouvelle catégorie.';
+  document.getElementById('confirm-import').classList.toggle('hidden',r.valides===0);
+}
+function changerActionImport(index,action){if(analyseImport?.lignes?.[index])analyseImport.lignes[index].action=action;}
+function confirmerImport(){
+  if(!analyseImport)return;
+  const bouton=document.getElementById('confirm-import');bouton.disabled=true;
+  google.script.run.withSuccessHandler(bilan=>{bouton.disabled=false;document.getElementById('import-results').innerHTML=`<div class="success-box"><strong>Import terminé</strong><br>${bilan.creees} charge(s) créée(s), ${bilan.misesAJour} mise(s) à jour, ${bilan.ignorees} ignorée(s).${bilan.erreurs.length?'<br>Erreurs : '+echapper(bilan.erreurs.join(' | ')):''}</div>`;document.getElementById('confirm-import').classList.add('hidden');setTimeout(()=>{fermerImportCharges();charger();ouvrirVue('operations');},1300);}).withFailureHandler(err=>{bouton.disabled=false;afficherErreur(err.message||String(err));}).importerChargesFixes(analyseImport.lignes,document.getElementById('create-import-categories').checked);
+}
+</script>
