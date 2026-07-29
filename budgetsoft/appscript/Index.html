@@ -23,7 +23,7 @@
         <button class="nav-item" data-view="ia">🤖 <span>Conseiller IA</span></button>
         <button class="nav-item" data-view="parametres">⚙️ <span>Paramètres</span></button>
       </nav>
-      <div class="sidebar-footer">Version <span id="version">0.5.0</span></div>
+      <div class="sidebar-footer">Version <span id="version">0.5.1</span></div>
     </aside>
 
     <main class="main">
@@ -60,12 +60,20 @@
       </section>
 
       <section id="operations" class="view">
-        <div class="section-toolbar"><p class="section-intro">Enregistrez vos revenus et dépenses, puis retrouvez-les instantanément.</p><button class="primary-button" id="add-operation-button">＋ Ajouter une opération</button></div>
+        <div class="section-toolbar">
+          <p class="section-intro">Enregistrez vos revenus et dépenses, puis automatisez vos charges mensuelles.</p>
+          <div class="toolbar-buttons"><button class="secondary-button" id="add-fixed-charge-button">↻ Charge fixe</button><button class="primary-button" id="add-operation-button">＋ Ajouter une opération</button></div>
+        </div>
         <div class="cards operations-summary">
           <article class="card metric-card"><span>Revenus affichés</span><strong id="operations-income">0,00 €</strong><small>Selon les filtres actifs</small></article>
           <article class="card metric-card"><span>Dépenses affichées</span><strong id="operations-expenses">0,00 €</strong><small>Selon les filtres actifs</small></article>
           <article class="card metric-card"><span>Solde affiché</span><strong id="operations-net">0,00 €</strong><small>Revenus moins dépenses</small></article>
         </div>
+        <article class="card panel fixed-charge-panel">
+          <div class="panel-heading"><div><span class="panel-kicker">Automatisation</span><h2>Charges fixes mensuelles</h2></div><span class="badge" id="fixed-charge-count">0 active</span></div>
+          <p class="helper-text">Chaque charge active est créée automatiquement une seule fois par mois, dès l’ouverture de BudgetSoft.</p>
+          <div id="fixed-charges-list" class="empty-state">Aucune charge fixe enregistrée.</div>
+        </article>
         <article class="card panel operations-page-panel">
           <div class="filters">
             <input id="operation-search" placeholder="Rechercher un libellé ou une catégorie">
@@ -91,6 +99,12 @@
   <div class="modal hidden" id="operation-modal" role="dialog" aria-modal="true" aria-labelledby="operation-modal-title">
     <div class="modal-card wide-modal"><div class="modal-heading"><div><p class="panel-kicker">Mouvement</p><h2 id="operation-modal-title">Ajouter une opération</h2></div><button class="modal-close" id="close-operation-modal">×</button></div>
       <form id="operation-form"><input type="hidden" id="operation-id"><div class="form-grid"><label>Date<input type="date" id="operation-date" required></label><label>Type<select id="operation-type"><option value="depense">Dépense</option><option value="revenu">Revenu</option></select></label><label class="full-field">Libellé<input id="operation-label" required maxlength="120" placeholder="Ex. Courses Carrefour"></label><label>Montant<input id="operation-amount" inputmode="decimal" required placeholder="0,00"></label><label>Compte<select id="operation-account" required></select></label><label>Catégorie<select id="operation-category"><option value="">Sans catégorie</option></select></label><label class="full-field">Commentaire<textarea id="operation-comment" rows="3" maxlength="500" placeholder="Facultatif"></textarea></label></div><div class="form-actions"><button type="button" class="secondary-button" id="cancel-operation">Annuler</button><button type="submit" class="primary-button" id="save-operation">Enregistrer</button></div></form>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="fixed-charge-modal" role="dialog" aria-modal="true" aria-labelledby="fixed-charge-modal-title">
+    <div class="modal-card wide-modal"><div class="modal-heading"><div><p class="panel-kicker">Automatisation</p><h2 id="fixed-charge-modal-title">Ajouter une charge fixe</h2></div><button class="modal-close" id="close-fixed-charge-modal">×</button></div>
+      <form id="fixed-charge-form"><input type="hidden" id="fixed-charge-id"><div class="form-grid"><label class="full-field">Libellé<input id="fixed-charge-label" required maxlength="120" placeholder="Ex. Crédit immobilier"></label><label>Montant mensuel<input id="fixed-charge-amount" inputmode="decimal" required placeholder="0,00"></label><label>Jour du mois<input type="number" id="fixed-charge-day" min="1" max="31" value="1" required></label><label>Compte<select id="fixed-charge-account" required></select></label><label>Catégorie<select id="fixed-charge-category"><option value="">Sans catégorie</option></select></label><label>Date de début<input type="date" id="fixed-charge-start" required></label><label>Date de fin facultative<input type="date" id="fixed-charge-end"></label><label class="full-field">Commentaire<textarea id="fixed-charge-comment" rows="2" maxlength="500" placeholder="Facultatif"></textarea></label><label class="checkbox-line full-field"><input type="checkbox" id="fixed-charge-active" checked> Reconduction mensuelle active</label></div><div class="form-actions"><button type="button" class="secondary-button" id="cancel-fixed-charge">Annuler</button><button type="submit" class="primary-button" id="save-fixed-charge">Enregistrer</button></div></form>
     </div>
   </div>
 
