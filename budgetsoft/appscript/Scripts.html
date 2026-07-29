@@ -1,84 +1,120 @@
 <script>
-const state={data:null};
+const state={data:null,currentView:'dashboard'};
 const money=new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'});
-const titles={dashboard:['Tableau de bord','📊'],comptes:['Comptes','💳'],operations:['Opérations','💶'],budget:['Budget','📅'],patrimoine:['Patrimoine','🏠'],credits:['Crédits','💼'],objectifs:['Objectifs','🎯'],analyses:['Analyses','📈'],ia:['Conseiller IA','🤖'],parametres:['Paramètres','⚙️']};
+const titles={dashboard:['Tableau de bord','📊','Vue d’ensemble'],comptes:['Comptes','💳','Gestion bancaire'],operations:['Opérations','💶','Mouvements'],budget:['Budget','📅','Prévisions'],patrimoine:['Patrimoine','🏠','Situation globale'],credits:['Crédits','💼','Financements'],objectifs:['Objectifs','🎯','Projets'],analyses:['Analyses','📈','Indicateurs'],ia:['Conseiller IA','🤖','Assistant financier'],parametres:['Paramètres','⚙️','Configuration']};
 
 document.addEventListener('DOMContentLoaded',()=>{
   document.querySelectorAll('.nav-item').forEach(button=>button.addEventListener('click',()=>ouvrirVue(button.dataset.view)));
   document.getElementById('refresh-button').addEventListener('click',charger);
+  document.getElementById('add-account-button').addEventListener('click',()=>ouvrirCompte());
+  document.getElementById('close-account-modal').addEventListener('click',fermerCompte);
+  document.getElementById('cancel-account').addEventListener('click',fermerCompte);
+  document.getElementById('account-form').addEventListener('submit',enregistrerCompte);
+  document.getElementById('show-archived').addEventListener('change',rendreComptes);
+  document.getElementById('account-modal').addEventListener('click',e=>{if(e.target.id==='account-modal')fermerCompte();});
   charger();
 });
 
 function ouvrirVue(view){
+  state.currentView=view;
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
   document.getElementById('page-title').textContent=titles[view][0];
+  document.getElementById('page-eyebrow').textContent=titles[view][2];
   document.getElementById('dashboard').classList.toggle('active',view==='dashboard');
-  document.getElementById('generic-view').classList.toggle('active',view!=='dashboard');
-  if(view!=='dashboard'){
+  document.getElementById('comptes').classList.toggle('active',view==='comptes');
+  document.getElementById('generic-view').classList.toggle('active',!['dashboard','comptes'].includes(view));
+  if(view==='comptes')rendreComptes();
+  if(!['dashboard','comptes'].includes(view)){
     document.getElementById('coming-icon').textContent=titles[view][1];
     document.getElementById('coming-title').textContent=titles[view][0];
-    document.getElementById('coming-text').textContent='Le module « '+titles[view][0]+' » est prêt à être développé et sera relié aux données du classeur lors du prochain sprint.';
+    document.getElementById('coming-text').textContent='Le module « '+titles[view][0]+' » sera relié aux données du classeur lors d’un prochain sprint.';
   }
 }
 
 function charger(){
   afficherChargement(true);
-  google.script.run
-    .withSuccessHandler(data=>{state.data=data; afficherChargement(false); rendreDashboard(data);})
-    .withFailureHandler(err=>{afficherChargement(false); afficherErreur(err.message||String(err));})
-    .chargerToutesLesDonnees();
+  google.script.run.withSuccessHandler(data=>{
+    state.data=data;afficherChargement(false);rendreDashboard(data);rendreComptes();
+  }).withFailureHandler(err=>{afficherChargement(false);afficherErreur(err.message||String(err));}).chargerToutesLesDonnees();
 }
-
 function afficherChargement(visible){document.getElementById('loading').classList.toggle('hidden',!visible);document.getElementById('error').classList.add('hidden');}
 function afficherErreur(message){const box=document.getElementById('error');box.textContent=message;box.classList.remove('hidden');}
-function nombre(v){const n=Number(String(v??'').replace(',','.'));return Number.isFinite(n)?n:0;}
+function nombre(v){const n=Number(String(v??'').replace(/\s/g,'').replace(',','.'));return Number.isFinite(n)?n:0;}
+function estActif(v){return v!==false&&String(v).toLowerCase()!=='false'&&String(v)!=='0';}
 
 function rendreDashboard(data){
-  document.getElementById('version').textContent=data.meta?.version||'0.3.0';
-  const comptes=(data.Comptes||[]).filter(c=>String(c.actif).toLowerCase()!=='false');
+  document.getElementById('version').textContent=data.meta?.version||'0.4.0';
+  const comptes=(data.Comptes||[]).filter(c=>estActif(c.actif));
   const operations=data.Operations||[];
   const now=new Date();
   const mois=operations.filter(o=>{const d=new Date(o.date);return !isNaN(d)&&d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();});
   const revenus=mois.filter(o=>String(o.type).toLowerCase()==='revenu'||nombre(o.montant)>0).reduce((s,o)=>s+Math.abs(nombre(o.montant)),0);
   const depenses=mois.filter(o=>String(o.type).toLowerCase()==='depense'||nombre(o.montant)<0).reduce((s,o)=>s+Math.abs(nombre(o.montant)),0);
-  const solde=comptes.reduce((s,c)=>s+nombre(c.solde_initial),0)+operations.reduce((s,o)=>s+nombre(o.montant),0);
+  const solde=comptes.reduce((s,c)=>s+soldeCompte(c,operations),0);
   document.getElementById('solde-global').textContent=money.format(solde);
   document.getElementById('revenus-mois').textContent=money.format(revenus);
   document.getElementById('depenses-mois').textContent=money.format(depenses);
   document.getElementById('epargne-mois').textContent=money.format(revenus-depenses);
-  rendreOperations(operations);
-  rendreGraphique(operations);
-  rendreSante(revenus,depenses,solde,data);
-  rendreAlertes(revenus,depenses,solde,data);
+  rendreOperations(operations);rendreGraphique(operations);rendreSante(revenus,depenses,solde,data);rendreAlertes(revenus,depenses,solde,data);
 }
 
-function rendreOperations(operations){
-  const zone=document.getElementById('recent-operations');
-  const rows=[...operations].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,6);
-  if(!rows.length){zone.className='empty-state';zone.textContent='Aucune opération enregistrée.';return;}
-  zone.className='';zone.innerHTML=rows.map(o=>{const m=nombre(o.montant);return `<div class="operation-row"><div><strong>${echapper(o.libelle||'Opération')}</strong><small>${formaterDate(o.date)} · ${echapper(o.categorie||'Sans catégorie')}</small></div><div class="${m>=0?'amount-positive':'amount-negative'}">${money.format(m)}</div></div>`}).join('');
+function soldeCompte(compte,operations){
+  return nombre(compte.solde_initial)+(operations||[]).filter(o=>String(o.compte)===String(compte.id)||String(o.compte)===String(compte.nom)).reduce((s,o)=>s+nombre(o.montant),0);
+}
+function rendreComptes(){
+  if(!state.data)return;
+  const afficherArchives=document.getElementById('show-archived').checked;
+  const tous=state.data.Comptes||[];
+  const actifs=tous.filter(c=>estActif(c.actif));
+  const operations=state.data.Operations||[];
+  document.getElementById('accounts-count').textContent=actifs.length;
+  document.getElementById('accounts-balance').textContent=money.format(actifs.reduce((s,c)=>s+soldeCompte(c,operations),0));
+  document.getElementById('savings-balance').textContent=money.format(actifs.filter(c=>['epargne','placement'].includes(String(c.type).toLowerCase())).reduce((s,c)=>s+soldeCompte(c,operations),0));
+  const comptes=tous.filter(c=>afficherArchives||estActif(c.actif));
+  const zone=document.getElementById('accounts-list');
+  if(!comptes.length){zone.className='empty-state';zone.textContent='Aucun compte enregistré. Cliquez sur « Ajouter un compte ».';return;}
+  zone.className='';
+  zone.innerHTML=comptes.map(c=>{
+    const actif=estActif(c.actif),solde=soldeCompte(c,operations);
+    return `<div class="account-row ${actif?'':'archived'}"><div class="account-main"><div class="account-icon">${iconeCompte(c.type)}</div><div><strong>${echapper(c.nom)}</strong><small>${actif?'<span class="badge">Actif</span>':'<span class="badge archived-badge">Archivé</span>'}</small></div></div><div class="account-type">${libelleType(c.type)}</div><div class="account-balance ${solde<0?'amount-negative':''}">${money.format(solde)}</div><div class="account-actions"><button class="small-button" onclick="modifierCompte('${echapperAttribut(c.id)}')" title="Modifier">✎</button><button class="small-button" onclick="basculerCompte('${echapperAttribut(c.id)}')" title="${actif?'Archiver':'Réactiver'}">${actif?'⌁':'↻'}</button></div></div>`;
+  }).join('');
+}
+function iconeCompte(type){return ({courant:'🏦',epargne:'🐷',especes:'💶',carte:'💳',placement:'📈',autre:'🗂️'})[String(type).toLowerCase()]||'🏦';}
+function libelleType(type){return ({courant:'Compte courant',epargne:'Épargne',especes:'Espèces',carte:'Carte',placement:'Placement',autre:'Autre'})[String(type).toLowerCase()]||echapper(type||'Autre');}
+
+function ouvrirCompte(compte){
+  document.getElementById('account-form').reset();
+  document.getElementById('account-id').value=compte?.id||'';
+  document.getElementById('account-name').value=compte?.nom||'';
+  document.getElementById('account-type').value=compte?.type||'courant';
+  document.getElementById('account-balance-input').value=nombre(compte?.solde_initial).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  document.getElementById('account-active').checked=compte?estActif(compte.actif):true;
+  document.getElementById('account-modal-title').textContent=compte?'Modifier le compte':'Ajouter un compte';
+  document.getElementById('account-modal').classList.remove('hidden');
+  setTimeout(()=>document.getElementById('account-name').focus(),50);
+}
+function fermerCompte(){document.getElementById('account-modal').classList.add('hidden');}
+function modifierCompte(id){const compte=(state.data.Comptes||[]).find(c=>String(c.id)===String(id));if(compte)ouvrirCompte(compte);}
+function basculerCompte(id){
+  const compte=(state.data.Comptes||[]).find(c=>String(c.id)===String(id));if(!compte)return;
+  sauvegarderCompte({...compte,actif:!estActif(compte.actif)});
+}
+function enregistrerCompte(e){
+  e.preventDefault();
+  const compte={id:document.getElementById('account-id').value,nom:document.getElementById('account-name').value.trim(),type:document.getElementById('account-type').value,solde_initial:nombre(document.getElementById('account-balance-input').value),actif:document.getElementById('account-active').checked};
+  if(!compte.nom){afficherErreur('Le nom du compte est obligatoire.');return;}
+  sauvegarderCompte(compte);
+}
+function sauvegarderCompte(compte){
+  document.getElementById('save-account').disabled=true;
+  google.script.run.withSuccessHandler(()=>{document.getElementById('save-account').disabled=false;fermerCompte();charger();ouvrirVue('comptes');}).withFailureHandler(err=>{document.getElementById('save-account').disabled=false;afficherErreur(err.message||String(err));}).enregistrerLigne('Comptes',compte);
 }
 
-function rendreGraphique(operations){
-  const zone=document.getElementById('monthly-bars');
-  const mois=[];const now=new Date();
-  for(let i=5;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);const total=operations.filter(o=>{const od=new Date(o.date);return !isNaN(od)&&od.getMonth()===d.getMonth()&&od.getFullYear()===d.getFullYear();}).reduce((s,o)=>s+nombre(o.montant),0);mois.push({label:d.toLocaleDateString('fr-FR',{month:'short'}),total});}
-  const max=Math.max(1,...mois.map(m=>Math.abs(m.total)));
-  zone.innerHTML=mois.map(m=>`<div class="bar ${m.total<0?'negative':''}" title="${money.format(m.total)}" style="height:${Math.max(4,Math.abs(m.total)/max*150)}px"><span class="bar-label">${m.label}</span></div>`).join('');
-}
-
-function rendreSante(revenus,depenses,solde,data){
-  let score=50; if(revenus>depenses)score+=20;if(solde>0)score+=20;if((data.Objectifs||[]).length)score+=10;score=Math.min(100,score);
-  document.getElementById('health-score').textContent=score+'/100';
-  document.getElementById('health-label').textContent=score>=75?'Situation saine':score>=55?'À surveiller':'Situation fragile';
-  const lignes=[['Trésorerie',solde>0?'Bon niveau':'À surveiller',solde>0?'good':'bad'],['Équilibre mensuel',revenus>=depenses?'Équilibré':'Déficitaire',revenus>=depenses?'good':'bad'],['Objectifs',(data.Objectifs||[]).length?'Suivis':'À définir',(data.Objectifs||[]).length?'good':'watch']];
-  document.getElementById('health-list').innerHTML=lignes.map(l=>`<div class="health-row"><span>${l[0]}</span><strong class="status-${l[2]}">${l[1]}</strong></div>`).join('');
-}
-
-function rendreAlertes(revenus,depenses,solde,data){
-  const alertes=[];if(solde<0)alertes.push('Le solde global est négatif.');if(depenses>revenus&&revenus>0)alertes.push('Les dépenses du mois dépassent les revenus.');if(!(data.Comptes||[]).length)alertes.push('Aucun compte n’est encore enregistré.');
-  const zone=document.getElementById('alerts');zone.className=alertes.length?'health-list':'empty-state';zone.innerHTML=alertes.length?alertes.map(a=>`<div class="health-row"><span>⚠️ ${echapper(a)}</span></div>`).join(''):'Aucune alerte pour le moment.';
-}
+function rendreOperations(operations){const zone=document.getElementById('recent-operations');const rows=[...operations].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,6);if(!rows.length){zone.className='empty-state';zone.textContent='Aucune opération enregistrée.';return;}zone.className='';zone.innerHTML=rows.map(o=>{const m=nombre(o.montant);return `<div class="operation-row"><div><strong>${echapper(o.libelle||'Opération')}</strong><small>${formaterDate(o.date)} · ${echapper(o.categorie||'Sans catégorie')}</small></div><div class="${m>=0?'amount-positive':'amount-negative'}">${money.format(m)}</div></div>`}).join('');}
+function rendreGraphique(operations){const zone=document.getElementById('monthly-bars');const mois=[];const now=new Date();for(let i=5;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);const total=operations.filter(o=>{const od=new Date(o.date);return !isNaN(od)&&od.getMonth()===d.getMonth()&&od.getFullYear()===d.getFullYear();}).reduce((s,o)=>s+nombre(o.montant),0);mois.push({label:d.toLocaleDateString('fr-FR',{month:'short'}),total});}const max=Math.max(1,...mois.map(m=>Math.abs(m.total)));zone.innerHTML=mois.map(m=>`<div class="bar ${m.total<0?'negative':''}" title="${money.format(m.total)}" style="height:${Math.max(4,Math.abs(m.total)/max*150)}px"><span class="bar-label">${m.label}</span></div>`).join('');}
+function rendreSante(revenus,depenses,solde,data){let score=50;if(revenus>depenses)score+=20;if(solde>0)score+=20;if((data.Objectifs||[]).length)score+=10;score=Math.min(100,score);document.getElementById('health-score').textContent=score+'/100';document.getElementById('health-label').textContent=score>=75?'Situation saine':score>=55?'À surveiller':'Situation fragile';const lignes=[['Trésorerie',solde>0?'Bon niveau':'À surveiller',solde>0?'good':'bad'],['Équilibre mensuel',revenus>=depenses?'Équilibré':'Déficitaire',revenus>=depenses?'good':'bad'],['Objectifs',(data.Objectifs||[]).length?'Suivis':'À définir',(data.Objectifs||[]).length?'good':'watch']];document.getElementById('health-list').innerHTML=lignes.map(l=>`<div class="health-row"><span>${l[0]}</span><strong class="status-${l[2]}">${l[1]}</strong></div>`).join('');}
+function rendreAlertes(revenus,depenses,solde,data){const alertes=[];if(solde<0)alertes.push('Le solde global est négatif.');if(depenses>revenus&&revenus>0)alertes.push('Les dépenses du mois dépassent les revenus.');if(!(data.Comptes||[]).length)alertes.push('Aucun compte n’est encore enregistré.');const zone=document.getElementById('alerts');zone.className=alertes.length?'health-list':'empty-state';zone.innerHTML=alertes.length?alertes.map(a=>`<div class="health-row"><span>⚠️ ${echapper(a)}</span></div>`).join(''):'Aucune alerte pour le moment.';}
 function formaterDate(value){const d=new Date(value);return isNaN(d)?'Date inconnue':d.toLocaleDateString('fr-FR');}
-function echapper(value){return String(value).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
+function echapper(value){return String(value??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
+function echapperAttribut(value){return String(value??'').replace(/['\\]/g,'');}
 </script>
