@@ -1,4 +1,4 @@
-const BUDGETSOFT_VERSION = '0.3.0';
+const BUDGETSOFT_VERSION = '0.4.0';
 
 const TABLES = {
   Parametres: ['cle', 'valeur'],
@@ -20,9 +20,7 @@ function onOpen() {
 }
 
 function doGet() {
-  return HtmlService.createTemplateFromFile('Index')
-    .evaluate()
-    .setTitle('BudgetSoft')
+  return HtmlService.createTemplateFromFile('Index').evaluate().setTitle('BudgetSoft')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
@@ -77,6 +75,14 @@ function enregistrerLigne(nom, ligne) {
   const entetes = TABLES[nom];
   const maintenant = new Date().toISOString();
   const copie = Object.assign({}, ligne);
+  if (nom === 'Comptes') {
+    copie.nom = String(copie.nom || '').trim();
+    if (!copie.nom) throw new Error('Le nom du compte est obligatoire.');
+    copie.type = String(copie.type || 'courant').trim();
+    copie.solde_initial = Number(String(copie.solde_initial || 0).replace(',', '.'));
+    if (!Number.isFinite(copie.solde_initial)) throw new Error('Le solde initial est invalide.');
+    copie.actif = copie.actif !== false && String(copie.actif).toLowerCase() !== 'false';
+  }
   if (entetes.includes('id') && !copie.id) copie.id = Utilities.getUuid();
   if (entetes.includes('cree_le') && !copie.cree_le) copie.cree_le = maintenant;
   if (entetes.includes('modifie_le')) copie.modifie_le = maintenant;
@@ -144,17 +150,14 @@ function verifierInitialisation_() {
   const manquantes = Object.keys(TABLES).filter(nom => !ss.getSheetByName(nom));
   if (manquantes.length) throw new Error('BudgetSoft n’est pas initialisé. Lancez initialiserBudgetSoft().');
 }
-
 function verifierNomTable_(nom) {
   if (!Object.prototype.hasOwnProperty.call(TABLES, nom)) throw new Error('Table inconnue : ' + nom);
 }
-
 function normaliserValeur_(valeur) {
   if (valeur === undefined || valeur === null) return '';
   if (typeof valeur === 'object' && !(valeur instanceof Date)) return JSON.stringify(valeur);
   return valeur;
 }
-
 function serialiserValeur_(valeur) {
   return valeur instanceof Date ? valeur.toISOString() : valeur;
 }
