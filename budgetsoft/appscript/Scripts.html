@@ -56,7 +56,7 @@ function estActif(v){return v!==false&&String(v).toLowerCase()!=='false'&&String
 function dateInput(value){const d=value?new Date(value):new Date();return isNaN(d)?'':`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 
 function rendreDashboard(data){
-  document.getElementById('version').textContent=data.meta?.version||'0.5.1';
+  document.getElementById('version').textContent=data.meta?.version||'0.6';
   const comptes=(data.Comptes||[]).filter(c=>estActif(c.actif));
   const operations=data.Operations||[];
   const now=new Date();
@@ -138,16 +138,20 @@ function rendreChargesFixes(){
   const zone=document.getElementById('fixed-charges-list');
   if(!charges.length){zone.className='empty-state';zone.textContent='Aucune charge fixe enregistrée.';return;}
   const comptes=Object.fromEntries((state.data.Comptes||[]).map(c=>[String(c.id),c.nom]));
-  zone.className='';zone.innerHTML=charges.map(c=>`<div class="fixed-charge-row ${estActif(c.actif)?'':'archived'}"><div><strong>${echapper(c.libelle)}</strong><small>${echapper(comptes[String(c.compte)]||'Compte inconnu')} · le ${Number(c.jour_execution)||1} de chaque mois</small></div><div class="fixed-charge-amount">${money.format(-Math.abs(nombre(c.montant)))}</div><div class="account-actions"><button class="small-button" onclick="modifierChargeFixe('${echapperAttribut(c.id)}')" title="Modifier">✎</button><button class="small-button" onclick="basculerChargeFixe('${echapperAttribut(c.id)}')" title="${estActif(c.actif)?'Suspendre':'Réactiver'}">${estActif(c.actif)?'⏸':'▶'}</button><button class="small-button danger" onclick="supprimerChargeFixe('${echapperAttribut(c.id)}')" title="Supprimer">🗑</button></div></div>`).join('');
+  zone.className='';zone.innerHTML=charges.map(c=>`<div class="fixed-charge-row ${estActif(c.actif)?'':'archived'}"><div><strong>${echapper(c.libelle)}</strong><small>${echapper(comptes[String(c.compte)]||'Compte inconnu')} · ${echapper(c.frequence||'Mensuelle')} · échéance ${Number(c.jour_execution)||1}<br>${echapper(c.libelle_bancaire||'Libellé bancaire non renseigné')}</small></div><div class="fixed-charge-amount">${money.format(-Math.abs(nombre(c.montant)))}</div><div class="account-actions"><button class="small-button" onclick="modifierChargeFixe('${echapperAttribut(c.id)}')" title="Modifier">✎</button><button class="small-button" onclick="basculerChargeFixe('${echapperAttribut(c.id)}')" title="${estActif(c.actif)?'Suspendre':'Réactiver'}">${estActif(c.actif)?'⏸':'▶'}</button><button class="small-button danger" onclick="supprimerChargeFixe('${echapperAttribut(c.id)}')" title="Supprimer">🗑</button></div></div>`).join('');
 }
 function ouvrirChargeFixe(charge){
   document.getElementById('fixed-charge-form').reset();rendreOperationsPage();
   document.getElementById('fixed-charge-id').value=charge?.id||'';
   document.getElementById('fixed-charge-label').value=charge?.libelle||'';
+  document.getElementById('fixed-charge-bank-label').value=charge?.libelle_bancaire||charge?.libelle||'';
   document.getElementById('fixed-charge-amount').value=Math.abs(nombre(charge?.montant)).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  document.getElementById('fixed-charge-tolerance').value=(charge?.tolerance==null?0.5:Math.abs(nombre(charge.tolerance))).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2});
   document.getElementById('fixed-charge-day').value=Number(charge?.jour_execution)||1;
+  document.getElementById('fixed-charge-frequency').value=charge?.frequence||'Mensuelle';
   document.getElementById('fixed-charge-account').value=charge?.compte||'';
   document.getElementById('fixed-charge-category').value=charge?.categorie||'';
+  document.getElementById('fixed-charge-nature').value=charge?.nature||'Autre';
   document.getElementById('fixed-charge-start').value=dateInput(charge?.date_debut);
   document.getElementById('fixed-charge-end').value=charge?.date_fin?dateInput(charge.date_fin):'';
   document.getElementById('fixed-charge-comment').value=charge?.commentaire||'';
@@ -159,7 +163,28 @@ function ouvrirChargeFixe(charge){
 function fermerChargeFixe(){document.getElementById('fixed-charge-modal').classList.add('hidden');}
 function modifierChargeFixe(id){const charge=(state.data.Charges_fixes||[]).find(c=>String(c.id)===String(id));if(charge)ouvrirChargeFixe(charge);}
 function basculerChargeFixe(id){const charge=(state.data.Charges_fixes||[]).find(c=>String(c.id)===String(id));if(charge)sauvegarderChargeFixe({...charge,actif:!estActif(charge.actif)});}
-function enregistrerChargeFixe(e){e.preventDefault();const charge={id:document.getElementById('fixed-charge-id').value,libelle:document.getElementById('fixed-charge-label').value.trim(),categorie:document.getElementById('fixed-charge-category').value,compte:document.getElementById('fixed-charge-account').value,montant:nombre(document.getElementById('fixed-charge-amount').value),type:'depense',jour_execution:Number(document.getElementById('fixed-charge-day').value),date_debut:document.getElementById('fixed-charge-start').value,date_fin:document.getElementById('fixed-charge-end').value,actif:document.getElementById('fixed-charge-active').checked,commentaire:document.getElementById('fixed-charge-comment').value.trim()};if(!charge.libelle||!charge.compte){afficherErreur('Le libellé et le compte sont obligatoires.');return;}sauvegarderChargeFixe(charge);}
+function enregistrerChargeFixe(e){
+  e.preventDefault();
+  const charge={
+    id:document.getElementById('fixed-charge-id').value,
+    libelle:document.getElementById('fixed-charge-label').value.trim(),
+    libelle_bancaire:document.getElementById('fixed-charge-bank-label').value.trim(),
+    categorie:document.getElementById('fixed-charge-category').value,
+    compte:document.getElementById('fixed-charge-account').value,
+    montant:nombre(document.getElementById('fixed-charge-amount').value),
+    tolerance:Math.abs(nombre(document.getElementById('fixed-charge-tolerance').value)),
+    type:'depense',
+    jour_execution:Number(document.getElementById('fixed-charge-day').value),
+    frequence:document.getElementById('fixed-charge-frequency').value,
+    nature:document.getElementById('fixed-charge-nature').value,
+    date_debut:document.getElementById('fixed-charge-start').value,
+    date_fin:document.getElementById('fixed-charge-end').value,
+    actif:document.getElementById('fixed-charge-active').checked,
+    commentaire:document.getElementById('fixed-charge-comment').value.trim()
+  };
+  if(!charge.libelle||!charge.libelle_bancaire||!charge.compte){afficherErreur('Le libellé, le libellé bancaire et le compte sont obligatoires.');return;}
+  sauvegarderChargeFixe(charge);
+}
 function sauvegarderChargeFixe(charge){document.getElementById('save-fixed-charge').disabled=true;google.script.run.withSuccessHandler(()=>{document.getElementById('save-fixed-charge').disabled=false;fermerChargeFixe();charger();ouvrirVue('operations');}).withFailureHandler(err=>{document.getElementById('save-fixed-charge').disabled=false;afficherErreur(err.message||String(err));}).enregistrerLigne('Charges_fixes',charge);}
 function supprimerChargeFixe(id){if(!confirm('Supprimer cette charge fixe ? Les opérations déjà créées seront conservées.'))return;google.script.run.withSuccessHandler(()=>{charger();ouvrirVue('operations');}).withFailureHandler(err=>afficherErreur(err.message||String(err))).supprimerLigne('Charges_fixes',id);}
 
