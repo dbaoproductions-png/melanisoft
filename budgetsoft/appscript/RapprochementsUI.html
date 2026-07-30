@@ -7,142 +7,40 @@ function installerRapprochementsUI(){
   const toolbar=document.querySelector('#operations .toolbar-buttons');
   if(toolbar&&!document.getElementById('review-matches-button')){
     const bouton=document.createElement('button');
-    bouton.type='button';
-    bouton.className='secondary-button';
-    bouton.id='review-matches-button';
-    bouton.textContent='🔎 Rapprochements';
-    bouton.addEventListener('click',ouvrirRapprochements);
-    toolbar.prepend(bouton);
+    bouton.type='button';bouton.className='secondary-button';bouton.id='review-matches-button';bouton.textContent='🔎 Rapprochements';
+    bouton.addEventListener('click',ouvrirRapprochements);toolbar.prepend(bouton);
   }
-  creerModalRapprochements();
-  chargerCompteurRapprochements();
+  creerModalRapprochements();chargerCompteurRapprochements();
 }
 
 function creerModalRapprochements(){
   if(document.getElementById('reconciliation-modal'))return;
-  const modal=document.createElement('div');
-  modal.id='reconciliation-modal';
-  modal.className='modal hidden';
-  modal.setAttribute('role','dialog');
-  modal.setAttribute('aria-modal','true');
-  modal.innerHTML=`
-    <div class="modal-card wide-modal reconciliation-card">
-      <div class="modal-heading">
-        <div><p class="panel-kicker">Contrôle bancaire</p><h2>Rapprochements à valider</h2></div>
-        <button class="modal-close" id="close-reconciliation-modal">×</button>
-      </div>
-      <p class="helper-text">Comparez la saisie manuelle avec l’opération issue du relevé. Une fusion conserve votre libellé et votre catégorie, puis ajoute les informations bancaires.</p>
-      <div class="reconciliation-toolbar">
-        <select id="reconciliation-filter">
-          <option value="À valider">À valider</option>
-          <option value="">Tous les statuts</option>
-          <option value="Traité">Traités</option>
-          <option value="Ignoré">Ignorés</option>
-        </select>
-        <button type="button" class="secondary-button" id="refresh-reconciliations">Actualiser</button>
-      </div>
-      <div id="reconciliation-status" class="helper-text"></div>
-      <div id="reconciliation-list" class="reconciliation-list"></div>
-    </div>`;
+  const modal=document.createElement('div');modal.id='reconciliation-modal';modal.className='modal hidden';modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');
+  modal.innerHTML=`<div class="modal-card wide-modal reconciliation-card"><div class="modal-heading"><div><p class="panel-kicker">Contrôle bancaire</p><h2>Rapprochements à valider</h2></div><button class="modal-close" id="close-reconciliation-modal">×</button></div><p class="helper-text">Comparez la saisie manuelle avec l’opération issue du relevé. Une fusion conserve votre libellé et votre catégorie, puis ajoute les informations bancaires.</p><div class="reconciliation-toolbar"><select id="reconciliation-filter"><option value="À valider">À valider</option><option value="">Tous les statuts</option><option value="Traité">Traités</option><option value="Ignoré">Ignorés</option></select><button type="button" class="secondary-button" id="refresh-reconciliations">Actualiser</button></div><div id="reconciliation-status" class="helper-text"></div><div id="reconciliation-list" class="reconciliation-list"></div></div>`;
   document.body.appendChild(modal);
   document.getElementById('close-reconciliation-modal').addEventListener('click',fermerRapprochements);
   document.getElementById('refresh-reconciliations').addEventListener('click',chargerRapprochements);
   document.getElementById('reconciliation-filter').addEventListener('change',e=>{rapprochementsUI.filtre=e.target.value;rendreRapprochements();});
   modal.addEventListener('click',e=>{if(e.target===modal)fermerRapprochements();});
-
-  const style=document.createElement('style');
-  style.textContent=`
-    .reconciliation-card{max-width:980px}
-    .reconciliation-toolbar{display:flex;gap:12px;align-items:center;margin:12px 0 18px}
-    .reconciliation-toolbar select{min-width:190px}
-    .reconciliation-list{display:grid;gap:14px;max-height:62vh;overflow:auto;padding-right:4px}
-    .reconciliation-item{border:1px solid rgba(20,125,100,.18);border-radius:14px;padding:16px;background:#fff}
-    .reconciliation-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:12px}
-    .reconciliation-score{font-weight:700;color:#147d64;white-space:nowrap}
-    .reconciliation-compare{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    .reconciliation-side{border-radius:12px;padding:12px;background:rgba(20,125,100,.06)}
-    .reconciliation-side.bank{background:rgba(30,90,150,.06)}
-    .reconciliation-side small{display:block;margin-bottom:6px;opacity:.7}
-    .reconciliation-side strong{display:block;margin-bottom:5px}
-    .reconciliation-meta{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:.92rem}
-    .reconciliation-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
-    .reconciliation-actions button{min-width:140px}
-    .reconciliation-decision{font-weight:600;color:#147d64;margin-top:10px}
-    @media(max-width:720px){.reconciliation-compare{grid-template-columns:1fr}}
-  `;
+  const style=document.createElement('style');style.textContent=`.reconciliation-card{max-width:980px}.reconciliation-toolbar{display:flex;gap:12px;align-items:center;margin:12px 0 18px}.reconciliation-toolbar select{min-width:190px}.reconciliation-list{display:grid;gap:14px;max-height:62vh;overflow:auto;padding-right:4px}.reconciliation-item{border:1px solid rgba(20,125,100,.18);border-radius:14px;padding:16px;background:#fff}.reconciliation-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:12px}.reconciliation-score{font-weight:700;color:#147d64;white-space:nowrap}.reconciliation-compare{display:grid;grid-template-columns:1fr 1fr;gap:12px}.reconciliation-side{border-radius:12px;padding:12px;background:rgba(20,125,100,.06)}.reconciliation-side.bank{background:rgba(30,90,150,.06)}.reconciliation-side small{display:block;margin-bottom:6px;opacity:.7}.reconciliation-side strong{display:block;margin-bottom:5px}.reconciliation-meta{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:.92rem}.reconciliation-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.reconciliation-actions button{min-width:140px}.reconciliation-decision{font-weight:600;color:#147d64;margin-top:10px}.budget-plan-table{display:grid;gap:8px}.budget-plan-table .import-row{grid-template-columns:minmax(160px,2fr) minmax(110px,1fr) minmax(110px,1fr) minmax(110px,1fr);align-items:center}.budget-plan-input{width:100%;box-sizing:border-box}@media(max-width:720px){.reconciliation-compare{grid-template-columns:1fr}.budget-plan-table .import-row{grid-template-columns:1fr 1fr}}`;
   document.head.appendChild(style);
 }
+function ouvrirRapprochements(){document.getElementById('reconciliation-modal').classList.remove('hidden');chargerRapprochements();}
+function fermerRapprochements(){document.getElementById('reconciliation-modal').classList.add('hidden');}
+function chargerRapprochements(){const status=document.getElementById('reconciliation-status');status.textContent='Chargement…';google.script.run.withSuccessHandler(liste=>{rapprochementsUI.liste=liste||[];status.textContent='';rendreRapprochements();mettreAJourCompteurRapprochements();}).withFailureHandler(err=>status.textContent='Erreur : '+(err.message||String(err))).lireRapprochementsAValider();}
+function chargerCompteurRapprochements(){google.script.run.withSuccessHandler(liste=>{rapprochementsUI.liste=liste||[];mettreAJourCompteurRapprochements();}).lireRapprochementsAValider();}
+function mettreAJourCompteurRapprochements(){const bouton=document.getElementById('review-matches-button');if(!bouton)return;const nombre=rapprochementsUI.liste.filter(r=>String(r.statut)==='À valider').length;bouton.textContent=nombre?`🔎 Rapprochements (${nombre})`:'🔎 Rapprochements';}
+function rendreRapprochements(){const zone=document.getElementById('reconciliation-list');if(!zone)return;const liste=rapprochementsUI.liste.filter(r=>!rapprochementsUI.filtre||String(r.statut)===rapprochementsUI.filtre);if(!liste.length){zone.innerHTML='<div class="empty-state">Aucun rapprochement correspondant à ce filtre.</div>';return;}zone.innerHTML=liste.map(r=>{const enAttente=String(r.statut)==='À valider';return `<article class="reconciliation-item" data-id="${echapperAttribut(r.id)}"><div class="reconciliation-head"><strong>${money.format(Math.abs(Number(r.montant)||0))}</strong><span class="reconciliation-score">Similarité ${Number(r.score)||0}/100</span></div><div class="reconciliation-compare"><div class="reconciliation-side"><small>Saisie manuelle</small><strong>${echapper(r.libelle_manuel||'—')}</strong><span>${dateRapprochement(r.date_manuelle)}</span></div><div class="reconciliation-side bank"><small>Relevé bancaire</small><strong>${echapper(r.libelle_bancaire||'—')}</strong><span>${dateRapprochement(r.date_bancaire)}</span></div></div><div class="reconciliation-meta"><span>Type : ${echapper(r.type||'—')}</span><span>Compte : ${echapper(nomCompteRapprochement(r.compte))}</span><span>Statut : ${echapper(r.statut||'—')}</span></div>${enAttente?`<div class="reconciliation-actions"><button type="button" class="primary-button" onclick="deciderRapprochement('${echapperAttribut(r.id)}','fusionner',this)">Fusionner</button><button type="button" class="secondary-button" onclick="deciderRapprochement('${echapperAttribut(r.id)}','conserver',this)">Conserver les deux</button><button type="button" class="secondary-button" onclick="deciderRapprochement('${echapperAttribut(r.id)}','ignorer',this)">Ignorer la proposition</button></div>`:`<div class="reconciliation-decision">Décision : ${echapper(r.decision||'—')}</div>`}</article>`;}).join('');}
+function deciderRapprochement(id,decision,bouton){const carte=bouton.closest('.reconciliation-item');carte.querySelectorAll('button').forEach(b=>b.disabled=true);const status=document.getElementById('reconciliation-status');status.textContent='Enregistrement de la décision…';google.script.run.withSuccessHandler(()=>{status.textContent='Décision enregistrée.';chargerRapprochements();if(typeof charger==='function')charger();}).withFailureHandler(err=>{status.textContent='Erreur : '+(err.message||String(err));carte.querySelectorAll('button').forEach(b=>b.disabled=false);}).deciderRapprochementBancaire(id,decision);}
+function dateRapprochement(valeur){const d=new Date(valeur);return isNaN(d)?'—':d.toLocaleDateString('fr-FR');}
+function nomCompteRapprochement(id){const compte=(state.data?.Comptes||[]).find(c=>String(c.id)===String(id));return compte?.nom||id||'—';}
 
-function ouvrirRapprochements(){
-  document.getElementById('reconciliation-modal').classList.remove('hidden');
-  chargerRapprochements();
-}
-
-function fermerRapprochements(){
-  document.getElementById('reconciliation-modal').classList.add('hidden');
-}
-
-function chargerRapprochements(){
-  const status=document.getElementById('reconciliation-status');
-  status.textContent='Chargement…';
-  google.script.run
-    .withSuccessHandler(liste=>{rapprochementsUI.liste=liste||[];status.textContent='';rendreRapprochements();mettreAJourCompteurRapprochements();})
-    .withFailureHandler(err=>{status.textContent='Erreur : '+(err.message||String(err));})
-    .lireRapprochementsAValider();
-}
-
-function chargerCompteurRapprochements(){
-  google.script.run.withSuccessHandler(liste=>{rapprochementsUI.liste=liste||[];mettreAJourCompteurRapprochements();}).lireRapprochementsAValider();
-}
-
-function mettreAJourCompteurRapprochements(){
-  const bouton=document.getElementById('review-matches-button');
-  if(!bouton)return;
-  const nombre=rapprochementsUI.liste.filter(r=>String(r.statut)==='À valider').length;
-  bouton.textContent=nombre?`🔎 Rapprochements (${nombre})`:'🔎 Rapprochements';
-}
-
-function rendreRapprochements(){
-  const zone=document.getElementById('reconciliation-list');
-  if(!zone)return;
-  const liste=rapprochementsUI.liste.filter(r=>!rapprochementsUI.filtre||String(r.statut)===rapprochementsUI.filtre);
-  if(!liste.length){zone.innerHTML='<div class="empty-state">Aucun rapprochement correspondant à ce filtre.</div>';return;}
-  zone.innerHTML=liste.map(r=>{
-    const enAttente=String(r.statut)==='À valider';
-    return `<article class="reconciliation-item" data-id="${echapperAttribut(r.id)}">
-      <div class="reconciliation-head"><strong>${money.format(Math.abs(Number(r.montant)||0))}</strong><span class="reconciliation-score">Similarité ${Number(r.score)||0}/100</span></div>
-      <div class="reconciliation-compare">
-        <div class="reconciliation-side"><small>Saisie manuelle</small><strong>${echapper(r.libelle_manuel||'—')}</strong><span>${dateRapprochement(r.date_manuelle)}</span></div>
-        <div class="reconciliation-side bank"><small>Relevé bancaire</small><strong>${echapper(r.libelle_bancaire||'—')}</strong><span>${dateRapprochement(r.date_bancaire)}</span></div>
-      </div>
-      <div class="reconciliation-meta"><span>Type : ${echapper(r.type||'—')}</span><span>Compte : ${echapper(nomCompteRapprochement(r.compte))}</span><span>Statut : ${echapper(r.statut||'—')}</span></div>
-      ${enAttente?`<div class="reconciliation-actions">
-        <button type="button" class="primary-button" onclick="deciderRapprochement('${echapperAttribut(r.id)}','fusionner',this)">Fusionner</button>
-        <button type="button" class="secondary-button" onclick="deciderRapprochement('${echapperAttribut(r.id)}','conserver',this)">Conserver les deux</button>
-        <button type="button" class="secondary-button" onclick="deciderRapprochement('${echapperAttribut(r.id)}','ignorer',this)">Ignorer la proposition</button>
-      </div>`:`<div class="reconciliation-decision">Décision : ${echapper(r.decision||'—')}</div>`}
-    </article>`;
-  }).join('');
-}
-
-function deciderRapprochement(id,decision,bouton){
-  const carte=bouton.closest('.reconciliation-item');
-  carte.querySelectorAll('button').forEach(b=>b.disabled=true);
-  const status=document.getElementById('reconciliation-status');
-  status.textContent='Enregistrement de la décision…';
-  google.script.run
-    .withSuccessHandler(()=>{status.textContent='Décision enregistrée.';chargerRapprochements();if(typeof charger==='function')charger();})
-    .withFailureHandler(err=>{status.textContent='Erreur : '+(err.message||String(err));carte.querySelectorAll('button').forEach(b=>b.disabled=false);})
-    .deciderRapprochementBancaire(id,decision);
-}
-
-function dateRapprochement(valeur){
-  const d=new Date(valeur);
-  return isNaN(d)?'—':d.toLocaleDateString('fr-FR');
-}
-
-function nomCompteRapprochement(id){
-  const compte=(state.data?.Comptes||[]).find(c=>String(c.id)===String(id));
-  return compte?.nom||id||'—';
-}
+const budgetPlanState={donnees:null};
+document.addEventListener('DOMContentLoaded',()=>{document.querySelector('[data-view="budget"]')?.addEventListener('click',()=>setTimeout(()=>chargerVueBudget(''),0));});
+function chargerVueBudget(cle){const zone=document.getElementById('generic-view');zone.innerHTML='<article class="card panel"><div class="loading">Chargement du budget…</div></article>';google.script.run.withSuccessHandler(d=>{budgetPlanState.donnees=d;rendreVueBudget(d);}).withFailureHandler(err=>afficherErreur(err.message||String(err))).chargerBudgetPeriode(cle||'');}
+function rendreVueBudget(d){const zone=document.getElementById('generic-view'),p=d.periode,depenses=d.postes.filter(x=>x.type==='depense'),revenus=d.postes.filter(x=>x.type==='revenu');zone.innerHTML=`<div class="section-toolbar"><div><p class="section-intro">Préparez la période comprise entre deux salaires et suivez les écarts en temps réel.</p><strong>${echapper(p.libelle)}</strong> · ${formaterDate(p.debut)} → ${formaterDate(p.fin)}</div><div class="toolbar-buttons"><button class="secondary-button" id="copy-previous-budget">Recopier la période précédente</button><button class="primary-button" id="save-budget-plan">Enregistrer le budget</button></div></div><div class="cards"><article class="card metric-card"><span>Dépenses prévues</span><strong>${money.format(d.totaux.depensesPrevues)}</strong><small>Enveloppes définies</small></article><article class="card metric-card"><span>Dépenses réalisées</span><strong>${money.format(d.totaux.depensesReelles)}</strong><small>Opérations de la période</small></article><article class="card metric-card"><span>Reste disponible</span><strong>${money.format(d.totaux.depensesPrevues-d.totaux.depensesReelles)}</strong><small>Prévu moins réalisé</small></article><article class="card metric-card"><span>Revenus réalisés</span><strong>${money.format(d.totaux.revenusReels)}</strong><small>Revenus reçus</small></article></div>${tableBudgetHtml('Dépenses',depenses)}${tableBudgetHtml('Revenus',revenus)}<p id="budget-plan-status" class="helper-text"></p>`;document.getElementById('save-budget-plan').addEventListener('click',enregistrerVueBudget);document.getElementById('copy-previous-budget').addEventListener('click',recopierBudgetPrecedent);}
+function tableBudgetHtml(titre,lignes){if(!lignes.length)return '';return `<article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Prévision</span><h2>${titre}</h2></div></div><div class="budget-plan-table"><div class="import-row"><strong>Poste</strong><strong>Prévu</strong><strong>Réalisé</strong><strong>Écart</strong></div>${lignes.map(x=>`<div class="import-row"><span>${echapper(x.poste)}</span><input class="budget-plan-input" data-poste="${echapperAttribut(x.poste)}" data-type="${echapperAttribut(x.type)}" inputmode="decimal" value="${Number(x.prevu||0).toFixed(2).replace('.',',')}"><span>${money.format(x.reel)}</span><strong class="${x.ecart<0?'amount-negative':'amount-positive'}">${money.format(x.ecart)}</strong></div>`).join('')}</div></article>`;}
+function enregistrerVueBudget(){const status=document.getElementById('budget-plan-status');const postes=[...document.querySelectorAll('.budget-plan-input')].map(input=>({poste:input.dataset.poste,type:input.dataset.type,prevu:parseMontantBudget(input.value)}));status.textContent='Enregistrement…';google.script.run.withSuccessHandler(d=>{budgetPlanState.donnees=d;rendreVueBudget(d);document.getElementById('budget-plan-status').textContent='Budget enregistré.';}).withFailureHandler(err=>status.textContent='Erreur : '+(err.message||String(err))).enregistrerBudgetPeriode(budgetPlanState.donnees.periode.cle,postes);}
+function recopierBudgetPrecedent(){const courant=budgetPlanState.donnees.periode.cle,[annee,mois]=courant.split('-').map(Number),precedent=new Date(annee,mois-2,1),source=`${precedent.getFullYear()}-${String(precedent.getMonth()+1).padStart(2,'0')}`,status=document.getElementById('budget-plan-status');status.textContent='Recopie du budget précédent…';google.script.run.withSuccessHandler(d=>{budgetPlanState.donnees=d;rendreVueBudget(d);document.getElementById('budget-plan-status').textContent='Budget précédent recopié.';}).withFailureHandler(err=>status.textContent='Erreur : '+(err.message||String(err))).recopierBudgetPeriode(source,courant);}
+function parseMontantBudget(v){const n=Number(String(v||'0').replace(/\s/g,'').replace(',','.'));return Number.isFinite(n)?Math.max(0,n):0;}
 </script>
