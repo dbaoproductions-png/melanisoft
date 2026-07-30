@@ -8,7 +8,7 @@ function importerOperationsHelloBank(operations, compte) {
   const cles = new Set(existantes.map(cleOperationImport_));
   const charges = lireTable_('Charges_fixes').filter(c => convertirBooleen_(c.actif));
   const correspondances = lireCorrespondancesBancaires();
-  const resultats = { importees: 0, doublons: 0, rapprochees: 0, reconnues: 0, apprises: 0, erreurs: [] };
+  const resultats = { importees: 0, doublons: 0, rapprochees: 0, rapprocheesManuelles: 0, reconnues: 0, apprises: 0, erreurs: [] };
 
   operations.forEach((operation, index) => {
     try {
@@ -26,7 +26,7 @@ function importerOperationsHelloBank(operations, compte) {
       const categorie = correspondance?.categorie || rapprochement?.categorie || suggererCategorieHelloBank_(libelleBrut, type);
       const typeFinal = correspondance?.type || type;
       const marqueur = '[PDF:HELLOBANK:' + Utilities.base64EncodeWebSafe(cle).slice(0, 28) + ']';
-      const commentaire = [
+      const commentaireBanque = [
         'Libellé bancaire : ' + libelleBrut,
         operation.details && operation.details !== libelleBrut ? operation.details : '',
         marqueur,
@@ -34,18 +34,49 @@ function importerOperationsHelloBank(operations, compte) {
         rapprochement ? '[RAPPROCHEMENT:' + rapprochement.id + ':' + rapprochement.score + ']' : ''
       ].filter(Boolean).join(' ');
 
-      enregistrerLigne('Operations', {
-        date,
-        libelle: libelleNormalise,
-        categorie,
-        compte,
-        montant: Math.abs(montant),
-        type: typeFinal,
-        commentaire
-      });
+      const candidateManuelle = trouverSaisieManuelleCorrespondante_(
+        { date, libelle: libelleBrut, montant: Math.abs(montant), type: typeFinal, compte },
+        existantes
+      );
+
+      if (candidateManuelle) {
+        const commentaireFusionne = [
+          candidateManuelle.commentaire || '',
+          commentaireBanque,
+          '[RAPPROCHEMENT_MANUEL:' + candidateManuelle.score + ']'
+        ].filter(Boolean).join(' ');
+
+        enregistrerLigne('Operations', {
+          id: candidateManuelle.operation.id,
+          date,
+          libelle: candidateManuelle.operation.libelle || libelleNormalise,
+          categorie: candidateManuelle.operation.categorie || categorie,
+          compte,
+          montant: Math.abs(montant),
+          type: typeFinal,
+          commentaire: commentaireFusionne,
+          cree_le: candidateManuelle.operation.cree_le || ''
+        });
+
+        candidateManuelle.operation.date = date;
+        candidateManuelle.operation.montant = Math.abs(montant);
+        candidateManuelle.operation.type = typeFinal;
+        candidateManuelle.operation.commentaire = commentaireFusionne;
+        resultats.rapprocheesManuelles++;
+      } else {
+        enregistrerLigne('Operations', {
+          date,
+          libelle: libelleNormalise,
+          categorie,
+          compte,
+          montant: Math.abs(montant),
+          type: typeFinal,
+          commentaire: commentaireBanque
+        });
+        resultats.importees++;
+      }
 
       cles.add(cle);
-      resultats.importees++;
       if (correspondance) resultats.reconnues++;
       if (rapprochement) resultats.rapprochees++;
 
@@ -69,6 +100,43 @@ function importerOperationsHelloBank(operations, compte) {
     }
   });
   return resultats;
+}
+
+function trouverSaisieManuelleCorrespondante_(operationPdf, operationsExistantes) {
+  const datePdf = debutJour_(new Date(operationPdf.date));
+  const montantPdf = Math.abs(Number(operationPdf.montant || 0));
+  const textePdf = normaliserTexteBanque_(operationPdf.libelle);
+  const motsPdf = motsSignificatifsBanque_(textePdf);
+
+  const candidates = (operationsExistantes || []).map(operation => {
+    if (String(operation.compte || '') !== String(operationPdf.compte || '')) return null;
+    if (String(operation.type || '').toLowerCase() !== String(operationPdf.type || '').toLowerCase()) return null;
+    if (Math.abs(Math.abs(Number(operation.montant || 0)) - montantPdf) > 0.01) return null;
+    if (/\[PDF:HELLOBANK:/.test(String(operation.commentaire || ''))) return null;
+
+    const dateExistante = debutJour_(new Date(operation.date));
+    if (isNaN(dateExistante.getTime())) return null;
+    const ecartJours = Math.abs(Math.round((dateExistante.getTime() - datePdf.getTime()) / 86400000));
+    if (ecartJours > 2) return null;
+
+    const texteExistant = normaliserTexteBanque_(operation.libelle);
+    const motsExistants = motsSignificatifsBanque_(texteExistant);
+    const communs = motsExistants.filter(m => motsPdf.includes(m)).length;
+    const scoreLibelle = Math.max(motsExistants.length, motsPdf.length)
+      ? Math.round(60 * communs / Math.max(motsExistants.length, motsPdf.length))
+      : 0;
+    const scoreDate = ecartJours === 0 ? 30 : ecartJours === 1 ? 20 : 10;
+    const score = 40 + scoreDate + scoreLibelle;
+
+    return { operation, score, ecartJours };
+  }).filter(Boolean).sort((a, b) => b.score - a.score || a.ecartJours - b.ecartJours);
+
+  return candidates.length && candidates[0].score >= 70 ? candidates[0] : null;
+}
+
+function motsSignificatifsBanque_(texte) {
+  const motsVides = new Set(['PRLV','SEPA','RECU','VIR','VIREMENT','FACTURE','CARTE','PAIEMENT','CB','RETRAIT','DAB','COMMISSIONS','FR','EUR','EURO','CLIENT','REF','REFERENCE']);
+  return normaliserTexteBanque_(texte).split(' ').filter(m => m.length > 2 && !motsVides.has(m) && !/^\d+$/.test(m));
 }
 
 function rapprocherChargeFixe_(libelle, montant, compte, charges) {
@@ -120,5 +188,6 @@ function normaliserTexteBanque_(texte) {
 function cleOperationImport_(operation) {
   const date = new Date(operation.date);
   const dateCle = isNaN(date) ? '' : Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd');
-  return [dateCle, normaliserTexteBanque_(operation.libelle), Number(operation.montant || 0).toFixed(2), String(operation.compte || '')].join('|');
+  const type = String(operation.type || (Number(operation.montant || 0) < 0 ? 'depense' : 'revenu')).toLowerCase();
+  return [dateCle, normaliserTexteBanque_(operation.libelle), Math.abs(Number(operation.montant || 0)).toFixed(2), type, String(operation.compte || '')].join('|');
 }
