@@ -1,10 +1,10 @@
-const BUDGETSOFT_VERSION = '0.5.1';
+const BUDGETSOFT_VERSION = '0.6';
 
 const TABLES = {
   Parametres: ['cle', 'valeur'],
   Comptes: ['id', 'nom', 'type', 'solde_initial', 'actif'],
   Operations: ['id', 'date', 'libelle', 'categorie', 'compte', 'montant', 'type', 'commentaire', 'cree_le', 'modifie_le'],
-  Charges_fixes: ['id', 'libelle', 'categorie', 'compte', 'montant', 'type', 'jour_execution', 'date_debut', 'date_fin', 'actif', 'commentaire'],
+  Charges_fixes: ['id', 'libelle', 'categorie', 'compte', 'montant', 'type', 'jour_execution', 'date_debut', 'date_fin', 'actif', 'commentaire', 'frequence', 'libelle_bancaire', 'tolerance'],
   Budget: ['id', 'mois', 'type', 'poste', 'prevu', 'reel'],
   Actifs: ['id', 'nom', 'type', 'valeur', 'date_valeur'],
   Dettes: ['id', 'nom', 'capital_restant', 'mensualite', 'taux', 'date_fin'],
@@ -25,6 +25,7 @@ function doGet() {
   return HtmlService.createTemplateFromFile('Index').evaluate().setTitle('BudgetSoft')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
+
 function inclure(nomFichier) { return HtmlService.createHtmlOutputFromFile(nomFichier).getContent(); }
 
 function initialiserBudgetSoft() {
@@ -32,23 +33,53 @@ function initialiserBudgetSoft() {
   Object.entries(TABLES).forEach(([nom, entetes]) => {
     let feuille = ss.getSheetByName(nom);
     if (!feuille) feuille = ss.insertSheet(nom);
+
     if (feuille.getLastRow() === 0) {
       feuille.getRange(1, 1, 1, entetes.length).setValues([entetes]);
-      feuille.setFrozenRows(1);
-      feuille.getRange(1, 1, 1, entetes.length).setFontWeight('bold').setBackground('#147d64').setFontColor('#ffffff');
-      feuille.autoResizeColumns(1, entetes.length);
+    } else {
+      const largeurActuelle = Math.max(feuille.getLastColumn(), 1);
+      const entetesActuelles = feuille.getRange(1, 1, 1, largeurActuelle).getValues()[0]
+        .map(v => String(v || '').trim())
+        .filter(Boolean);
+      const manquantes = entetes.filter(e => !entetesActuelles.includes(e));
+      if (manquantes.length) {
+        feuille.getRange(1, entetesActuelles.length + 1, 1, manquantes.length).setValues([manquantes]);
+      }
     }
+
+    feuille.setFrozenRows(1);
+    feuille.getRange(1, 1, 1, entetes.length)
+      .setFontWeight('bold')
+      .setBackground('#147d64')
+      .setFontColor('#ffffff');
+    feuille.autoResizeColumns(1, entetes.length);
   });
+
   ajouterDonneesInitiales_();
+  mettreAJourVersion_();
   PropertiesService.getDocumentProperties().setProperty('BUDGETSOFT_INITIALISE', 'true');
-  SpreadsheetApp.getUi().alert('BudgetSoft est initialisé et à jour.');
+  SpreadsheetApp.getUi().alert('BudgetSoft est initialisé et à jour (version ' + BUDGETSOFT_VERSION + ').');
 }
 
 function verifierConfiguration() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const manquantes = Object.keys(TABLES).filter(nom => !ss.getSheetByName(nom));
-  SpreadsheetApp.getUi().alert(manquantes.length ? 'Onglets manquants : ' + manquantes.join(', ') : 'Configuration valide. BudgetSoft est prêt.');
-  return { ok: manquantes.length === 0, manquantes };
+  const colonnesManquantes = [];
+
+  Object.entries(TABLES).forEach(([nom, entetes]) => {
+    const feuille = ss.getSheetByName(nom);
+    if (!feuille || feuille.getLastRow() === 0) return;
+    const largeur = Math.max(feuille.getLastColumn(), 1);
+    const presentes = feuille.getRange(1, 1, 1, largeur).getValues()[0].map(v => String(v || '').trim());
+    entetes.filter(e => !presentes.includes(e)).forEach(e => colonnesManquantes.push(nom + '.' + e));
+  });
+
+  let message = 'Configuration valide. BudgetSoft est prêt.';
+  if (manquantes.length) message = 'Onglets manquants : ' + manquantes.join(', ');
+  else if (colonnesManquantes.length) message = 'Colonnes manquantes : ' + colonnesManquantes.join(', ');
+
+  SpreadsheetApp.getUi().alert(message);
+  return { ok: manquantes.length === 0 && colonnesManquantes.length === 0, manquantes, colonnesManquantes };
 }
 
 function chargerToutesLesDonnees() {
@@ -87,7 +118,11 @@ function enregistrerLigne(nom, ligne) {
     copie.date_debut = copie.date_debut ? new Date(copie.date_debut) : new Date();
     copie.date_fin = copie.date_fin ? new Date(copie.date_fin) : '';
     copie.actif = convertirBooleen_(copie.actif);
+    copie.frequence = String(copie.frequence || 'Mensuelle').trim();
+    copie.libelle_bancaire = String(copie.libelle_bancaire || '').trim();
+    copie.tolerance = copie.tolerance === '' || copie.tolerance == null ? 0.50 : Math.abs(convertirNombre_(copie.tolerance));
     if (!copie.libelle || !copie.compte) throw new Error('Le libellé et le compte sont obligatoires.');
+    if (!copie.libelle_bancaire) throw new Error('Le libellé bancaire est obligatoire.');
     if (isNaN(copie.date_debut.getTime())) throw new Error('La date de début est invalide.');
     if (copie.date_fin instanceof Date && isNaN(copie.date_fin.getTime())) throw new Error('La date de fin est invalide.');
   }
@@ -115,7 +150,6 @@ function enregistrerLigne(nom, ligne) {
 
 function genererChargesFixes() {
   verifierInitialisation_();
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
   const charges = lireTable_('Charges_fixes').filter(c => convertirBooleen_(c.actif));
   if (!charges.length) return { creees: 0 };
   const operations = lireTable_('Operations');
@@ -184,11 +218,12 @@ function normaliserOperation_(copie) {
   const montant = Math.abs(convertirNombre_(copie.montant));
   copie.montant = copie.type === 'depense' ? -montant : montant;
 }
+
 function ajouterDonneesInitiales_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const categories = ss.getSheetByName('Categories');
   if (categories.getLastRow() === 1) {
-    [['Logement','depense'],['Courses','depense'],['Transport','depense'],['Santé','depense'],['Loisirs','depense'],['Revenus','revenu'],['Épargne','epargne'],['Crédits','depense']]
+    [['Logement','depense'],['Courses','depense'],['Transport','depense'],['Santé','depense'],['Loisirs','depense'],['Revenus','revenu'],['Épargne','epargne'],['Crédits','depense'],['Assurances','depense'],['Télécommunications','depense'],['Abonnements','depense'],['Impôts','depense'],['Animaux','depense'],['Frais bancaires','depense']]
       .forEach(([nom, type]) => categories.appendRow([Utilities.getUuid(), nom, type, '', true]));
   }
   const parametres = ss.getSheetByName('Parametres');
@@ -198,6 +233,16 @@ function ajouterDonneesInitiales_() {
     parametres.appendRow(['locale', 'fr-FR']);
   }
 }
+
+function mettreAJourVersion_() {
+  const feuille = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Parametres');
+  if (!feuille || feuille.getLastRow() < 2) return;
+  const valeurs = feuille.getRange(2, 1, feuille.getLastRow() - 1, 2).getValues();
+  const index = valeurs.findIndex(l => String(l[0]).trim() === 'version');
+  if (index >= 0) feuille.getRange(index + 2, 2).setValue(BUDGETSOFT_VERSION);
+  else feuille.appendRow(['version', BUDGETSOFT_VERSION]);
+}
+
 function verifierInitialisation_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const manquantes = Object.keys(TABLES).filter(nom => !ss.getSheetByName(nom));
