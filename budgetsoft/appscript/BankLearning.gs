@@ -1,4 +1,4 @@
-const BANK_LEARNING_VERSION = '1.0';
+const BANK_LEARNING_VERSION = '1.1';
 const BANK_MAPPING_SHEET = 'Correspondances_bancaires';
 const BANK_MAPPING_HEADERS = ['id','motif_bancaire','libelle_normalise','categorie','type','compte','actif','utilisations','derniere_utilisation','cree_le','modifie_le'];
 
@@ -49,6 +49,27 @@ function enregistrerCorrespondanceBancaire(correspondance) {
   if (position >= 0) feuille.getRange(position + 2, 1, 1, valeurs.length).setValues([valeurs]);
   else feuille.appendRow(valeurs);
   return copie;
+}
+
+function supprimerCorrespondanceBancaire(id) {
+  initialiserCorrespondancesBancaires();
+  const identifiant = String(id || '').trim();
+  if (!identifiant) throw new Error('Identifiant de correspondance manquant.');
+  const feuille = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(BANK_MAPPING_SHEET);
+  if (feuille.getLastRow() < 2) return { supprimee: false };
+  const indexId = BANK_MAPPING_HEADERS.indexOf('id');
+  const ids = feuille.getRange(2, indexId + 1, feuille.getLastRow() - 1, 1).getValues().flat();
+  const position = ids.findIndex(valeur => String(valeur) === identifiant);
+  if (position < 0) return { supprimee: false };
+  feuille.deleteRow(position + 2);
+  return { supprimee: true, id: identifiant };
+}
+
+function basculerCorrespondanceBancaire(id, actif) {
+  const correspondance = lireCorrespondancesBancaires().find(c => String(c.id) === String(id));
+  if (!correspondance) throw new Error('Correspondance introuvable.');
+  correspondance.actif = actif === true || String(actif).toLowerCase() === 'true';
+  return enregistrerCorrespondanceBancaire(correspondance);
 }
 
 function trouverCorrespondanceBancaire_(libelle, compte, correspondances) {
