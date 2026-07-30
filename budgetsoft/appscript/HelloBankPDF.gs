@@ -1,6 +1,14 @@
+const RAPPROCHEMENTS_SHEET = 'Rapprochements_a_valider';
+const RAPPROCHEMENTS_HEADERS = [
+  'id','statut','score','operation_manuelle_id','operation_importee_id',
+  'date_manuelle','date_bancaire','libelle_manuel','libelle_bancaire',
+  'montant','type','compte','decision','cree_le','modifie_le'
+];
+
 function importerOperationsHelloBank(operations, compte) {
   verifierInitialisation_();
   initialiserCorrespondancesBancaires();
+  initialiserRapprochementsAValider_();
   if (!Array.isArray(operations) || !operations.length) throw new Error('Aucune opération PDF à importer.');
   if (!compte) throw new Error('Choisissez le compte bancaire concerné.');
 
@@ -8,7 +16,16 @@ function importerOperationsHelloBank(operations, compte) {
   const cles = new Set(existantes.map(cleOperationImport_));
   const charges = lireTable_('Charges_fixes').filter(c => convertirBooleen_(c.actif));
   const correspondances = lireCorrespondancesBancaires();
-  const resultats = { importees: 0, doublons: 0, rapprochees: 0, rapprocheesManuelles: 0, reconnues: 0, apprises: 0, erreurs: [] };
+  const resultats = {
+    importees: 0,
+    doublons: 0,
+    rapprochees: 0,
+    rapprocheesManuelles: 0,
+    aValider: 0,
+    reconnues: 0,
+    apprises: 0,
+    erreurs: []
+  };
 
   operations.forEach((operation, index) => {
     try {
@@ -16,9 +33,13 @@ function importerOperationsHelloBank(operations, compte) {
       const montant = convertirNombre_(operation.montant);
       const libelleBrut = nettoyerLibelleHelloBank_(operation.libelle);
       if (isNaN(date.getTime()) || !libelleBrut || !montant) throw new Error('ligne incomplète');
+
       const type = montant < 0 ? 'depense' : 'revenu';
-      const cle = cleOperationImport_({ date, libelle: libelleBrut, montant, compte });
-      if (cles.has(cle)) { resultats.doublons++; return; }
+      const cle = cleOperationImport_({ date, libelle: libelleBrut, montant, type, compte });
+      if (cles.has(cle)) {
+        resultats.doublons++;
+        return;
+      }
 
       const correspondance = trouverCorrespondanceBancaire_(libelleBrut, compte, correspondances);
       const rapprochement = rapprocherChargeFixe_(libelleBrut, Math.abs(montant), compte, charges);
@@ -39,9 +60,9 @@ function importerOperationsHelloBank(operations, compte) {
         existantes
       );
 
-      if (candidateManuelle) {
+      if (candidateManuelle && candidateManuelle.automatique) {
         const commentaireFusionne = [
-          candidateManuelle.commentaire || '',
+          candidateManuelle.operation.commentaire || '',
           commentaireBanque,
           '[RAPPROCHEMENT_MANUEL:' + candidateManuelle.score + ']'
         ].filter(Boolean).join(' ');
@@ -64,7 +85,7 @@ function importerOperationsHelloBank(operations, compte) {
         candidateManuelle.operation.commentaire = commentaireFusionne;
         resultats.rapprocheesManuelles++;
       } else {
-        enregistrerLigne('Operations', {
+        const operationImportee = enregistrerLigne('Operations', {
           date,
           libelle: libelleNormalise,
           categorie,
@@ -73,7 +94,24 @@ function importerOperationsHelloBank(operations, compte) {
           type: typeFinal,
           commentaire: commentaireBanque
         });
+        existantes.push(operationImportee);
         resultats.importees++;
+
+        if (candidateManuelle) {
+          enregistrerRapprochementAValider_({
+            score: candidateManuelle.score,
+            operation_manuelle_id: candidateManuelle.operation.id,
+            operation_importee_id: operationImportee.id,
+            date_manuelle: candidateManuelle.operation.date,
+            date_bancaire: date,
+            libelle_manuel: candidateManuelle.operation.libelle,
+            libelle_bancaire: libelleBrut,
+            montant: Math.abs(montant),
+            type: typeFinal,
+            compte
+          });
+          resultats.aValider++;
+        }
       }
 
       cles.add(cle);
@@ -99,14 +137,14 @@ function importerOperationsHelloBank(operations, compte) {
       resultats.erreurs.push('Ligne ' + (index + 1) + ' : ' + e.message);
     }
   });
+
   return resultats;
 }
 
 function trouverSaisieManuelleCorrespondante_(operationPdf, operationsExistantes) {
   const datePdf = debutJour_(new Date(operationPdf.date));
   const montantPdf = Math.abs(Number(operationPdf.montant || 0));
-  const textePdf = normaliserTexteBanque_(operationPdf.libelle);
-  const motsPdf = motsSignificatifsBanque_(textePdf);
+  const motsPdf = motsSignificatifsBanque_(operationPdf.libelle);
 
   const candidates = (operationsExistantes || []).map(operation => {
     if (String(operation.compte || '') !== String(operationPdf.compte || '')) return null;
@@ -119,8 +157,7 @@ function trouverSaisieManuelleCorrespondante_(operationPdf, operationsExistantes
     const ecartJours = Math.abs(Math.round((dateExistante.getTime() - datePdf.getTime()) / 86400000));
     if (ecartJours > 2) return null;
 
-    const texteExistant = normaliserTexteBanque_(operation.libelle);
-    const motsExistants = motsSignificatifsBanque_(texteExistant);
+    const motsExistants = motsSignificatifsBanque_(operation.libelle);
     const communs = motsExistants.filter(m => motsPdf.includes(m)).length;
     const scoreLibelle = Math.max(motsExistants.length, motsPdf.length)
       ? Math.round(60 * communs / Math.max(motsExistants.length, motsPdf.length))
@@ -128,15 +165,53 @@ function trouverSaisieManuelleCorrespondante_(operationPdf, operationsExistantes
     const scoreDate = ecartJours === 0 ? 30 : ecartJours === 1 ? 20 : 10;
     const score = 40 + scoreDate + scoreLibelle;
 
-    return { operation, score, ecartJours };
+    return { operation, score, ecartJours, automatique: score >= 70 };
   }).filter(Boolean).sort((a, b) => b.score - a.score || a.ecartJours - b.ecartJours);
 
-  return candidates.length && candidates[0].score >= 70 ? candidates[0] : null;
+  return candidates.length && candidates[0].score >= 50 ? candidates[0] : null;
 }
 
 function motsSignificatifsBanque_(texte) {
   const motsVides = new Set(['PRLV','SEPA','RECU','VIR','VIREMENT','FACTURE','CARTE','PAIEMENT','CB','RETRAIT','DAB','COMMISSIONS','FR','EUR','EURO','CLIENT','REF','REFERENCE']);
   return normaliserTexteBanque_(texte).split(' ').filter(m => m.length > 2 && !motsVides.has(m) && !/^\d+$/.test(m));
+}
+
+function initialiserRapprochementsAValider_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let feuille = ss.getSheetByName(RAPPROCHEMENTS_SHEET);
+  if (!feuille) feuille = ss.insertSheet(RAPPROCHEMENTS_SHEET);
+  if (feuille.getLastRow() === 0) {
+    feuille.getRange(1, 1, 1, RAPPROCHEMENTS_HEADERS.length).setValues([RAPPROCHEMENTS_HEADERS]);
+  }
+  feuille.setFrozenRows(1);
+  feuille.getRange(1, 1, 1, RAPPROCHEMENTS_HEADERS.length)
+    .setFontWeight('bold').setBackground('#147d64').setFontColor('#ffffff');
+  feuille.autoResizeColumns(1, RAPPROCHEMENTS_HEADERS.length);
+}
+
+function enregistrerRapprochementAValider_(donnees) {
+  initialiserRapprochementsAValider_();
+  const feuille = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(RAPPROCHEMENTS_SHEET);
+  const maintenant = new Date().toISOString();
+  const ligne = Object.assign({
+    id: Utilities.getUuid(),
+    statut: 'À valider',
+    decision: '',
+    cree_le: maintenant,
+    modifie_le: maintenant
+  }, donnees || {});
+  feuille.appendRow(RAPPROCHEMENTS_HEADERS.map(h => ligne[h] == null ? '' : ligne[h]));
+  return ligne;
+}
+
+function lireRapprochementsAValider() {
+  initialiserRapprochementsAValider_();
+  const feuille = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(RAPPROCHEMENTS_SHEET);
+  if (feuille.getLastRow() < 2) return [];
+  return feuille.getRange(2, 1, feuille.getLastRow() - 1, RAPPROCHEMENTS_HEADERS.length)
+    .getValues()
+    .filter(l => l.some(v => v !== '' && v !== null))
+    .map(l => Object.fromEntries(RAPPROCHEMENTS_HEADERS.map((h, i) => [h, l[i] instanceof Date ? l[i].toISOString() : l[i]])));
 }
 
 function rapprocherChargeFixe_(libelle, montant, compte, charges) {
