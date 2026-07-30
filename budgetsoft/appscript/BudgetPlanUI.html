@@ -1,0 +1,63 @@
+<script>
+const budgetPlanState={donnees:null};
+
+document.addEventListener('DOMContentLoaded',()=>{
+  document.querySelector('[data-view="budget"]')?.addEventListener('click',()=>setTimeout(chargerVueBudget,0));
+});
+
+function chargerVueBudget(cle){
+  const zone=document.getElementById('generic-view');
+  zone.innerHTML='<article class="card panel"><div class="loading">Chargement du budget…</div></article>';
+  google.script.run.withSuccessHandler(d=>{budgetPlanState.donnees=d;rendreVueBudget(d);})
+    .withFailureHandler(err=>afficherErreur(err.message||String(err))).chargerBudgetPeriode(cle||'');
+}
+
+function rendreVueBudget(d){
+  const zone=document.getElementById('generic-view');
+  const p=d.periode;
+  const depenses=d.postes.filter(x=>x.type==='depense');
+  const revenus=d.postes.filter(x=>x.type==='revenu');
+  zone.innerHTML=`
+    <div class="section-toolbar"><div><p class="section-intro">Préparez la période comprise entre deux salaires et suivez les écarts en temps réel.</p><strong>${echapper(p.libelle)}</strong> · ${formaterDate(p.debut)} → ${formaterDate(p.fin)}</div><div class="toolbar-buttons"><button class="secondary-button" id="copy-previous-budget">Recopier la période précédente</button><button class="primary-button" id="save-budget-plan">Enregistrer le budget</button></div></div>
+    <div class="cards">
+      <article class="card metric-card"><span>Dépenses prévues</span><strong>${money.format(d.totaux.depensesPrevues)}</strong><small>Enveloppes définies</small></article>
+      <article class="card metric-card"><span>Dépenses réalisées</span><strong>${money.format(d.totaux.depensesReelles)}</strong><small>Opérations de la période</small></article>
+      <article class="card metric-card"><span>Reste disponible</span><strong>${money.format(d.totaux.depensesPrevues-d.totaux.depensesReelles)}</strong><small>Prévu moins réalisé</small></article>
+      <article class="card metric-card"><span>Revenus réalisés</span><strong>${money.format(d.totaux.revenusReels)}</strong><small>Revenus reçus</small></article>
+    </div>
+    ${tableBudgetHtml('Dépenses',depenses)}
+    ${tableBudgetHtml('Revenus',revenus)}
+    <p id="budget-plan-status" class="helper-text"></p>`;
+  document.getElementById('save-budget-plan').addEventListener('click',enregistrerVueBudget);
+  document.getElementById('copy-previous-budget').addEventListener('click',recopierBudgetPrecedent);
+}
+
+function tableBudgetHtml(titre,lignes){
+  if(!lignes.length)return '';
+  return `<article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Prévision</span><h2>${titre}</h2></div></div><div class="budget-plan-table"><div class="import-row"><strong>Poste</strong><strong>Prévu</strong><strong>Réalisé</strong><strong>Écart</strong></div>${lignes.map(x=>`<div class="import-row"><span>${echapper(x.poste)}</span><input class="budget-plan-input" data-poste="${echapperAttribut(x.poste)}" data-type="${echapperAttribut(x.type)}" inputmode="decimal" value="${Number(x.prevu||0).toFixed(2).replace('.',',')}"><span>${money.format(x.reel)}</span><strong class="${x.ecart<0?'amount-negative':'amount-positive'}">${money.format(x.ecart)}</strong></div>`).join('')}</div></article>`;
+}
+
+function enregistrerVueBudget(){
+  const status=document.getElementById('budget-plan-status');
+  const postes=[...document.querySelectorAll('.budget-plan-input')].map(input=>({poste:input.dataset.poste,type:input.dataset.type,prevu:parseMontantBudget(input.value)}));
+  status.textContent='Enregistrement…';
+  google.script.run.withSuccessHandler(d=>{budgetPlanState.donnees=d;rendreVueBudget(d);document.getElementById('budget-plan-status').textContent='Budget enregistré.';})
+    .withFailureHandler(err=>status.textContent='Erreur : '+(err.message||String(err))).enregistrerBudgetPeriode(budgetPlanState.donnees.periode.cle,postes);
+}
+
+function recopierBudgetPrecedent(){
+  const courant=budgetPlanState.donnees.periode.cle;
+  const [annee,mois]=courant.split('-').map(Number);
+  const precedent=new Date(annee,mois-2,1);
+  const source=`${precedent.getFullYear()}-${String(precedent.getMonth()+1).padStart(2,'0')}`;
+  const status=document.getElementById('budget-plan-status');
+  status.textContent='Recopie du budget précédent…';
+  google.script.run.withSuccessHandler(d=>{budgetPlanState.donnees=d;rendreVueBudget(d);document.getElementById('budget-plan-status').textContent='Budget précédent recopié.';})
+    .withFailureHandler(err=>status.textContent='Erreur : '+(err.message||String(err))).recopierBudgetPeriode(source,courant);
+}
+
+function parseMontantBudget(v){
+  const n=Number(String(v||'0').replace(/\s/g,'').replace(',','.'));
+  return Number.isFinite(n)?Math.max(0,n):0;
+}
+</script>
