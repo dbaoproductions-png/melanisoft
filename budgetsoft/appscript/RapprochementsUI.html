@@ -1,0 +1,148 @@
+<script>
+const rapprochementsUI={liste:[],filtre:'À valider'};
+
+document.addEventListener('DOMContentLoaded',installerRapprochementsUI);
+
+function installerRapprochementsUI(){
+  const toolbar=document.querySelector('#operations .toolbar-buttons');
+  if(toolbar&&!document.getElementById('review-matches-button')){
+    const bouton=document.createElement('button');
+    bouton.type='button';
+    bouton.className='secondary-button';
+    bouton.id='review-matches-button';
+    bouton.textContent='🔎 Rapprochements';
+    bouton.addEventListener('click',ouvrirRapprochements);
+    toolbar.prepend(bouton);
+  }
+  creerModalRapprochements();
+  chargerCompteurRapprochements();
+}
+
+function creerModalRapprochements(){
+  if(document.getElementById('reconciliation-modal'))return;
+  const modal=document.createElement('div');
+  modal.id='reconciliation-modal';
+  modal.className='modal hidden';
+  modal.setAttribute('role','dialog');
+  modal.setAttribute('aria-modal','true');
+  modal.innerHTML=`
+    <div class="modal-card wide-modal reconciliation-card">
+      <div class="modal-heading">
+        <div><p class="panel-kicker">Contrôle bancaire</p><h2>Rapprochements à valider</h2></div>
+        <button class="modal-close" id="close-reconciliation-modal">×</button>
+      </div>
+      <p class="helper-text">Comparez la saisie manuelle avec l’opération issue du relevé. Une fusion conserve votre libellé et votre catégorie, puis ajoute les informations bancaires.</p>
+      <div class="reconciliation-toolbar">
+        <select id="reconciliation-filter">
+          <option value="À valider">À valider</option>
+          <option value="">Tous les statuts</option>
+          <option value="Traité">Traités</option>
+          <option value="Ignoré">Ignorés</option>
+        </select>
+        <button type="button" class="secondary-button" id="refresh-reconciliations">Actualiser</button>
+      </div>
+      <div id="reconciliation-status" class="helper-text"></div>
+      <div id="reconciliation-list" class="reconciliation-list"></div>
+    </div>`;
+  document.body.appendChild(modal);
+  document.getElementById('close-reconciliation-modal').addEventListener('click',fermerRapprochements);
+  document.getElementById('refresh-reconciliations').addEventListener('click',chargerRapprochements);
+  document.getElementById('reconciliation-filter').addEventListener('change',e=>{rapprochementsUI.filtre=e.target.value;rendreRapprochements();});
+  modal.addEventListener('click',e=>{if(e.target===modal)fermerRapprochements();});
+
+  const style=document.createElement('style');
+  style.textContent=`
+    .reconciliation-card{max-width:980px}
+    .reconciliation-toolbar{display:flex;gap:12px;align-items:center;margin:12px 0 18px}
+    .reconciliation-toolbar select{min-width:190px}
+    .reconciliation-list{display:grid;gap:14px;max-height:62vh;overflow:auto;padding-right:4px}
+    .reconciliation-item{border:1px solid rgba(20,125,100,.18);border-radius:14px;padding:16px;background:#fff}
+    .reconciliation-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:12px}
+    .reconciliation-score{font-weight:700;color:#147d64;white-space:nowrap}
+    .reconciliation-compare{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .reconciliation-side{border-radius:12px;padding:12px;background:rgba(20,125,100,.06)}
+    .reconciliation-side.bank{background:rgba(30,90,150,.06)}
+    .reconciliation-side small{display:block;margin-bottom:6px;opacity:.7}
+    .reconciliation-side strong{display:block;margin-bottom:5px}
+    .reconciliation-meta{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:.92rem}
+    .reconciliation-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+    .reconciliation-actions button{min-width:140px}
+    .reconciliation-decision{font-weight:600;color:#147d64;margin-top:10px}
+    @media(max-width:720px){.reconciliation-compare{grid-template-columns:1fr}}
+  `;
+  document.head.appendChild(style);
+}
+
+function ouvrirRapprochements(){
+  document.getElementById('reconciliation-modal').classList.remove('hidden');
+  chargerRapprochements();
+}
+
+function fermerRapprochements(){
+  document.getElementById('reconciliation-modal').classList.add('hidden');
+}
+
+function chargerRapprochements(){
+  const status=document.getElementById('reconciliation-status');
+  status.textContent='Chargement…';
+  google.script.run
+    .withSuccessHandler(liste=>{rapprochementsUI.liste=liste||[];status.textContent='';rendreRapprochements();mettreAJourCompteurRapprochements();})
+    .withFailureHandler(err=>{status.textContent='Erreur : '+(err.message||String(err));})
+    .lireRapprochementsAValider();
+}
+
+function chargerCompteurRapprochements(){
+  google.script.run.withSuccessHandler(liste=>{rapprochementsUI.liste=liste||[];mettreAJourCompteurRapprochements();}).lireRapprochementsAValider();
+}
+
+function mettreAJourCompteurRapprochements(){
+  const bouton=document.getElementById('review-matches-button');
+  if(!bouton)return;
+  const nombre=rapprochementsUI.liste.filter(r=>String(r.statut)==='À valider').length;
+  bouton.textContent=nombre?`🔎 Rapprochements (${nombre})`:'🔎 Rapprochements';
+}
+
+function rendreRapprochements(){
+  const zone=document.getElementById('reconciliation-list');
+  if(!zone)return;
+  const liste=rapprochementsUI.liste.filter(r=>!rapprochementsUI.filtre||String(r.statut)===rapprochementsUI.filtre);
+  if(!liste.length){zone.innerHTML='<div class="empty-state">Aucun rapprochement correspondant à ce filtre.</div>';return;}
+  zone.innerHTML=liste.map(r=>{
+    const enAttente=String(r.statut)==='À valider';
+    return `<article class="reconciliation-item" data-id="${echapperAttribut(r.id)}">
+      <div class="reconciliation-head"><strong>${money.format(Math.abs(Number(r.montant)||0))}</strong><span class="reconciliation-score">Similarité ${Number(r.score)||0}/100</span></div>
+      <div class="reconciliation-compare">
+        <div class="reconciliation-side"><small>Saisie manuelle</small><strong>${echapper(r.libelle_manuel||'—')}</strong><span>${dateRapprochement(r.date_manuelle)}</span></div>
+        <div class="reconciliation-side bank"><small>Relevé bancaire</small><strong>${echapper(r.libelle_bancaire||'—')}</strong><span>${dateRapprochement(r.date_bancaire)}</span></div>
+      </div>
+      <div class="reconciliation-meta"><span>Type : ${echapper(r.type||'—')}</span><span>Compte : ${echapper(nomCompteRapprochement(r.compte))}</span><span>Statut : ${echapper(r.statut||'—')}</span></div>
+      ${enAttente?`<div class="reconciliation-actions">
+        <button type="button" class="primary-button" onclick="deciderRapprochement('${echapperAttribut(r.id)}','fusionner',this)">Fusionner</button>
+        <button type="button" class="secondary-button" onclick="deciderRapprochement('${echapperAttribut(r.id)}','conserver',this)">Conserver les deux</button>
+        <button type="button" class="secondary-button" onclick="deciderRapprochement('${echapperAttribut(r.id)}','ignorer',this)">Ignorer la proposition</button>
+      </div>`:`<div class="reconciliation-decision">Décision : ${echapper(r.decision||'—')}</div>`}
+    </article>`;
+  }).join('');
+}
+
+function deciderRapprochement(id,decision,bouton){
+  const carte=bouton.closest('.reconciliation-item');
+  carte.querySelectorAll('button').forEach(b=>b.disabled=true);
+  const status=document.getElementById('reconciliation-status');
+  status.textContent='Enregistrement de la décision…';
+  google.script.run
+    .withSuccessHandler(()=>{status.textContent='Décision enregistrée.';chargerRapprochements();if(typeof charger==='function')charger();})
+    .withFailureHandler(err=>{status.textContent='Erreur : '+(err.message||String(err));carte.querySelectorAll('button').forEach(b=>b.disabled=false);})
+    .deciderRapprochementBancaire(id,decision);
+}
+
+function dateRapprochement(valeur){
+  const d=new Date(valeur);
+  return isNaN(d)?'—':d.toLocaleDateString('fr-FR');
+}
+
+function nomCompteRapprochement(id){
+  const compte=(state.data?.Comptes||[]).find(c=>String(c.id)===String(id));
+  return compte?.nom||id||'—';
+}
+</script>
