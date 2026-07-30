@@ -62,7 +62,7 @@
 
       <section id="operations" class="view">
         <div class="section-toolbar">
-          <p class="section-intro">Enregistrez vos revenus et dépenses, puis automatisez vos charges mensuelles.</p>
+          <p class="section-intro">Enregistrez vos revenus et dépenses, puis automatisez vos charges récurrentes.</p>
           <div class="toolbar-buttons"><button class="secondary-button" id="import-fixed-charges-button">📥 Importer</button><button class="secondary-button" id="add-fixed-charge-button">↻ Charge fixe</button><button class="primary-button" id="add-operation-button">＋ Ajouter une opération</button></div>
         </div>
         <div class="cards operations-summary">
@@ -71,8 +71,8 @@
           <article class="card metric-card"><span>Solde affiché</span><strong id="operations-net">0,00 €</strong><small>Revenus moins dépenses</small></article>
         </div>
         <article class="card panel fixed-charge-panel">
-          <div class="panel-heading"><div><span class="panel-kicker">Automatisation</span><h2>Charges fixes mensuelles</h2></div><span class="badge" id="fixed-charge-count">0 active</span></div>
-          <p class="helper-text">Chaque charge active est créée automatiquement une seule fois par mois, dès l’ouverture de BudgetSoft.</p>
+          <div class="panel-heading"><div><span class="panel-kicker">Automatisation</span><h2>Charges fixes récurrentes</h2></div><span class="badge" id="fixed-charge-count">0 active</span></div>
+          <p class="helper-text">Chaque charge active est créée automatiquement selon sa fréquence, sans doublon.</p>
           <div id="fixed-charges-list" class="empty-state">Aucune charge fixe enregistrée.</div>
         </article>
         <article class="card panel operations-page-panel">
@@ -105,13 +105,31 @@
 
   <div class="modal hidden" id="fixed-charge-modal" role="dialog" aria-modal="true" aria-labelledby="fixed-charge-modal-title">
     <div class="modal-card wide-modal"><div class="modal-heading"><div><p class="panel-kicker">Automatisation</p><h2 id="fixed-charge-modal-title">Ajouter une charge fixe</h2></div><button class="modal-close" id="close-fixed-charge-modal">×</button></div>
-      <form id="fixed-charge-form"><input type="hidden" id="fixed-charge-id"><div class="form-grid"><label class="full-field">Libellé<input id="fixed-charge-label" required maxlength="120" placeholder="Ex. Crédit immobilier"></label><label>Montant mensuel<input id="fixed-charge-amount" inputmode="decimal" required placeholder="0,00"></label><label>Jour du mois<input type="number" id="fixed-charge-day" min="1" max="31" value="1" required></label><label>Compte<select id="fixed-charge-account" required></select></label><label>Catégorie<select id="fixed-charge-category"><option value="">Sans catégorie</option></select></label><label>Date de début<input type="date" id="fixed-charge-start" required></label><label>Date de fin facultative<input type="date" id="fixed-charge-end"></label><label class="full-field">Commentaire<textarea id="fixed-charge-comment" rows="2" maxlength="500" placeholder="Facultatif"></textarea></label><label class="checkbox-line full-field"><input type="checkbox" id="fixed-charge-active" checked> Reconduction mensuelle active</label></div><div class="form-actions"><button type="button" class="secondary-button" id="cancel-fixed-charge">Annuler</button><button type="submit" class="primary-button" id="save-fixed-charge">Enregistrer</button></div></form>
+      <form id="fixed-charge-form">
+        <input type="hidden" id="fixed-charge-id">
+        <div class="form-grid">
+          <label class="full-field">Libellé<input id="fixed-charge-label" required maxlength="120" placeholder="Ex. Crédit immobilier"></label>
+          <label class="full-field">Créancier / libellé bancaire<input id="fixed-charge-bank-label" required maxlength="160" placeholder="Ex. PRLV SEPA EDF CLIENT 1234"></label>
+          <label>Montant attendu<input id="fixed-charge-amount" inputmode="decimal" required placeholder="0,00"></label>
+          <label>Tolérance (€)<input id="fixed-charge-tolerance" inputmode="decimal" value="0,50" placeholder="0,50"></label>
+          <label>Jour d’échéance<input type="number" id="fixed-charge-day" min="1" max="31" value="1" required></label>
+          <label>Fréquence<select id="fixed-charge-frequency"><option value="Mensuelle">Mensuelle</option><option value="Hebdomadaire">Hebdomadaire</option><option value="Quotidienne">Quotidienne</option><option value="Trimestrielle">Trimestrielle</option><option value="Semestrielle">Semestrielle</option><option value="Annuelle">Annuelle</option></select></label>
+          <label>Compte<select id="fixed-charge-account" required></select></label>
+          <label>Catégorie<select id="fixed-charge-category"><option value="">Sans catégorie</option></select></label>
+          <label>Nature<select id="fixed-charge-nature"><option value="Autre">Autre</option><option value="Crédit">Crédit</option><option value="Assurance">Assurance</option><option value="Énergie">Énergie</option><option value="Télécom">Télécom</option><option value="Impôt">Impôt</option><option value="Abonnement">Abonnement</option></select></label>
+          <label>Date de début<input type="date" id="fixed-charge-start" required></label>
+          <label>Date de fin facultative<input type="date" id="fixed-charge-end"></label>
+          <label class="full-field">Commentaire<textarea id="fixed-charge-comment" rows="2" maxlength="500" placeholder="Facultatif"></textarea></label>
+          <label class="checkbox-line full-field"><input type="checkbox" id="fixed-charge-active" checked> Charge récurrente active</label>
+        </div>
+        <div class="form-actions"><button type="button" class="secondary-button" id="cancel-fixed-charge">Annuler</button><button type="submit" class="primary-button" id="save-fixed-charge">Enregistrer</button></div>
+      </form>
     </div>
   </div>
 
   <div class="modal hidden" id="import-modal" role="dialog" aria-modal="true" aria-labelledby="import-modal-title">
     <div class="modal-card wide-modal"><div class="modal-heading"><div><p class="panel-kicker">Import intelligent</p><h2 id="import-modal-title">Importer des charges fixes</h2></div><button class="modal-close" id="close-import-modal">×</button></div>
-      <div class="import-help">Copiez les colonnes <strong>Libellé, Montant, Jour, Catégorie, Compte, Fréquence</strong> depuis Excel, puis collez-les ci-dessous.</div>
+      <div class="import-help">Copiez les colonnes <strong>Libellé, Libellé bancaire, Montant, Tolérance, Jour, Fréquence, Compte, Catégorie et Actif</strong> depuis Excel, puis collez-les ci-dessous.</div>
       <label>Tableau à importer<textarea id="import-text" class="import-area" rows="10"></textarea></label>
       <div id="import-results" class="hidden"><div id="import-summary" class="import-summary"></div><div id="import-preview" class="import-preview"></div><p id="new-categories-note" class="helper-text"></p><label class="checkbox-line"><input type="checkbox" id="create-import-categories" checked> Créer automatiquement les catégories manquantes</label></div>
       <div class="form-actions"><button type="button" class="secondary-button" id="cancel-import">Annuler</button><button type="button" class="secondary-button" id="analyze-import">Analyser</button><button type="button" class="primary-button hidden" id="confirm-import">Importer</button></div>
