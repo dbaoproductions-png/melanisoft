@@ -17,8 +17,9 @@ function analyserImportChargesFixes(texte) {
     const jour = parseInt(ligne.jour || ligne.jour_execution, 10);
     const compteSaisi = String(ligne.compte || '').trim();
     const categorie = String(ligne.categorie || '').trim();
-    const frequence = String(ligne.frequence || 'Mensuelle').trim();
+    const frequence = normaliserFrequence_(ligne.frequence || 'Mensuelle');
     const libelleBancaire = String(ligne.libelle_bancaire || '').trim();
+    const nature = String(ligne.nature || deduireNatureImport_(categorie)).trim();
     const tolerance = ligne.tolerance === '' || ligne.tolerance == null
       ? 0.50
       : convertirNombreImport_(ligne.tolerance);
@@ -48,6 +49,7 @@ function analyserImportChargesFixes(texte) {
       frequence,
       libelle_bancaire: libelleBancaire,
       tolerance,
+      nature,
       actif,
       erreurs,
       avertissements,
@@ -100,10 +102,11 @@ function importerChargesFixes(lignes, creerCategories) {
         frequence: ligne.frequence || 'Mensuelle',
         libelle_bancaire: ligne.libelle_bancaire || '',
         tolerance: Number.isFinite(Number(ligne.tolerance)) ? Number(ligne.tolerance) : 0.50,
-        date_debut: new Date(),
-        date_fin: '',
+        nature: ligne.nature || deduireNatureImport_(categorie),
+        date_debut: ligne.date_debut ? new Date(ligne.date_debut) : new Date(),
+        date_fin: ligne.date_fin ? new Date(ligne.date_fin) : '',
         actif: ligne.actif !== false,
-        commentaire: 'Import BudgetSoft 0.6'
+        commentaire: 'Import BudgetSoft 0.7'
       });
 
       if (ligne.doublon_id && ligne.action === 'mettre_a_jour') bilan.misesAJour++;
@@ -145,6 +148,8 @@ function normaliserEnteteImport_(v) {
     libelle_de_reconnaissance: 'libelle_bancaire',
     mot_cle_bancaire: 'libelle_bancaire',
     marge: 'tolerance',
+    periodicite: 'frequence',
+    type_de_charge: 'nature',
     active: 'actif'
   };
   return alias[n] || n;
@@ -161,6 +166,17 @@ function convertirBooleenImport_(v, valeurParDefaut) {
   if (['oui', 'true', '1', 'actif', 'active'].includes(n)) return true;
   if (['non', 'false', '0', 'inactif', 'inactive'].includes(n)) return false;
   return valeurParDefaut;
+}
+
+function deduireNatureImport_(categorie) {
+  const texte = normaliserTexteImport_(categorie);
+  if (texte.includes('credit')) return 'Crédit';
+  if (texte.includes('assurance')) return 'Assurance';
+  if (texte.includes('energie') || texte.includes('electric') || texte.includes('gaz')) return 'Énergie';
+  if (texte.includes('telecom') || texte.includes('internet') || texte.includes('telephone')) return 'Télécom';
+  if (texte.includes('impot') || texte.includes('taxe')) return 'Impôt';
+  if (texte.includes('abonnement')) return 'Abonnement';
+  return 'Autre';
 }
 
 function normaliserTexteImport_(v) {
