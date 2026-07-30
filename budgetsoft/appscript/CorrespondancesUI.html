@@ -1,0 +1,125 @@
+<script>
+const correspondancesUI={liste:[],edition:null};
+const rendreParametresBudgetairesBase=rendreParametresBudgetaires;
+
+rendreParametresBudgetaires=function(){
+  rendreParametresBudgetairesBase();
+  installerGestionCorrespondances();
+};
+
+function installerGestionCorrespondances(){
+  const zone=document.getElementById('generic-view');
+  if(!zone||document.getElementById('bank-mappings-panel'))return;
+  const panneau=document.createElement('article');
+  panneau.className='card panel';
+  panneau.id='bank-mappings-panel';
+  panneau.innerHTML=`
+    <div class="panel-heading">
+      <div><span class="panel-kicker">Apprentissage</span><h2>Correspondances bancaires</h2></div>
+      <button type="button" class="primary-button" id="add-bank-mapping">＋ Ajouter</button>
+    </div>
+    <p class="helper-text">Ces règles transforment les libellés bruts des relevés en noms lisibles et leur attribuent automatiquement une catégorie.</p>
+    <div class="filters"><input id="bank-mapping-search" placeholder="Rechercher un motif, un libellé ou une catégorie"><select id="bank-mapping-status"><option value="">Toutes les règles</option><option value="active">Actives</option><option value="inactive">Inactives</option></select></div>
+    <div id="bank-mappings-list" class="empty-state">Chargement des correspondances…</div>`;
+  zone.appendChild(panneau);
+  creerModalCorrespondance();
+  document.getElementById('add-bank-mapping').addEventListener('click',()=>ouvrirCorrespondance());
+  document.getElementById('bank-mapping-search').addEventListener('input',afficherCorrespondances);
+  document.getElementById('bank-mapping-status').addEventListener('change',afficherCorrespondances);
+  chargerCorrespondances();
+}
+
+function chargerCorrespondances(){
+  google.script.run.withSuccessHandler(liste=>{
+    correspondancesUI.liste=Array.isArray(liste)?liste:[];
+    afficherCorrespondances();
+  }).withFailureHandler(err=>{
+    document.getElementById('bank-mappings-list').innerHTML='<div class="error">'+echapper(err.message||String(err))+'</div>';
+  }).lireCorrespondancesBancaires();
+}
+
+function afficherCorrespondances(){
+  const zone=document.getElementById('bank-mappings-list');if(!zone)return;
+  const recherche=(document.getElementById('bank-mapping-search')?.value||'').trim().toLowerCase();
+  const statut=document.getElementById('bank-mapping-status')?.value||'';
+  const liste=correspondancesUI.liste.filter(c=>{
+    const actif=estCorrespondanceActive(c.actif);
+    if(statut==='active'&&!actif)return false;
+    if(statut==='inactive'&&actif)return false;
+    const texte=[c.motif_bancaire,c.libelle_normalise,c.categorie].join(' ').toLowerCase();
+    return !recherche||texte.includes(recherche);
+  }).sort((a,b)=>(Number(b.utilisations)||0)-(Number(a.utilisations)||0)||String(a.libelle_normalise).localeCompare(String(b.libelle_normalise),'fr'));
+  if(!liste.length){zone.className='empty-state';zone.textContent='Aucune correspondance ne correspond aux filtres.';return;}
+  zone.className='';
+  zone.innerHTML=`<div class="mapping-table"><div class="mapping-row mapping-head"><span>Motif bancaire</span><span>Libellé affiché</span><span>Catégorie</span><span>Usage</span><span>État</span><span></span></div>${liste.map(c=>`
+    <div class="mapping-row" data-id="${echapperAttribut(c.id)}">
+      <span class="mapping-pattern" title="${echapperAttribut(c.motif_bancaire||'')}">${echapper(c.motif_bancaire||'—')}</span>
+      <strong>${echapper(c.libelle_normalise||'—')}</strong>
+      <span>${echapper(c.categorie||'Sans catégorie')}</span>
+      <span>${Number(c.utilisations)||0}</span>
+      <label class="toggle-label"><input type="checkbox" class="mapping-active" ${estCorrespondanceActive(c.actif)?'checked':''}> Active</label>
+      <span class="mapping-actions"><button type="button" class="icon-button edit-mapping" title="Modifier">✎</button><button type="button" class="icon-button delete-mapping" title="Supprimer">×</button></span>
+    </div>`).join('')}</div>`;
+  zone.querySelectorAll('.mapping-row[data-id]').forEach(ligne=>{
+    const id=ligne.dataset.id;
+    ligne.querySelector('.edit-mapping').addEventListener('click',()=>ouvrirCorrespondance(id));
+    ligne.querySelector('.delete-mapping').addEventListener('click',()=>supprimerCorrespondance(id));
+    ligne.querySelector('.mapping-active').addEventListener('change',e=>basculerCorrespondance(id,e.target.checked));
+  });
+}
+
+function creerModalCorrespondance(){
+  if(document.getElementById('bank-mapping-modal'))return;
+  const modal=document.createElement('div');modal.id='bank-mapping-modal';modal.className='modal hidden';modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');
+  modal.innerHTML=`<div class="modal-card wide-modal"><div class="modal-heading"><div><p class="panel-kicker">Apprentissage bancaire</p><h2 id="bank-mapping-title">Ajouter une correspondance</h2></div><button type="button" class="modal-close" id="close-bank-mapping">×</button></div><form id="bank-mapping-form"><input type="hidden" id="bank-mapping-id"><div class="form-grid"><label class="full-field">Motif bancaire<input id="bank-mapping-pattern" required maxlength="160" placeholder="Ex. FREE TELECOM"></label><label class="full-field">Libellé affiché<input id="bank-mapping-label" required maxlength="80" placeholder="Ex. Free"></label><label>Catégorie<select id="bank-mapping-category"><option value="">Sans catégorie</option></select></label><label>Type<select id="bank-mapping-type"><option value="">Automatique</option><option value="depense">Dépense</option><option value="revenu">Revenu</option></select></label><label>Compte<select id="bank-mapping-account"><option value="">Tous les comptes</option></select></label><label class="checkbox-line"><input type="checkbox" id="bank-mapping-active" checked> Règle active</label></div><div class="form-actions"><button type="button" class="secondary-button" id="cancel-bank-mapping">Annuler</button><button type="submit" class="primary-button">Enregistrer</button></div></form></div>`;
+  document.body.appendChild(modal);
+  document.getElementById('close-bank-mapping').addEventListener('click',fermerCorrespondance);
+  document.getElementById('cancel-bank-mapping').addEventListener('click',fermerCorrespondance);
+  document.getElementById('bank-mapping-form').addEventListener('submit',enregistrerCorrespondanceUI);
+  modal.addEventListener('click',e=>{if(e.target===modal)fermerCorrespondance();});
+}
+
+function ouvrirCorrespondance(id){
+  const c=id?correspondancesUI.liste.find(x=>String(x.id)===String(id)):null;
+  correspondancesUI.edition=c||null;
+  const categories=(state.data?.Categories||[]).filter(x=>estActif(x.actif));
+  const comptes=(state.data?.Comptes||[]).filter(x=>estActif(x.actif));
+  document.getElementById('bank-mapping-category').innerHTML='<option value="">Sans catégorie</option>'+categories.map(x=>`<option value="${echapperAttribut(x.nom)}">${echapper(x.nom)}</option>`).join('');
+  document.getElementById('bank-mapping-account').innerHTML='<option value="">Tous les comptes</option>'+comptes.map(x=>`<option value="${echapperAttribut(x.id)}">${echapper(x.nom)}</option>`).join('');
+  document.getElementById('bank-mapping-title').textContent=c?'Modifier la correspondance':'Ajouter une correspondance';
+  document.getElementById('bank-mapping-id').value=c?.id||'';
+  document.getElementById('bank-mapping-pattern').value=c?.motif_bancaire||'';
+  document.getElementById('bank-mapping-label').value=c?.libelle_normalise||'';
+  document.getElementById('bank-mapping-category').value=c?.categorie||'';
+  document.getElementById('bank-mapping-type').value=c?.type||'';
+  document.getElementById('bank-mapping-account').value=c?.compte||'';
+  document.getElementById('bank-mapping-active').checked=c?estCorrespondanceActive(c.actif):true;
+  document.getElementById('bank-mapping-modal').classList.remove('hidden');
+  document.getElementById('bank-mapping-pattern').focus();
+}
+
+function fermerCorrespondance(){document.getElementById('bank-mapping-modal').classList.add('hidden');}
+
+function enregistrerCorrespondanceUI(e){
+  e.preventDefault();
+  const base=correspondancesUI.edition||{};
+  const donnee=Object.assign({},base,{id:document.getElementById('bank-mapping-id').value||base.id||'',motif_bancaire:document.getElementById('bank-mapping-pattern').value,libelle_normalise:document.getElementById('bank-mapping-label').value,categorie:document.getElementById('bank-mapping-category').value,type:document.getElementById('bank-mapping-type').value,compte:document.getElementById('bank-mapping-account').value,actif:document.getElementById('bank-mapping-active').checked});
+  google.script.run.withSuccessHandler(()=>{fermerCorrespondance();chargerCorrespondances();}).withFailureHandler(err=>afficherErreur(err.message||String(err))).enregistrerCorrespondanceBancaire(donnee);
+}
+
+function basculerCorrespondance(id,actif){
+  google.script.run.withSuccessHandler(c=>{const i=correspondancesUI.liste.findIndex(x=>String(x.id)===String(id));if(i>=0)correspondancesUI.liste[i]=c;afficherCorrespondances();}).withFailureHandler(err=>{afficherErreur(err.message||String(err));chargerCorrespondances();}).basculerCorrespondanceBancaire(id,actif);
+}
+
+function supprimerCorrespondance(id){
+  const c=correspondancesUI.liste.find(x=>String(x.id)===String(id));
+  if(!confirm(`Supprimer la correspondance « ${c?.libelle_normalise||''} » ?`))return;
+  google.script.run.withSuccessHandler(()=>{correspondancesUI.liste=correspondancesUI.liste.filter(x=>String(x.id)!==String(id));afficherCorrespondances();}).withFailureHandler(err=>afficherErreur(err.message||String(err))).supprimerCorrespondanceBancaire(id);
+}
+
+function estCorrespondanceActive(v){return v===true||String(v).toLowerCase()==='true'||String(v)==='1';}
+
+const styleCorrespondances=document.createElement('style');
+styleCorrespondances.textContent=`.mapping-table{display:grid;gap:.4rem}.mapping-row{display:grid;grid-template-columns:minmax(160px,1.5fr) minmax(130px,1.2fr) minmax(110px,1fr) 70px 100px 82px;gap:.75rem;align-items:center;padding:.7rem .8rem;border:1px solid var(--border,#dfe6e2);border-radius:10px}.mapping-head{font-size:.78rem;font-weight:700;text-transform:uppercase;background:#f5f8f6}.mapping-pattern{font-family:monospace;font-size:.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mapping-actions{display:flex;gap:.25rem;justify-content:flex-end}@media(max-width:900px){.mapping-head{display:none}.mapping-row{grid-template-columns:1fr 1fr}.mapping-actions{justify-content:flex-start}}`;
+document.head.appendChild(styleCorrespondances);
+</script>
