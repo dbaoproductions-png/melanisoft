@@ -1,6 +1,6 @@
 <script>
 const cycleUI={donnees:null};
-document.addEventListener('DOMContentLoaded',()=>{installerCycleUI();chargerCycleUI();});
+document.addEventListener('DOMContentLoaded',()=>{installerCycleUI();installerImportCycle();chargerCycleUI();});
 
 function installerCycleUI(){
   const cards=document.querySelector('#dashboard .cards');
@@ -16,6 +16,18 @@ function installerCycleUI(){
     panneau.innerHTML='<div class="panel-heading"><div><span class="panel-kicker">Trésorerie réelle</span><h2>Cycle financier</h2></div><button class="secondary-button" type="button" onclick="chargerCycleUI()">Actualiser</button></div><div id="cycle-finance-content" class="helper-text">Chargement…</div>';
     grille.prepend(panneau);
   }
+}
+function installerImportCycle(){
+  const bouton=document.getElementById('confirm-pdf-import');
+  if(!bouton||bouton.dataset.cycleInstalled)return;
+  bouton.dataset.cycleInstalled='1';
+  bouton.addEventListener('click',e=>{
+    e.preventDefault();e.stopImmediatePropagation();
+    const compte=document.getElementById('pdf-account').value,status=document.getElementById('pdf-status');
+    if(!compte){status.textContent='Choisissez le compte concerné.';return;}
+    bouton.disabled=true;
+    google.script.run.withSuccessHandler(r=>{bouton.disabled=false;status.textContent=`Import terminé : ${r.importees} importées, ${r.doublons} doublons ignorés, ${r.rapprochees} rapprochées. Les paiements CB ont été datés au dernier jour du mois.`;charger();chargerCycleUI();}).withFailureHandler(err=>{bouton.disabled=false;status.textContent='Erreur : '+(err.message||String(err));}).importerOperationsHelloBankCycle(sprint0809.pdfOperations,compte);
+  },true);
 }
 function chargerCycleUI(){
   google.script.run.withSuccessHandler(d=>{cycleUI.donnees=d;rendreCycleUI();}).withFailureHandler(e=>{const z=document.getElementById('cycle-finance-content');if(z)z.textContent='Erreur : '+(e.message||e);}).chargerCycleFinancier();
