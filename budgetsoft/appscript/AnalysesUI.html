@@ -1,0 +1,65 @@
+<script>
+window.budgetsoftModules=window.budgetsoftModules||{};
+window.budgetsoftModules.analyses=afficherModuleAnalyses;
+const analysesUI={donnees:null,nombrePeriodes:6};
+
+function afficherModuleAnalyses(){
+  const zone=document.getElementById('generic-view');
+  zone.innerHTML=`<article class="card panel">
+    <div class="panel-heading"><div><span class="panel-kicker">Indicateurs</span><h2>Analyse budgétaire</h2></div>
+      <label>Périodes <select id="analyses-period-count"><option value="3">3</option><option value="6" selected>6</option><option value="12">12</option></select></label>
+    </div>
+    <div id="analyses-status" class="helper-text">Chargement…</div>
+    <div id="analyses-content"></div>
+  </article>`;
+  document.getElementById('analyses-period-count').value=String(analysesUI.nombrePeriodes);
+  document.getElementById('analyses-period-count').addEventListener('change',e=>{analysesUI.nombrePeriodes=Number(e.target.value)||6;chargerAnalysesUI();});
+  installerStylesAnalyses();
+  chargerAnalysesUI();
+}
+
+function chargerAnalysesUI(){
+  const status=document.getElementById('analyses-status');if(status)status.textContent='Chargement…';
+  google.script.run.withSuccessHandler(d=>{analysesUI.donnees=d;rendreAnalyses();})
+    .withFailureHandler(e=>{if(status)status.textContent='Erreur : '+(e.message||e);})
+    .chargerAnalysesBudgetaires(analysesUI.nombrePeriodes);
+}
+
+function rendreAnalyses(){
+  const d=analysesUI.donnees,zone=document.getElementById('analyses-content'),status=document.getElementById('analyses-status');
+  if(!d||!zone)return;if(status)status.textContent=`Période courante : ${dateAnalyse(d.courante.debut)} → ${dateAnalyse(d.courante.fin)}`;
+  const maxFlux=Math.max(1,...d.periodes.flatMap(p=>[p.revenus,p.depenses]));
+  const maxCategorie=Math.max(1,...d.categories.map(c=>c.montant));
+  zone.innerHTML=`
+    <div class="cards analyses-metrics">
+      <article class="card metric-card"><span>Revenus moyens</span><strong>${money.format(d.indicateurs.revenusMoyens)}</strong><small>Sur ${d.periodes.length} périodes</small></article>
+      <article class="card metric-card"><span>Dépenses moyennes</span><strong>${money.format(d.indicateurs.depensesMoyennes)}</strong><small>${formatEvolution(d.indicateurs.evolutionDepenses)} depuis la période précédente</small></article>
+      <article class="card metric-card"><span>Épargne moyenne</span><strong>${money.format(d.indicateurs.epargneMoyenne)}</strong><small>Taux moyen ${Number(d.indicateurs.tauxEpargneMoyen||0).toLocaleString('fr-FR')} %</small></article>
+    </div>
+    <div class="analysis-grid">
+      <section class="analysis-block"><h3>Revenus et dépenses</h3><div class="flow-chart">${d.periodes.map(p=>`<div class="flow-column"><div class="flow-bars"><span class="flow-bar income" style="height:${Math.max(3,p.revenus/maxFlux*150)}px" title="Revenus ${money.format(p.revenus)}"></span><span class="flow-bar expense" style="height:${Math.max(3,p.depenses/maxFlux*150)}px" title="Dépenses ${money.format(p.depenses)}"></span></div><small>${echapper(courtLibelleAnalyse(p.libelle))}</small><strong class="${p.solde>=0?'amount-positive':'amount-negative'}">${money.format(p.solde)}</strong></div>`).join('')}</div><div class="analysis-legend"><span>■ Revenus</span><span>■ Dépenses</span></div></section>
+      <section class="analysis-block"><h3>Dépenses par catégorie</h3>${d.categories.length?`<div class="category-analysis">${d.categories.slice(0,8).map(c=>`<div class="category-analysis-row"><div><strong>${echapper(c.nom)}</strong><small>${Number(c.part).toLocaleString('fr-FR')} %</small></div><div class="analysis-track"><span style="width:${Math.max(2,c.montant/maxCategorie*100)}%"></span></div><strong>${money.format(c.montant)}</strong></div>`).join('')}</div>`:'<div class="empty-state">Aucune dépense sur la période.</div>'}</section>
+    </div>
+    <section class="analysis-block analysis-alerts"><h3>Écarts au budget</h3>${d.alertes.length?d.alertes.map(a=>`<div class="account-row"><div><strong>${echapper(a.poste)}</strong><small>${a.taux} % de l’enveloppe consommée</small></div><span>Prévu ${money.format(a.prevu)}</span><strong class="amount-negative">Dépassement ${money.format(Math.abs(a.ecart))}</strong></div>`).join(''):'<div class="empty-state">Aucune enveloppe budgétaire dépassée.</div>'}</section>`;
+}
+
+function installerStylesAnalyses(){
+  if(document.getElementById('analyses-ui-styles'))return;
+  const style=document.createElement('style');style.id='analyses-ui-styles';style.textContent=`
+    .analysis-grid{display:grid;grid-template-columns:1.15fr 1fr;gap:18px;margin-top:18px}
+    .analysis-block{border:1px solid rgba(20,125,100,.16);border-radius:16px;padding:18px;background:#fff}
+    .analysis-block h3{margin:0 0 16px}.flow-chart{display:flex;align-items:flex-end;gap:12px;min-height:210px;overflow-x:auto;padding:12px 4px 0}
+    .flow-column{display:grid;justify-items:center;gap:6px;min-width:66px;flex:1}.flow-bars{height:155px;display:flex;align-items:flex-end;gap:5px}
+    .flow-bar{display:block;width:15px;border-radius:6px 6px 2px 2px}.flow-bar.income{background:#147d64}.flow-bar.expense{background:#d77b53}
+    .flow-column small{white-space:nowrap}.flow-column strong{font-size:.82rem}.analysis-legend{display:flex;gap:16px;justify-content:center;margin-top:12px;font-size:.85rem}
+    .analysis-legend span:first-child{color:#147d64}.analysis-legend span:last-child{color:#b75b37}
+    .category-analysis{display:grid;gap:13px}.category-analysis-row{display:grid;grid-template-columns:minmax(100px,1fr) 2fr auto;gap:10px;align-items:center}
+    .category-analysis-row small{display:block}.analysis-track{height:9px;background:rgba(20,125,100,.1);border-radius:999px;overflow:hidden}.analysis-track span{display:block;height:100%;background:#147d64;border-radius:999px}
+    .analysis-alerts{margin-top:18px}.analysis-alerts .account-row{grid-template-columns:1fr auto auto}
+    @media(max-width:850px){.analysis-grid{grid-template-columns:1fr}.category-analysis-row{grid-template-columns:1fr auto}.analysis-track{grid-column:1/-1;grid-row:2}}
+  `;document.head.appendChild(style);
+}
+function dateAnalyse(v){const d=new Date(v);return isNaN(d)?'—':d.toLocaleDateString('fr-FR');}
+function courtLibelleAnalyse(v){return String(v||'').replace(/^./,c=>c.toUpperCase()).split(' ')[0].slice(0,4);}
+function formatEvolution(v){const n=Number(v||0);return `${n>0?'+':''}${n.toLocaleString('fr-FR')} %`;}
+</script>
