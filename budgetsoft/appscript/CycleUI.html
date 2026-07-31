@@ -1,0 +1,31 @@
+<script>
+const cycleUI={donnees:null};
+document.addEventListener('DOMContentLoaded',()=>{installerCycleUI();chargerCycleUI();});
+
+function installerCycleUI(){
+  const cards=document.querySelector('#dashboard .cards');
+  if(cards&&!document.getElementById('cycle-status-card')){
+    const bloc=document.createElement('article');
+    bloc.className='card metric-card';bloc.id='cycle-status-card';
+    bloc.innerHTML='<span>Cycle financier</span><strong id="cycle-day">—</strong><small id="cycle-dates">Chargement…</small>';
+    cards.prepend(bloc);
+  }
+  const grille=document.querySelector('#dashboard .dashboard-grid');
+  if(grille&&!document.getElementById('cycle-finance-panel')){
+    const panneau=document.createElement('article');panneau.className='card panel';panneau.id='cycle-finance-panel';
+    panneau.innerHTML='<div class="panel-heading"><div><span class="panel-kicker">Trésorerie réelle</span><h2>Cycle financier</h2></div><button class="secondary-button" type="button" onclick="chargerCycleUI()">Actualiser</button></div><div id="cycle-finance-content" class="helper-text">Chargement…</div>';
+    grille.prepend(panneau);
+  }
+}
+function chargerCycleUI(){
+  google.script.run.withSuccessHandler(d=>{cycleUI.donnees=d;rendreCycleUI();}).withFailureHandler(e=>{const z=document.getElementById('cycle-finance-content');if(z)z.textContent='Erreur : '+(e.message||e);}).chargerCycleFinancier();
+}
+function rendreCycleUI(){
+  const d=cycleUI.donnees;if(!d)return;const p=d.periode,i=d.indicateurs;
+  const debut=new Date(p.debut),fin=new Date(p.fin);
+  document.getElementById('cycle-day').textContent=`Jour ${p.jourCourant} / ${p.dureeJours}`;
+  document.getElementById('cycle-dates').textContent=`${debut.toLocaleDateString('fr-FR')} → ${fin.toLocaleDateString('fr-FR')} · ${p.joursRestants} jour(s) restant(s)`;
+  const z=document.getElementById('cycle-finance-content');if(!z)return;
+  z.innerHTML=`<p><strong>Aujourd’hui, vous êtes au jour ${p.jourCourant} de votre cycle financier.</strong> ${p.joursRestants} jour(s) restent avant la fin estimée du cycle.</p><div class="cards" style="margin-top:14px"><article class="card metric-card"><span>Solde bancaire</span><strong>${money.format(i.soldeBancaire)}</strong></article><article class="card metric-card"><span>Solde engagé</span><strong>${money.format(i.soldeEngage)}</strong><small>Après CB en attente</small></article><article class="card metric-card"><span>Solde projeté</span><strong>${money.format(i.soldeProjete)}</strong><small>Fin de cycle</small></article><article class="card metric-card"><span>CB en attente</span><strong>${money.format(i.cbEnAttente)}</strong><small>${i.nombreCbEnAttente} opération(s)</small></article></div><div style="height:8px;background:#e8efed;border-radius:999px;margin-top:16px;overflow:hidden"><div style="height:100%;width:${p.progression}%;background:#147d64"></div></div>${d.salaire?`<p class="helper-text">Salaire détecté : ${echapper(d.salaire.libelle)} · fenêtre habituelle du ${d.salaire.jourMin} au ${d.salaire.jourMax} · confiance ${d.salaire.confiance}%.</p>`:'<p class="helper-text">Salaire principal non détecté : utilisation du jour de référence.</p>'}${d.alertes.length?'<div class="error" style="margin-top:12px">'+d.alertes.map(e=>echapper(e)).join('<br>')+'</div>':''}`;
+}
+</script>
