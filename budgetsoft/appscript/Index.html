@@ -24,122 +24,37 @@
         <button class="nav-item" data-view="ia">🤖 <span>Conseiller IA</span></button>
         <button class="nav-item" data-view="parametres">⚙️ <span>Paramètres</span></button>
       </nav>
-      <div class="sidebar-footer">Version <span id="version">1.1</span></div>
+      <div class="sidebar-footer">Version <span id="version">1.2</span></div>
     </aside>
 
     <main class="main">
-      <header class="topbar">
-        <div><p class="eyebrow" id="page-eyebrow">Vue d’ensemble</p><h1 id="page-title">Tableau de bord</h1></div>
-        <div class="topbar-actions"><button class="icon-button" id="refresh-button" title="Actualiser">↻</button><div class="user-chip">PH</div></div>
-      </header>
+      <header class="topbar"><div><p class="eyebrow" id="page-eyebrow">Vue d’ensemble</p><h1 id="page-title">Tableau de bord</h1></div><div class="topbar-actions"><button class="icon-button" id="refresh-button" title="Actualiser">↻</button><div class="user-chip">PH</div></div></header>
       <section id="loading" class="loading">Chargement des données…</section>
       <section id="error" class="error hidden"></section>
 
       <section id="dashboard" class="view active">
-        <div class="cards">
-          <article class="card metric-card"><span>Solde global</span><strong id="solde-global">0,00 €</strong><small>Total des comptes actifs</small></article>
-          <article class="card metric-card"><span>Revenus du mois</span><strong id="revenus-mois">0,00 €</strong><small>Entrées enregistrées</small></article>
-          <article class="card metric-card"><span>Dépenses du mois</span><strong id="depenses-mois">0,00 €</strong><small>Sorties enregistrées</small></article>
-          <article class="card metric-card"><span>Épargne du mois</span><strong id="epargne-mois">0,00 €</strong><small>Revenus moins dépenses</small></article>
-        </div>
-        <div class="dashboard-grid">
-          <article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Activité</span><h2>Évolution mensuelle</h2></div></div><div class="chart-placeholder" id="monthly-bars"><span>Aucune opération pour le moment</span></div></article>
-          <article class="card panel health-panel"><div class="panel-heading"><div><span class="panel-kicker">Pilotage</span><h2>Santé financière</h2></div></div><div class="health-score"><strong id="health-score">—</strong><span id="health-label">Données insuffisantes</span></div><div class="health-list" id="health-list"></div></article>
-          <article class="card panel operations-panel"><div class="panel-heading"><div><span class="panel-kicker">Derniers mouvements</span><h2>Opérations récentes</h2></div></div><div id="recent-operations" class="empty-state">Aucune opération enregistrée.</div></article>
-          <article class="card panel alerts-panel"><div class="panel-heading"><div><span class="panel-kicker">À surveiller</span><h2>Alertes</h2></div></div><div id="alerts" class="empty-state">Aucune alerte pour le moment.</div></article>
-        </div>
+        <div class="cards"><article class="card metric-card"><span>Solde global</span><strong id="solde-global">0,00 €</strong><small>Total des comptes actifs</small></article><article class="card metric-card"><span>Revenus du mois</span><strong id="revenus-mois">0,00 €</strong><small>Entrées enregistrées</small></article><article class="card metric-card"><span>Dépenses du mois</span><strong id="depenses-mois">0,00 €</strong><small>Sorties enregistrées</small></article><article class="card metric-card"><span>Épargne du mois</span><strong id="epargne-mois">0,00 €</strong><small>Revenus moins dépenses</small></article></div>
+        <div class="dashboard-grid"><article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Activité</span><h2>Évolution mensuelle</h2></div></div><div class="chart-placeholder" id="monthly-bars"><span>Aucune opération pour le moment</span></div></article><article class="card panel health-panel"><div class="panel-heading"><div><span class="panel-kicker">Pilotage</span><h2>Santé financière</h2></div></div><div class="health-score"><strong id="health-score">—</strong><span id="health-label">Données insuffisantes</span></div><div class="health-list" id="health-list"></div></article><article class="card panel operations-panel"><div class="panel-heading"><div><span class="panel-kicker">Derniers mouvements</span><h2>Opérations récentes</h2></div></div><div id="recent-operations" class="empty-state">Aucune opération enregistrée.</div></article><article class="card panel alerts-panel"><div class="panel-heading"><div><span class="panel-kicker">À surveiller</span><h2>Alertes</h2></div></div><div id="alerts" class="empty-state">Aucune alerte pour le moment.</div></article></div>
       </section>
 
-      <section id="comptes" class="view">
-        <div class="section-toolbar"><p class="section-intro">Gérez vos comptes et suivez leur solde réel.</p><button class="primary-button" id="add-account-button">＋ Ajouter un compte</button></div>
-        <div class="cards accounts-summary">
-          <article class="card metric-card"><span>Comptes actifs</span><strong id="accounts-count">0</strong><small>Hors comptes archivés</small></article>
-          <article class="card metric-card"><span>Solde disponible</span><strong id="accounts-balance">0,00 €</strong><small>Solde actuel cumulé</small></article>
-          <article class="card metric-card"><span>Épargne</span><strong id="savings-balance">0,00 €</strong><small>Livrets et placements liquides</small></article>
-        </div>
-        <article class="card panel accounts-panel"><div class="panel-heading"><div><span class="panel-kicker">Vos comptes</span><h2>Liste des comptes</h2></div><label class="toggle-label"><input type="checkbox" id="show-archived"> Afficher les archivés</label></div><div id="accounts-list" class="empty-state">Aucun compte enregistré.</div></article>
-      </section>
+      <section id="comptes" class="view"><div class="section-toolbar"><p class="section-intro">Gérez vos comptes et suivez leur solde réel.</p><button class="primary-button" id="add-account-button">＋ Ajouter un compte</button></div><div class="cards accounts-summary"><article class="card metric-card"><span>Comptes actifs</span><strong id="accounts-count">0</strong><small>Hors comptes archivés</small></article><article class="card metric-card"><span>Solde disponible</span><strong id="accounts-balance">0,00 €</strong><small>Solde actuel cumulé</small></article><article class="card metric-card"><span>Épargne</span><strong id="savings-balance">0,00 €</strong><small>Livrets et placements liquides</small></article></div><article class="card panel accounts-panel"><div class="panel-heading"><div><span class="panel-kicker">Vos comptes</span><h2>Liste des comptes</h2></div><label class="toggle-label"><input type="checkbox" id="show-archived"> Afficher les archivés</label></div><div id="accounts-list" class="empty-state">Aucun compte enregistré.</div></article></section>
 
-      <section id="operations" class="view">
-        <div class="section-toolbar">
-          <p class="section-intro">Enregistrez vos revenus et dépenses, puis automatisez vos charges récurrentes.</p>
-          <div class="toolbar-buttons"><button class="secondary-button" id="import-fixed-charges-button">📥 Importer</button><button class="secondary-button" id="add-fixed-charge-button">↻ Charge fixe</button><button class="primary-button" id="add-operation-button">＋ Ajouter une opération</button></div>
-        </div>
-        <div class="cards operations-summary">
-          <article class="card metric-card"><span>Revenus affichés</span><strong id="operations-income">0,00 €</strong><small>Selon les filtres actifs</small></article>
-          <article class="card metric-card"><span>Dépenses affichées</span><strong id="operations-expenses">0,00 €</strong><small>Selon les filtres actifs</small></article>
-          <article class="card metric-card"><span>Solde affiché</span><strong id="operations-net">0,00 €</strong><small>Revenus moins dépenses</small></article>
-        </div>
-        <article class="card panel fixed-charge-panel">
-          <div class="panel-heading"><div><span class="panel-kicker">Automatisation</span><h2>Charges fixes récurrentes</h2></div><span class="badge" id="fixed-charge-count">0 active</span></div>
-          <p class="helper-text">Chaque charge active est créée automatiquement selon sa fréquence, sans doublon.</p>
-          <div id="fixed-charges-list" class="empty-state">Aucune charge fixe enregistrée.</div>
-        </article>
-        <article class="card panel operations-page-panel">
-          <div class="filters">
-            <input id="operation-search" placeholder="Rechercher un libellé ou une catégorie">
-            <select id="operation-account-filter"><option value="">Tous les comptes</option></select>
-            <select id="operation-type-filter"><option value="">Tous les types</option><option value="depense">Dépenses</option><option value="revenu">Revenus</option></select>
-            <input type="month" id="operation-month-filter">
-            <button class="secondary-button" id="reset-operation-filters">Réinitialiser</button>
-          </div>
-          <div id="operations-list" class="empty-state">Aucune opération enregistrée.</div>
-        </article>
-      </section>
+      <section id="operations" class="view"><div class="section-toolbar"><p class="section-intro">Enregistrez vos revenus et dépenses, puis automatisez vos charges récurrentes.</p><div class="toolbar-buttons"><button class="secondary-button" id="import-fixed-charges-button">📥 Importer</button><button class="secondary-button" id="add-fixed-charge-button">↻ Charge fixe</button><button class="primary-button" id="add-operation-button">＋ Ajouter une opération</button></div></div><div class="cards operations-summary"><article class="card metric-card"><span>Revenus affichés</span><strong id="operations-income">0,00 €</strong><small>Selon les filtres actifs</small></article><article class="card metric-card"><span>Dépenses affichées</span><strong id="operations-expenses">0,00 €</strong><small>Selon les filtres actifs</small></article><article class="card metric-card"><span>Solde affiché</span><strong id="operations-net">0,00 €</strong><small>Revenus moins dépenses</small></article></div><article class="card panel fixed-charge-panel"><div class="panel-heading"><div><span class="panel-kicker">Automatisation</span><h2>Charges fixes récurrentes</h2></div><span class="badge" id="fixed-charge-count">0 active</span></div><p class="helper-text">Chaque charge active est créée automatiquement selon sa fréquence, sans doublon.</p><div id="fixed-charges-list" class="empty-state">Aucune charge fixe enregistrée.</div></article><article class="card panel operations-page-panel"><div class="filters"><input id="operation-search" placeholder="Rechercher un libellé ou une catégorie"><select id="operation-account-filter"><option value="">Tous les comptes</option></select><select id="operation-type-filter"><option value="">Tous les types</option><option value="depense">Dépenses</option><option value="revenu">Revenus</option></select><input type="month" id="operation-month-filter"><button class="secondary-button" id="reset-operation-filters">Réinitialiser</button></div><div id="operations-list" class="empty-state">Aucune opération enregistrée.</div></article></section>
 
       <section id="generic-view" class="view"><article class="card coming-soon"><div class="coming-icon" id="coming-icon">🧩</div><h2 id="coming-title">Module en préparation</h2><p id="coming-text">Cette rubrique sera reliée aux données du classeur lors du prochain sprint.</p></article></section>
     </main>
   </div>
 
-  <div class="modal hidden" id="account-modal" role="dialog" aria-modal="true" aria-labelledby="account-modal-title">
-    <div class="modal-card"><div class="modal-heading"><div><p class="panel-kicker">Compte</p><h2 id="account-modal-title">Ajouter un compte</h2></div><button class="modal-close" id="close-account-modal">×</button></div>
-      <form id="account-form"><input type="hidden" id="account-id"><label>Nom du compte<input id="account-name" required maxlength="80" placeholder="Ex. Compte courant"></label><label>Type<select id="account-type"><option value="courant">Compte courant</option><option value="epargne">Épargne</option><option value="especes">Espèces</option><option value="carte">Carte</option><option value="placement">Placement</option><option value="autre">Autre</option></select></label><label>Solde initial<input id="account-balance-input" inputmode="decimal" value="0,00" required></label><label class="checkbox-line"><input type="checkbox" id="account-active" checked> Compte actif</label><div class="form-actions"><button type="button" class="secondary-button" id="cancel-account">Annuler</button><button type="submit" class="primary-button" id="save-account">Enregistrer</button></div></form>
-    </div>
-  </div>
-
-  <div class="modal hidden" id="operation-modal" role="dialog" aria-modal="true" aria-labelledby="operation-modal-title">
-    <div class="modal-card wide-modal"><div class="modal-heading"><div><p class="panel-kicker">Mouvement</p><h2 id="operation-modal-title">Ajouter une opération</h2></div><button class="modal-close" id="close-operation-modal">×</button></div>
-      <form id="operation-form"><input type="hidden" id="operation-id"><div class="form-grid"><label>Date<input type="date" id="operation-date" required></label><label>Type<select id="operation-type"><option value="depense">Dépense</option><option value="revenu">Revenu</option></select></label><label class="full-field">Libellé<input id="operation-label" required maxlength="120" placeholder="Ex. Courses Carrefour"></label><label>Montant<input id="operation-amount" inputmode="decimal" required placeholder="0,00"></label><label>Compte<select id="operation-account" required></select></label><label>Catégorie<select id="operation-category"><option value="">Sans catégorie</option></select></label><label class="full-field">Commentaire<textarea id="operation-comment" rows="3" maxlength="500" placeholder="Facultatif"></textarea></label></div><div class="form-actions"><button type="button" class="secondary-button" id="cancel-operation">Annuler</button><button type="submit" class="primary-button" id="save-operation">Enregistrer</button></div></form>
-    </div>
-  </div>
-
-  <div class="modal hidden" id="fixed-charge-modal" role="dialog" aria-modal="true" aria-labelledby="fixed-charge-modal-title">
-    <div class="modal-card wide-modal"><div class="modal-heading"><div><p class="panel-kicker">Automatisation</p><h2 id="fixed-charge-modal-title">Ajouter une charge fixe</h2></div><button class="modal-close" id="close-fixed-charge-modal">×</button></div>
-      <form id="fixed-charge-form">
-        <input type="hidden" id="fixed-charge-id">
-        <div class="form-grid">
-          <label class="full-field">Libellé<input id="fixed-charge-label" required maxlength="120" placeholder="Ex. Crédit immobilier"></label>
-          <label class="full-field">Créancier / libellé bancaire<input id="fixed-charge-bank-label" required maxlength="160" placeholder="Ex. PRLV SEPA EDF CLIENT 1234"></label>
-          <label>Montant attendu<input id="fixed-charge-amount" inputmode="decimal" required placeholder="0,00"></label>
-          <label>Tolérance (€)<input id="fixed-charge-tolerance" inputmode="decimal" value="0,50" placeholder="0,50"></label>
-          <label>Jour d’échéance<input type="number" id="fixed-charge-day" min="1" max="31" value="1" required></label>
-          <label>Fréquence<select id="fixed-charge-frequency"><option value="Mensuelle">Mensuelle</option><option value="Hebdomadaire">Hebdomadaire</option><option value="Quotidienne">Quotidienne</option><option value="Trimestrielle">Trimestrielle</option><option value="Semestrielle">Semestrielle</option><option value="Annuelle">Annuelle</option></select></label>
-          <label>Compte<select id="fixed-charge-account" required></select></label>
-          <label>Catégorie<select id="fixed-charge-category"><option value="">Sans catégorie</option></select></label>
-          <label>Nature<select id="fixed-charge-nature"><option value="Autre">Autre</option><option value="Crédit">Crédit</option><option value="Assurance">Assurance</option><option value="Énergie">Énergie</option><option value="Télécom">Télécom</option><option value="Impôt">Impôt</option><option value="Abonnement">Abonnement</option></select></label>
-          <label>Date de début<input type="date" id="fixed-charge-start" required></label>
-          <label>Date de fin facultative<input type="date" id="fixed-charge-end"></label>
-          <label class="full-field">Commentaire<textarea id="fixed-charge-comment" rows="2" maxlength="500" placeholder="Facultatif"></textarea></label>
-          <label class="checkbox-line full-field"><input type="checkbox" id="fixed-charge-active" checked> Charge récurrente active</label>
-        </div>
-        <div class="form-actions"><button type="button" class="secondary-button" id="cancel-fixed-charge">Annuler</button><button type="submit" class="primary-button" id="save-fixed-charge">Enregistrer</button></div>
-      </form>
-    </div>
-  </div>
-
-  <div class="modal hidden" id="import-modal" role="dialog" aria-modal="true" aria-labelledby="import-modal-title">
-    <div class="modal-card wide-modal"><div class="modal-heading"><div><p class="panel-kicker">Import intelligent</p><h2 id="import-modal-title">Importer des charges fixes</h2></div><button class="modal-close" id="close-import-modal">×</button></div>
-      <div class="import-help">Copiez les colonnes <strong>Libellé, Libellé bancaire, Montant, Tolérance, Jour, Fréquence, Compte, Catégorie et Actif</strong> depuis Excel, puis collez-les ci-dessous.</div>
-      <label>Tableau à importer<textarea id="import-text" class="import-area" rows="10"></textarea></label>
-      <div id="import-results" class="hidden"><div id="import-summary" class="import-summary"></div><div id="import-preview" class="import-preview"></div><p id="new-categories-note" class="helper-text"></p><label class="checkbox-line"><input type="checkbox" id="create-import-categories" checked> Créer automatiquement les catégories manquantes</label></div>
-      <div class="form-actions"><button type="button" class="secondary-button" id="cancel-import">Annuler</button><button type="button" class="secondary-button" id="analyze-import">Analyser</button><button type="button" class="primary-button hidden" id="confirm-import">Importer</button></div>
-    </div>
-  </div>
+  <div class="modal hidden" id="account-modal" role="dialog" aria-modal="true"><div class="modal-card"><div class="modal-heading"><div><p class="panel-kicker">Compte</p><h2 id="account-modal-title">Ajouter un compte</h2></div><button class="modal-close" id="close-account-modal">×</button></div><form id="account-form"><input type="hidden" id="account-id"><label>Nom du compte<input id="account-name" required maxlength="80"></label><label>Type<select id="account-type"><option value="courant">Compte courant</option><option value="epargne">Épargne</option><option value="especes">Espèces</option><option value="carte">Carte</option><option value="placement">Placement</option><option value="autre">Autre</option></select></label><label>Solde initial<input id="account-balance-input" inputmode="decimal" value="0,00" required></label><label class="checkbox-line"><input type="checkbox" id="account-active" checked> Compte actif</label><div class="form-actions"><button type="button" class="secondary-button" id="cancel-account">Annuler</button><button type="submit" class="primary-button" id="save-account">Enregistrer</button></div></form></div></div>
+  <div class="modal hidden" id="operation-modal" role="dialog" aria-modal="true"><div class="modal-card wide-modal"><div class="modal-heading"><div><p class="panel-kicker">Mouvement</p><h2 id="operation-modal-title">Ajouter une opération</h2></div><button class="modal-close" id="close-operation-modal">×</button></div><form id="operation-form"><input type="hidden" id="operation-id"><div class="form-grid"><label>Date<input type="date" id="operation-date" required></label><label>Type<select id="operation-type"><option value="depense">Dépense</option><option value="revenu">Revenu</option></select></label><label class="full-field">Libellé<input id="operation-label" required maxlength="120"></label><label>Montant<input id="operation-amount" inputmode="decimal" required></label><label>Compte<select id="operation-account" required></select></label><label>Catégorie<select id="operation-category"><option value="">Sans catégorie</option></select></label><label class="full-field">Commentaire<textarea id="operation-comment" rows="3" maxlength="500"></textarea></label></div><div class="form-actions"><button type="button" class="secondary-button" id="cancel-operation">Annuler</button><button type="submit" class="primary-button" id="save-operation">Enregistrer</button></div></form></div></div>
+  <div class="modal hidden" id="fixed-charge-modal" role="dialog" aria-modal="true"><div class="modal-card wide-modal"><div class="modal-heading"><div><p class="panel-kicker">Automatisation</p><h2 id="fixed-charge-modal-title">Ajouter une charge fixe</h2></div><button class="modal-close" id="close-fixed-charge-modal">×</button></div><form id="fixed-charge-form"><input type="hidden" id="fixed-charge-id"><div class="form-grid"><label class="full-field">Libellé<input id="fixed-charge-label" required maxlength="120"></label><label class="full-field">Créancier / libellé bancaire<input id="fixed-charge-bank-label" required maxlength="160"></label><label>Montant attendu<input id="fixed-charge-amount" inputmode="decimal" required></label><label>Tolérance (€)<input id="fixed-charge-tolerance" inputmode="decimal" value="0,50"></label><label>Jour d’échéance<input type="number" id="fixed-charge-day" min="1" max="31" value="1" required></label><label>Fréquence<select id="fixed-charge-frequency"><option value="Mensuelle">Mensuelle</option><option value="Hebdomadaire">Hebdomadaire</option><option value="Quotidienne">Quotidienne</option><option value="Trimestrielle">Trimestrielle</option><option value="Semestrielle">Semestrielle</option><option value="Annuelle">Annuelle</option></select></label><label>Compte<select id="fixed-charge-account" required></select></label><label>Catégorie<select id="fixed-charge-category"><option value="">Sans catégorie</option></select></label><label>Nature<select id="fixed-charge-nature"><option value="Autre">Autre</option><option value="Crédit">Crédit</option><option value="Assurance">Assurance</option><option value="Énergie">Énergie</option><option value="Télécom">Télécom</option><option value="Impôt">Impôt</option><option value="Abonnement">Abonnement</option></select></label><label>Date de début<input type="date" id="fixed-charge-start" required></label><label>Date de fin facultative<input type="date" id="fixed-charge-end"></label><label class="full-field">Commentaire<textarea id="fixed-charge-comment" rows="2" maxlength="500"></textarea></label><label class="checkbox-line full-field"><input type="checkbox" id="fixed-charge-active" checked> Charge récurrente active</label></div><div class="form-actions"><button type="button" class="secondary-button" id="cancel-fixed-charge">Annuler</button><button type="submit" class="primary-button" id="save-fixed-charge">Enregistrer</button></div></form></div></div>
+  <div class="modal hidden" id="import-modal" role="dialog" aria-modal="true"><div class="modal-card wide-modal"><div class="modal-heading"><div><p class="panel-kicker">Import intelligent</p><h2 id="import-modal-title">Importer des charges fixes</h2></div><button class="modal-close" id="close-import-modal">×</button></div><div class="import-help">Copiez les colonnes depuis Excel, puis collez-les ci-dessous.</div><label>Tableau à importer<textarea id="import-text" class="import-area" rows="10"></textarea></label><div id="import-results" class="hidden"><div id="import-summary" class="import-summary"></div><div id="import-preview" class="import-preview"></div><p id="new-categories-note" class="helper-text"></p><label class="checkbox-line"><input type="checkbox" id="create-import-categories" checked> Créer automatiquement les catégories manquantes</label></div><div class="form-actions"><button type="button" class="secondary-button" id="cancel-import">Annuler</button><button type="button" class="secondary-button" id="analyze-import">Analyser</button><button type="button" class="primary-button hidden" id="confirm-import">Importer</button></div></div></div>
 
   <?!= inclure('Scripts'); ?>
   <?!= inclure('ImportScripts'); ?>
   <?!= inclure('BudgetSoftUI'); ?>
   <?!= inclure('CorrespondancesUI'); ?>
   <?!= inclure('RapprochementsUI'); ?>
+  <?!= inclure('PlanningUI'); ?>
 </body>
 </html>
