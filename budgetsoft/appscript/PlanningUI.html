@@ -1,25 +1,40 @@
 <script>
 const planningUI={budget:null,patrimoine:null};
+window.budgetsoftModules=window.budgetsoftModules||{};
+window.budgetsoftModules.budget=afficherModuleBudget;
+window.budgetsoftModules.patrimoine=afficherModulePatrimoine;
 
 document.addEventListener('DOMContentLoaded',()=>{
-  const ouvrirVueInitiale=ouvrirVue;
-  ouvrirVue=function(view){
-    ouvrirVueInitiale(view);
-    const moduleReel=['budget','patrimoine'].includes(view);
-    document.getElementById('generic-view').classList.toggle('active',moduleReel);
-    if(view==='budget') afficherModuleBudget();
-    if(view==='patrimoine') afficherModulePatrimoine();
-  };
+  document.addEventListener('click',e=>{
+    const bouton=e.target.closest('.nav-item[data-view]');
+    if(!bouton)return;
+    const view=bouton.dataset.view;
+    if(!window.budgetsoftModules[view])return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    ouvrirModuleBudgetSoft(view);
+  },true);
 });
+
+function ouvrirModuleBudgetSoft(view){
+  state.currentView=view;
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
+  document.getElementById('page-title').textContent=titles[view]?.[0]||view;
+  document.getElementById('page-eyebrow').textContent=titles[view]?.[2]||'';
+  ['dashboard','comptes','operations'].forEach(id=>document.getElementById(id)?.classList.remove('active'));
+  const generic=document.getElementById('generic-view');
+  generic.classList.add('active');
+  window.budgetsoftModules[view]();
+}
 
 function afficherModuleBudget(){
   const zone=document.getElementById('generic-view');
   zone.innerHTML='<article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Prévisions</span><h2>Budget de la période</h2></div></div><div id="budget-ui-status" class="helper-text">Chargement…</div><div id="budget-ui-content"></div></article>';
-  google.script.run.withSuccessHandler(d=>{planningUI.budget=d;rendreBudget();}).withFailureHandler(e=>document.getElementById('budget-ui-status').textContent='Erreur : '+(e.message||e)).chargerBudgetPeriode('');
+  google.script.run.withSuccessHandler(d=>{planningUI.budget=d;rendreBudget();}).withFailureHandler(e=>{const s=document.getElementById('budget-ui-status');if(s)s.textContent='Erreur : '+(e.message||e);}).chargerBudgetPeriode('');
 }
 function rendreBudget(){
   const d=planningUI.budget,status=document.getElementById('budget-ui-status'),zone=document.getElementById('budget-ui-content');if(!d||!zone)return;
-  status.textContent=`${new Date(d.periode.debut).toLocaleDateString('fr-FR')} → ${new Date(d.periode.fin).toLocaleDateString('fr-FR')}`;
+  if(status)status.textContent=`${new Date(d.periode.debut).toLocaleDateString('fr-FR')} → ${new Date(d.periode.fin).toLocaleDateString('fr-FR')}`;
   zone.innerHTML=`<div class="cards"><article class="card metric-card"><span>Dépenses prévues</span><strong>${money.format(d.totaux.depensesPrevues)}</strong></article><article class="card metric-card"><span>Dépenses réalisées</span><strong>${money.format(d.totaux.depensesReelles)}</strong></article><article class="card metric-card"><span>Reste</span><strong>${money.format(d.totaux.depensesPrevues-d.totaux.depensesReelles)}</strong></article></div><div style="margin-top:18px;display:grid;gap:10px">${d.postes.map((p,i)=>`<div class="account-row"><div><strong>${echapper(p.poste)}</strong><small>${p.type==='revenu'?'Revenu':'Dépense'} · Réalisé ${money.format(p.reel)}</small></div><input style="max-width:140px" inputmode="decimal" value="${Number(p.prevu||0).toFixed(2).replace('.',',')}" data-budget-index="${i}"></div>`).join('')}</div><div class="form-actions"><button class="primary-button" type="button" onclick="sauverBudget()">Enregistrer le budget</button></div>`;
 }
 function sauverBudget(){
@@ -30,10 +45,10 @@ function sauverBudget(){
 function afficherModulePatrimoine(){
   const zone=document.getElementById('generic-view');
   zone.innerHTML='<article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Situation globale</span><h2>Patrimoine net</h2></div><button class="primary-button" type="button" onclick="ajouterElementPatrimoine()">＋ Ajouter</button></div><div id="patrimoine-status" class="helper-text">Chargement…</div><div id="patrimoine-content"></div></article>';
-  google.script.run.withSuccessHandler(d=>{planningUI.patrimoine=d;rendrePatrimoine();}).withFailureHandler(e=>document.getElementById('patrimoine-status').textContent='Erreur : '+(e.message||e)).chargerPatrimoine();
+  google.script.run.withSuccessHandler(d=>{planningUI.patrimoine=d;rendrePatrimoine();}).withFailureHandler(e=>{const s=document.getElementById('patrimoine-status');if(s)s.textContent='Erreur : '+(e.message||e);}).chargerPatrimoine();
 }
 function rendrePatrimoine(){
-  const d=planningUI.patrimoine,zone=document.getElementById('patrimoine-content');document.getElementById('patrimoine-status').textContent='';
+  const d=planningUI.patrimoine,zone=document.getElementById('patrimoine-content');if(!d||!zone)return;const status=document.getElementById('patrimoine-status');if(status)status.textContent='';
   zone.innerHTML=`<div class="cards"><article class="card metric-card"><span>Actifs</span><strong>${money.format(d.totalActifs)}</strong></article><article class="card metric-card"><span>Dettes</span><strong>${money.format(d.totalDettes)}</strong></article><article class="card metric-card"><span>Patrimoine net</span><strong>${money.format(d.patrimoineNet)}</strong></article></div><div style="margin-top:18px"><h3>Actifs</h3>${d.actifs.length?d.actifs.map(a=>`<div class="account-row"><strong>${echapper(a.nom)}</strong><span>${echapper(a.type||'Autre')}</span><strong>${money.format(Number(a.valeur)||0)}</strong></div>`).join(''):'<div class="empty-state">Aucun actif enregistré.</div>'}<h3 style="margin-top:18px">Dettes et crédits</h3>${[...d.dettes,...d.credits].length?[...d.dettes,...d.credits].map(a=>`<div class="account-row"><strong>${echapper(a.nom)}</strong><span>Mensualité ${money.format(Number(a.mensualite)||0)}</span><strong>${money.format(Number(a.capital_restant)||0)}</strong></div>`).join(''):'<div class="empty-state">Aucune dette enregistrée.</div>'}</div>`;
 }
 function ajouterElementPatrimoine(){
