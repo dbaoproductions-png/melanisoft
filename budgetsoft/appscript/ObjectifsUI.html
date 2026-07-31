@@ -1,0 +1,76 @@
+<script>
+window.budgetsoftModules=window.budgetsoftModules||{};
+window.budgetsoftModules.objectifs=afficherModuleObjectifs;
+const objectifsUI={donnees:null};
+
+function afficherModuleObjectifs(){
+  const zone=document.getElementById('generic-view');
+  zone.innerHTML=`<article class="card panel">
+    <div class="panel-heading"><div><span class="panel-kicker">Projets</span><h2>Objectifs financiers</h2></div><button class="primary-button" type="button" onclick="ouvrirObjectif()">＋ Ajouter</button></div>
+    <div id="objectifs-status" class="helper-text">Chargement…</div><div id="objectifs-content"></div>
+  </article>`;
+  google.script.run.withSuccessHandler(d=>{objectifsUI.donnees=d;rendreObjectifs();}).withFailureHandler(e=>{const s=document.getElementById('objectifs-status');if(s)s.textContent='Erreur : '+(e.message||e);}).chargerObjectifs();
+}
+
+function rendreObjectifs(){
+  const d=objectifsUI.donnees,zone=document.getElementById('objectifs-content');if(!d||!zone)return;
+  const status=document.getElementById('objectifs-status');if(status)status.textContent='';
+  zone.innerHTML=`<div class="cards">
+    <article class="card metric-card"><span>Montant cible</span><strong>${money.format(d.totaux.cible)}</strong></article>
+    <article class="card metric-card"><span>Déjà constitué</span><strong>${money.format(d.totaux.actuel)}</strong></article>
+    <article class="card metric-card"><span>Reste à financer</span><strong>${money.format(d.totaux.restant)}</strong></article>
+    <article class="card metric-card"><span>Effort mensuel conseillé</span><strong>${money.format(d.totaux.effortMensuel)}</strong></article>
+  </div>
+  <div class="objectifs-grid">${d.objectifs.length?d.objectifs.map(o=>carteObjectif(o)).join(''):'<div class="empty-state">Aucun objectif enregistré.</div>'}</div>`;
+  installerStyleObjectifs();
+}
+
+function carteObjectif(o){
+  const date=o.date_cible?new Date(o.date_cible):null;
+  const dateTexte=date&&!isNaN(date)?date.toLocaleDateString('fr-FR'):'Sans échéance';
+  return `<article class="objectif-card ${o.en_retard?'objectif-retard':''}">
+    <div class="objectif-head"><div><strong>${echapper(o.nom)}</strong><small>${echapper(o.statut||'En cours')} · ${dateTexte}</small></div><span>${Number(o.progression||0)} %</span></div>
+    <div class="objectif-progress"><span style="width:${Math.max(0,Math.min(100,Number(o.progression)||0))}%"></span></div>
+    <div class="objectif-montants"><span>${money.format(Number(o.montant_actuel)||0)} constitués</span><strong>${money.format(Number(o.montant_cible)||0)}</strong></div>
+    <div class="objectif-detail">Reste ${money.format(Number(o.restant)||0)}${o.restant>0?' · '+money.format(Number(o.effort_mensuel)||0)+'/mois':''}${o.en_retard?' · échéance dépassée':''}</div>
+    <div class="reconciliation-actions">
+      ${o.restant>0?`<button class="primary-button" type="button" onclick="verserObjectif('${echapperAttribut(o.id)}')">Ajouter un versement</button>`:''}
+      <button class="secondary-button" type="button" onclick="ouvrirObjectif('${echapperAttribut(o.id)}')">Modifier</button>
+      <button class="secondary-button" type="button" onclick="supprimerObjectifUI('${echapperAttribut(o.id)}')">Supprimer</button>
+    </div>
+  </article>`;
+}
+
+function ouvrirObjectif(id){
+  const o=(objectifsUI.donnees?.objectifs||[]).find(x=>String(x.id)===String(id));
+  const nom=prompt('Nom de l’objectif',o?.nom||'');if(!nom)return;
+  const cible=nombre(prompt('Montant cible',o?.montant_cible||'0'));
+  const actuel=nombre(prompt('Montant déjà constitué',o?.montant_actuel||'0'));
+  const date=prompt('Date cible (AAAA-MM-JJ)',o?.date_cible?dateInput(o.date_cible):'');
+  google.script.run.withSuccessHandler(d=>{objectifsUI.donnees=d;rendreObjectifs();}).withFailureHandler(e=>afficherErreur(e.message||e)).enregistrerObjectif({id:o?.id||'',nom,montant_cible:cible,montant_actuel:actuel,date_cible:date,statut:o?.statut||'En cours'});
+}
+
+function verserObjectif(id){
+  const montant=nombre(prompt('Montant du versement','0'));if(montant<=0)return;
+  google.script.run.withSuccessHandler(d=>{objectifsUI.donnees=d;rendreObjectifs();}).withFailureHandler(e=>afficherErreur(e.message||e)).verserSurObjectif(id,montant);
+}
+
+function supprimerObjectifUI(id){
+  if(!confirm('Supprimer cet objectif ?'))return;
+  google.script.run.withSuccessHandler(d=>{objectifsUI.donnees=d;rendreObjectifs();}).withFailureHandler(e=>afficherErreur(e.message||e)).supprimerObjectif(id);
+}
+
+function installerStyleObjectifs(){
+  if(document.getElementById('objectifs-style'))return;
+  const style=document.createElement('style');style.id='objectifs-style';style.textContent=`
+    .objectifs-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px;margin-top:18px}
+    .objectif-card{border:1px solid rgba(20,125,100,.18);border-radius:14px;padding:16px;background:#fff}
+    .objectif-retard{border-color:rgba(180,70,50,.45)}
+    .objectif-head,.objectif-montants{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+    .objectif-head small{display:block;margin-top:4px;opacity:.7}.objectif-head>span{font-weight:700;color:#147d64}
+    .objectif-progress{height:9px;border-radius:999px;background:rgba(20,125,100,.1);overflow:hidden;margin:14px 0 10px}
+    .objectif-progress span{display:block;height:100%;background:#147d64;border-radius:999px}
+    .objectif-detail{margin-top:8px;font-size:.92rem;opacity:.75}
+  `;document.head.appendChild(style);
+}
+</script>
