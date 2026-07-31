@@ -1,0 +1,34 @@
+<script>
+window.budgetsoftModules=window.budgetsoftModules||{};
+window.budgetsoftModules.credits=afficherModuleCredits;
+const creditsUI={donnees:null};
+
+function afficherModuleCredits(){
+  const zone=document.getElementById('generic-view');
+  zone.innerHTML=`<article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Financements</span><h2>Crédits et dettes</h2></div><button class="primary-button" type="button" onclick="ouvrirCreditDette()">＋ Ajouter</button></div><div id="credits-status" class="helper-text">Chargement…</div><div id="credits-content"></div></article>`;
+  google.script.run.withSuccessHandler(d=>{creditsUI.donnees=d;rendreCredits();}).withFailureHandler(e=>document.getElementById('credits-status').textContent='Erreur : '+(e.message||e)).chargerCreditsEtDettes();
+}
+
+function rendreCredits(){
+  const d=creditsUI.donnees,zone=document.getElementById('credits-content');
+  if(!d||!zone)return;
+  document.getElementById('credits-status').textContent='';
+  zone.innerHTML=`<div class="cards"><article class="card metric-card"><span>Capital restant</span><strong>${money.format(d.capitalRestant)}</strong></article><article class="card metric-card"><span>Mensualités</span><strong>${money.format(d.mensualites)}</strong></article><article class="card metric-card"><span>Taux moyen</span><strong>${Number(d.tauxPondere||0).toLocaleString('fr-FR',{maximumFractionDigits:2})} %</strong></article></div><div style="margin-top:18px">${d.lignes.length?d.lignes.map(l=>`<div class="account-row"><div><strong>${echapper(l.nom)}</strong><small>${echapper(l.nature)} · fin ${l.date_fin?new Date(l.date_fin).toLocaleDateString('fr-FR'):'non renseignée'}</small></div><div>${money.format(Number(l.mensualite)||0)} / mois</div><div><strong>${money.format(Number(l.capital_restant)||0)}</strong><small>${Number(l.taux||0).toLocaleString('fr-FR')} %</small></div><div class="account-actions"><button class="small-button" onclick="ouvrirCreditDette('${echapperAttribut(l.id)}','${echapperAttribut(l.table)}')">✎</button><button class="small-button danger" onclick="supprimerCreditDette('${echapperAttribut(l.id)}','${echapperAttribut(l.table)}')">🗑</button></div></div>`).join(''):'<div class="empty-state">Aucun crédit ou dette enregistré.</div>'}</div>`;
+}
+
+function ouvrirCreditDette(id,table){
+  const existant=(creditsUI.donnees?.lignes||[]).find(l=>String(l.id)===String(id)&&String(l.table)===String(table));
+  const nature=prompt('Type : CREDIT ou DETTE',existant?.table==='Dettes'?'DETTE':'CREDIT');if(!nature)return;
+  const nom=prompt('Nom',existant?.nom||'');if(!nom)return;
+  const capital=nombre(prompt('Capital restant',existant?.capital_restant||'0'));
+  const mensualite=nombre(prompt('Mensualité',existant?.mensualite||'0'));
+  const taux=nombre(prompt('Taux annuel (%)',existant?.taux||'0'));
+  const dateFin=prompt('Date de fin (AAAA-MM-JJ)',existant?.date_fin?dateInput(existant.date_fin):'');
+  google.script.run.withSuccessHandler(d=>{creditsUI.donnees=d;rendreCredits();}).withFailureHandler(e=>afficherErreur(e.message||e)).enregistrerCreditOuDette({id:existant?.id||'',table:nature.toUpperCase()==='DETTE'?'Dettes':'Credits',nom,capital_restant:capital,mensualite,taux,date_fin:dateFin});
+}
+
+function supprimerCreditDette(id,table){
+  if(!confirm('Supprimer cet élément ?'))return;
+  google.script.run.withSuccessHandler(d=>{creditsUI.donnees=d;rendreCredits();}).withFailureHandler(e=>afficherErreur(e.message||e)).supprimerCreditOuDette(table,id);
+}
+</script>
