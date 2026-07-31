@@ -68,6 +68,23 @@ function rendreAnalyseImport(resultat) {
     `<div class="import-stat"><span>Doublons</span><strong>${doublons}</strong></div>` +
     `<div class="import-stat"><span>Erreurs</span><strong>${invalides}</strong></div>`;
 
+  const motifs = {};
+  lignes.forEach(ligne => {
+    const erreurs = ligne && Array.isArray(ligne.erreurs) ? ligne.erreurs : [];
+    erreurs.forEach(erreur => {
+      const cle = String(erreur || '').replace(/\s*:\s*.*/, '').trim();
+      if (cle) motifs[cle] = (motifs[cle] || 0) + 1;
+    });
+  });
+
+  const diagnostic = invalides > 0
+    ? `<div class="import-diagnostic"><strong>Pourquoi l’import est bloqué</strong>` +
+      Object.entries(motifs)
+        .map(([motif, nombre]) => `${nombre} ligne(s) : ${echapper(motif)}`)
+        .join('<br>') +
+      `<br><span>Corrigez les cellules signalées dans Excel, puis recollez le tableau et relancez l’analyse.</span></div>`
+    : '';
+
   const entete =
     '<div class="import-row header">' +
       '<span>Libellé</span><span>Montant</span><span>Jour</span>' +
@@ -101,7 +118,7 @@ function rendreAnalyseImport(resultat) {
     `</div>`;
   }).join('');
 
-  document.getElementById('import-preview').innerHTML = entete + contenu;
+  document.getElementById('import-preview').innerHTML = diagnostic + entete + contenu;
   document.getElementById('new-categories-note').textContent = nouvellesCategories.length
     ? 'Nouvelles catégories proposées : ' + nouvellesCategories.join(', ')
     : 'Aucune nouvelle catégorie.';
