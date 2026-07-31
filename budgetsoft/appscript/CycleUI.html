@@ -1,6 +1,10 @@
 <script>
 const cycleUI={donnees:null};
-document.addEventListener('DOMContentLoaded',()=>{installerCycleUI();installerImportCycle();chargerCycleUI();});
+const maintenanceUI={donnees:null};
+window.budgetsoftModules=window.budgetsoftModules||{};
+window.budgetsoftModules.maintenance=afficherCentreMaintenance;
+
+document.addEventListener('DOMContentLoaded',()=>{installerCycleUI();installerImportCycle();installerMaintenanceUI();chargerCycleUI();});
 
 function installerCycleUI(){
   const cards=document.querySelector('#dashboard .cards');
@@ -40,4 +44,42 @@ function rendreCycleUI(){
   const z=document.getElementById('cycle-finance-content');if(!z)return;
   z.innerHTML=`<p><strong>Aujourd’hui, vous êtes au jour ${p.jourCourant} de votre cycle financier.</strong> ${p.joursRestants} jour(s) restent avant la fin estimée du cycle.</p><div class="cards" style="margin-top:14px"><article class="card metric-card"><span>Solde bancaire</span><strong>${money.format(i.soldeBancaire)}</strong></article><article class="card metric-card"><span>Solde engagé</span><strong>${money.format(i.soldeEngage)}</strong><small>Après CB en attente</small></article><article class="card metric-card"><span>Solde projeté</span><strong>${money.format(i.soldeProjete)}</strong><small>Fin de cycle</small></article><article class="card metric-card"><span>CB en attente</span><strong>${money.format(i.cbEnAttente)}</strong><small>${i.nombreCbEnAttente} opération(s)</small></article></div><div style="height:8px;background:#e8efed;border-radius:999px;margin-top:16px;overflow:hidden"><div style="height:100%;width:${p.progression}%;background:#147d64"></div></div>${d.salaire?`<p class="helper-text">Salaire détecté : ${echapper(d.salaire.libelle)} · fenêtre habituelle du ${d.salaire.jourMin} au ${d.salaire.jourMax} · confiance ${d.salaire.confiance}%.</p>`:'<p class="helper-text">Salaire principal non détecté : utilisation du jour de référence.</p>'}${d.alertes.length?'<div class="error" style="margin-top:12px">'+d.alertes.map(e=>echapper(e)).join('<br>')+'</div>':''}`;
 }
+
+function installerMaintenanceUI(){
+  const nav=document.querySelector('.nav');
+  if(!nav||document.querySelector('[data-view="maintenance"]'))return;
+  const bouton=document.createElement('button');
+  bouton.className='nav-item';bouton.dataset.view='maintenance';bouton.innerHTML='🛠 <span>Maintenance</span>';
+  const parametres=nav.querySelector('[data-view="parametres"]');
+  nav.insertBefore(bouton,parametres||null);
+}
+
+function afficherCentreMaintenance(){
+  const zone=document.getElementById('generic-view');
+  zone.innerHTML='<div class="section-toolbar"><p class="section-intro">Nettoyez, recalculez et contrôlez les données de BudgetSoft.</p><button class="secondary-button" type="button" onclick="chargerMaintenanceUI()">↻ Actualiser</button></div><div id="maintenance-status" class="helper-text">Chargement…</div><div id="maintenance-content"></div>';
+  chargerMaintenanceUI();
+}
+function chargerMaintenanceUI(){
+  google.script.run.withSuccessHandler(d=>{maintenanceUI.donnees=d;rendreMaintenanceUI();}).withFailureHandler(e=>{const s=document.getElementById('maintenance-status');if(s)s.textContent='Erreur : '+(e.message||e);}).chargerCentreMaintenance();
+}
+function rendreMaintenanceUI(){
+  const d=maintenanceUI.donnees,zone=document.getElementById('maintenance-content'),status=document.getElementById('maintenance-status');if(!d||!zone)return;
+  if(status)status.textContent=`Version ${d.version} · ${d.compteurs.Operations||0} opération(s) · santé ${d.controle.score}/100`;
+  zone.innerHTML=`<div class="dashboard-grid">
+  <article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Nettoyage</span><h2>Données</h2></div></div><p class="helper-text">La structure et les en-têtes des feuilles sont conservés.</p>
+  ${ligneMaintenance_('Vider toutes les opérations',d.compteurs.Operations||0,"nettoyerMaintenance('operations','Vider toutes les opérations')",true)}
+  ${ligneMaintenance_('Retirer les imports PDF et leur apprentissage',(d.compteurs.Rapprochements_a_valider||0)+(d.compteurs.Correspondances_bancaires||0),"nettoyerMaintenance('imports_bancaires','Retirer les imports PDF')",true)}
+  ${ligneMaintenance_('Vider les rapprochements',d.compteurs.Rapprochements_a_valider||0,"nettoyerMaintenance('rapprochements','Vider les rapprochements')")}
+  ${ligneMaintenance_('Vider les correspondances bancaires',d.compteurs.Correspondances_bancaires||0,"nettoyerMaintenance('correspondances','Vider les correspondances')")}
+  ${ligneMaintenance_('Vider les charges fixes',d.compteurs.Charges_fixes||0,"nettoyerMaintenance('charges_fixes','Vider les charges fixes')",true)}</article>
+  <article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Mise à jour</span><h2>Recalcul</h2></div></div>
+  ${ligneAction_('Recalculer le cycle financier',"recalculerMaintenanceUI('cycles')")}${ligneAction_('Recalculer les budgets',"recalculerMaintenanceUI('budgets')")}${ligneAction_('Recalculer le patrimoine',"recalculerMaintenanceUI('patrimoine')")}${ligneAction_('Recalculer les analyses',"recalculerMaintenanceUI('analyses')")}${ligneAction_('Tout recalculer',"recalculerMaintenanceUI('tout')",true)}</article>
+  <article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Intégrité</span><h2>Contrôle qualité</h2></div><strong>${d.controle.score}/100</strong></div><div class="cards"><article class="card metric-card"><span>Erreurs</span><strong>${d.controle.erreurs}</strong></article><article class="card metric-card"><span>À vérifier</span><strong>${d.controle.attentions}</strong></article></div><div style="margin-top:14px">${d.controle.anomalies.length?d.controle.anomalies.slice(0,25).map(a=>`<div class="account-row"><div><strong>${echapper(a.domaine)}</strong><small>${echapper(a.message)}</small></div><span class="badge">${a.niveau==='erreur'?'Erreur':'À vérifier'}</span></div>`).join(''):'<div class="success-box"><strong>Aucune anomalie détectée.</strong></div>'}</div><div class="form-actions"><button class="primary-button" type="button" onclick="controlerMaintenanceUI()">Vérification complète</button></div></article></div><div id="maintenance-result" style="margin-top:16px"></div>`;
+}
+function ligneMaintenance_(label,nombre,action,danger){return `<div class="account-row"><div><strong>${echapper(label)}</strong><small>${nombre} ligne(s)</small></div><button class="small-button ${danger?'danger':''}" type="button" onclick="${action}">Exécuter</button></div>`;}
+function ligneAction_(label,action,principal){return `<div class="account-row"><strong>${echapper(label)}</strong><button class="${principal?'primary-button':'small-button'}" type="button" onclick="${action}">Exécuter</button></div>`;}
+function nettoyerMaintenance(cible,label){if(!confirm(label+'\n\nCette action supprime les données concernées. Continuer ?'))return;resultatMaintenance_('Traitement en cours…');google.script.run.withSuccessHandler(r=>{resultatMaintenance_(`<div class="success-box"><strong>Nettoyage terminé</strong><br>${r.supprimees} ligne(s) supprimée(s).</div>`);chargerMaintenanceUI();charger();chargerCycleUI();}).withFailureHandler(e=>resultatMaintenance_(`<div class="error">Erreur : ${echapper(e.message||e)}</div>`)).viderDonneesMaintenance(cible);}
+function recalculerMaintenanceUI(cible){resultatMaintenance_('Recalcul en cours…');google.script.run.withSuccessHandler(r=>{resultatMaintenance_(`<div class="${r.succes?'success-box':'error'}"><strong>${r.succes?'Recalcul terminé':'Recalcul incomplet'}</strong><br>${(r.details||[]).map(echapper).join('<br>')}</div>`);chargerMaintenanceUI();chargerCycleUI();}).withFailureHandler(e=>resultatMaintenance_(`<div class="error">Erreur : ${echapper(e.message||e)}</div>`)).recalculerMaintenance(cible);}
+function controlerMaintenanceUI(){resultatMaintenance_('Contrôle en cours…');google.script.run.withSuccessHandler(r=>{maintenanceUI.donnees.controle=r;rendreMaintenanceUI();resultatMaintenance_(`<div class="success-box"><strong>Contrôle terminé</strong><br>Score ${r.score}/100 · ${r.erreurs} erreur(s) · ${r.attentions} point(s) d’attention.</div>`);}).withFailureHandler(e=>resultatMaintenance_(`<div class="error">Erreur : ${echapper(e.message||e)}</div>`)).controlerQualiteBudgetSoft();}
+function resultatMaintenance_(contenu){const zone=document.getElementById('maintenance-result');if(zone)zone.innerHTML=contenu;}
 </script>
