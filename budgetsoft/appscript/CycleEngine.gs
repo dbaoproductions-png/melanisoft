@@ -61,5 +61,15 @@ function appliquerDateDebitDiffere(operation) {
   copie.date_achat = dateAchat.toISOString();
   copie.date = dateDebit.toISOString();
   copie.commentaire_cycle = '[CARTE_DIFFEREE:' + Utilities.formatDate(dateAchat, Session.getScriptTimeZone(), 'yyyy-MM-dd') + ']';
+  copie.details = [
+    copie.details || copie.libelle || '',
+    'Date d’achat : ' + Utilities.formatDate(dateAchat, Session.getScriptTimeZone(), 'dd/MM/yyyy'),
+    copie.commentaire_cycle
+  ].filter(Boolean).join(' ');
   return copie;
+}
+
+function importerOperationsHelloBankCycle(operations, compte) {
+  const transformees = (operations || []).map(appliquerDateDebitDiffere);
+  return importerOperationsHelloBank(transformees, compte);
 }
