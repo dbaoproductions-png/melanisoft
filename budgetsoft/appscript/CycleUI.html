@@ -4,6 +4,20 @@ const maintenanceUI={donnees:null};
 window.budgetsoftModules=window.budgetsoftModules||{};
 window.budgetsoftModules.maintenance=afficherCentreMaintenance;
 
+// Le rendu historique du tableau de bord peut repasser après le moteur de cycle.
+// On le décore ici afin que le moteur de cycle ait toujours le dernier mot.
+const rendreDashboardAvantCycle = typeof rendreDashboard === 'function' ? rendreDashboard : null;
+if (rendreDashboardAvantCycle) {
+  rendreDashboard = function(data){
+    rendreDashboardAvantCycle(data);
+    if(cycleUI.donnees) {
+      setTimeout(rendreCycleUI,0);
+    } else {
+      setTimeout(chargerCycleUI,0);
+    }
+  };
+}
+
 document.addEventListener('DOMContentLoaded',()=>{installerCycleUI();installerImportCycle();installerMaintenanceUI();chargerCycleUI();});
 
 function installerCycleUI(){
@@ -18,18 +32,50 @@ function installerCycleUI(){
 }
 function installerImportCycle(){
   const bouton=document.getElementById('confirm-pdf-import');if(!bouton||bouton.dataset.cycleInstalled)return;bouton.dataset.cycleInstalled='1';
-  bouton.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();const compte=document.getElementById('pdf-account').value,status=document.getElementById('pdf-status');if(!compte){status.textContent='Choisissez le compte concerné.';return;}bouton.disabled=true;google.script.run.withSuccessHandler(r=>{bouton.disabled=false;status.textContent=`Import terminé : ${r.importees} importées, ${r.doublons} doublons ignorés, ${r.rapprochees} rapprochées.${r.soldeCloture!=null?' Solde de clôture mémorisé : '+money.format(r.soldeCloture)+'.':''}`;charger();chargerCycleUI();}).withFailureHandler(err=>{bouton.disabled=false;status.textContent='Erreur : '+(err.message||String(err));}).importerOperationsHelloBankCycle(sprint0809.pdfOperations,compte,sprint0809.pdfMeta);},true);
+  bouton.addEventListener('click',e=>{
+    e.preventDefault();e.stopImmediatePropagation();
+    const compte=document.getElementById('pdf-account').value,status=document.getElementById('pdf-status');
+    if(!compte){status.textContent='Choisissez le compte concerné.';return;}
+    bouton.disabled=true;
+    status.textContent='Import en cours…';
+    google.script.run.withSuccessHandler(r=>{
+      bouton.disabled=false;
+      let message=`Import terminé : ${r.importees} opération(s) importée(s), ${r.doublons} doublon(s) ignoré(s), ${r.rapprochees} rapprochement(s).`;
+      if(r.soldeOuverture!=null) message+=` Solde d’ouverture : ${money.format(r.soldeOuverture)}.`;
+      if(r.soldeCloture!=null) message+=` Solde de clôture : ${money.format(r.soldeCloture)}.`;
+      if(r.continuite===true) message+=' Continuité avec le relevé précédent : conforme.';
+      if(r.continuite===false) message+=` Attention : écart de continuité de ${money.format(r.ecartContinuite||0)}.`;
+      status.innerHTML=`<div class="success-box"><strong>Relevé importé avec succès</strong><br>${echapper(message)}</div>`;
+      charger();
+      chargerCycleUI();
+      setTimeout(()=>{
+        fermerImportPdf();
+        alert(message);
+      },700);
+    }).withFailureHandler(err=>{
+      bouton.disabled=false;
+      status.innerHTML=`<div class="error"><strong>Échec de l’import</strong><br>${echapper(err.message||String(err))}</div>`;
+    }).importerOperationsHelloBankCycle(sprint0809.pdfOperations,compte,sprint0809.pdfMeta);
+  },true);
 }
 function chargerCycleUI(){google.script.run.withSuccessHandler(d=>{cycleUI.donnees=d;rendreCycleUI();}).withFailureHandler(e=>{const z=document.getElementById('cycle-finance-content');if(z)z.textContent='Erreur : '+(e.message||e);}).chargerCycleFinancier();}
 function rendreCycleUI(){
   const d=cycleUI.donnees;if(!d)return;const p=d.periode,i=d.indicateurs,c=d.couverture||{};const debut=new Date(p.debut),fin=new Date(p.fin);
-  document.getElementById('cycle-day').textContent=p.libelle||'Cycle courant';document.getElementById('cycle-dates').textContent=`${debut.toLocaleDateString('fr-FR')} → ${fin.toLocaleDateString('fr-FR')} · Jour ${p.jourCourant}/${p.dureeJours}`;
+  const cycleDay=document.getElementById('cycle-day'),cycleDates=document.getElementById('cycle-dates');
+  if(cycleDay)cycleDay.textContent=p.libelle||'Cycle courant';
+  if(cycleDates)cycleDates.textContent=`${debut.toLocaleDateString('fr-FR')} → ${fin.toLocaleDateString('fr-FR')} · Jour ${p.jourCourant}/${p.dureeJours}`;
+
   const solde=document.getElementById('solde-global'),revenus=document.getElementById('revenus-mois'),depenses=document.getElementById('depenses-mois'),epargne=document.getElementById('epargne-mois');
-  if(solde){solde.textContent=c.soldeFiable?money.format(i.soldeBancaire):'À synchroniser';solde.parentElement.querySelector('small').textContent=c.dateDernierReleve?'Dernier solde bancaire connu au '+new Date(c.dateDernierReleve).toLocaleDateString('fr-FR'):'Aucun solde de clôture mémorisé';}
+  if(solde){
+    solde.textContent=c.soldeFiable?money.format(i.soldeBancaire):'À synchroniser';
+    const small=solde.parentElement&&solde.parentElement.querySelector('small');
+    if(small)small.textContent=c.dateDernierReleve?'Dernier solde bancaire connu au '+new Date(c.dateDernierReleve).toLocaleDateString('fr-FR'):'Aucun solde de clôture mémorisé';
+  }
   const cycleCouvert=c.completeCycle===true;
-  if(revenus){revenus.textContent=cycleCouvert?money.format(i.revenusCycle):'Données incomplètes';revenus.parentElement.querySelector('small').textContent=cycleCouvert?'Entrées du cycle '+p.libelle:'Les relevés importés ne couvrent pas encore '+p.libelle;}
-  if(depenses){depenses.textContent=cycleCouvert?money.format(i.depensesCycle):'Données incomplètes';depenses.parentElement.querySelector('small').textContent=cycleCouvert?'Sorties du cycle '+p.libelle:'Les relevés importés ne couvrent pas encore '+p.libelle;}
-  if(epargne){epargne.textContent=cycleCouvert?money.format(i.epargneCycle):'Données incomplètes';epargne.parentElement.querySelector('small').textContent=cycleCouvert?'Revenus moins dépenses du cycle':'Calcul indisponible tant que le cycle n’est pas couvert';}
+  if(revenus){revenus.textContent=cycleCouvert?money.format(i.revenusCycle):'Données incomplètes';const small=revenus.parentElement&&revenus.parentElement.querySelector('small');if(small)small.textContent=cycleCouvert?'Entrées du cycle '+p.libelle:'Les relevés importés ne couvrent pas encore '+p.libelle;}
+  if(depenses){depenses.textContent=cycleCouvert?money.format(i.depensesCycle):'Données incomplètes';const small=depenses.parentElement&&depenses.parentElement.querySelector('small');if(small)small.textContent=cycleCouvert?'Sorties du cycle '+p.libelle:'Les relevés importés ne couvrent pas encore '+p.libelle;}
+  if(epargne){epargne.textContent=cycleCouvert?money.format(i.epargneCycle):'Données incomplètes';const small=epargne.parentElement&&epargne.parentElement.querySelector('small');if(small)small.textContent=cycleCouvert?'Revenus moins dépenses du cycle':'Calcul indisponible tant que le cycle n’est pas couvert';}
+
   const z=document.getElementById('cycle-finance-content');if(!z)return;
   z.innerHTML=`<p><strong>${echapper(p.libelle||'Cycle courant')}</strong> · du ${debut.toLocaleDateString('fr-FR')} au ${fin.toLocaleDateString('fr-FR')}. Aujourd’hui : jour ${p.jourCourant} sur ${p.dureeJours}, ${p.joursRestants} jour(s) restant(s).</p><div class="cards" style="margin-top:14px"><article class="card metric-card"><span>Solde bancaire</span><strong>${c.soldeFiable?money.format(i.soldeBancaire):'À synchroniser'}</strong><small>${c.dateDernierReleve?'Au '+new Date(c.dateDernierReleve).toLocaleDateString('fr-FR'):'Solde de relevé absent'}</small></article><article class="card metric-card"><span>Solde engagé</span><strong>${c.soldeFiable?money.format(i.soldeEngage):'—'}</strong><small>Après CB en attente</small></article><article class="card metric-card"><span>Solde projeté</span><strong>${c.soldeFiable&&cycleCouvert?money.format(i.soldeProjete):'—'}</strong><small>Fin de cycle</small></article><article class="card metric-card"><span>CB en attente</span><strong>${money.format(i.cbEnAttente)}</strong><small>${i.nombreCbEnAttente} opération(s)</small></article></div><div style="height:8px;background:#e8efed;border-radius:999px;margin-top:16px;overflow:hidden"><div style="height:100%;width:${p.progression}%;background:#147d64"></div></div>${d.salaire?`<p class="helper-text">Salaire principal détecté : ${echapper(d.salaire.libelle)} · réception habituelle du ${d.salaire.jourMin} au ${d.salaire.jourMax} · confiance ${d.salaire.confiance}%.</p>`:'<p class="helper-text">Salaire principal non détecté : utilisation du jour de référence.</p>'}${d.alertes.length?'<div class="error" style="margin-top:12px">'+d.alertes.map(e=>echapper(e)).join('<br>')+'</div>':''}`;
 }
