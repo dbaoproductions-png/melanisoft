@@ -24,6 +24,13 @@ function dateDebitCarte_(dateAchat) {
   return dernierJourDuMois_(dateAchat);
 }
 
+function cleSalaire_(operation) {
+  return normaliserTexteCycle_(operation && operation.libelle)
+    .replace(/\b(SALAIRE|PAYE|TRAITEMENT)\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim() || 'SALAIRE';
+}
+
 function detecterSalairePrincipal_(operations, moisHistorique) {
   const limite = new Date();
   limite.setMonth(limite.getMonth() - Math.max(3, Number(moisHistorique) || 12));
@@ -31,7 +38,7 @@ function detecterSalairePrincipal_(operations, moisHistorique) {
     operation: o,
     date: new Date(o.date),
     montant: Math.abs(Number(o.montant || 0)),
-    cle: normaliserTexteCycle_(o.libelle).replace(/\b(SALAIRE|PAYE|TRAITEMENT)\b/g, '').trim() || 'SALAIRE'
+    cle: cleSalaire_(o)
   })).filter(c => !isNaN(c.date) && c.date >= limite);
 
   if (!candidats.length) return null;
@@ -43,8 +50,9 @@ function detecterSalairePrincipal_(operations, moisHistorique) {
   const groupe = Object.values(groupes).sort((a, b) => b.length - a.length || moyenne_(b.map(x => x.montant)) - moyenne_(a.map(x => x.montant)))[0];
   const jours = groupe.map(c => c.date.getDate()).sort((a,b)=>a-b);
   const montants = groupe.map(c => c.montant);
-  const dernier = groupe.sort((a,b)=>b.date-a.date)[0];
+  const dernier = groupe.slice().sort((a,b)=>b.date-a.date)[0];
   return {
+    cle: dernier.cle,
     libelle: dernier.operation.libelle || 'Salaire principal',
     compte: dernier.operation.compte || '',
     occurrences: groupe.length,
@@ -57,15 +65,34 @@ function detecterSalairePrincipal_(operations, moisHistorique) {
   };
 }
 
-function calculerCycleDepuisSalaire_(reference, operations, jourRepli) {
+function estSalairePrincipal_(operation, salairePrincipal) {
+  if (!operation || !salairePrincipal || !estOperationSalaire_(operation)) return false;
+  if (salairePrincipal.compte && String(operation.compte || '') !== String(salairePrincipal.compte)) return false;
+  return cleSalaire_(operation) === salairePrincipal.cle;
+}
+
+function calculerCycleDepuisSalaire_(reference, operations, jourRepli, salairePrincipal) {
   const dateRef = reference instanceof Date ? reference : new Date(reference || new Date());
-  const salaires = (operations || []).filter(estOperationSalaire_).map(o => new Date(o.date)).filter(d => !isNaN(d)).sort((a,b)=>a-b);
+  const filtre = salairePrincipal
+    ? o => estSalairePrincipal_(o, salairePrincipal)
+    : o => estOperationSalaire_(o);
+  const salaires = (operations || []).filter(filtre).map(o => new Date(o.date)).filter(d => !isNaN(d)).sort((a,b)=>a-b);
   const precedent = salaires.filter(d => d <= dateRef).pop();
   const suivant = salaires.find(d => d > dateRef);
+
   if (precedent) {
-    const fin = suivant ? new Date(suivant.getTime() - 1) : new Date(new Date(precedent.getFullYear(), precedent.getMonth() + 1, precedent.getDate()).getTime() - 1);
+    let fin;
+    if (suivant) {
+      fin = new Date(suivant.getTime() - 1);
+    } else {
+      const jourEstime = Math.max(1, Math.min(28, Number(salairePrincipal && salairePrincipal.jourMoyen) || Number(jourRepli) || 28));
+      let prochainEstime = new Date(precedent.getFullYear(), precedent.getMonth() + 1, jourEstime, 0, 0, 0, 0);
+      if (prochainEstime <= precedent) prochainEstime = new Date(precedent.getFullYear(), precedent.getMonth() + 2, jourEstime, 0, 0, 0, 0);
+      fin = new Date(prochainEstime.getTime() - 1);
+    }
     return construirePeriodeCycle_(precedent, fin, true);
   }
+
   const jour = Math.max(1, Math.min(28, Number(jourRepli) || 28));
   const debut = dateRef.getDate() >= jour ? new Date(dateRef.getFullYear(), dateRef.getMonth(), jour) : new Date(dateRef.getFullYear(), dateRef.getMonth()-1, jour);
   const fin = new Date(new Date(debut.getFullYear(), debut.getMonth()+1, jour).getTime()-1);
@@ -76,11 +103,13 @@ function construirePeriodeCycle_(debut, fin, salaireDetecte) {
   const maintenant = new Date();
   const duree = Math.max(1, Math.ceil((fin - debut) / 86400000) + 1);
   const jourCourant = maintenant < debut ? 0 : maintenant > fin ? duree : Math.min(duree, Math.floor((maintenant - debut) / 86400000) + 1);
+  const moisNom = new Date(debut.getFullYear(), debut.getMonth() + 1, 1);
+  const libelle = moisNom.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }).replace(/^./, c => c.toUpperCase());
   return {
     debut: debut.toISOString(),
     fin: fin.toISOString(),
-    cle: Utilities.formatDate(debut, Session.getScriptTimeZone(), 'yyyy-MM-dd'),
-    libelle: 'Cycle du ' + Utilities.formatDate(debut, Session.getScriptTimeZone(), 'dd/MM') + ' au ' + Utilities.formatDate(fin, Session.getScriptTimeZone(), 'dd/MM'),
+    cle: Utilities.formatDate(moisNom, Session.getScriptTimeZone(), 'yyyy-MM'),
+    libelle: libelle,
     salaireDetecte: salaireDetecte,
     dureeJours: duree,
     jourCourant: jourCourant,
