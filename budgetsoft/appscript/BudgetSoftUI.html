@@ -12,10 +12,15 @@ document.addEventListener('DOMContentLoaded',()=>{
 
 function installerSprint0809(){
   const toolbar=document.querySelector('#operations .toolbar-buttons');
-  if(toolbar&&!document.getElementById('import-pdf-button')){
-    const bouton=document.createElement('button');
+  let bouton=document.getElementById('import-pdf-button');
+  if(!bouton&&toolbar){
+    bouton=document.createElement('button');
     bouton.type='button';bouton.className='secondary-button';bouton.id='import-pdf-button';bouton.textContent='📄 Relevé PDF';
-    bouton.addEventListener('click',ouvrirImportPdf);toolbar.prepend(bouton);
+    toolbar.prepend(bouton);
+  }
+  if(bouton&&!bouton.dataset.listenerInstalled){
+    bouton.dataset.listenerInstalled='1';
+    bouton.addEventListener('click',ouvrirImportPdf);
   }
   const cards=document.querySelector('#dashboard .cards');
   if(cards&&!document.getElementById('budget-period-card')){
