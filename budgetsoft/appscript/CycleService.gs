@@ -1,8 +1,15 @@
 function estOperationSalaire_(operation) {
   const montant = Number(operation && operation.montant || 0);
   if (montant <= 0) return false;
-  const texte = normaliserTexteCycle_([operation.libelle, operation.categorie, operation.commentaire].join(' '));
-  return CYCLE_SALARY_WORDS.some(mot => texte.indexOf(mot) >= 0);
+  const texte = normaliserTexteCycle_([
+    operation && operation.libelle,
+    operation && operation.details,
+    operation && operation.categorie,
+    operation && operation.commentaire
+  ].join(' '));
+  const motSalaire = CYCLE_SALARY_WORDS.some(mot => texte.indexOf(mot) >= 0);
+  const mairieToulouse = texte.indexOf('MAIRIE DE TOULOUSE') >= 0 || (texte.indexOf('TOULOUSE') >= 0 && texte.indexOf('PAYE') >= 0);
+  return motSalaire || mairieToulouse;
 }
 
 function estOperationCarte_(operation) {
@@ -25,8 +32,24 @@ function dateDebitCarte_(dateAchat) {
 }
 
 function cleSalaire_(operation) {
-  return normaliserTexteCycle_(operation && operation.libelle)
+  const texte = normaliserTexteCycle_([
+    operation && operation.libelle,
+    operation && operation.details,
+    operation && operation.commentaire
+  ].join(' '));
+
+  // Cas stable du salaire principal : le libellé bancaire varie selon le mois,
+  // mais MAIRIE DE TOULOUSE / PAYE identifie le même employeur.
+  if (texte.indexOf('MAIRIE DE TOULOUSE') >= 0 || (texte.indexOf('TOULOUSE') >= 0 && texte.indexOf('PAYE') >= 0)) {
+    return 'MAIRIE DE TOULOUSE';
+  }
+
+  return texte
     .replace(/\b(SALAIRE|PAYE|TRAITEMENT)\b/g, '')
+    .replace(/\bVIR\b|\bSEPA\b|\bRECU\b|\bMOTIF\b/g, ' ')
+    .replace(/\b\d{1,2}[ .\/]\d{1,2}(?:[ .\/]\d{2,4})?\b/g, ' ')
+    .replace(/\b(?:19|20)\d{2}\b/g, ' ')
+    .replace(/\bPAYE\d+\b/g, ' ')
     .replace(/\s+/g, ' ')
     .trim() || 'SALAIRE';
 }
@@ -53,7 +76,7 @@ function detecterSalairePrincipal_(operations, moisHistorique) {
   const dernier = groupe.slice().sort((a,b)=>b.date-a.date)[0];
   return {
     cle: dernier.cle,
-    libelle: dernier.operation.libelle || 'Salaire principal',
+    libelle: dernier.cle === 'MAIRIE DE TOULOUSE' ? 'Salaire — Mairie de Toulouse' : (dernier.operation.libelle || 'Salaire principal'),
     compte: dernier.operation.compte || '',
     occurrences: groupe.length,
     montantMoyen: arrondirCycle_(moyenne_(montants)),
