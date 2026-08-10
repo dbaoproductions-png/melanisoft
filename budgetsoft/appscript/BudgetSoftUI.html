@@ -1,5 +1,5 @@
 <script>
-const sprint0809={configuration:null,pdfOperations:[]};
+const sprint0809={configuration:null,pdfOperations:[],pdfMeta:null};
 
 document.addEventListener('DOMContentLoaded',()=>{
   installerSprint0809();
@@ -15,168 +15,52 @@ function installerSprint0809(){
   if(toolbar&&!document.getElementById('import-pdf-button')){
     const bouton=document.createElement('button');
     bouton.type='button';bouton.className='secondary-button';bouton.id='import-pdf-button';bouton.textContent='📄 Relevé PDF';
-    bouton.addEventListener('click',ouvrirImportPdf);
-    toolbar.prepend(bouton);
+    bouton.addEventListener('click',ouvrirImportPdf);toolbar.prepend(bouton);
   }
   const cards=document.querySelector('#dashboard .cards');
   if(cards&&!document.getElementById('budget-period-card')){
     const card=document.createElement('article');card.className='card metric-card';card.id='budget-period-card';
-    card.innerHTML='<span>Mois budgétaire</span><strong id="budget-period-label">—</strong><small id="budget-period-dates">Du 28 au 27</small>';
-    cards.prepend(card);
+    card.innerHTML='<span>Mois budgétaire</span><strong id="budget-period-label">—</strong><small id="budget-period-dates">Du 28 au 27</small>';cards.prepend(card);
   }
   creerModalImportPdf();
   document.querySelector('[data-view="parametres"]')?.addEventListener('click',()=>setTimeout(rendreParametresBudgetaires,0));
 }
-
-function afficherPeriodeBudgetaire(){
-  const p=sprint0809.configuration?.periodeCourante;if(!p)return;
-  const debut=new Date(p.debut),fin=new Date(p.fin);
-  document.getElementById('budget-period-label').textContent=(p.libelle||'').replace(/^./,c=>c.toUpperCase());
-  document.getElementById('budget-period-dates').textContent=`${debut.toLocaleDateString('fr-FR')} → ${fin.toLocaleDateString('fr-FR')}`;
-  if(state.data)rendreDashboard(state.data);
-}
-
-const rendreDashboardCivil=rendreDashboard;
-rendreDashboard=function(data){
-  document.getElementById('version').textContent=sprint0809.configuration?.version||data.meta?.version||'0.9';
-  const comptes=(data.Comptes||[]).filter(c=>estActif(c.actif));
-  const operations=data.Operations||[];
-  const periode=sprint0809.configuration?.periodeCourante;
-  const debut=periode?new Date(periode.debut):new Date(new Date().getFullYear(),new Date().getMonth(),1);
-  const fin=periode?new Date(periode.fin):new Date(new Date().getFullYear(),new Date().getMonth()+1,0,23,59,59);
-  const mois=operations.filter(o=>{const d=new Date(o.date);return !isNaN(d)&&d>=debut&&d<=fin;});
-  const revenus=mois.filter(o=>nombre(o.montant)>0).reduce((s,o)=>s+nombre(o.montant),0);
-  const depenses=mois.filter(o=>nombre(o.montant)<0).reduce((s,o)=>s+Math.abs(nombre(o.montant)),0);
-  const solde=comptes.reduce((s,c)=>s+soldeCompte(c,operations),0);
-  document.getElementById('solde-global').textContent=money.format(solde);
-  document.getElementById('revenus-mois').textContent=money.format(revenus);
-  document.getElementById('depenses-mois').textContent=money.format(depenses);
-  document.getElementById('epargne-mois').textContent=money.format(revenus-depenses);
-  rendreOperationsRecentes(operations);rendreGraphiqueBudgetaire(operations);rendreSante(revenus,depenses,solde,data);rendreAlertes(revenus,depenses,solde,data);
-  afficherPeriodeBudgetaireSansRendu();
-};
-
-function afficherPeriodeBudgetaireSansRendu(){
-  const p=sprint0809.configuration?.periodeCourante;if(!p)return;
-  const debut=new Date(p.debut),fin=new Date(p.fin);
-  const label=document.getElementById('budget-period-label'),dates=document.getElementById('budget-period-dates');
-  if(label)label.textContent=(p.libelle||'').replace(/^./,c=>c.toUpperCase());
-  if(dates)dates.textContent=`${debut.toLocaleDateString('fr-FR')} → ${fin.toLocaleDateString('fr-FR')}`;
-}
-
-function rendreGraphiqueBudgetaire(operations){
-  const zone=document.getElementById('monthly-bars'),mois=[];
-  const jour=sprint0809.configuration?.jourDebutMois||28,now=new Date();
-  for(let i=5;i>=0;i--){
-    const repere=new Date(now.getFullYear(),now.getMonth()-i,15);
-    const p=periodeBudgetaireClient(repere,jour);
-    const total=operations.filter(o=>{const d=new Date(o.date);return !isNaN(d)&&d>=p.debut&&d<=p.fin;}).reduce((s,o)=>s+nombre(o.montant),0);
-    mois.push({label:p.libelle,total});
-  }
-  const max=Math.max(1,...mois.map(m=>Math.abs(m.total)));
-  zone.innerHTML=mois.map(m=>`<div class="bar ${m.total<0?'negative':''}" title="${money.format(m.total)}" style="height:${Math.max(4,Math.abs(m.total)/max*150)}px"><span class="bar-label">${m.label}</span></div>`).join('');
-}
-
-function periodeBudgetaireClient(date,jour){
-  const d=new Date(date),apres=d.getDate()>=jour;
-  const debut=new Date(d.getFullYear(),d.getMonth()-(apres?0:1),jour);
-  const prochain=new Date(debut.getFullYear(),debut.getMonth()+1,jour);
-  const fin=new Date(prochain.getTime()-1);
-  const libelle=new Date(debut.getFullYear(),debut.getMonth()+1,1).toLocaleDateString('fr-FR',{month:'short'});
-  return {debut,fin,libelle};
-}
-
+function afficherPeriodeBudgetaire(){const p=sprint0809.configuration?.periodeCourante;if(!p)return;const debut=new Date(p.debut),fin=new Date(p.fin);document.getElementById('budget-period-label').textContent=(p.libelle||'').replace(/^./,c=>c.toUpperCase());document.getElementById('budget-period-dates').textContent=`${debut.toLocaleDateString('fr-FR')} → ${fin.toLocaleDateString('fr-FR')}`;}
 function rendreParametresBudgetaires(){
   const generic=document.getElementById('generic-view');
   generic.innerHTML=`<article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Calendrier</span><h2>Mois budgétaire</h2></div></div><p class="helper-text">Le mois affiché commence à la réception réelle du salaire lorsqu’elle est détectée. Le jour de référence sert de solution de repli.</p><form id="budget-calendar-form" class="form-grid"><label>Jour de référence<input type="number" id="budget-start-day" min="1" max="28" value="${sprint0809.configuration?.jourDebutMois||28}" required></label><label>Jour habituel du salaire<input type="number" id="salary-day" min="1" max="28" value="${sprint0809.configuration?.jourSalaire||28}" required></label><div class="form-actions full-field"><button class="primary-button" type="submit">Enregistrer</button></div></form></article>`;
-  document.getElementById('budget-calendar-form').addEventListener('submit',e=>{
-    e.preventDefault();
-    google.script.run.withSuccessHandler(config=>{sprint0809.configuration=config;afficherPeriodeBudgetaire();ouvrirVue('dashboard');}).withFailureHandler(err=>afficherErreur(err.message||String(err))).enregistrerConfigurationBudgetaire({jourDebutMois:Number(document.getElementById('budget-start-day').value),jourSalaire:Number(document.getElementById('salary-day').value)});
-  });
+  document.getElementById('budget-calendar-form').addEventListener('submit',e=>{e.preventDefault();google.script.run.withSuccessHandler(config=>{sprint0809.configuration=config;afficherPeriodeBudgetaire();ouvrirVue('dashboard');}).withFailureHandler(err=>afficherErreur(err.message||String(err))).enregistrerConfigurationBudgetaire({jourDebutMois:Number(document.getElementById('budget-start-day').value),jourSalaire:Number(document.getElementById('salary-day').value)});});
 }
-
 function creerModalImportPdf(){
   if(document.getElementById('pdf-import-modal'))return;
   const modal=document.createElement('div');modal.id='pdf-import-modal';modal.className='modal hidden';modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');
-  modal.innerHTML=`<div class="modal-card wide-modal"><div class="modal-heading"><div><p class="panel-kicker">Hello bank!</p><h2>Importer un relevé PDF</h2></div><button class="modal-close" id="close-pdf-import">×</button></div><div class="import-help">Le PDF reste dans votre navigateur : seules les opérations extraites sont envoyées au classeur.</div><div class="form-grid"><label class="full-field">Relevé PDF<input type="file" id="pdf-file" accept="application/pdf"></label><label>Compte concerné<select id="pdf-account"></select></label></div><div id="pdf-status" class="helper-text"></div><div id="pdf-preview" class="import-preview hidden"></div><div class="form-actions"><button type="button" class="secondary-button" id="cancel-pdf-import">Annuler</button><button type="button" class="secondary-button" id="analyze-pdf">Analyser le PDF</button><button type="button" class="primary-button hidden" id="confirm-pdf-import">Importer les opérations</button></div></div>`;
-  document.body.appendChild(modal);
-  document.getElementById('close-pdf-import').addEventListener('click',fermerImportPdf);
-  document.getElementById('cancel-pdf-import').addEventListener('click',fermerImportPdf);
-  document.getElementById('analyze-pdf').addEventListener('click',analyserPdfHelloBank);
-  document.getElementById('confirm-pdf-import').addEventListener('click',confirmerImportPdf);
-  modal.addEventListener('click',e=>{if(e.target===modal)fermerImportPdf();});
+  modal.innerHTML=`<div class="modal-card wide-modal"><div class="modal-heading"><div><p class="panel-kicker">Hello bank!</p><h2>Importer un relevé PDF</h2></div><button class="modal-close" id="close-pdf-import">×</button></div><div class="import-help">Le PDF reste dans votre navigateur : seules les opérations et les informations de clôture extraites sont envoyées au classeur.</div><div class="form-grid"><label class="full-field">Relevé PDF<input type="file" id="pdf-file" accept="application/pdf"></label><label>Compte concerné<select id="pdf-account"></select></label></div><div id="pdf-status" class="helper-text"></div><div id="pdf-preview" class="import-preview hidden"></div><div class="form-actions"><button type="button" class="secondary-button" id="cancel-pdf-import">Annuler</button><button type="button" class="secondary-button" id="analyze-pdf">Analyser le PDF</button><button type="button" class="primary-button hidden" id="confirm-pdf-import">Importer les opérations</button></div></div>`;
+  document.body.appendChild(modal);document.getElementById('close-pdf-import').addEventListener('click',fermerImportPdf);document.getElementById('cancel-pdf-import').addEventListener('click',fermerImportPdf);document.getElementById('analyze-pdf').addEventListener('click',analyserPdfHelloBank);document.getElementById('confirm-pdf-import').addEventListener('click',confirmerImportPdf);modal.addEventListener('click',e=>{if(e.target===modal)fermerImportPdf();});
 }
-
-function ouvrirImportPdf(){
-  sprint0809.pdfOperations=[];
-  const comptes=(state.data?.Comptes||[]).filter(c=>estActif(c.actif));
-  document.getElementById('pdf-account').innerHTML='<option value="">Choisir un compte</option>'+comptes.map(c=>`<option value="${echapperAttribut(c.id)}">${echapper(c.nom)}</option>`).join('');
-  document.getElementById('pdf-file').value='';document.getElementById('pdf-status').textContent='';document.getElementById('pdf-preview').classList.add('hidden');document.getElementById('confirm-pdf-import').classList.add('hidden');
-  document.getElementById('pdf-import-modal').classList.remove('hidden');
-}
+function ouvrirImportPdf(){sprint0809.pdfOperations=[];sprint0809.pdfMeta=null;const comptes=(state.data?.Comptes||[]).filter(c=>estActif(c.actif));document.getElementById('pdf-account').innerHTML='<option value="">Choisir un compte</option>'+comptes.map(c=>`<option value="${echapperAttribut(c.id)}">${echapper(c.nom)}</option>`).join('');document.getElementById('pdf-file').value='';document.getElementById('pdf-status').textContent='';document.getElementById('pdf-preview').classList.add('hidden');document.getElementById('confirm-pdf-import').classList.add('hidden');document.getElementById('pdf-import-modal').classList.remove('hidden');}
 function fermerImportPdf(){document.getElementById('pdf-import-modal').classList.add('hidden');}
-
-async function chargerPdfJs(){
-  if(window.pdfjsLib)return window.pdfjsLib;
-  const version='4.10.38';
-  const base=`https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${version}`;
-  const pdfjs=await import(`${base}/pdf.min.mjs`);
-  pdfjs.GlobalWorkerOptions.workerSrc=`${base}/pdf.worker.min.mjs`;
-  window.pdfjsLib=pdfjs;
-  return pdfjs;
-}
+async function chargerPdfJs(){if(window.pdfjsLib)return window.pdfjsLib;const version='4.10.38',base=`https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${version}`;const pdfjs=await import(`${base}/pdf.min.mjs`);pdfjs.GlobalWorkerOptions.workerSrc=`${base}/pdf.worker.min.mjs`;window.pdfjsLib=pdfjs;return pdfjs;}
 
 async function analyserPdfHelloBank(){
-  const fichier=document.getElementById('pdf-file').files[0],status=document.getElementById('pdf-status');
-  if(!fichier){status.textContent='Choisissez un relevé PDF.';return;}
+  const fichier=document.getElementById('pdf-file').files[0],status=document.getElementById('pdf-status');if(!fichier){status.textContent='Choisissez un relevé PDF.';return;}
   try{
-    status.textContent='Lecture du relevé…';
-    const pdfjs=await chargerPdfJs();
-    const data=await fichier.arrayBuffer();
-    const pdf=await pdfjs.getDocument({data}).promise;
-    const operations=[];
-    for(let p=1;p<=pdf.numPages;p++){
-      const page=await pdf.getPage(p),viewport=page.getViewport({scale:1}),contenu=await page.getTextContent();
-      operations.push(...extraireOperationsPageHelloBank(contenu.items,viewport.width));
-    }
-    sprint0809.pdfOperations=dedoublonnerOperationsPdf(operations);
-    status.textContent=`${sprint0809.pdfOperations.length} opérations détectées sur ${pdf.numPages} pages.`;
-    const preview=document.getElementById('pdf-preview');preview.classList.remove('hidden');
-    preview.innerHTML=sprint0809.pdfOperations.slice(0,40).map(o=>`<div class="import-row"><span>${formaterDate(o.date)}</span><strong>${echapper(o.libelle)}</strong><span class="${o.montant>=0?'amount-positive':'amount-negative'}">${money.format(o.montant)}</span></div>`).join('')+(sprint0809.pdfOperations.length>40?`<p class="helper-text">… et ${sprint0809.pdfOperations.length-40} autres opérations.</p>`:'');
-    document.getElementById('confirm-pdf-import').classList.toggle('hidden',!sprint0809.pdfOperations.length);
+    status.textContent='Lecture du relevé…';const pdfjs=await chargerPdfJs();const data=await fichier.arrayBuffer();const pdf=await pdfjs.getDocument({data}).promise;const operations=[];const textes=[];
+    for(let p=1;p<=pdf.numPages;p++){const page=await pdf.getPage(p),viewport=page.getViewport({scale:1}),contenu=await page.getTextContent();operations.push(...extraireOperationsPageHelloBank(contenu.items,viewport.width));textes.push(contenu.items.map(i=>i.str).join(' '));}
+    sprint0809.pdfOperations=dedoublonnerOperationsPdf(operations);sprint0809.pdfMeta=extraireMetaReleveHelloBank(textes.join(' '));
+    const meta=sprint0809.pdfMeta;status.textContent=`${sprint0809.pdfOperations.length} opérations détectées sur ${pdf.numPages} pages.`+(meta?.soldeCloture!=null?` Solde de clôture : ${money.format(meta.soldeCloture)} au ${new Date(meta.dateCloture).toLocaleDateString('fr-FR')}.`:' Solde de clôture non détecté.');
+    const preview=document.getElementById('pdf-preview');preview.classList.remove('hidden');preview.innerHTML=sprint0809.pdfOperations.slice(0,40).map(o=>`<div class="import-row"><span>${formaterDate(o.date)}</span><strong>${echapper(o.libelle)}</strong><span class="${o.montant>=0?'amount-positive':'amount-negative'}">${money.format(o.montant)}</span></div>`).join('')+(sprint0809.pdfOperations.length>40?`<p class="helper-text">… et ${sprint0809.pdfOperations.length-40} autres opérations.</p>`:'');document.getElementById('confirm-pdf-import').classList.toggle('hidden',!sprint0809.pdfOperations.length);
   }catch(e){status.textContent='Erreur : '+(e.message||String(e));}
 }
-
+function extraireMetaReleveHelloBank(texte){
+  const t=String(texte||'').replace(/\s+/g,' ');let m=t.match(/SOLDE\s+(CREDITEUR|DEBITEUR)\s+AU\s+(\d{2})[\.\/]?(\d{2})[\.\/]?(\d{4})\s+([\d\s.]+,\d{2})/i);
+  if(!m)return null;const signe=/DEBITEUR/i.test(m[1])?-1:1;const montant=signe*parseMontantPdf(m[5]);const date=new Date(Number(m[4]),Number(m[3])-1,Number(m[2]),12,0,0);return {soldeCloture:montant,dateCloture:date.toISOString()};
+}
 function extraireOperationsPageHelloBank(items,largeur){
-  const lignes=new Map();
-  items.forEach(item=>{const y=Math.round(item.transform[5]);if(!lignes.has(y))lignes.set(y,[]);lignes.get(y).push({texte:item.str.trim(),x:item.transform[4],ratio:item.transform[4]/largeur});});
-  const ordonnees=[...lignes.entries()].sort((a,b)=>b[0]-a[0]).map(([,cellules])=>cellules.filter(c=>c.texte).sort((a,b)=>a.x-b.x));
-  const resultats=[];let courant=null;const annee=extraireAnneeReleve(ordonnees);
-  ordonnees.forEach(cellules=>{
-    const dateCell=cellules.find(c=>c.ratio<0.16&&/^\d{2}\.\d{2}$/.test(c.texte));
-    const montantCells=cellules.filter(c=>c.ratio>0.60&&/^\d{1,3}(?:[ .]\d{3})*,\d{2}$/.test(c.texte));
-    if(dateCell&&montantCells.length){
-      if(courant)resultats.push(courant);
-      const [jour,mois]=dateCell.texte.split('.').map(Number);
-      const montantCell=montantCells[montantCells.length-1];
-      const credit=montantCell.ratio>0.82;
-      const description=cellules.filter(c=>c.ratio>=0.12&&c.ratio<0.60).map(c=>c.texte).join(' ');
-      courant={date:new Date(annee,mois-1,jour).toISOString(),libelle:description||'Opération Hello bank!',details:description,montant:(credit?1:-1)*parseMontantPdf(montantCell.texte)};
-    }else if(courant){
-      const suite=cellules.filter(c=>c.ratio>=0.12&&c.ratio<0.60).map(c=>c.texte).join(' ');
-      if(suite&&!/RELEVE DE COMPTE|Date Nature|P\. \d+\//i.test(suite)){courant.details=(courant.details+' '+suite).trim();courant.libelle=courant.details.slice(0,120);}
-    }
-  });
-  if(courant)resultats.push(courant);
-  return resultats.filter(o=>!/^SOLDE|^TOTAL DES OPERATIONS/i.test(o.libelle));
+  const lignes=new Map();items.forEach(item=>{const y=Math.round(item.transform[5]);if(!lignes.has(y))lignes.set(y,[]);lignes.get(y).push({texte:item.str.trim(),x:item.transform[4],ratio:item.transform[4]/largeur});});const ordonnees=[...lignes.entries()].sort((a,b)=>b[0]-a[0]).map(([,cellules])=>cellules.filter(c=>c.texte).sort((a,b)=>a.x-b.x));const resultats=[];let courant=null;const annee=extraireAnneeReleve(ordonnees);
+  ordonnees.forEach(cellules=>{const dateCell=cellules.find(c=>c.ratio<0.16&&/^\d{2}\.\d{2}$/.test(c.texte));const montantCells=cellules.filter(c=>c.ratio>0.60&&/^\d{1,3}(?:[ .]\d{3})*,\d{2}$/.test(c.texte));if(dateCell&&montantCells.length){if(courant)resultats.push(courant);const [jour,mois]=dateCell.texte.split('.').map(Number);const montantCell=montantCells[montantCells.length-1];const credit=montantCell.ratio>0.82;const description=cellules.filter(c=>c.ratio>=0.12&&c.ratio<0.60).map(c=>c.texte).join(' ');courant={date:new Date(annee,mois-1,jour).toISOString(),libelle:description||'Opération Hello bank!',details:description,montant:(credit?1:-1)*parseMontantPdf(montantCell.texte)};}else if(courant){const suite=cellules.filter(c=>c.ratio>=0.12&&c.ratio<0.60).map(c=>c.texte).join(' ');if(suite&&!/RELEVE DE COMPTE|Date Nature|P\. \d+\//i.test(suite)){courant.details=(courant.details+' '+suite).trim();courant.libelle=courant.details.slice(0,120);}}});if(courant)resultats.push(courant);return resultats.filter(o=>!/^SOLDE|^TOTAL DES OPERATIONS/i.test(o.libelle));
 }
 function extraireAnneeReleve(lignes){const texte=lignes.flat().map(c=>c.texte).join(' '),m=texte.match(/(?:20)\d{2}/);return m?Number(m[0]):new Date().getFullYear();}
 function parseMontantPdf(v){return Number(String(v).replace(/[ .]/g,'').replace(',','.'))||0;}
 function dedoublonnerOperationsPdf(operations){const vus=new Set();return operations.filter(o=>{const k=[o.date,o.libelle,o.montant].join('|');if(vus.has(k))return false;vus.add(k);return true;});}
-function confirmerImportPdf(){
-  const compte=document.getElementById('pdf-account').value,status=document.getElementById('pdf-status');
-  if(!compte){status.textContent='Choisissez le compte concerné.';return;}
-  document.getElementById('confirm-pdf-import').disabled=true;
-  google.script.run.withSuccessHandler(r=>{document.getElementById('confirm-pdf-import').disabled=false;status.textContent=`Import terminé : ${r.importees} importées, ${r.doublons} doublons ignorés, ${r.rapprochees} rapprochées.`;charger();}).withFailureHandler(err=>{document.getElementById('confirm-pdf-import').disabled=false;status.textContent='Erreur : '+(err.message||String(err));}).importerOperationsHelloBank(sprint0809.pdfOperations,compte);
-}
+function confirmerImportPdf(){const compte=document.getElementById('pdf-account').value,status=document.getElementById('pdf-status');if(!compte){status.textContent='Choisissez le compte concerné.';return;}document.getElementById('confirm-pdf-import').disabled=true;google.script.run.withSuccessHandler(r=>{document.getElementById('confirm-pdf-import').disabled=false;status.textContent=`Import terminé : ${r.importees} importées, ${r.doublons} doublons ignorés, ${r.rapprochees} rapprochées.`;charger();}).withFailureHandler(err=>{document.getElementById('confirm-pdf-import').disabled=false;status.textContent='Erreur : '+(err.message||String(err));}).importerOperationsHelloBank(sprint0809.pdfOperations,compte);}
 </script>
