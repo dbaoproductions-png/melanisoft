@@ -34,7 +34,7 @@ function rendreParametresBudgetaires(){
 function creerModalImportPdf(){
   if(document.getElementById('pdf-import-modal'))return;
   const modal=document.createElement('div');modal.id='pdf-import-modal';modal.className='modal hidden';modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');
-  modal.innerHTML=`<div class="modal-card wide-modal"><div class="modal-heading"><div><p class="panel-kicker">Hello bank!</p><h2>Importer un relevé PDF</h2></div><button class="modal-close" id="close-pdf-import">×</button></div><div class="import-help">Le PDF reste dans votre navigateur : seules les opérations et les informations de clôture extraites sont envoyées au classeur.</div><div class="form-grid"><label class="full-field">Relevé PDF<input type="file" id="pdf-file" accept="application/pdf"></label><label>Compte concerné<select id="pdf-account"></select></label></div><div id="pdf-status" class="helper-text"></div><div id="pdf-preview" class="import-preview hidden"></div><div class="form-actions"><button type="button" class="secondary-button" id="cancel-pdf-import">Annuler</button><button type="button" class="secondary-button" id="analyze-pdf">Analyser le PDF</button><button type="button" class="primary-button hidden" id="confirm-pdf-import">Importer les opérations</button></div></div>`;
+  modal.innerHTML=`<div class="modal-card wide-modal"><div class="modal-heading"><div><p class="panel-kicker">Hello bank!</p><h2>Importer un relevé PDF</h2></div><button class="modal-close" id="close-pdf-import">×</button></div><div class="import-help">Le PDF reste dans votre navigateur : seules les opérations et les soldes d’ouverture/clôture extraits sont envoyés au classeur.</div><div class="form-grid"><label class="full-field">Relevé PDF<input type="file" id="pdf-file" accept="application/pdf"></label><label>Compte concerné<select id="pdf-account"></select></label></div><div id="pdf-status" class="helper-text"></div><div id="pdf-preview" class="import-preview hidden"></div><div class="form-actions"><button type="button" class="secondary-button" id="cancel-pdf-import">Annuler</button><button type="button" class="secondary-button" id="analyze-pdf">Analyser le PDF</button><button type="button" class="primary-button hidden" id="confirm-pdf-import">Importer les opérations</button></div></div>`;
   document.body.appendChild(modal);document.getElementById('close-pdf-import').addEventListener('click',fermerImportPdf);document.getElementById('cancel-pdf-import').addEventListener('click',fermerImportPdf);document.getElementById('analyze-pdf').addEventListener('click',analyserPdfHelloBank);document.getElementById('confirm-pdf-import').addEventListener('click',confirmerImportPdf);modal.addEventListener('click',e=>{if(e.target===modal)fermerImportPdf();});
 }
 function ouvrirImportPdf(){sprint0809.pdfOperations=[];sprint0809.pdfMeta=null;const comptes=(state.data?.Comptes||[]).filter(c=>estActif(c.actif));document.getElementById('pdf-account').innerHTML='<option value="">Choisir un compte</option>'+comptes.map(c=>`<option value="${echapperAttribut(c.id)}">${echapper(c.nom)}</option>`).join('');document.getElementById('pdf-file').value='';document.getElementById('pdf-status').textContent='';document.getElementById('pdf-preview').classList.add('hidden');document.getElementById('confirm-pdf-import').classList.add('hidden');document.getElementById('pdf-import-modal').classList.remove('hidden');}
@@ -47,13 +47,36 @@ async function analyserPdfHelloBank(){
     status.textContent='Lecture du relevé…';const pdfjs=await chargerPdfJs();const data=await fichier.arrayBuffer();const pdf=await pdfjs.getDocument({data}).promise;const operations=[];const textes=[];
     for(let p=1;p<=pdf.numPages;p++){const page=await pdf.getPage(p),viewport=page.getViewport({scale:1}),contenu=await page.getTextContent();operations.push(...extraireOperationsPageHelloBank(contenu.items,viewport.width));textes.push(contenu.items.map(i=>i.str).join(' '));}
     sprint0809.pdfOperations=dedoublonnerOperationsPdf(operations);sprint0809.pdfMeta=extraireMetaReleveHelloBank(textes.join(' '));
-    const meta=sprint0809.pdfMeta;status.textContent=`${sprint0809.pdfOperations.length} opérations détectées sur ${pdf.numPages} pages.`+(meta?.soldeCloture!=null?` Solde de clôture : ${money.format(meta.soldeCloture)} au ${new Date(meta.dateCloture).toLocaleDateString('fr-FR')}.`:' Solde de clôture non détecté.');
+    const meta=sprint0809.pdfMeta;let resume=`${sprint0809.pdfOperations.length} opérations détectées sur ${pdf.numPages} pages.`;
+    if(meta?.soldeOuverture!=null)resume+=` Ouverture : ${money.format(meta.soldeOuverture)} au ${new Date(meta.dateOuverture).toLocaleDateString('fr-FR')}.`;
+    else resume+=' Solde d’ouverture non détecté.';
+    if(meta?.soldeCloture!=null)resume+=` Clôture : ${money.format(meta.soldeCloture)} au ${new Date(meta.dateCloture).toLocaleDateString('fr-FR')}.`;
+    else resume+=' Solde de clôture non détecté.';
+    status.textContent=resume;
     const preview=document.getElementById('pdf-preview');preview.classList.remove('hidden');preview.innerHTML=sprint0809.pdfOperations.slice(0,40).map(o=>`<div class="import-row"><span>${formaterDate(o.date)}</span><strong>${echapper(o.libelle)}</strong><span class="${o.montant>=0?'amount-positive':'amount-negative'}">${money.format(o.montant)}</span></div>`).join('')+(sprint0809.pdfOperations.length>40?`<p class="helper-text">… et ${sprint0809.pdfOperations.length-40} autres opérations.</p>`:'');document.getElementById('confirm-pdf-import').classList.toggle('hidden',!sprint0809.pdfOperations.length);
   }catch(e){status.textContent='Erreur : '+(e.message||String(e));}
 }
+
 function extraireMetaReleveHelloBank(texte){
-  const t=String(texte||'').replace(/\s+/g,' ');let m=t.match(/SOLDE\s+(CREDITEUR|DEBITEUR)\s+AU\s+(\d{2})[\.\/]?(\d{2})[\.\/]?(\d{4})\s+([\d\s.]+,\d{2})/i);
-  if(!m)return null;const signe=/DEBITEUR/i.test(m[1])?-1:1;const montant=signe*parseMontantPdf(m[5]);const date=new Date(Number(m[4]),Number(m[3])-1,Number(m[2]),12,0,0);return {soldeCloture:montant,dateCloture:date.toISOString()};
+  const t=String(texte||'').replace(/\s+/g,' ');
+  const regex=/SOLDE\s+(CREDITEUR|DEBITEUR)\s+AU\s+(\d{2})[\.\/]?(\d{2})[\.\/]?(\d{4})\s+([\d\s.]+,\d{2})/ig;
+  const soldes=[];let m;
+  while((m=regex.exec(t))!==null){
+    const signe=/DEBITEUR/i.test(m[1])?-1:1;
+    const date=new Date(Number(m[4]),Number(m[3])-1,Number(m[2]),12,0,0);
+    const montant=signe*parseMontantPdf(m[5]);
+    if(!isNaN(date)&&Number.isFinite(montant))soldes.push({date,montant});
+  }
+  if(!soldes.length)return null;
+  soldes.sort((a,b)=>a.date-b.date);
+  const ouverture=soldes[0],cloture=soldes[soldes.length-1];
+  return {
+    soldeOuverture:ouverture.montant,
+    dateOuverture:ouverture.date.toISOString(),
+    soldeCloture:cloture.montant,
+    dateCloture:cloture.date.toISOString(),
+    nombreSoldesDetectes:soldes.length
+  };
 }
 function extraireOperationsPageHelloBank(items,largeur){
   const lignes=new Map();items.forEach(item=>{const y=Math.round(item.transform[5]);if(!lignes.has(y))lignes.set(y,[]);lignes.get(y).push({texte:item.str.trim(),x:item.transform[4],ratio:item.transform[4]/largeur});});const ordonnees=[...lignes.entries()].sort((a,b)=>b[0]-a[0]).map(([,cellules])=>cellules.filter(c=>c.texte).sort((a,b)=>a.x-b.x));const resultats=[];let courant=null;const annee=extraireAnneeReleve(ordonnees);
@@ -62,5 +85,5 @@ function extraireOperationsPageHelloBank(items,largeur){
 function extraireAnneeReleve(lignes){const texte=lignes.flat().map(c=>c.texte).join(' '),m=texte.match(/(?:20)\d{2}/);return m?Number(m[0]):new Date().getFullYear();}
 function parseMontantPdf(v){return Number(String(v).replace(/[ .]/g,'').replace(',','.'))||0;}
 function dedoublonnerOperationsPdf(operations){const vus=new Set();return operations.filter(o=>{const k=[o.date,o.libelle,o.montant].join('|');if(vus.has(k))return false;vus.add(k);return true;});}
-function confirmerImportPdf(){const compte=document.getElementById('pdf-account').value,status=document.getElementById('pdf-status');if(!compte){status.textContent='Choisissez le compte concerné.';return;}document.getElementById('confirm-pdf-import').disabled=true;google.script.run.withSuccessHandler(r=>{document.getElementById('confirm-pdf-import').disabled=false;status.textContent=`Import terminé : ${r.importees} importées, ${r.doublons} doublons ignorés, ${r.rapprochees} rapprochées.`;charger();}).withFailureHandler(err=>{document.getElementById('confirm-pdf-import').disabled=false;status.textContent='Erreur : '+(err.message||String(err));}).importerOperationsHelloBank(sprint0809.pdfOperations,compte);}
+function confirmerImportPdf(){const compte=document.getElementById('pdf-account').value,status=document.getElementById('pdf-status');if(!compte){status.textContent='Choisissez le compte concerné.';return;}document.getElementById('confirm-pdf-import').disabled=true;google.script.run.withSuccessHandler(r=>{document.getElementById('confirm-pdf-import').disabled=false;let message=`Import terminé : ${r.importees} importées, ${r.doublons} doublons ignorés, ${r.rapprochees} rapprochées.`;if(r.continuite===true)message+=' Continuité des soldes : conforme.';if(r.continuite===false)message+=` ⚠ Écart de continuité : ${money.format(r.ecartContinuite||0)}.`;status.textContent=message;charger();}).withFailureHandler(err=>{document.getElementById('confirm-pdf-import').disabled=false;status.textContent='Erreur : '+(err.message||String(err));}).importerOperationsHelloBankCycle(sprint0809.pdfOperations,compte,sprint0809.pdfMeta);}
 </script>
