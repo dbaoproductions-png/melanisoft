@@ -109,11 +109,65 @@ function appliquerDateDebitDiffere(operation) {
 function importerOperationsHelloBankCycle(operations, compte, meta) {
   const transformees = (operations || []).map(appliquerDateDebitDiffere);
   const resultat = importerOperationsHelloBank(transformees, compte);
-  if (meta && Number.isFinite(Number(meta.soldeCloture)) && meta.dateCloture) {
-    enregistrerParametreBudgetaire_('solde_releve_' + String(compte), Number(meta.soldeCloture));
-    enregistrerParametreBudgetaire_('date_solde_releve_' + String(compte), String(meta.dateCloture));
-    resultat.soldeCloture = Number(meta.soldeCloture);
-    resultat.dateCloture = String(meta.dateCloture);
+
+  if (meta) {
+    const historique = lireHistoriqueReleves_(compte);
+    const releve = {
+      dateOuverture: meta.dateOuverture || null,
+      soldeOuverture: Number.isFinite(Number(meta.soldeOuverture)) ? Number(meta.soldeOuverture) : null,
+      dateCloture: meta.dateCloture || null,
+      soldeCloture: Number.isFinite(Number(meta.soldeCloture)) ? Number(meta.soldeCloture) : null,
+      importeLe: new Date().toISOString()
+    };
+
+    if (releve.dateCloture && releve.soldeCloture !== null) {
+      enregistrerParametreBudgetaire_('solde_releve_' + String(compte), releve.soldeCloture);
+      enregistrerParametreBudgetaire_('date_solde_releve_' + String(compte), releve.dateCloture);
+      resultat.soldeCloture = releve.soldeCloture;
+      resultat.dateCloture = releve.dateCloture;
+    }
+
+    if (releve.dateOuverture && releve.soldeOuverture !== null) {
+      enregistrerParametreBudgetaire_('solde_ouverture_premier_releve_' + String(compte), historique.length ? historique[0].soldeOuverture : releve.soldeOuverture);
+      enregistrerParametreBudgetaire_('date_ouverture_premier_releve_' + String(compte), historique.length ? historique[0].dateOuverture : releve.dateOuverture);
+      resultat.soldeOuverture = releve.soldeOuverture;
+      resultat.dateOuverture = releve.dateOuverture;
+    }
+
+    let precedent = null;
+    if (releve.dateOuverture) {
+      const dateOuverture = new Date(releve.dateOuverture);
+      precedent = historique.filter(r => r.dateCloture && new Date(r.dateCloture) <= dateOuverture)
+        .sort((a,b)=>new Date(b.dateCloture)-new Date(a.dateCloture))[0] || null;
+    }
+
+    if (precedent && precedent.soldeCloture != null && releve.soldeOuverture != null) {
+      const ecart = arrondirCycle_(Number(releve.soldeOuverture) - Number(precedent.soldeCloture));
+      resultat.continuite = Math.abs(ecart) < 0.01;
+      resultat.ecartContinuite = ecart;
+    } else {
+      resultat.continuite = null;
+    }
+
+    historique.push(releve);
+    historique.sort((a,b)=>new Date(a.dateOuverture || a.dateCloture || 0)-new Date(b.dateOuverture || b.dateCloture || 0));
+    enregistrerHistoriqueReleves_(compte, historique);
   }
   return resultat;
+}
+
+function lireHistoriqueReleves_(compte) {
+  const parametres = Object.fromEntries(lireTable_('Parametres').map(p => [String(p.cle), p.valeur]));
+  const brut = parametres['historique_releves_' + String(compte)];
+  if (!brut) return [];
+  try {
+    const parsed = JSON.parse(String(brut));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function enregistrerHistoriqueReleves_(compte, historique) {
+  enregistrerParametreBudgetaire_('historique_releves_' + String(compte), JSON.stringify(historique || []));
 }
