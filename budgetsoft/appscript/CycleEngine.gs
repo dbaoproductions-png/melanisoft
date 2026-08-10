@@ -5,7 +5,7 @@ function chargerCycleFinancier() {
   const parametres = Object.fromEntries(lireTable_('Parametres').map(p => [String(p.cle), p.valeur]));
   const salaire = detecterSalairePrincipal_(operations, 12);
   const jourRepli = salaire ? salaire.jourMoyen : Number(parametres.jour_debut_mois || 28);
-  const periode = calculerCycleDepuisSalaire_(new Date(), operations, jourRepli);
+  const periode = calculerCycleDepuisSalaire_(new Date(), operations, jourRepli, salaire);
   const debut = new Date(periode.debut);
   const fin = new Date(periode.fin);
 
