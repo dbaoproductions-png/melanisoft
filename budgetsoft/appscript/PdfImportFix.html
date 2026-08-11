@@ -1,6 +1,17 @@
 <script>
 (function () {
+  function retirerAncienMoisBudgetaire() {
+    var carte = document.getElementById('budget-period-card');
+    if (carte) carte.remove();
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    setTimeout(retirerAncienMoisBudgetaire, 0);
+    setTimeout(retirerAncienMoisBudgetaire, 500);
+  });
+
   document.addEventListener('click', function (event) {
+    retirerAncienMoisBudgetaire();
     var bouton = event.target && event.target.closest ? event.target.closest('#confirm-pdf-import') : null;
     if (!bouton) return;
     if (bouton.disabled) return;
