@@ -1,0 +1,19 @@
+<script>
+(function(){
+  window.supprimerOperation=function(id){
+    const operation=(state.data?.Operations||[]).find(o=>String(o.id)===String(id));
+    if(!operation)return;
+    const auto=/\[RECURRENCE:[^\]]+\]/.test(String(operation.commentaire||''));
+    const message=auto?'Nettoyer ce doublon automatique ? Une occurrence valide sera conservée.':'Supprimer définitivement cette opération ?';
+    if(!confirm(message))return;
+    google.script.run.withSuccessHandler(r=>{
+      if(r?.mode==='unique_auto'){
+        alert(r.message||'Cette occurrence automatique unique est liée à une charge fixe active.');
+        return;
+      }
+      charger();
+      ouvrirVue('operations');
+    }).withFailureHandler(err=>afficherErreur(err.message||String(err))).supprimerOperationBudgetSoft(id);
+  };
+})();
+</script>
