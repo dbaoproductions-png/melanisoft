@@ -1,5 +1,13 @@
 <script>
 (function(){
+  function lireDonneesCycle_(){
+    try {
+      return (typeof cycleUI !== 'undefined' && cycleUI && cycleUI.donnees) ? cycleUI.donnees : null;
+    } catch(e) {
+      return null;
+    }
+  }
+
   function calculerCycleCourant_(d){
     const maintenant=new Date();
     const jourRef=d&&d.salaire?Math.max(1,Math.min(28,Number(d.salaire.jourMoyen)||28)):28;
@@ -42,12 +50,17 @@
 
   const rendreCyclePrecedent=typeof rendreCycleUI==='function'?rendreCycleUI:null;
   window.rendreCycleUI=function(){
-    const d=window.cycleUI&&cycleUI.donnees?cycleUI.donnees:null;
-    if(!d&&rendreCyclePrecedent){rendreCyclePrecedent();return;}
+    const d=lireDonneesCycle_();
+    if(rendreCyclePrecedent) rendreCyclePrecedent();
+    if(!d) return;
     rendreBandeau_(d);
     rendreHistorique_(d);
   };
 
-  document.addEventListener('DOMContentLoaded',()=>{installerBandeau_();if(window.cycleUI&&cycleUI.donnees)window.rendreCycleUI();});
+  document.addEventListener('DOMContentLoaded',()=>{
+    installerBandeau_();
+    const d=lireDonneesCycle_();
+    if(d){rendreBandeau_(d);rendreHistorique_(d);}
+  });
 })();
 </script>
