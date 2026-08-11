@@ -1,0 +1,53 @@
+<script>
+(function(){
+  function calculerCycleCourant_(d){
+    const maintenant=new Date();
+    const jourRef=d&&d.salaire?Math.max(1,Math.min(28,Number(d.salaire.jourMoyen)||28)):28;
+    let debut=maintenant.getDate()>=jourRef?new Date(maintenant.getFullYear(),maintenant.getMonth(),jourRef,12):new Date(maintenant.getFullYear(),maintenant.getMonth()-1,jourRef,12);
+    let fin=new Date(debut.getFullYear(),debut.getMonth()+1,jourRef,12);fin.setDate(fin.getDate()-1);
+    const jour0=new Date(maintenant.getFullYear(),maintenant.getMonth(),maintenant.getDate(),12);
+    const duree=Math.round((fin-debut)/86400000)+1;
+    const jour=Math.max(1,Math.min(duree,Math.round((jour0-debut)/86400000)+1));
+    const libelle=new Date(debut.getFullYear(),debut.getMonth()+1,1).toLocaleDateString('fr-FR',{month:'long',year:'numeric'}).replace(/^./,c=>c.toUpperCase());
+    return {debut,fin,duree,jour,libelle};
+  }
+
+  function installerBandeau_(){
+    const zone=document.querySelector('#dashboard > .cards');
+    if(!zone)return;
+    zone.innerHTML='<article class="card panel" id="current-cycle-banner" style="grid-column:1/-1;width:100%"><div class="panel-heading"><div><span class="panel-kicker">Cycle en cours</span><h2 id="current-cycle-title">—</h2></div><span class="badge" id="current-cycle-day">—</span></div><div id="current-cycle-dates" style="font-size:1.05rem;font-weight:600">Chargement…</div></article>';
+  }
+
+  function rendreBandeau_(d){
+    installerBandeau_();
+    const c=calculerCycleCourant_(d);
+    const titre=document.getElementById('current-cycle-title'),jour=document.getElementById('current-cycle-day'),dates=document.getElementById('current-cycle-dates');
+    if(titre)titre.textContent=c.libelle;
+    if(jour)jour.textContent='Jour '+c.jour+'/'+c.duree;
+    if(dates)dates.textContent=c.debut.toLocaleDateString('fr-FR')+' → '+c.fin.toLocaleDateString('fr-FR');
+  }
+
+  function rendreHistorique_(d){
+    const panneau=document.getElementById('cycle-finance-panel');
+    const z=document.getElementById('cycle-finance-content');
+    if(!panneau||!z||!d)return;
+    const heading=panneau.querySelector('.panel-heading > div');
+    if(heading)heading.innerHTML='<span class="panel-kicker">Historique bancaire</span><h2>Dernier cycle analysé</h2>';
+    const p=d.periode,i=d.indicateurs,c=d.couverture||{};
+    const debut=new Date(p.debut),fin=new Date(p.fin),dateReleve=c.dateDernierReleve?new Date(c.dateDernierReleve):null,dateTxt=dateReleve?dateReleve.toLocaleDateString('fr-FR'):'';
+    const couvert=c.completeCycle===true;
+    const note=couvert?'Cycle couvert':'Partiel · relevés jusqu’au '+(dateTxt||'—');
+    z.innerHTML=`<div class="panel-heading" style="margin-bottom:8px"><div><span class="panel-kicker">${p.termine?'Cycle terminé':'Cycle historique'}</span><h2>${echapper(p.libelle||'Cycle')}</h2></div><span class="badge">${p.dureeJours} jours</span></div><p><strong>${debut.toLocaleDateString('fr-FR')} → ${fin.toLocaleDateString('fr-FR')}</strong></p><div class="cards" style="margin-top:12px"><article class="card metric-card"><span>Solde bancaire</span><strong>${c.soldeFiable?money.format(i.soldeBancaire):'À synchroniser'}</strong><small>${dateReleve?'Au '+dateTxt:'Solde absent'}</small></article><article class="card metric-card"><span>Revenus</span><strong>${money.format(i.revenusCycle)}</strong><small>${note}</small></article><article class="card metric-card"><span>Dépenses</span><strong>${money.format(i.depensesCycle)}</strong><small>${note}</small></article><article class="card metric-card"><span>Épargne</span><strong>${money.format(i.epargneCycle)}</strong><small>${couvert?'Bilan du cycle':'Calcul provisoire'}</small></article></div>`;
+  }
+
+  const rendreCyclePrecedent=typeof rendreCycleUI==='function'?rendreCycleUI:null;
+  window.rendreCycleUI=function(){
+    const d=window.cycleUI&&cycleUI.donnees?cycleUI.donnees:null;
+    if(!d&&rendreCyclePrecedent){rendreCyclePrecedent();return;}
+    rendreBandeau_(d);
+    rendreHistorique_(d);
+  };
+
+  document.addEventListener('DOMContentLoaded',()=>{installerBandeau_();if(window.cycleUI&&cycleUI.donnees)window.rendreCycleUI();});
+})();
+</script>
