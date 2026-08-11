@@ -1,4 +1,4 @@
-const MAINTENANCE_VERSION = '2.2';
+const MAINTENANCE_VERSION = '2.3';
 
 function chargerCentreMaintenance() {
   verifierInitialisation_();
@@ -28,12 +28,41 @@ function viderDonneesMaintenance(cible) {
     resultat.details.push(viderOperationsPdf_());
     resultat.details.push(viderFeuilleDonnees_('Rapprochements_a_valider'));
     resultat.details.push(viderFeuilleDonnees_('Correspondances_bancaires'));
+    resultat.details.push(viderReferencesReleves_());
+  } else if (cible === 'operations') {
+    resultat.details.push(viderFeuilleDonnees_('Operations'));
+    resultat.details.push(viderReferencesReleves_());
   } else {
     autorisees[cible].forEach(nom => resultat.details.push(viderFeuilleDonnees_(nom)));
   }
   resultat.supprimees = resultat.details.reduce((s, d) => s + Number(d.supprimees || 0), 0);
-  journaliserMaintenance_('Nettoyage ' + cible, resultat.supprimees + ' ligne(s) supprimée(s)');
+  journaliserMaintenance_('Nettoyage ' + cible, resultat.supprimees + ' élément(s) supprimé(s)');
   return resultat;
+}
+
+function viderReferencesReleves_() {
+  const feuille = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Parametres');
+  if (!feuille || feuille.getLastRow() < 2) return { feuille: 'Références relevés', supprimees: 0 };
+  const valeurs = feuille.getDataRange().getValues();
+  const entetes = valeurs[0].map(v => String(v).trim().toLowerCase());
+  const indexCle = entetes.indexOf('cle');
+  if (indexCle < 0) return { feuille: 'Références relevés', supprimees: 0 };
+  const prefixes = [
+    'solde_releve_',
+    'date_solde_releve_',
+    'solde_ouverture_premier_releve_',
+    'date_ouverture_premier_releve_',
+    'historique_releves_'
+  ];
+  let supprimees = 0;
+  for (let i = valeurs.length - 1; i >= 1; i--) {
+    const cle = String(valeurs[i][indexCle] || '');
+    if (prefixes.some(prefixe => cle.indexOf(prefixe) === 0)) {
+      feuille.deleteRow(i + 1);
+      supprimees++;
+    }
+  }
+  return { feuille: 'Références relevés', supprimees };
 }
 
 function viderFeuilleDonnees_(nom) {
