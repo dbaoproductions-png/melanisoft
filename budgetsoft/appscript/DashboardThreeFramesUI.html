@@ -1,0 +1,38 @@
+<script>
+(function(){
+  function fmt(v){return v==null?'—':(typeof money!=='undefined'?money.format(Number(v||0)):Number(v||0).toLocaleString('fr-FR',{style:'currency',currency:'EUR'}));}
+  function ech(v){return typeof echapper==='function'?echapper(v):String(v||'');}
+  function dfr(v){return v?new Date(v).toLocaleDateString('fr-FR'):'—';}
+
+  function installerStructure_(){
+    const dash=document.getElementById('dashboard');
+    if(!dash)return;
+    dash.innerHTML='<div id="dashboard-three-frames" style="display:grid;gap:16px"><article class="card panel" id="dash-current"><div class="helper-text">Chargement du cycle courant…</div></article><article class="card panel" id="dash-forecast"><div class="helper-text">Chargement du prévisionnel…</div></article><article class="card panel" id="dash-previous"><div class="helper-text">Chargement du cycle précédent…</div></article></div>';
+  }
+
+  function carte_(titre,valeur,sousTitre){return `<div style="padding:14px 16px;border:1px solid var(--line);border-radius:14px;min-width:0"><span style="display:block;color:var(--muted);font-size:12px">${ech(titre)}</span><strong style="display:block;font-size:24px;margin:7px 0 4px">${valeur}</strong><small style="color:var(--muted)">${ech(sousTitre||'')}</small></div>`;}
+  function grille4_(contenu){return `<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:14px">${contenu}</div>`;}
+
+  function rendre_(d){
+    if(!d)return;
+    const c=d.cycleCourant||{},p=d.previsionnel||{},m=d.cyclePrecedent||{};
+    const current=document.getElementById('dash-current');
+    if(current) current.innerHTML=`<div class="panel-heading" style="margin-bottom:8px"><div><span class="panel-kicker">Cycle en cours</span><h2>${ech(c.libelle||'Cycle')}</h2></div><span class="badge">Jour ${c.jour||'—'}/${c.duree||'—'}</span></div><div style="font-size:16px;font-weight:700">${dfr(c.debut)} → ${dfr(c.fin)}</div><div class="helper-text" style="margin-top:6px">Données importées jusqu’au ${dfr(c.dateReference)}.</div>${grille4_(carte_('Solde bancaire',fmt(c.soldeBancaire),c.dateSolde?'Au '+dfr(c.dateSolde):'Solde de relevé absent')+carte_('Revenus',fmt(c.revenus),'Depuis le début du cycle')+carte_('Dépenses',fmt(c.depenses),'Depuis le début du cycle')+carte_('Épargne',fmt(c.epargne),'Revenus moins dépenses'))}`;
+
+    const detail=(p.detailCharges||[]).slice(0,5).map(x=>`<div style="display:flex;justify-content:space-between;gap:16px;padding:7px 0;border-bottom:1px solid var(--line)"><span>${dfr(x.date)} · ${ech(x.libelle)}</span><strong>${fmt(x.montant)}</strong></div>`).join('');
+    const forecast=document.getElementById('dash-forecast');
+    if(forecast) forecast.innerHTML=`<div class="panel-heading" style="margin-bottom:8px"><div><span class="panel-kicker">Prévisionnel</span><h2>Jusqu’au prochain salaire</h2></div><span class="badge">${p.nombreCharges||0} charge(s) fixe(s)</span></div><div class="helper-text">Projection du ${dfr(p.debut)} au ${dfr(p.fin)} à partir du dernier solde bancaire connu.</div>${grille4_(carte_('Solde de départ',fmt(p.soldeDepart),p.dateSolde?'Au '+dfr(p.dateSolde):'Solde inconnu')+carte_('Charges restantes',fmt(p.chargesRestantes),'Charges fixes encore à tomber')+carte_('Solde projeté',fmt(p.soldeProjete),'Avant réception du salaire suivant')+carte_('Marge restante',fmt(p.soldeProjete),'Après charges fixes connues'))}${detail?`<div style="margin-top:14px"><strong>Prochaines charges fixes</strong>${detail}</div>`:'<div class="success-box" style="margin-top:14px">Aucune charge fixe mensuelle restante détectée sur ce cycle.</div>'}`;
+
+    const previous=document.getElementById('dash-previous');
+    if(previous) previous.innerHTML=`<div class="panel-heading" style="margin-bottom:8px"><div><span class="panel-kicker">Cycle précédent</span><h2>${ech(m.libelle||'Cycle précédent')}</h2></div><span class="badge">${m.operations||0} opération(s)</span></div><div style="font-size:16px;font-weight:700">${dfr(m.debut)} → ${dfr(m.fin)}</div>${grille4_(carte_('Revenus',fmt(m.revenus),'Cycle précédent')+carte_('Dépenses',fmt(m.depenses),'Cycle précédent')+carte_('Épargne',fmt(m.epargne),'Revenus moins dépenses')+carte_('Résultat',fmt(m.epargne),m.epargne>=0?'Cycle positif':'Cycle déficitaire'))}`;
+  }
+
+  function chargerTroisCadres_(){google.script.run.withSuccessHandler(rendre_).withFailureHandler(e=>{const z=document.getElementById('dash-current');if(z)z.innerHTML='<div class="error">Erreur dashboard : '+ech(e.message||e)+'</div>';}).chargerDashboardReel();}
+
+  window.chargerDashboardTroisCadres=chargerTroisCadres_;
+  document.addEventListener('DOMContentLoaded',()=>{installerStructure_();setTimeout(chargerTroisCadres_,250);});
+  const ancienRendre=typeof rendreDashboard==='function'?rendreDashboard:null;
+  if(ancienRendre){window.rendreDashboard=function(data){ancienRendre(data);installerStructure_();setTimeout(chargerTroisCadres_,50);};}
+  const refresh=document.getElementById('refresh-button');if(refresh)refresh.addEventListener('click',()=>setTimeout(chargerTroisCadres_,250));
+})();
+</script>
