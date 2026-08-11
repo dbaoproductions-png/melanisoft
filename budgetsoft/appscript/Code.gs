@@ -315,10 +315,24 @@ function normaliserOperation_(copie) {
 function ajouterDonneesInitiales_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const categories = ss.getSheetByName('Categories');
-  if (categories.getLastRow() === 1) {
-    [['Logement','depense'],['Courses','depense'],['Transport','depense'],['Santé','depense'],['Loisirs','depense'],['Revenus','revenu'],['Épargne','epargne'],['Crédits','depense'],['Assurances','depense'],['Télécommunications','depense'],['Abonnements','depense'],['Impôts','depense'],['Animaux','depense'],['Frais bancaires','depense']]
-      .forEach(([nom, type]) => categories.appendRow([Utilities.getUuid(), nom, type, '', true]));
-  }
+  const categoriesParDefaut = [
+    ['Logement','depense'],['Courses','depense'],['Transport','depense'],['Santé','depense'],
+    ['Loisirs','depense'],['Revenus','revenu'],['Épargne','epargne'],['Crédits','depense'],
+    ['Assurances','depense'],['Télécommunications','depense'],['Abonnements','depense'],['Impôts','depense'],
+    ['Animaux','depense'],['Banque','depense'],['Frais bancaires','depense']
+  ];
+  const existantes = new Set(
+    categories.getLastRow() > 1
+      ? categories.getRange(2, 2, categories.getLastRow() - 1, 1).getValues().flat().map(v => String(v || '').trim().toLowerCase())
+      : []
+  );
+  categoriesParDefaut.forEach(([nom, type]) => {
+    if (!existantes.has(nom.toLowerCase())) {
+      categories.appendRow([Utilities.getUuid(), nom, type, '', true]);
+      existantes.add(nom.toLowerCase());
+    }
+  });
+
   const parametres = ss.getSheetByName('Parametres');
   if (parametres.getLastRow() === 1) {
     parametres.appendRow(['version', BUDGETSOFT_VERSION]);
