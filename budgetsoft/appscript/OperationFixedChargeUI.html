@@ -9,22 +9,31 @@
     bloc.id='operation-fixed-charge-block';
     bloc.className='full-field';
     bloc.style.marginTop='10px';
-    bloc.innerHTML=`<label class="checkbox-line"><input type="checkbox" id="operation-to-fixed-charge"> Enregistrer aussi comme charge fixe</label><p class="helper-text" id="operation-fixed-charge-help">Crée une règle récurrente à partir de cette opération bancaire.</p>`;
+    bloc.innerHTML=`<label class="checkbox-line"><input type="checkbox" id="operation-to-fixed-charge"> Enregistrer aussi comme charge fixe</label><p class="helper-text">Crée une règle récurrente à partir de cette opération bancaire.</p>`;
     actions.parentNode.insertBefore(bloc,actions);
   }
 
-  function preparerChargeFixeDepuisOperation(){
-    const coche=document.getElementById('operation-to-fixed-charge');
-    if(!coche||!coche.checked)return null;
-    const date=new Date(document.getElementById('operation-date').value+'T12:00:00');
-    const libelle=document.getElementById('operation-label').value.trim();
-    const montant=Math.abs(nombre(document.getElementById('operation-amount').value));
+  function lireOperationFormulaire_(){
+    return {
+      id:document.getElementById('operation-id').value,
+      date:document.getElementById('operation-date').value,
+      libelle:document.getElementById('operation-label').value.trim(),
+      categorie:document.getElementById('operation-category').value,
+      compte:document.getElementById('operation-account').value,
+      montant:nombre(document.getElementById('operation-amount').value),
+      type:document.getElementById('operation-type').value,
+      commentaire:document.getElementById('operation-comment').value.trim()
+    };
+  }
+
+  function preparerChargeFixeDepuisOperation_(operation){
+    const date=new Date(operation.date+'T12:00:00');
     return {
       id:'',
-      libelle:libelle,
-      categorie:document.getElementById('operation-category').value||'',
-      compte:document.getElementById('operation-account').value||'',
-      montant:montant,
+      libelle:operation.libelle,
+      categorie:operation.categorie||'',
+      compte:operation.compte||'',
+      montant:Math.abs(operation.montant),
       type:'depense',
       jour_execution:isNaN(date)?1:date.getDate(),
       date_debut:isNaN(date)?'':dateInput(date),
@@ -32,29 +41,47 @@
       actif:true,
       commentaire:'Créée depuis une opération existante',
       frequence:'Mensuelle',
-      libelle_bancaire:libelle,
+      libelle_bancaire:operation.libelle,
       tolerance:0.50,
       nature:'Autre'
     };
   }
-
-  function reinitialiserOption(){const c=document.getElementById('operation-to-fixed-charge');if(c)c.checked=false;}
 
   document.addEventListener('DOMContentLoaded',()=>{
     installerOptionChargeFixeOperation();
     const form=document.getElementById('operation-form');
     if(!form||form.dataset.fixedChargeBridge)return;
     form.dataset.fixedChargeBridge='1';
-    form.addEventListener('submit',function(){
-      const charge=preparerChargeFixeDepuisOperation();
-      if(!charge)return;
-      setTimeout(()=>{
+
+    form.addEventListener('submit',function(e){
+      const coche=document.getElementById('operation-to-fixed-charge');
+      if(!coche||!coche.checked)return;
+
+      e.preventDefault();
+      e.stopImmediatePropagation();
+
+      const operation=lireOperationFormulaire_();
+      if(!operation.libelle||!operation.compte){afficherErreur('Le libellé et le compte sont obligatoires.');return;}
+      const charge=preparerChargeFixeDepuisOperation_(operation);
+      const bouton=document.getElementById('save-operation');
+      bouton.disabled=true;
+
+      google.script.run.withSuccessHandler(()=>{
         google.script.run.withSuccessHandler(()=>{
-          reinitialiserOption();
+          bouton.disabled=false;
+          coche.checked=false;
+          fermerOperation();
           charger();
-          if(typeof chargerDashboardTroisCadres==='function')chargerDashboardTroisCadres();
-        }).withFailureHandler(err=>afficherErreur('Opération enregistrée, mais la charge fixe n’a pas pu être créée : '+(err.message||String(err)))).enregistrerLigne('Charges_fixes',charge);
-      },250);
+          ouvrirVue('operations');
+          if(typeof chargerDashboardTroisCadres==='function')setTimeout(chargerDashboardTroisCadres,300);
+        }).withFailureHandler(err=>{
+          bouton.disabled=false;
+          afficherErreur('Opération enregistrée, mais la charge fixe n’a pas pu être créée : '+(err.message||String(err)));
+        }).enregistrerLigne('Charges_fixes',charge);
+      }).withFailureHandler(err=>{
+        bouton.disabled=false;
+        afficherErreur(err.message||String(err));
+      }).enregistrerLigne('Operations',operation);
     },true);
   });
 })();
