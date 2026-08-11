@@ -1,0 +1,44 @@
+<script>
+(function(){
+  function estAuto(o){return /\[RECURRENCE:[^\]]+\]/.test(String(o&&o.commentaire||''));}
+  function parametres(){return Object.fromEntries((state.data?.Parametres||[]).map(p=>[String(p.cle),p.valeur]));}
+  function correspondCompte(o,c){return String(o.compte)===String(c.id)||String(o.compte)===String(c.nom);}
+
+  window.soldeCompte=function(compte,operations){
+    const params=parametres(),cleSolde='solde_releve_'+String(compte.id),cleDate='date_solde_releve_'+String(compte.id);
+    const valeur=params[cleSolde],dateRef=params[cleDate]?new Date(params[cleDate]):null;
+    const reelles=(operations||[]).filter(o=>!estAuto(o)&&correspondCompte(o,compte));
+    if(valeur!==undefined&&valeur!==''&&dateRef&&!isNaN(dateRef)){
+      const base=Number(String(valeur).replace(',','.'));
+      if(Number.isFinite(base)){
+        const apres=reelles.filter(o=>{const d=new Date(o.date);return !isNaN(d)&&d>dateRef;}).reduce((s,o)=>s+nombre(o.montant),0);
+        return base+apres;
+      }
+    }
+    return nombre(compte.solde_initial)+reelles.reduce((s,o)=>s+nombre(o.montant),0);
+  };
+
+  window.operationsFiltrees=function(){
+    const recherche=document.getElementById('operation-search').value.trim().toLowerCase();
+    const compte=document.getElementById('operation-account-filter').value;
+    const type=document.getElementById('operation-type-filter').value;
+    const mois=document.getElementById('operation-month-filter').value;
+    return (state.data?.Operations||[]).filter(o=>{
+      if(estAuto(o))return false;
+      const texte=[o.libelle,o.categorie,o.commentaire].join(' ').toLowerCase();
+      const d=new Date(o.date),moisOperation=isNaN(d)?'':`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      return (!recherche||texte.includes(recherche))&&(!compte||String(o.compte)===String(compte))&&(!type||type==='charges_a_venir'||String(o.type).toLowerCase()===type)&&(!mois||moisOperation===mois);
+    }).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  };
+
+  const ancienRendreDashboard=window.rendreDashboard;
+  if(typeof ancienRendreDashboard==='function'){
+    window.rendreDashboard=function(data){
+      // Les widgets historiques éventuels utilisent eux aussi uniquement les mouvements bancaires réels.
+      const original=data.Operations;
+      data.Operations=(original||[]).filter(o=>!estAuto(o));
+      try{return ancienRendreDashboard(data);}finally{data.Operations=original;}
+    };
+  }
+})();
+</script>
