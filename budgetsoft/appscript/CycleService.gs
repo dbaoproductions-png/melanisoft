@@ -11,7 +11,10 @@ function estOperationCarte_(operation) {
   if (operation && operation.estCarte === true) return true;
   const brut = [operation && operation.libelle, operation && operation.details, operation && operation.commentaire].join(' ');
   const texte = normaliserTexteCycle_(brut);
+  // Exclusions prioritaires : ces mouvements ne doivent jamais être transformés en carte différée,
+  // même si leur libellé contient une date sous la forme « DU 040626 ».
   if (/\bPRLV\b|\bPRELEVEMENT\b|\bVIR(?:EMENT)?\b|\bCHEQUE\b/.test(texte)) return false;
+  if (/\bECHEANCE\s+PRET\b|\bPRET\b|\bCREDIT\b|\bINTERETS?\s+DEBITEURS?\b|\bCASDEN\b/.test(texte)) return false;
   if (/FACTURE\s*S?\s*CARTE/.test(texte)) return true;
   if (/\bDU\s+\d{6}\b/.test(texte)) return true;
   return false;
