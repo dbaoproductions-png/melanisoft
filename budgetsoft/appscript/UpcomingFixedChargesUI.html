@@ -1,0 +1,32 @@
+<script>
+(function(){
+  function installerFiltreChargesAVenir(){
+    const select=document.getElementById('operation-type-filter');
+    if(!select||select.querySelector('option[value="charges_a_venir"]'))return;
+    const option=document.createElement('option');
+    option.value='charges_a_venir';option.textContent='Charges fixes à venir';select.appendChild(option);
+  }
+  function compteNom(id){const c=(state.data?.Comptes||[]).find(x=>String(x.id)===String(id));return c?c.nom:(id||'—');}
+  function chargesAVenir(){
+    const d=window.__dashboardTroisCadresData;
+    const details=d?.cycleCourant?.detailChargesFixes||d?.previsionnel?.detailCharges||[];
+    return details.map((c,i)=>({id:'PREV_'+i,date:c.date,libelle:c.libelle||'Charge fixe',compte:c.compte||'',categorie:c.categorie||'',montant:-Math.abs(nombre(c.montant)),previsionnelle:true}));
+  }
+  const ancienne=window.rendreListeOperations;
+  window.rendreListeOperations=function(){
+    installerFiltreChargesAVenir();
+    const filtre=document.getElementById('operation-type-filter');
+    if(!filtre||filtre.value!=='charges_a_venir')return ancienne.apply(this,arguments);
+    const operations=chargesAVenir();
+    document.getElementById('operations-income').textContent=money.format(0);
+    const depenses=operations.reduce((s,o)=>s+Math.abs(o.montant),0);
+    document.getElementById('operations-expenses').textContent=money.format(depenses);
+    document.getElementById('operations-net').textContent=money.format(-depenses);
+    const zone=document.getElementById('operations-list');
+    if(!operations.length){zone.className='empty-state';zone.textContent='Aucune charge fixe à venir avant le prochain salaire.';return;}
+    zone.className='';
+    zone.innerHTML='<div class="operation-table-row header"><span>Date</span><span>Libellé</span><span class="hide-medium">Compte</span><span class="hide-medium">Catégorie</span><span>Montant</span><span></span></div>'+operations.map(o=>`<div class="operation-table-row"><div class="operation-date">${formaterDate(o.date)}</div><div class="operation-label"><strong>${echapper(o.libelle)} <span class="badge auto-badge">À venir</span></strong><small>Charge fixe prévisionnelle du cycle · non encore débitée</small></div><div class="operation-account hide-medium">${echapper(compteNom(o.compte))}</div><div class="operation-category hide-medium">${echapper(o.categorie||'Sans catégorie')}</div><div class="operation-amount amount-negative">${money.format(o.montant)}</div><div class="operation-actions"></div></div>`).join('');
+  };
+  document.addEventListener('DOMContentLoaded',installerFiltreChargesAVenir);
+})();
+</script>
