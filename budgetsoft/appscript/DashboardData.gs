@@ -88,7 +88,8 @@ function chargerDashboardReel() {
   const solde=dernierSoldeConnu_();
   const chargesRestantes=echeancesFixes_(reference,finCourant);
   const totalChargesRestantes=arrondirCycle_(chargesRestantes.reduce((s,c)=>s+c.montant,0));
-  const soldeProjete=solde.fiable?arrondirCycle_(solde.solde-totalChargesRestantes):null;
+  const soldeEngage=solde.fiable?arrondirCycle_(solde.solde-totalChargesRestantes):null;
+  const soldeProjete=soldeEngage;
 
   const refPrecedent=new Date(debutCourant.getTime()-86400000);
   const periodePrecedente=periodePour_(refPrecedent);
@@ -105,6 +106,8 @@ function chargerDashboardReel() {
       jour:jour,duree:duree,dateReference:reference.toISOString(),
       revenus:statsCourants.revenus,depenses:statsCourants.depenses,epargne:statsCourants.epargne,operations:statsCourants.operations,
       soldeBancaire:solde.fiable?solde.solde:null,dateSolde:solde.date?solde.date.toISOString():null,
+      chargesFixesRestantes:totalChargesRestantes,nombreChargesFixes:chargesRestantes.length,
+      detailChargesFixes:chargesRestantes,soldeEngage:soldeEngage,
       complet:reference>=finCourant
     },
     previsionnel:{
