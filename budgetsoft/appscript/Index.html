@@ -32,10 +32,7 @@
       <section id="loading" class="loading">Chargement des données…</section>
       <section id="error" class="error hidden"></section>
 
-      <section id="dashboard" class="view active">
-        <div class="cards"><article class="card metric-card"><span>Solde global</span><strong id="solde-global">0,00 €</strong><small>Total des comptes actifs</small></article><article class="card metric-card"><span>Revenus du mois</span><strong id="revenus-mois">0,00 €</strong><small>Entrées enregistrées</small></article><article class="card metric-card"><span>Dépenses du mois</span><strong id="depenses-mois">0,00 €</strong><small>Sorties enregistrées</small></article><article class="card metric-card"><span>Épargne du mois</span><strong id="epargne-mois">0,00 €</strong><small>Revenus moins dépenses</small></article></div>
-        <div class="dashboard-grid"><article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Activité</span><h2>Évolution mensuelle</h2></div></div><div class="chart-placeholder" id="monthly-bars"><span>Aucune opération pour le moment</span></div></article><article class="card panel health-panel"><div class="panel-heading"><div><span class="panel-kicker">Pilotage</span><h2>Santé financière</h2></div></div><div class="health-score"><strong id="health-score">—</strong><span id="health-label">Données insuffisantes</span></div><div class="health-list" id="health-list"></div></article><article class="card panel operations-panel"><div class="panel-heading"><div><span class="panel-kicker">Derniers mouvements</span><h2>Opérations récentes</h2></div></div><div id="recent-operations" class="empty-state">Aucune opération enregistrée.</div></article><article class="card panel alerts-panel"><div class="panel-heading"><div><span class="panel-kicker">À surveiller</span><h2>Alertes</h2></div></div><div id="alerts" class="empty-state">Aucune alerte pour le moment.</div></article></div>
-      </section>
+      <section id="dashboard" class="view active"></section>
 
       <section id="comptes" class="view"><div class="section-toolbar"><p class="section-intro">Gérez vos comptes et suivez leur solde réel.</p><button class="primary-button" id="add-account-button">＋ Ajouter un compte</button></div><div class="cards accounts-summary"><article class="card metric-card"><span>Comptes actifs</span><strong id="accounts-count">0</strong><small>Hors comptes archivés</small></article><article class="card metric-card"><span>Solde disponible</span><strong id="accounts-balance">0,00 €</strong><small>Solde actuel cumulé</small></article><article class="card metric-card"><span>Épargne</span><strong id="savings-balance">0,00 €</strong><small>Livrets et placements liquides</small></article></div><article class="card panel accounts-panel"><div class="panel-heading"><div><span class="panel-kicker">Vos comptes</span><h2>Liste des comptes</h2></div><label class="toggle-label"><input type="checkbox" id="show-archived"> Afficher les archivés</label></div><div id="accounts-list" class="empty-state">Aucun compte enregistré.</div></article></section>
 
@@ -60,7 +57,6 @@
   <?!= inclure('ObjectifsUI'); ?>
   <?!= inclure('AnalysesUI'); ?>
   <?!= inclure('CycleUI'); ?>
-  <?!= inclure('DashboardCurrentCycleUI'); ?>
-  <?!= inclure('DashboardDataUI'); ?>
+  <?!= inclure('DashboardThreeFramesUI'); ?>
 </body>
 </html>
