@@ -13,7 +13,10 @@ function importerOperationsHelloBank(operations, compte) {
   if (!compte) throw new Error('Choisissez le compte bancaire concerné.');
 
   const existantes = lireTable_('Operations');
-  const cles = new Set(existantes.map(cleOperationImport_));
+  // Important : ce jeu ne contient que les opérations déjà présentes AVANT l'import.
+  // On ne lui ajoute pas les opérations du relevé courant, car deux paiements réellement
+  // identiques peuvent exister le même jour et doivent tous les deux être conservés.
+  const clesExistantes = new Set(existantes.map(cleOperationImport_));
   const charges = lireTable_('Charges_fixes').filter(c => convertirBooleen_(c.actif));
   const correspondances = lireCorrespondancesBancaires();
   const aAjouter = [];
@@ -28,16 +31,15 @@ function importerOperationsHelloBank(operations, compte) {
       const libelleBrut = nettoyerLibelleHelloBank_(operation.libelle);
       if (isNaN(date.getTime()) || !libelleBrut || !montant) throw new Error('ligne incomplète');
 
+      // Le signe du PDF est la source de vérité pour débit/crédit.
       const type = montant < 0 ? 'depense' : 'revenu';
       const cle = cleOperationImport_({ date, libelle: libelleBrut, montant, type, compte });
-      if (cles.has(cle)) { resultats.doublons++; return; }
+      if (clesExistantes.has(cle)) { resultats.doublons++; return; }
 
       const correspondance = trouverCorrespondanceBancaire_(libelleBrut, compte, correspondances);
       const rapprochement = rapprocherChargeFixe_(libelleBrut, Math.abs(montant), compte, charges);
       const libelleNormalise = correspondance?.libelle_normalise || rapprochement?.libelle || proposerLibelleNormalise_(libelleBrut);
       const categorie = correspondance?.categorie || rapprochement?.categorie || suggererCategorieHelloBank_(libelleBrut, type);
-      // Le sens débit/crédit vient toujours du relevé PDF. Une correspondance apprise
-      // peut proposer un libellé ou une catégorie, mais jamais changer une dépense en revenu.
       const typeFinal = type;
       const marqueur = '[PDF:HELLOBANK:' + Utilities.base64EncodeWebSafe(cle).slice(0, 28) + ']';
       const commentaireBanque = [
@@ -75,7 +77,8 @@ function importerOperationsHelloBank(operations, compte) {
         const maintenant = new Date().toISOString();
         const operationImportee = {
           id: Utilities.getUuid(), date, libelle: libelleNormalise, categorie, compte,
-          montant: typeFinal === 'depense' ? -Math.abs(montant) : Math.abs(montant), type: typeFinal, commentaire: commentaireBanque,
+          montant: typeFinal === 'depense' ? -Math.abs(montant) : Math.abs(montant),
+          type: typeFinal, commentaire: commentaireBanque,
           cree_le: maintenant, modifie_le: maintenant
         };
         aAjouter.push(operationImportee);
@@ -98,14 +101,11 @@ function importerOperationsHelloBank(operations, compte) {
         }
       }
 
-      cles.add(cle);
       if (correspondance) {
         resultats.reconnues++;
         const copie = Object.assign({}, correspondance);
         copie.utilisations = Number(copie.utilisations || 0) + 1;
         copie.derniere_utilisation = new Date().toISOString();
-        // Nettoie progressivement les anciennes correspondances contaminées.
-        copie.type = typeFinal;
         correspondancesAIncrementer.set(String(copie.id), copie);
       }
       if (rapprochement) resultats.rapprochees++;
