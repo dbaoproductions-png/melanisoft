@@ -36,7 +36,9 @@ function importerOperationsHelloBank(operations, compte) {
       const rapprochement = rapprocherChargeFixe_(libelleBrut, Math.abs(montant), compte, charges);
       const libelleNormalise = correspondance?.libelle_normalise || rapprochement?.libelle || proposerLibelleNormalise_(libelleBrut);
       const categorie = correspondance?.categorie || rapprochement?.categorie || suggererCategorieHelloBank_(libelleBrut, type);
-      const typeFinal = correspondance?.type || type;
+      // Le sens débit/crédit vient toujours du relevé PDF. Une correspondance apprise
+      // peut proposer un libellé ou une catégorie, mais jamais changer une dépense en revenu.
+      const typeFinal = type;
       const marqueur = '[PDF:HELLOBANK:' + Utilities.base64EncodeWebSafe(cle).slice(0, 28) + ']';
       const commentaireBanque = [
         'Libellé bancaire : ' + libelleBrut,
@@ -65,7 +67,7 @@ function importerOperationsHelloBank(operations, compte) {
           cree_le: candidateManuelle.operation.cree_le || ''
         });
         candidateManuelle.operation.date = date;
-        candidateManuelle.operation.montant = Math.abs(montant);
+        candidateManuelle.operation.montant = typeFinal === 'depense' ? -Math.abs(montant) : Math.abs(montant);
         candidateManuelle.operation.type = typeFinal;
         candidateManuelle.operation.commentaire = commentaireFusionne;
         resultats.rapprocheesManuelles++;
@@ -73,7 +75,7 @@ function importerOperationsHelloBank(operations, compte) {
         const maintenant = new Date().toISOString();
         const operationImportee = {
           id: Utilities.getUuid(), date, libelle: libelleNormalise, categorie, compte,
-          montant: Math.abs(montant), type: typeFinal, commentaire: commentaireBanque,
+          montant: typeFinal === 'depense' ? -Math.abs(montant) : Math.abs(montant), type: typeFinal, commentaire: commentaireBanque,
           cree_le: maintenant, modifie_le: maintenant
         };
         aAjouter.push(operationImportee);
@@ -102,6 +104,8 @@ function importerOperationsHelloBank(operations, compte) {
         const copie = Object.assign({}, correspondance);
         copie.utilisations = Number(copie.utilisations || 0) + 1;
         copie.derniere_utilisation = new Date().toISOString();
+        // Nettoie progressivement les anciennes correspondances contaminées.
+        copie.type = typeFinal;
         correspondancesAIncrementer.set(String(copie.id), copie);
       }
       if (rapprochement) resultats.rapprochees++;
