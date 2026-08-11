@@ -1,0 +1,61 @@
+<script>
+(function(){
+  function installerOptionChargeFixeOperation(){
+    const form=document.getElementById('operation-form');
+    if(!form||document.getElementById('operation-to-fixed-charge'))return;
+    const actions=form.querySelector('.form-actions');
+    if(!actions)return;
+    const bloc=document.createElement('div');
+    bloc.id='operation-fixed-charge-block';
+    bloc.className='full-field';
+    bloc.style.marginTop='10px';
+    bloc.innerHTML=`<label class="checkbox-line"><input type="checkbox" id="operation-to-fixed-charge"> Enregistrer aussi comme charge fixe</label><p class="helper-text" id="operation-fixed-charge-help">Crée une règle récurrente à partir de cette opération bancaire.</p>`;
+    actions.parentNode.insertBefore(bloc,actions);
+  }
+
+  function preparerChargeFixeDepuisOperation(){
+    const coche=document.getElementById('operation-to-fixed-charge');
+    if(!coche||!coche.checked)return null;
+    const date=new Date(document.getElementById('operation-date').value+'T12:00:00');
+    const libelle=document.getElementById('operation-label').value.trim();
+    const montant=Math.abs(nombre(document.getElementById('operation-amount').value));
+    return {
+      id:'',
+      libelle:libelle,
+      categorie:document.getElementById('operation-category').value||'',
+      compte:document.getElementById('operation-account').value||'',
+      montant:montant,
+      type:'depense',
+      jour_execution:isNaN(date)?1:date.getDate(),
+      date_debut:isNaN(date)?'':dateInput(date),
+      date_fin:'',
+      actif:true,
+      commentaire:'Créée depuis une opération existante',
+      frequence:'Mensuelle',
+      libelle_bancaire:libelle,
+      tolerance:0.50,
+      nature:'Autre'
+    };
+  }
+
+  function reinitialiserOption(){const c=document.getElementById('operation-to-fixed-charge');if(c)c.checked=false;}
+
+  document.addEventListener('DOMContentLoaded',()=>{
+    installerOptionChargeFixeOperation();
+    const form=document.getElementById('operation-form');
+    if(!form||form.dataset.fixedChargeBridge)return;
+    form.dataset.fixedChargeBridge='1';
+    form.addEventListener('submit',function(){
+      const charge=preparerChargeFixeDepuisOperation();
+      if(!charge)return;
+      setTimeout(()=>{
+        google.script.run.withSuccessHandler(()=>{
+          reinitialiserOption();
+          charger();
+          if(typeof chargerDashboardTroisCadres==='function')chargerDashboardTroisCadres();
+        }).withFailureHandler(err=>afficherErreur('Opération enregistrée, mais la charge fixe n’a pas pu être créée : '+(err.message||String(err)))).enregistrerLigne('Charges_fixes',charge);
+      },250);
+    },true);
+  });
+})();
+</script>
