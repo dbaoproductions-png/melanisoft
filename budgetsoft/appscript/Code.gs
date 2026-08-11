@@ -13,33 +13,11 @@ const TABLES = {
   Categories: ['id', 'nom', 'type', 'couleur', 'actif']
 };
 
-function onOpen() {
-  SpreadsheetApp.getUi().createMenu('BudgetSoft')
-    .addItem('Initialiser / mettre à jour', 'initialiserBudgetSoft')
-    .addItem('Générer les charges récurrentes', 'genererChargesFixes')
-    .addItem('Vérifier la configuration', 'verifierConfiguration')
-    .addToUi();
-}
-
-function doGet() {
-  return HtmlService.createTemplateFromFile('Index').evaluate().setTitle('BudgetSoft')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-}
-
-function inclure(nomFichier) { return HtmlService.createHtmlOutputFromFile(nomFichier).getContent(); }
-
-function initialiserBudgetSoft() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  Object.entries(TABLES).forEach(([nom, entetes]) => {
-    let feuille = ss.getSheetByName(nom); if (!feuille) feuille = ss.insertSheet(nom);
-    if (feuille.getLastRow() === 0) feuille.getRange(1, 1, 1, entetes.length).setValues([entetes]);
-    else { const largeur=Math.max(feuille.getLastColumn(),1); const presentes=feuille.getRange(1,1,1,largeur).getValues()[0].map(v=>String(v||'').trim()); const manquantes=entetes.filter(e=>!presentes.includes(e)); if(manquantes.length) feuille.getRange(1,largeur+1,1,manquantes.length).setValues([manquantes]); }
-    feuille.setFrozenRows(1); feuille.getRange(1,1,1,entetes.length).setFontWeight('bold').setBackground('#147d64').setFontColor('#ffffff'); feuille.autoResizeColumns(1,entetes.length);
-  });
-  ajouterDonneesInitiales_(); mettreAJourVersion_(); PropertiesService.getDocumentProperties().setProperty('BUDGETSOFT_INITIALISE','true'); SpreadsheetApp.getUi().alert('BudgetSoft est initialisé et à jour (version '+BUDGETSOFT_VERSION+').');
-}
-
-function verifierConfiguration() { const ss=SpreadsheetApp.getActiveSpreadsheet();const manquantes=Object.keys(TABLES).filter(n=>!ss.getSheetByName(n));const colonnesManquantes=[];Object.entries(TABLES).forEach(([nom,entetes])=>{const f=ss.getSheetByName(nom);if(!f||f.getLastRow()===0)return;const largeur=Math.max(f.getLastColumn(),1),presentes=f.getRange(1,1,1,largeur).getValues()[0].map(v=>String(v||'').trim());entetes.filter(e=>!presentes.includes(e)).forEach(e=>colonnesManquantes.push(nom+'.'+e));});let message='Configuration valide. BudgetSoft est prêt.';if(manquantes.length)message='Onglets manquants : '+manquantes.join(', ');else if(colonnesManquantes.length)message='Colonnes manquantes : '+colonnesManquantes.join(', ');SpreadsheetApp.getUi().alert(message);return{ok:!manquantes.length&&!colonnesManquantes.length,manquantes,colonnesManquantes}; }
+function onOpen() { SpreadsheetApp.getUi().createMenu('BudgetSoft').addItem('Initialiser / mettre à jour','initialiserBudgetSoft').addItem('Générer les charges récurrentes','genererChargesFixes').addItem('Vérifier la configuration','verifierConfiguration').addToUi(); }
+function doGet(){return HtmlService.createTemplateFromFile('Index').evaluate().setTitle('BudgetSoft').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);}
+function inclure(nomFichier){return HtmlService.createHtmlOutputFromFile(nomFichier).getContent();}
+function initialiserBudgetSoft(){const ss=SpreadsheetApp.getActiveSpreadsheet();Object.entries(TABLES).forEach(([nom,entetes])=>{let feuille=ss.getSheetByName(nom);if(!feuille)feuille=ss.insertSheet(nom);if(feuille.getLastRow()===0)feuille.getRange(1,1,1,entetes.length).setValues([entetes]);else{const largeur=Math.max(feuille.getLastColumn(),1),presentes=feuille.getRange(1,1,1,largeur).getValues()[0].map(v=>String(v||'').trim()),manquantes=entetes.filter(e=>!presentes.includes(e));if(manquantes.length)feuille.getRange(1,largeur+1,1,manquantes.length).setValues([manquantes]);}feuille.setFrozenRows(1);feuille.getRange(1,1,1,entetes.length).setFontWeight('bold').setBackground('#147d64').setFontColor('#ffffff');feuille.autoResizeColumns(1,entetes.length);});ajouterDonneesInitiales_();mettreAJourVersion_();PropertiesService.getDocumentProperties().setProperty('BUDGETSOFT_INITIALISE','true');SpreadsheetApp.getUi().alert('BudgetSoft est initialisé et à jour (version '+BUDGETSOFT_VERSION+').');}
+function verifierConfiguration(){const ss=SpreadsheetApp.getActiveSpreadsheet(),manquantes=Object.keys(TABLES).filter(n=>!ss.getSheetByName(n)),colonnesManquantes=[];Object.entries(TABLES).forEach(([nom,entetes])=>{const f=ss.getSheetByName(nom);if(!f||f.getLastRow()===0)return;const largeur=Math.max(f.getLastColumn(),1),presentes=f.getRange(1,1,1,largeur).getValues()[0].map(v=>String(v||'').trim());entetes.filter(e=>!presentes.includes(e)).forEach(e=>colonnesManquantes.push(nom+'.'+e));});let message='Configuration valide. BudgetSoft est prêt.';if(manquantes.length)message='Onglets manquants : '+manquantes.join(', ');else if(colonnesManquantes.length)message='Colonnes manquantes : '+colonnesManquantes.join(', ');SpreadsheetApp.getUi().alert(message);return{ok:!manquantes.length&&!colonnesManquantes.length,manquantes,colonnesManquantes};}
 function chargerToutesLesDonnees(){verifierInitialisation_();const generation=genererChargesFixes(),resultat={};Object.keys(TABLES).forEach(n=>resultat[n]=lireTable_(n));resultat.meta={version:BUDGETSOFT_VERSION,chargeLe:new Date().toISOString(),generation};return resultat;}
 function lireTable(nom){verifierNomTable_(nom);verifierInitialisation_();return lireTable_(nom);}
 function enregistrerLigne(nom,ligne){verifierNomTable_(nom);verifierInitialisation_();if(!ligne||typeof ligne!=='object')throw new Error('Donnée invalide.');const feuille=SpreadsheetApp.getActiveSpreadsheet().getSheetByName(nom),entetes=TABLES[nom],maintenant=new Date().toISOString(),copie=Object.assign({},ligne);if(nom==='Comptes'){copie.nom=String(copie.nom||'').trim();if(!copie.nom)throw new Error('Le nom du compte est obligatoire.');copie.type=String(copie.type||'courant').trim();copie.solde_initial=convertirNombre_(copie.solde_initial);copie.actif=convertirBooleen_(copie.actif);}if(nom==='Operations')normaliserOperation_(copie);if(nom==='Charges_fixes')normaliserChargeFixe_(copie);if(entetes.includes('id')&&!copie.id)copie.id=Utilities.getUuid();if(entetes.includes('cree_le')&&!copie.cree_le)copie.cree_le=maintenant;if(entetes.includes('modifie_le'))copie.modifie_le=maintenant;const verrou=LockService.getDocumentLock();verrou.waitLock(10000);try{const idIndex=entetes.indexOf('id');let ligneCible=-1;if(idIndex>=0&&copie.id&&feuille.getLastRow()>1){const ids=feuille.getRange(2,idIndex+1,feuille.getLastRow()-1,1).getValues().flat(),position=ids.findIndex(id=>String(id)===String(copie.id));if(position>=0)ligneCible=position+2;}const valeurs=entetes.map(cle=>normaliserValeur_(copie[cle]));if(ligneCible>0)feuille.getRange(ligneCible,1,1,entetes.length).setValues([valeurs]);else feuille.appendRow(valeurs);}finally{verrou.releaseLock();}return copie;}
@@ -58,31 +36,20 @@ function normaliserOperation_(copie){copie.libelle=String(copie.libelle||'').tri
 
 function ajouterDonneesInitiales_(){
   const ss=SpreadsheetApp.getActiveSpreadsheet(),categories=ss.getSheetByName('Categories');
-  // Migration : l'ancienne catégorie « Frais bancaires » est fusionnée dans « Banque ».
   if(categories.getLastRow()>1){
     const valeurs=categories.getRange(2,1,categories.getLastRow()-1,TABLES.Categories.length).getValues();
     let banqueExiste=valeurs.some(r=>String(r[1]||'').trim().toLowerCase()==='banque');
-    for(let i=valeurs.length-1;i>=0;i--){
-      if(String(valeurs[i][1]||'').trim().toLowerCase()==='frais bancaires'){
-        if(!banqueExiste){categories.getRange(i+2,2).setValue('Banque');banqueExiste=true;}
-        else categories.deleteRow(i+2);
-      }
-    }
+    for(let i=valeurs.length-1;i>=0;i--){if(String(valeurs[i][1]||'').trim().toLowerCase()==='frais bancaires'){if(!banqueExiste){categories.getRange(i+2,2).setValue('Banque');banqueExiste=true;}else categories.deleteRow(i+2);}}
   }
-  // Les opérations déjà classées « Frais bancaires » suivent également la fusion.
   const operations=ss.getSheetByName('Operations');
-  if(operations&&operations.getLastRow()>1){
-    const colCategorie=TABLES.Operations.indexOf('categorie')+1;
-    const plage=operations.getRange(2,colCategorie,operations.getLastRow()-1,1),vals=plage.getValues();let change=false;
-    vals.forEach(r=>{if(String(r[0]||'').trim().toLowerCase()==='frais bancaires'){r[0]='Banque';change=true;}});
-    if(change)plage.setValues(vals);
-  }
+  if(operations&&operations.getLastRow()>1){const colCategorie=TABLES.Operations.indexOf('categorie')+1,plage=operations.getRange(2,colCategorie,operations.getLastRow()-1,1),vals=plage.getValues();let change=false;vals.forEach(r=>{if(String(r[0]||'').trim().toLowerCase()==='frais bancaires'){r[0]='Banque';change=true;}});if(change)plage.setValues(vals);}
   const categoriesParDefaut=[
     ['Logement','depense'],['Courses','depense'],['Transport','depense'],['Santé','depense'],['Loisirs','depense'],
-    ['Revenus','revenu'],['Salaire','revenu'],['France Travail','revenu'],['Cours','depense'],['Divers','depense'],
-    ['Épargne','epargne'],['Crédits','depense'],['Assurances','depense'],['Télécommunications','depense'],['Abonnements','depense'],
-    ['Impôts','depense'],['Animaux','depense'],['Banque','depense']
+    ['Revenus','revenu'],['Salaire','revenu'],['France Travail','revenu'],['Cours','revenu'],['Divers','revenu'],['Revenus fonciers','revenu'],
+    ['Épargne','epargne'],['Crédits','depense'],['Assurances','depense'],['Télécommunications','depense'],['Abonnements','depense'],['Impôts','depense'],['Animaux','depense'],['Banque','depense']
   ];
+  // Corrige aussi le type de catégories déjà créées lors d'une version précédente.
+  if(categories.getLastRow()>1){const nomsRevenus=new Set(['cours','divers','revenus fonciers']);const plage=categories.getRange(2,1,categories.getLastRow()-1,TABLES.Categories.length),vals=plage.getValues();let change=false;vals.forEach(r=>{if(nomsRevenus.has(String(r[1]||'').trim().toLowerCase())&&String(r[2]||'').trim().toLowerCase()!=='revenu'){r[2]='revenu';change=true;}});if(change)plage.setValues(vals);}
   const existantes=new Set(categories.getLastRow()>1?categories.getRange(2,2,categories.getLastRow()-1,1).getValues().flat().map(v=>String(v||'').trim().toLowerCase()):[]);
   categoriesParDefaut.forEach(([nom,type])=>{if(!existantes.has(nom.toLowerCase())){categories.appendRow([Utilities.getUuid(),nom,type,'',true]);existantes.add(nom.toLowerCase());}});
   const parametres=ss.getSheetByName('Parametres');if(parametres.getLastRow()===1){parametres.appendRow(['version',BUDGETSOFT_VERSION]);parametres.appendRow(['devise','EUR']);parametres.appendRow(['locale','fr-FR']);}
