@@ -1,3 +1,16 @@
+function dateEffectiveOperationCycle_(operation) {
+  const commentaire = String(operation && operation.commentaire || '');
+  const match = commentaire.match(/\[CARTE_DIFFEREE:(\d{4}-\d{2}-\d{2})\]/);
+  // Si une opération a été marquée autrefois comme carte différée mais ne l'est plus
+  // selon la détection actuelle, on reprend sa date bancaire d'origine.
+  if (match && !estOperationCarte_(operation)) {
+    const parties = match[1].split('-').map(Number);
+    const d = new Date(parties[0], parties[1] - 1, parties[2], 12, 0, 0, 0);
+    if (!isNaN(d)) return d;
+  }
+  return new Date(operation && operation.date);
+}
+
 function chargerCycleFinancier() {
   verifierInitialisation_();
   const operations = lireTable_('Operations');
@@ -10,7 +23,7 @@ function chargerCycleFinancier() {
   const fin = new Date(periode.fin);
 
   const operationsCycle = operations.filter(o => {
-    const d = new Date(o.date);
+    const d = dateEffectiveOperationCycle_(o);
     return !isNaN(d) && d >= debut && d <= fin;
   });
   const revenus = operationsCycle.filter(o => String(o.type || '').toLowerCase() === 'revenu')
@@ -18,8 +31,8 @@ function chargerCycleFinancier() {
   const depenses = operationsCycle.filter(o => String(o.type || '').toLowerCase() === 'depense')
     .reduce((s,o)=>s+Math.abs(Number(o.montant || 0)),0);
 
-  const cartes = operationsCycle.filter(o => /\[CARTE_DIFFEREE:/.test(String(o.commentaire || '')));
-  const cartesEnAttente = cartes.filter(o => new Date(o.date) > new Date());
+  const cartes = operationsCycle.filter(o => /\[CARTE_DIFFEREE:/.test(String(o.commentaire || '')) && estOperationCarte_(o));
+  const cartesEnAttente = cartes.filter(o => dateEffectiveOperationCycle_(o) > new Date());
   const cbEnAttente = cartesEnAttente.reduce((s,o)=>s+Math.abs(Number(o.montant || 0)),0);
 
   let soldeBancaire = 0;
@@ -35,14 +48,17 @@ function chargerCycleFinancier() {
         soldeBancaire += soldeConnu;
         soldeFiable = true;
         if (dateConnu && !isNaN(dateConnu) && (!dateSoldeBancaire || dateConnu > dateSoldeBancaire)) dateSoldeBancaire = dateConnu;
-        const mouvementsApres = operations.filter(o => String(o.compte) === String(c.id) && dateConnu && new Date(o.date) > dateConnu && new Date(o.date) <= new Date());
+        const mouvementsApres = operations.filter(o => {
+          const d = dateEffectiveOperationCycle_(o);
+          return String(o.compte) === String(c.id) && dateConnu && !isNaN(d) && d > dateConnu && d <= new Date();
+        });
         soldeBancaire += mouvementsApres.reduce((s,o)=>s + (String(o.type).toLowerCase()==='depense' ? -Math.abs(Number(o.montant||0)) : Math.abs(Number(o.montant||0))),0);
       }
     }
   });
 
   if (!soldeFiable) {
-    soldeBancaire = comptes.reduce((s,c)=>s+Number(c.solde_initial || 0),0) + operations.filter(o=>new Date(o.date)<=new Date()).reduce((s,o)=>s + (String(o.type).toLowerCase()==='depense' ? -Math.abs(Number(o.montant||0)) : Math.abs(Number(o.montant||0))),0);
+    soldeBancaire = comptes.reduce((s,c)=>s+Number(c.solde_initial || 0),0) + operations.filter(o=>dateEffectiveOperationCycle_(o)<=new Date()).reduce((s,o)=>s + (String(o.type).toLowerCase()==='depense' ? -Math.abs(Number(o.montant||0)) : Math.abs(Number(o.montant||0))),0);
   }
 
   const soldeEngage = soldeBancaire - cbEnAttente;
