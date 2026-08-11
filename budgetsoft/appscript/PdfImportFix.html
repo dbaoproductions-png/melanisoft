@@ -1,0 +1,25 @@
+<script>
+(function () {
+  document.addEventListener('click', function (event) {
+    var bouton = event.target && event.target.closest ? event.target.closest('#confirm-pdf-import') : null;
+    if (!bouton) return;
+    if (bouton.disabled) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    var status = document.getElementById('pdf-status');
+    if (status) status.textContent = 'Import du relevé en cours…';
+    bouton.disabled = true;
+    bouton.textContent = 'Import en cours…';
+
+    try {
+      confirmerImportPdf();
+    } catch (e) {
+      bouton.disabled = false;
+      bouton.textContent = 'Importer les opérations';
+      if (status) status.textContent = 'Erreur avant envoi : ' + (e && e.message ? e.message : String(e));
+    }
+  }, true);
+})();
+</script>
