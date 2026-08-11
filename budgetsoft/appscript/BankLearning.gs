@@ -1,4 +1,4 @@
-const BANK_LEARNING_VERSION = '1.1';
+const BANK_LEARNING_VERSION = '1.2';
 const BANK_MAPPING_SHEET = 'Correspondances_bancaires';
 const BANK_MAPPING_HEADERS = ['id','motif_bancaire','libelle_normalise','categorie','type','compte','actif','utilisations','derniere_utilisation','cree_le','modifie_le'];
 
@@ -24,9 +24,7 @@ function lireCorrespondancesBancaires() {
   return valeurs.filter(l => l.some(v => v !== '' && v !== null)).map(l => Object.fromEntries(BANK_MAPPING_HEADERS.map((h, i) => [h, l[i] instanceof Date ? l[i].toISOString() : l[i]])));
 }
 
-function enregistrerCorrespondanceBancaire(correspondance) {
-  initialiserCorrespondancesBancaires();
-  const feuille = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(BANK_MAPPING_SHEET);
+function preparerCorrespondanceBancaire_(correspondance) {
   const maintenant = new Date().toISOString();
   const copie = Object.assign({}, correspondance || {});
   copie.motif_bancaire = normaliserTexteBanque_(copie.motif_bancaire || copie.libelle_normalise);
@@ -41,7 +39,13 @@ function enregistrerCorrespondanceBancaire(correspondance) {
   copie.modifie_le = maintenant;
   if (!copie.motif_bancaire || !copie.libelle_normalise) throw new Error('Le motif bancaire et le libellé normalisé sont obligatoires.');
   if (!copie.id) copie.id = Utilities.getUuid();
+  return copie;
+}
 
+function enregistrerCorrespondanceBancaire(correspondance) {
+  initialiserCorrespondancesBancaires();
+  const feuille = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(BANK_MAPPING_SHEET);
+  const copie = preparerCorrespondanceBancaire_(correspondance);
   const lignes = feuille.getLastRow() > 1 ? feuille.getRange(2, 1, feuille.getLastRow() - 1, BANK_MAPPING_HEADERS.length).getValues() : [];
   const indexId = BANK_MAPPING_HEADERS.indexOf('id');
   const position = lignes.findIndex(l => String(l[indexId]) === String(copie.id));
@@ -49,6 +53,38 @@ function enregistrerCorrespondanceBancaire(correspondance) {
   if (position >= 0) feuille.getRange(position + 2, 1, 1, valeurs.length).setValues([valeurs]);
   else feuille.appendRow(valeurs);
   return copie;
+}
+
+function enregistrerCorrespondancesBancairesEnLot_(correspondances) {
+  const entrees = Array.isArray(correspondances) ? correspondances.filter(Boolean) : [];
+  if (!entrees.length) return { misesAJour: 0, ajoutees: 0 };
+  initialiserCorrespondancesBancaires();
+  const feuille = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(BANK_MAPPING_SHEET);
+  const existantes = feuille.getLastRow() > 1
+    ? feuille.getRange(2, 1, feuille.getLastRow() - 1, BANK_MAPPING_HEADERS.length).getValues()
+    : [];
+  const indexId = BANK_MAPPING_HEADERS.indexOf('id');
+  const positionParId = new Map();
+  existantes.forEach((ligne, index) => positionParId.set(String(ligne[indexId]), index));
+
+  const nouvelles = [];
+  let misesAJour = 0;
+  entrees.forEach(entree => {
+    const copie = preparerCorrespondanceBancaire_(entree);
+    const valeurs = BANK_MAPPING_HEADERS.map(h => copie[h] == null ? '' : copie[h]);
+    const position = positionParId.get(String(copie.id));
+    if (position !== undefined) {
+      existantes[position] = valeurs;
+      misesAJour++;
+    } else {
+      nouvelles.push(valeurs);
+      positionParId.set(String(copie.id), existantes.length + nouvelles.length - 1);
+    }
+  });
+
+  if (existantes.length) feuille.getRange(2, 1, existantes.length, BANK_MAPPING_HEADERS.length).setValues(existantes);
+  if (nouvelles.length) feuille.getRange(feuille.getLastRow() + 1, 1, nouvelles.length, BANK_MAPPING_HEADERS.length).setValues(nouvelles);
+  return { misesAJour, ajoutees: nouvelles.length };
 }
 
 function supprimerCorrespondanceBancaire(id) {
