@@ -9,13 +9,15 @@ function chargerDashboardReel() {
     return /\[RECURRENCE:[^\]]+\]/.test(String(o && o.commentaire || ''));
   }
   const operationsReelles = operations.filter(o => !estOperationAuto_(o));
-  const dateOp = o => {
-    try { return typeof dateEffectiveOperationCycle_ === 'function' ? dateEffectiveOperationCycle_(o) : new Date(o.date); }
-    catch (e) { return new Date(o.date); }
-  };
+
+  // Règle de trésorerie : tous les calculs financiers utilisent exclusivement
+  // la date bancaire enregistrée dans Operations.date. Une éventuelle date
+  // d'achat CB peut servir aux analyses de consommation, jamais aux cycles,
+  // soldes, revenus, dépenses ou épargne.
+  const dateBancaire_ = o => new Date(o.date);
   const valides = operationsReelles.map(o => ({
     brut:o,
-    date:dateOp(o),
+    date:dateBancaire_(o),
     libelle:String(o.libelle || o.libelle_bancaire || 'Opération'),
     categorie:String(o.categorie || ''),
     compte:String(o.compte || ''),
@@ -98,10 +100,7 @@ function chargerDashboardReel() {
       if(!jour||!Number.isFinite(montant)||montant<=0)return;
       let curseur=new Date(debut.getFullYear(),debut.getMonth(),Math.min(31,jour),12,0,0,0);
       if(curseur<=debut)curseur=new Date(debut.getFullYear(),debut.getMonth()+1,Math.min(31,jour),12,0,0,0);
-      if(curseur<=fin)items.push({
-        id:String(c.id||''),libelle:String(valeurCharge_(c,['libelle','nom','intitule','libelle_bancaire'],'Charge fixe')),
-        montant:arrondirCycle_(montant),date:curseur.toISOString(),compte:String(c.compte||''),categorie:String(c.categorie||'')
-      });
+      if(curseur<=fin)items.push({id:String(c.id||''),libelle:String(valeurCharge_(c,['libelle','nom','intitule','libelle_bancaire'],'Charge fixe')),montant:arrondirCycle_(montant),date:curseur.toISOString(),compte:String(c.compte||''),categorie:String(c.categorie||'')});
     });
     return items.sort((a,b)=>new Date(a.date)-new Date(b.date));
   }
