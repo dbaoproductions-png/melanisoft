@@ -47,25 +47,30 @@ function chargerDashboardReel() {
   const datesReleves = Object.keys(parametres).filter(k=>k.indexOf('date_solde_releve_')===0).map(k=>new Date(parametres[k])).filter(d=>!isNaN(d));
   const dernierReleve = datesReleves.length ? datesReleves.sort((a,b)=>b-a)[0] : null;
 
-  // Cycle courant réel : basé sur le jour habituel de réception du salaire,
-  // indépendamment de la date du dernier relevé historique importé.
+  // Référence du cycle courant = dernière donnée réellement importée.
+  const derniereOperation = valides.length ? valides.slice().sort((a,b)=>b.date-a.date)[0].date : null;
+  let referenceCourante = null;
+  if (dernierReleve && derniereOperation) referenceCourante = dernierReleve > derniereOperation ? dernierReleve : derniereOperation;
+  else referenceCourante = dernierReleve || derniereOperation || maintenant;
+  referenceCourante = new Date(referenceCourante.getFullYear(), referenceCourante.getMonth(), referenceCourante.getDate(), 12, 0, 0, 0);
+
   let salaire = null;
   try { salaire = detecterSalairePrincipal_(operations, 12); } catch (e) {}
   const jourRef = Math.max(1, Math.min(28, Number(salaire && salaire.jourMoyen) || Number(parametres.jour_debut_mois) || 28));
-  const aujourdhui = new Date(maintenant.getFullYear(), maintenant.getMonth(), maintenant.getDate(), 12, 0, 0, 0);
-  const debutCourant = aujourdhui.getDate() >= jourRef
-    ? new Date(aujourdhui.getFullYear(), aujourdhui.getMonth(), jourRef, 12, 0, 0, 0)
-    : new Date(aujourdhui.getFullYear(), aujourdhui.getMonth()-1, jourRef, 12, 0, 0, 0);
+  const debutCourant = referenceCourante.getDate() >= jourRef
+    ? new Date(referenceCourante.getFullYear(), referenceCourante.getMonth(), jourRef, 12, 0, 0, 0)
+    : new Date(referenceCourante.getFullYear(), referenceCourante.getMonth()-1, jourRef, 12, 0, 0, 0);
   const finCourant = new Date(debutCourant.getFullYear(), debutCourant.getMonth()+1, jourRef, 12, 0, 0, 0);
   finCourant.setDate(finCourant.getDate()-1);
-  const opsCourantes = valides.filter(o => o.date >= debutCourant && o.date <= aujourdhui);
+
+  const opsCourantes = valides.filter(o => o.date >= debutCourant && o.date <= referenceCourante);
   const revenusCourants = opsCourantes.filter(o=>o.type==='revenu').reduce((s,o)=>s+o.montant,0);
   const depensesCourantes = opsCourantes.filter(o=>o.type==='depense').reduce((s,o)=>s+o.montant,0);
   const dureeCourante = Math.round((finCourant-debutCourant)/86400000)+1;
-  const jourCourant = Math.max(1,Math.min(dureeCourante,Math.round((aujourdhui-debutCourant)/86400000)+1));
+  const jourCourant = Math.max(1,Math.min(dureeCourante,Math.round((referenceCourante-debutCourant)/86400000)+1));
   const moisNom = new Date(debutCourant.getFullYear(),debutCourant.getMonth()+1,1);
   const libelleCourant = moisNom.toLocaleDateString('fr-FR',{month:'long',year:'numeric'}).replace(/^./,c=>c.toUpperCase());
-  const couvertureCourante = !!(dernierReleve && dernierReleve >= debutCourant);
+  const couvertureCourante = !!(dernierReleve && dernierReleve >= finCourant);
 
   const alertes = [];
   if (sansCategorie > 0) alertes.push({niveau:'attention',message:sansCategorie+' opération(s) restent sans catégorie.'});
@@ -87,11 +92,12 @@ function chargerDashboardReel() {
       libelle:libelleCourant,
       debut:debutCourant.toISOString(),
       fin:finCourant.toISOString(),
+      dateReference:referenceCourante.toISOString(),
       jour:jourCourant,
       duree:dureeCourante,
       revenus:arrondirCycle_(revenusCourants),
       depenses:arrondirCycle_(depensesCourantes),
-      epargne:arrondirCycle_(revenusCourants-depensesCourantes),
+      epargne:arrondirCycle_(revenusCourants-depensesCourants),
       operations:opsCourantes.length,
       couvertParReleve:couvertureCourante,
       dateDernierReleve:dernierReleve?dernierReleve.toISOString():null
