@@ -3,11 +3,14 @@
   function estAuto(o){return /\[RECURRENCE:[^\]]+\]/.test(String(o&&o.commentaire||''));}
   function parametres(){return Object.fromEntries((state.data?.Parametres||[]).map(p=>[String(p.cle),p.valeur]));}
   function correspondCompte(o,c){return String(o.compte)===String(c.id)||String(o.compte)===String(c.nom);}
+  function estFuture(o){const d=new Date(o&&o.date);if(isNaN(d))return false;const finAuj=new Date();finAuj.setHours(23,59,59,999);return d>finAuj;}
 
   window.soldeCompte=function(compte,operations){
     const params=parametres(),cleSolde='solde_releve_'+String(compte.id),cleDate='date_solde_releve_'+String(compte.id);
     const valeur=params[cleSolde],dateRef=params[cleDate]?new Date(params[cleDate]):null;
-    const reelles=(operations||[]).filter(o=>!estAuto(o)&&correspondCompte(o,compte));
+    // Solde bancaire réel = uniquement mouvements réellement débités/crédités à ce jour.
+    // Les cartes différées futures restent dans Operations pour le prévisionnel mais ne touchent pas encore le solde.
+    const reelles=(operations||[]).filter(o=>!estAuto(o)&&!estFuture(o)&&correspondCompte(o,compte));
     if(valeur!==undefined&&valeur!==''&&dateRef&&!isNaN(dateRef)){
       const base=Number(String(valeur).replace(',','.'));
       if(Number.isFinite(base)){
@@ -61,16 +64,12 @@
     if(!texte.trim()){status.innerHTML='<span class="warning-text">Collez d’abord les opérations Hello bank!.</span>';return;}
     if(!compte){status.innerHTML='<span class="warning-text">Choisissez le compte bancaire.</span>';return;}
     b.disabled=true;b.textContent='Analyse en cours…';status.textContent='Analyse du copier-coller en cours…';document.getElementById('hello-bank-results').classList.add('hidden');
-    google.script.run
-      .withSuccessHandler(r=>{b.disabled=false;b.textContent='Analyser';analyseHelloBank=r;status.textContent=(r&&r.total?`${r.total} opération(s) détectée(s).`:'Analyse terminée.');rendreHelloBank_(r||{});})
-      .withFailureHandler(e=>{b.disabled=false;b.textContent='Analyser';const msg=e&&e.message?e.message:String(e||'Erreur inconnue');status.innerHTML='<span class="warning-text"><strong>Échec de l’analyse :</strong> '+echapper(msg)+'</span>';document.getElementById('hello-bank-results').classList.add('hidden');})
-      .analyserCollerHelloBank(texte,compte);
+    google.script.run.withSuccessHandler(r=>{b.disabled=false;b.textContent='Analyser';analyseHelloBank=r;status.textContent=(r&&r.total?`${r.total} opération(s) détectée(s).`:'Analyse terminée.');rendreHelloBank_(r||{});}).withFailureHandler(e=>{b.disabled=false;b.textContent='Analyser';const msg=e&&e.message?e.message:String(e||'Erreur inconnue');status.innerHTML='<span class="warning-text"><strong>Échec de l’analyse :</strong> '+echapper(msg)+'</span>';document.getElementById('hello-bank-results').classList.add('hidden');}).analyserCollerHelloBank(texte,compte);
   }
   function rendreHelloBank_(r){const z=document.getElementById('hello-bank-results');z.classList.remove('hidden');document.getElementById('hello-bank-summary').innerHTML=`<div class="import-stat"><span>Détectées</span><strong>${r.total||0}</strong></div><div class="import-stat"><span>À importer</span><strong>${r.importables||0}</strong></div><div class="import-stat"><span>Doublons</span><strong>${r.doublons||0}</strong></div><div class="import-stat"><span>Déjà couvertes</span><strong>${r.avantReleve||0}</strong></div><div class="success-box" style="margin-top:12px">Crédits : <strong>${money.format(r.revenus||0)}</strong> · Débits : <strong>${money.format(r.depenses||0)}</strong> · Net : <strong>${money.format(r.net||0)}</strong>${r.dateDernierReleve?'<br>Dernier relevé connu : '+formaterDate(r.dateDernierReleve):''}</div>`;
     const lignes=r.lignes||[];document.getElementById('hello-bank-preview').innerHTML=lignes.slice(0,30).map((l,i)=>`<div class="import-row ${l.valide?'':'invalid'}"><span>${formaterDate(l.date)}</span><div><strong>${echapper(l.libelle)}</strong><small>${l.doublon?'Doublon détecté':(l.avantReleve?'Déjà couverte par le dernier relevé':'Prête à importer')}</small></div><span>${money.format(l.type==='depense'?-Math.abs(l.montant):Math.abs(l.montant))}</span><select onchange="window.__helloBankAction(${i},this.value)" ${l.valide?'':'disabled'}><option value="importer" ${l.action==='importer'?'selected':''}>Importer</option><option value="ignorer" ${l.action==='ignorer'?'selected':''}>Ignorer</option></select></div>`).join('')+(lignes.length>30?`<div class="helper-text">${lignes.length-30} autre(s) opération(s) analysée(s).</div>`:'');document.getElementById('hello-bank-confirm').classList.toggle('hidden',!(r.importables>0));}
   window.__helloBankAction=function(i,a){if(analyseHelloBank&&analyseHelloBank.lignes&&analyseHelloBank.lignes[i])analyseHelloBank.lignes[i].action=a;};
   function importerHelloBank_(){if(!analyseHelloBank)return;const b=document.getElementById('hello-bank-confirm');b.disabled=true;b.textContent='Import en cours…';google.script.run.withSuccessHandler(r=>{b.disabled=false;b.textContent='Importer';document.getElementById('hello-bank-results').innerHTML=`<div class="success-box"><strong>Import terminé</strong><br>${r.importees||0} opération(s) importée(s), ${r.ignorees||0} ignorée(s).${(r.erreurs||[]).length?'<br>'+echapper(r.erreurs.join(' | ')):''}</div>`;document.getElementById('hello-bank-confirm').classList.add('hidden');setTimeout(()=>{fermerHelloBank_();charger();ouvrirVue('operations');if(typeof chargerDashboardTroisCadres==='function')chargerDashboardTroisCadres();},1200);}).withFailureHandler(e=>{b.disabled=false;b.textContent='Importer';document.getElementById('hello-bank-status').innerHTML='<span class="warning-text">'+echapper(e.message||String(e))+'</span>';}).importerCollerHelloBank(analyseHelloBank.lignes);}
-
   document.addEventListener('DOMContentLoaded',()=>setTimeout(installerImportHelloBank_,100));
 })();
 </script>
