@@ -31,4 +31,54 @@ function analyserCollerHelloBank(texte, compteId) {
   const imp=resultats.filter(r=>r.valide),rev=imp.filter(r=>r.type==='revenu').reduce((s,r)=>s+Number(r.montant||0),0),dep=imp.filter(r=>r.type==='depense').reduce((s,r)=>s+Number(r.montant||0),0),cb=imp.filter(r=>r.carteDifferee),totCb=cb.reduce((s,r)=>s+Number(r.montant||0),0);
   return{total:resultats.length,importables:imp.length,doublons:resultats.filter(r=>r.doublon).length,avantReleve:resultats.filter(r=>r.avantReleve).length,revenus:arrondirCycle_(rev),depenses:arrondirCycle_(dep),net:arrondirCycle_(rev-dep),cartesDifferees:cb.length,totalCartesDifferees:arrondirCycle_(totCb),dateDernierReleve:dateDernierReleve&&!isNaN(dateDernierReleve)?dateDernierReleve.toISOString():null,lignes:resultats};
 }
-function importerCollerHelloBank(lignes){verifierInitialisation_();const valides=(lignes||[]).filter(r=>r&&r.action==='importer'&&r.valide!==false);let importees=0,erreurs=[];valides.forEach(r=>{try{enregistrerLigne('Operations',{date:r.date,libelle:r.libelle,categorie:r.categorie||'',compte:r.compte,montant:r.montant,type:r.type,commentaire:r.commentaire||'[HELLOBANK_COLLER]'});importees++;}catch(e){erreurs.push((r.libelle||'Opération')+' : '+e.message);}});return{importees,ignorees:(lignes||[]).length-valides.length,erreurs};}
+
+function importerCollerHelloBank(lignes){
+  verifierInitialisation_();
+  const valides=(lignes||[]).filter(r=>r&&r.action==='importer'&&r.valide!==false);
+  if(!valides.length)return{importees:0,ignorees:(lignes||[]).length,erreurs:[]};
+
+  const feuille=SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Operations');
+  const entetes=TABLES.Operations;
+  const maintenant=new Date().toISOString();
+  const erreurs=[];
+  const lignesPretes=[];
+
+  valides.forEach(r=>{
+    try{
+      const copie={
+        id:Utilities.getUuid(),
+        date:r.date,
+        libelle:r.libelle,
+        categorie:r.categorie||'',
+        compte:r.compte,
+        montant:r.montant,
+        type:r.type,
+        commentaire:r.commentaire||'[HELLOBANK_COLLER]',
+        cree_le:maintenant,
+        modifie_le:maintenant
+      };
+      normaliserOperation_(copie);
+      lignesPretes.push(entetes.map(cle=>normaliserValeur_(copie[cle])));
+    }catch(e){
+      erreurs.push((r.libelle||'Opération')+' : '+e.message);
+    }
+  });
+
+  if(lignesPretes.length){
+    const verrou=LockService.getDocumentLock();
+    verrou.waitLock(15000);
+    try{
+      const premiereLigne=feuille.getLastRow()+1;
+      feuille.getRange(premiereLigne,1,lignesPretes.length,entetes.length).setValues(lignesPretes);
+      SpreadsheetApp.flush();
+    }finally{
+      verrou.releaseLock();
+    }
+  }
+
+  return{
+    importees:lignesPretes.length,
+    ignorees:(lignes||[]).length-valides.length,
+    erreurs:erreurs
+  };
+}
