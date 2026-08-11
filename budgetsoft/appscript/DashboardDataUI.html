@@ -1,0 +1,33 @@
+<script>
+(function(){
+  function fmt(v){return typeof money!=='undefined'?money.format(Number(v||0)):Number(v||0).toLocaleString('fr-FR',{style:'currency',currency:'EUR'});}
+  function ech(v){return typeof echapper==='function'?echapper(v):String(v||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  function chargerDashboardReelUI(){
+    google.script.run.withSuccessHandler(rendreDashboardReelUI).withFailureHandler(e=>{
+      const a=document.getElementById('alerts');if(a)a.innerHTML='<div class="error">Erreur dashboard : '+ech(e.message||e)+'</div>';
+    }).chargerDashboardReel();
+  }
+  function rendreDashboardReelUI(d){
+    const zone=document.getElementById('monthly-bars');
+    if(zone){
+      const parent=zone.closest('.panel');const h=parent&&parent.querySelector('h2');if(h)h.textContent='Évolution des 6 derniers mois importés';
+      if(!d.evolution||!d.evolution.length) zone.innerHTML='<span>Aucune opération importée.</span>';
+      else {
+        const max=Math.max(...d.evolution.map(m=>Math.max(m.revenus,m.depenses)),1);
+        zone.innerHTML=d.evolution.map(m=>`<div style="display:grid;grid-template-columns:64px 1fr auto;gap:10px;align-items:center;margin:10px 0"><strong>${ech(m.libelle)}</strong><div><div style="height:8px;background:#e8efed;border-radius:999px;overflow:hidden"><div style="height:100%;width:${Math.round(m.revenus/max*100)}%;background:#147d64"></div></div><div style="height:8px;background:#f0e9e8;border-radius:999px;overflow:hidden;margin-top:4px"><div style="height:100%;width:${Math.round(m.depenses/max*100)}%;background:#8b4d47"></div></div></div><small>${fmt(m.solde)}</small></div>`).join('')+'<div class="helper-text">Barre haute : revenus · barre basse : dépenses.</div>';
+      }
+    }
+    const score=document.getElementById('health-score'),label=document.getElementById('health-label'),liste=document.getElementById('health-list');
+    if(score)score.textContent=d.sante.score+'/100';
+    if(label)label.textContent=d.sante.label;
+    if(liste)liste.innerHTML=`<div class="account-row"><div><strong>Épargne moyenne</strong><small>3 derniers mois importés</small></div><span>${fmt(d.sante.epargneMoyenne)}</span></div><div class="account-row"><div><strong>Catégorisation</strong><small>Opérations sans catégorie</small></div><span>${d.sante.ratioCategorie}%</span></div><div class="account-row"><div><strong>Historique</strong><small>Données réellement importées</small></div><span>${d.compteurs.operations} op.</span></div>`;
+    const rec=document.getElementById('recent-operations');
+    if(rec){rec.classList.remove('empty-state');rec.innerHTML=d.recents&&d.recents.length?d.recents.map(o=>`<div class="account-row"><div><strong>${ech(o.libelle)}</strong><small>${new Date(o.date).toLocaleDateString('fr-FR')}${o.categorie?' · '+ech(o.categorie):''}</small></div><span>${o.type==='depense'?'-':'+'}${fmt(o.montant)}</span></div>`).join(''):'<div class="empty-state">Aucune opération importée.</div>';}
+    const alerts=document.getElementById('alerts');
+    if(alerts){alerts.classList.remove('empty-state');alerts.innerHTML=(d.alertes||[]).map(a=>`<div class="${a.niveau==='ok'?'success-box':'error'}" style="margin-bottom:8px">${ech(a.message)}</div>`).join('');}
+  }
+  window.chargerDashboardReelUI=chargerDashboardReelUI;
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(chargerDashboardReelUI,250));
+  const refresh=document.getElementById('refresh-button');if(refresh)refresh.addEventListener('click',()=>setTimeout(chargerDashboardReelUI,350));
+})();
+</script>
