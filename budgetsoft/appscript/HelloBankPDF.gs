@@ -13,9 +13,6 @@ function importerOperationsHelloBank(operations, compte) {
   if (!compte) throw new Error('Choisissez le compte bancaire concerné.');
 
   const existantes = lireTable_('Operations');
-  // Important : ce jeu ne contient que les opérations déjà présentes AVANT l'import.
-  // On ne lui ajoute pas les opérations du relevé courant, car deux paiements réellement
-  // identiques peuvent exister le même jour et doivent tous les deux être conservés.
   const clesExistantes = new Set(existantes.map(cleOperationImport_));
   const charges = lireTable_('Charges_fixes').filter(c => convertirBooleen_(c.actif));
   const correspondances = lireCorrespondancesBancaires();
@@ -31,7 +28,6 @@ function importerOperationsHelloBank(operations, compte) {
       const libelleBrut = nettoyerLibelleHelloBank_(operation.libelle);
       if (isNaN(date.getTime()) || !libelleBrut || !montant) throw new Error('ligne incomplète');
 
-      // Le signe du PDF est la source de vérité pour débit/crédit.
       const type = montant < 0 ? 'depense' : 'revenu';
       const cle = cleOperationImport_({ date, libelle: libelleBrut, montant, type, compte });
       if (clesExistantes.has(cle)) { resultats.doublons++; return; }
@@ -103,10 +99,11 @@ function importerOperationsHelloBank(operations, compte) {
 
       if (correspondance) {
         resultats.reconnues++;
-        const copie = Object.assign({}, correspondance);
+        const idCorrespondance = String(correspondance.id);
+        const copie = correspondancesAIncrementer.get(idCorrespondance) || Object.assign({}, correspondance);
         copie.utilisations = Number(copie.utilisations || 0) + 1;
         copie.derniere_utilisation = new Date().toISOString();
-        correspondancesAIncrementer.set(String(copie.id), copie);
+        correspondancesAIncrementer.set(idCorrespondance, copie);
       }
       if (rapprochement) resultats.rapprochees++;
     } catch (e) {
@@ -116,7 +113,7 @@ function importerOperationsHelloBank(operations, compte) {
 
   ajouterOperationsEnLot_(aAjouter);
   ajouterRapprochementsEnLot_(rapprochementsAValider);
-  correspondancesAIncrementer.forEach(c => enregistrerCorrespondanceBancaire(c));
+  enregistrerCorrespondancesBancairesEnLot_([...correspondancesAIncrementer.values()]);
   return resultats;
 }
 
