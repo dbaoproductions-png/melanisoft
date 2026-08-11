@@ -1,8 +1,6 @@
 function dateEffectiveOperationCycle_(operation) {
   const commentaire = String(operation && operation.commentaire || '');
   const match = commentaire.match(/\[CARTE_DIFFEREE:(\d{4}-\d{2}-\d{2})\]/);
-  // Si une opération a été marquée autrefois comme carte différée mais ne l'est plus
-  // selon la détection actuelle, on reprend sa date bancaire d'origine.
   if (match && !estOperationCarte_(operation)) {
     const parties = match[1].split('-').map(Number);
     const d = new Date(parties[0], parties[1] - 1, parties[2], 12, 0, 0, 0);
@@ -26,10 +24,8 @@ function chargerCycleFinancier() {
     const d = dateEffectiveOperationCycle_(o);
     return !isNaN(d) && d >= debut && d <= fin;
   });
-  const revenus = operationsCycle.filter(o => String(o.type || '').toLowerCase() === 'revenu')
-    .reduce((s,o)=>s+Math.abs(Number(o.montant || 0)),0);
-  const depenses = operationsCycle.filter(o => String(o.type || '').toLowerCase() === 'depense')
-    .reduce((s,o)=>s+Math.abs(Number(o.montant || 0)),0);
+  const revenus = operationsCycle.filter(o => String(o.type || '').toLowerCase() === 'revenu').reduce((s,o)=>s+Math.abs(Number(o.montant || 0)),0);
+  const depenses = operationsCycle.filter(o => String(o.type || '').toLowerCase() === 'depense').reduce((s,o)=>s+Math.abs(Number(o.montant || 0)),0);
 
   const cartes = operationsCycle.filter(o => /\[CARTE_DIFFEREE:/.test(String(o.commentaire || '')) && estOperationCarte_(o));
   const cartesEnAttente = cartes.filter(o => dateEffectiveOperationCycle_(o) > new Date());
@@ -73,11 +69,13 @@ function chargerCycleFinancier() {
   const epargneCycle = revenus - depenses;
 
   const dernierReleve = dateSoldeBancaire;
-  const couvertureCycle = !!(dernierReleve && dernierReleve >= debut);
+  // Un cycle n'est complet que si un relevé bancaire couvre sa date de fin.
+  // Être simplement postérieur au début du cycle ne suffit pas.
+  const couvertureCycle = !!(dernierReleve && dernierReleve >= fin);
   const alertes = [];
   if (!salaire) alertes.push('Salaire principal non détecté : le jour de référence est utilisé.');
   if (!soldeFiable) alertes.push('Aucun solde de clôture de relevé n’est encore mémorisé : le solde affiché est calculé et peut être inexact.');
-  if (dernierReleve && !couvertureCycle) alertes.push('Les relevés importés s’arrêtent au ' + Utilities.formatDate(dernierReleve, Session.getScriptTimeZone(), 'dd/MM/yyyy') + ' : le cycle ' + periode.libelle + ' n’est pas encore couvert.');
+  if (dernierReleve && !couvertureCycle) alertes.push('Les relevés importés s’arrêtent au ' + Utilities.formatDate(dernierReleve, Session.getScriptTimeZone(), 'dd/MM/yyyy') + ' : le cycle ' + periode.libelle + ' n’est couvert que partiellement (jusqu’au ' + Utilities.formatDate(fin, Session.getScriptTimeZone(), 'dd/MM/yyyy') + ').');
   if (cbEnAttente > 0) alertes.push(arrondirCycle_(cbEnAttente) + ' € de paiements CB restent à débiter.');
   if (soldeProjete < 0 && couvertureCycle) alertes.push('Le solde projeté de fin de cycle est négatif.');
 
@@ -114,60 +112,22 @@ function appliquerDateDebitDiffere(operation) {
   copie.date_achat = dateAchat.toISOString();
   copie.date = dateDebit.toISOString();
   copie.commentaire_cycle = '[CARTE_DIFFEREE:' + Utilities.formatDate(dateAchat, Session.getScriptTimeZone(), 'yyyy-MM-dd') + ']';
-  copie.details = [
-    copie.details || copie.libelle || '',
-    'Date d’achat : ' + Utilities.formatDate(dateAchat, Session.getScriptTimeZone(), 'dd/MM/yyyy'),
-    copie.commentaire_cycle
-  ].filter(Boolean).join(' ');
+  copie.details = [copie.details || copie.libelle || '', 'Date d’achat : ' + Utilities.formatDate(dateAchat, Session.getScriptTimeZone(), 'dd/MM/yyyy'), copie.commentaire_cycle].filter(Boolean).join(' ');
   return copie;
 }
 
 function importerOperationsHelloBankCycle(operations, compte, meta) {
   const transformees = (operations || []).map(appliquerDateDebitDiffere);
   const resultat = importerOperationsHelloBank(transformees, compte);
-
   if (meta) {
     const historique = lireHistoriqueReleves_(compte);
-    const releve = {
-      dateOuverture: meta.dateOuverture || null,
-      soldeOuverture: Number.isFinite(Number(meta.soldeOuverture)) ? Number(meta.soldeOuverture) : null,
-      dateCloture: meta.dateCloture || null,
-      soldeCloture: Number.isFinite(Number(meta.soldeCloture)) ? Number(meta.soldeCloture) : null,
-      importeLe: new Date().toISOString()
-    };
-
-    if (releve.dateCloture && releve.soldeCloture !== null) {
-      enregistrerParametreBudgetaire_('solde_releve_' + String(compte), releve.soldeCloture);
-      enregistrerParametreBudgetaire_('date_solde_releve_' + String(compte), releve.dateCloture);
-      resultat.soldeCloture = releve.soldeCloture;
-      resultat.dateCloture = releve.dateCloture;
-    }
-
-    if (releve.dateOuverture && releve.soldeOuverture !== null) {
-      enregistrerParametreBudgetaire_('solde_ouverture_premier_releve_' + String(compte), historique.length ? historique[0].soldeOuverture : releve.soldeOuverture);
-      enregistrerParametreBudgetaire_('date_ouverture_premier_releve_' + String(compte), historique.length ? historique[0].dateOuverture : releve.dateOuverture);
-      resultat.soldeOuverture = releve.soldeOuverture;
-      resultat.dateOuverture = releve.dateOuverture;
-    }
-
+    const releve = { dateOuverture: meta.dateOuverture || null, soldeOuverture: Number.isFinite(Number(meta.soldeOuverture)) ? Number(meta.soldeOuverture) : null, dateCloture: meta.dateCloture || null, soldeCloture: Number.isFinite(Number(meta.soldeCloture)) ? Number(meta.soldeCloture) : null, importeLe: new Date().toISOString() };
+    if (releve.dateCloture && releve.soldeCloture !== null) { enregistrerParametreBudgetaire_('solde_releve_' + String(compte), releve.soldeCloture); enregistrerParametreBudgetaire_('date_solde_releve_' + String(compte), releve.dateCloture); resultat.soldeCloture = releve.soldeCloture; resultat.dateCloture = releve.dateCloture; }
+    if (releve.dateOuverture && releve.soldeOuverture !== null) { enregistrerParametreBudgetaire_('solde_ouverture_premier_releve_' + String(compte), historique.length ? historique[0].soldeOuverture : releve.soldeOuverture); enregistrerParametreBudgetaire_('date_ouverture_premier_releve_' + String(compte), historique.length ? historique[0].dateOuverture : releve.dateOuverture); resultat.soldeOuverture = releve.soldeOuverture; resultat.dateOuverture = releve.dateOuverture; }
     let precedent = null;
-    if (releve.dateOuverture) {
-      const dateOuverture = new Date(releve.dateOuverture);
-      precedent = historique.filter(r => r.dateCloture && new Date(r.dateCloture) <= dateOuverture)
-        .sort((a,b)=>new Date(b.dateCloture)-new Date(a.dateCloture))[0] || null;
-    }
-
-    if (precedent && precedent.soldeCloture != null && releve.soldeOuverture != null) {
-      const ecart = arrondirCycle_(Number(releve.soldeOuverture) - Number(precedent.soldeCloture));
-      resultat.continuite = Math.abs(ecart) < 0.01;
-      resultat.ecartContinuite = ecart;
-    } else {
-      resultat.continuite = null;
-    }
-
-    historique.push(releve);
-    historique.sort((a,b)=>new Date(a.dateOuverture || a.dateCloture || 0)-new Date(b.dateOuverture || b.dateCloture || 0));
-    enregistrerHistoriqueReleves_(compte, historique);
+    if (releve.dateOuverture) { const dateOuverture = new Date(releve.dateOuverture); precedent = historique.filter(r => r.dateCloture && new Date(r.dateCloture) <= dateOuverture).sort((a,b)=>new Date(b.dateCloture)-new Date(a.dateCloture))[0] || null; }
+    if (precedent && precedent.soldeCloture != null && releve.soldeOuverture != null) { const ecart = arrondirCycle_(Number(releve.soldeOuverture) - Number(precedent.soldeCloture)); resultat.continuite = Math.abs(ecart) < 0.01; resultat.ecartContinuite = ecart; } else resultat.continuite = null;
+    historique.push(releve); historique.sort((a,b)=>new Date(a.dateOuverture || a.dateCloture || 0)-new Date(b.dateOuverture || b.dateCloture || 0)); enregistrerHistoriqueReleves_(compte, historique);
   }
   return resultat;
 }
@@ -176,14 +136,6 @@ function lireHistoriqueReleves_(compte) {
   const parametres = Object.fromEntries(lireTable_('Parametres').map(p => [String(p.cle), p.valeur]));
   const brut = parametres['historique_releves_' + String(compte)];
   if (!brut) return [];
-  try {
-    const parsed = JSON.parse(String(brut));
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (e) {
-    return [];
-  }
+  try { const parsed = JSON.parse(String(brut)); return Array.isArray(parsed) ? parsed : []; } catch (e) { return []; }
 }
-
-function enregistrerHistoriqueReleves_(compte, historique) {
-  enregistrerParametreBudgetaire_('historique_releves_' + String(compte), JSON.stringify(historique || []));
-}
+function enregistrerHistoriqueReleves_(compte, historique) { enregistrerParametreBudgetaire_('historique_releves_' + String(compte), JSON.stringify(historique || [])); }
