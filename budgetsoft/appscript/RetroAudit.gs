@@ -61,25 +61,40 @@ function lancerAuditRetro(){
   return {analysees:operations.length,nouvelles:ajouts.length,aValider:lireAuditRetro().filter(x=>String(x.statut)==='À valider').length};
 }
 
-function deciderAuditRetro(id,decision){
+function deciderAuditRetro(id,decision,modifications){
   const choix=String(decision||'').toLowerCase();
   if(!['appliquer','ignorer'].includes(choix))throw new Error('Décision inconnue.');
   const f=initialiserAuditRetro_(),liste=lireAuditRetro(),item=liste.find(x=>String(x.id)===String(id));
   if(!item)throw new Error('Proposition introuvable.');
   if(String(item.statut)!=='À valider')throw new Error('Cette proposition a déjà été traitée.');
+
+  const mod=modifications&&typeof modifications==='object'?modifications:{};
+  const libelleFinal=String(mod.libelle!==undefined?mod.libelle:item.libelle_propose||'').trim();
+  const categorieFinale=String(mod.categorie!==undefined?mod.categorie:item.categorie_proposee||'').trim();
+  const typeFinal=String(mod.type!==undefined?mod.type:item.type_propose||'').trim().toLowerCase();
   if(choix==='appliquer'){
+    if(!libelleFinal)throw new Error('Le libellé proposé ne peut pas être vide.');
+    if(!['depense','revenu'].includes(typeFinal))throw new Error('Le type doit être Dépense ou Revenu.');
     const op=lireTable_('Operations').find(o=>String(o.id)===String(item.operation_id));
     if(!op)throw new Error('Opération introuvable.');
     enregistrerLigne('Operations',{
-      id:op.id,date:op.date,libelle:item.libelle_propose||op.libelle,categorie:item.categorie_proposee||op.categorie,
-      compte:op.compte,montant:Math.abs(Number(op.montant||0)),type:item.type_propose||op.type,
+      id:op.id,date:op.date,libelle:libelleFinal,categorie:categorieFinale,
+      compte:op.compte,montant:Math.abs(Number(op.montant||0)),type:typeFinal,
       commentaire:[op.commentaire||'','[AUDIT_RETRO:'+item.id+']'].filter(Boolean).join(' '),cree_le:op.cree_le||''
     });
   }
+
   const ids=f.getRange(2,1,f.getLastRow()-1,1).getValues().flat();
   const pos=ids.findIndex(v=>String(v)===String(id));
   const ligne=pos+2,vals=f.getRange(ligne,1,1,RETRO_AUDIT_HEADERS.length).getValues()[0],obj=Object.fromEntries(RETRO_AUDIT_HEADERS.map((h,i)=>[h,vals[i]]));
-  obj.statut=choix==='appliquer'?'Traité':'Ignoré';obj.decision=choix==='appliquer'?'Correction appliquée':'Proposition ignorée';obj.modifie_le=new Date().toISOString();
+  if(choix==='appliquer'){
+    obj.libelle_propose=libelleFinal;
+    obj.categorie_proposee=categorieFinale;
+    obj.type_propose=typeFinal;
+  }
+  obj.statut=choix==='appliquer'?'Traité':'Ignoré';
+  obj.decision=choix==='appliquer'?'Correction validée par l’utilisateur':'Proposition ignorée';
+  obj.modifie_le=new Date().toISOString();
   f.getRange(ligne,1,1,RETRO_AUDIT_HEADERS.length).setValues([RETRO_AUDIT_HEADERS.map(h=>obj[h]==null?'':obj[h])]);
   return {ok:true,restant:lireAuditRetro().filter(x=>String(x.statut)==='À valider').length};
 }
