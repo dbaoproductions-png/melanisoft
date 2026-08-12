@@ -9,7 +9,7 @@
     bloc.id='operation-fixed-charge-block';
     bloc.className='full-field';
     bloc.style.marginTop='10px';
-    bloc.innerHTML=`<label class="checkbox-line"><input type="checkbox" id="operation-to-fixed-charge"> Enregistrer aussi comme charge fixe</label><p class="helper-text">Crée une règle récurrente à partir de cette opération bancaire.</p>`;
+    bloc.innerHTML=`<label class="checkbox-line"><input type="checkbox" id="operation-to-fixed-charge"> Enregistrer aussi comme charge fixe</label><p class="helper-text">Crée la règle récurrente et rattache aussi les opérations bancaires équivalentes déjà présentes dans l’historique.</p>`;
     actions.parentNode.insertBefore(bloc,actions);
   }
 
@@ -66,22 +66,19 @@
       const bouton=document.getElementById('save-operation');
       bouton.disabled=true;
 
-      google.script.run.withSuccessHandler(()=>{
-        google.script.run.withSuccessHandler(()=>{
-          bouton.disabled=false;
-          coche.checked=false;
-          fermerOperation();
-          charger();
-          ouvrirVue('operations');
-          if(typeof chargerDashboardTroisCadres==='function')setTimeout(chargerDashboardTroisCadres,300);
-        }).withFailureHandler(err=>{
-          bouton.disabled=false;
-          afficherErreur('Opération enregistrée, mais la charge fixe n’a pas pu être créée : '+(err.message||String(err)));
-        }).enregistrerLigne('Charges_fixes',charge);
+      google.script.run.withSuccessHandler(r=>{
+        bouton.disabled=false;
+        coche.checked=false;
+        fermerOperation();
+        charger();
+        ouvrirVue('operations');
+        const n=r&&r.retrospectif?Number(r.retrospectif.rattachees||0):0;
+        if(typeof afficherToast==='function') afficherToast('Charge fixe créée · '+n+' opération(s) historique(s) rattachée(s).');
+        if(typeof chargerDashboardTroisCadres==='function')setTimeout(chargerDashboardTroisCadres,300);
       }).withFailureHandler(err=>{
         bouton.disabled=false;
         afficherErreur(err.message||String(err));
-      }).enregistrerLigne('Operations',operation);
+      }).enregistrerOperationAvecChargeFixe(operation,charge);
     },true);
   });
 })();
