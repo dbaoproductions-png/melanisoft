@@ -44,7 +44,7 @@ function ajouterDonneesInitiales_(){
   const operations=ss.getSheetByName('Operations');
   if(operations&&operations.getLastRow()>1){const colCategorie=TABLES.Operations.indexOf('categorie')+1,plage=operations.getRange(2,colCategorie,operations.getLastRow()-1,1),vals=plage.getValues();let change=false;vals.forEach(r=>{if(String(r[0]||'').trim().toLowerCase()==='frais bancaires'){r[0]='Banque';change=true;}});if(change)plage.setValues(vals);}
   const categoriesParDefaut=[
-    ['Logement','depense'],['Courses','depense'],['Transport','depense'],['Santé','depense'],['Loisirs','depense'],
+    ['Logement','depense'],['Courses','depense'],['Transport','depense'],['Santé','depense'],['Loisirs','depense'],['Bricolage','depense'],['Voiture','depense'],['Achats personnels','depense'],['Énergie','depense'],
     ['Revenus','revenu'],['Salaire','revenu'],['France Travail','revenu'],['Cours','revenu'],['Divers','revenu'],['Revenus fonciers','revenu'],
     ['Épargne','epargne'],['Crédits','depense'],['Assurances','depense'],['Télécommunications','depense'],['Abonnements','depense'],['Impôts','depense'],['Animaux','depense'],['Banque','depense']
   ];
