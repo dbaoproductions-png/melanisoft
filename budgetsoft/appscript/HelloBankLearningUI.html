@@ -1,0 +1,42 @@
+<script>
+(function(){
+  let traitementEnCours=false;
+
+  function reconnaitreCollagesHelloBank_(silencieux){
+    if(traitementEnCours)return;
+    traitementEnCours=true;
+    google.script.run
+      .withSuccessHandler(r=>{
+        traitementEnCours=false;
+        if(r&&r.modifiees>0){
+          if(typeof charger==='function')charger();
+          if(typeof chargerDashboardTroisCadres==='function')chargerDashboardTroisCadres();
+          if(!silencieux&&typeof afficherErreur==='function')afficherErreur(`${r.modifiees} opération(s) Hello bank! reconnue(s) et reclassée(s).`);
+        }
+      })
+      .withFailureHandler(()=>{traitementEnCours=false;})
+      .reconnaitreOperationsHelloBankCollees();
+  }
+
+  function installerPontHelloBank_(){
+    // Corrige automatiquement les opérations déjà importées par copier-coller.
+    setTimeout(()=>reconnaitreCollagesHelloBank_(true),900);
+
+    // Après chaque nouvel import Hello bank!, relance l'apprentissage dès que
+    // le message « Import terminé » apparaît dans la fenêtre.
+    const observer=new MutationObserver(()=>{
+      const zone=document.getElementById('hello-bank-results');
+      if(zone&&/Import terminé/i.test(zone.textContent||''))setTimeout(()=>reconnaitreCollagesHelloBank_(true),250);
+    });
+    const attendre=setInterval(()=>{
+      const zone=document.getElementById('hello-bank-results');
+      if(!zone)return;
+      clearInterval(attendre);
+      observer.observe(zone,{childList:true,subtree:true,characterData:true});
+    },250);
+    setTimeout(()=>clearInterval(attendre),10000);
+  }
+
+  document.addEventListener('DOMContentLoaded',installerPontHelloBank_);
+})();
+</script>
