@@ -1,14 +1,257 @@
 <script>
-(function(){let analyse=null;function installer(){const tb=document.querySelector('#operations .toolbar-buttons');if(tb&&!document.getElementById('reimport-cleanup-button')){const b=document.createElement('button');b.id='reimport-cleanup-button';b.type='button';b.className='secondary-button';b.textContent='🧼 Nettoyer par réimportation';b.onclick=ouvrir;tb.prepend(b);}if(document.getElementById('reimport-cleanup-modal'))return;const w=document.createElement('div');w.innerHTML=`<div class="modal hidden" id="reimport-cleanup-modal"><div class="modal-card wide-modal" style="max-height:94vh;overflow:auto"><div class="modal-heading"><div><p class="panel-kicker">Nettoyage sécurisé</p><h2>Réimporter sans perdre vos catégories</h2></div><button class="modal-close" id="close-reimport-cleanup">×</button></div><div class="warning-box"><strong>Mode remplacement.</strong> Les correspondances sûres remplacent uniquement les données bancaires source. Les cas résiduels peuvent ensuite être arbitrés manuellement.</div><label>Compte<select id="reimport-cleanup-account"></select></label><div class="form-grid" style="margin-top:12px"><label>Source<select id="reimport-cleanup-source"><option value="pdf">Relevé PDF Hello bank!</option><option value="coller">Copier-coller Hello bank!</option></select></label></div><div id="reimport-cleanup-pdf-zone" style="margin-top:12px"><label>Relevé PDF<input type="file" id="reimport-cleanup-pdf" accept="application/pdf"></label></div><div id="reimport-cleanup-paste-zone" class="hidden" style="margin-top:12px"><label>Opérations copiées<textarea id="reimport-cleanup-text" class="import-area" rows="12"></textarea></label></div><div id="reimport-cleanup-status" class="helper-text" style="margin-top:10px"></div><div id="reimport-cleanup-summary" class="import-summary" style="margin-top:12px"></div><div id="reimport-cleanup-filters" class="hidden" style="margin:12px 0;display:flex;gap:8px;flex-wrap:wrap"><button class="secondary-button" data-filter="residuels">À arbitrer</button><button class="secondary-button" data-filter="Ambigu">Ambiguës</button><button class="secondary-button" data-filter="Nouveau">Nouvelles</button><button class="secondary-button" data-filter="Correspondance sûre">Sûres</button></div><div id="reimport-cleanup-preview" class="import-preview" style="max-height:420px;overflow:auto"></div><div class="form-actions"><button class="secondary-button" id="reimport-cleanup-analyze">Analyser sans modifier</button><button class="primary-button" id="reimport-cleanup-apply" disabled>Remplacer les correspondances sûres</button></div></div></div>`;document.body.appendChild(w.firstElementChild);document.getElementById('close-reimport-cleanup').onclick=()=>document.getElementById('reimport-cleanup-modal').classList.add('hidden');document.getElementById('reimport-cleanup-analyze').onclick=analyser;document.getElementById('reimport-cleanup-apply').onclick=appliquer;document.getElementById('reimport-cleanup-source').onchange=changerSource;document.querySelectorAll('#reimport-cleanup-filters button').forEach(b=>b.onclick=()=>rendreListe(b.dataset.filter));}
-function comptes(){const s=document.getElementById('reimport-cleanup-account');s.innerHTML=(state.data?.Comptes||[]).filter(c=>estActif(c.actif)).map(c=>`<option value="${echapperAttribut(c.id)}">${echapper(c.nom)}</option>`).join('');}
-function changerSource(){const pdf=document.getElementById('reimport-cleanup-source').value==='pdf';document.getElementById('reimport-cleanup-pdf-zone').classList.toggle('hidden',!pdf);document.getElementById('reimport-cleanup-paste-zone').classList.toggle('hidden',pdf);analyse=null;document.getElementById('reimport-cleanup-apply').disabled=true;document.getElementById('reimport-cleanup-summary').innerHTML='';document.getElementById('reimport-cleanup-preview').innerHTML='';}
-function ouvrir(){analyse=null;comptes();document.getElementById('reimport-cleanup-source').value='pdf';document.getElementById('reimport-cleanup-pdf').value='';document.getElementById('reimport-cleanup-text').value='';changerSource();document.getElementById('reimport-cleanup-status').textContent='';document.getElementById('reimport-cleanup-modal').classList.remove('hidden');}
-async function lirePdfReimport_(fichier){const pdfjs=await chargerPdfJs();const data=await fichier.arrayBuffer();const pdf=await pdfjs.getDocument({data}).promise,operations=[],textes=[];for(let p=1;p<=pdf.numPages;p++){const page=await pdf.getPage(p),viewport=page.getViewport({scale:1}),contenu=await page.getTextContent();operations.push(...extraireOperationsPageHelloBank(contenu.items,viewport.width));textes.push(contenu.items.map(i=>i.str).join(' '));}const meta=extraireMetaReleveHelloBank(textes.join(' ')),controle=controlerTotauxPdf(operations,meta);if(controle.verifiable&&!controle.conforme)throw new Error(`Totaux PDF non conformes : débits ${money.format(controle.debitsCalcules)} / PDF ${money.format(controle.debitsPdf)} ; crédits ${money.format(controle.creditsCalcules)} / PDF ${money.format(controle.creditsPdf)}.`);return{operations,meta,controle,pages:pdf.numPages};}
-function envoyerAnalyse_(lignes,compte,s,b){google.script.run.withSuccessHandler(r=>{analyse=r;b.disabled=false;b.textContent='Analyser sans modifier';s.textContent='Analyse terminée. Aucune donnée n’a été modifiée.';rendre(r);}).withFailureHandler(e=>{b.disabled=false;b.textContent='Analyser sans modifier';s.textContent='Erreur : '+(e.message||e);}).analyserReimportNettoyage(lignes,compte);}
-async function analyser(){const source=document.getElementById('reimport-cleanup-source').value,compte=document.getElementById('reimport-cleanup-account').value,s=document.getElementById('reimport-cleanup-status'),b=document.getElementById('reimport-cleanup-analyze');if(!compte){s.textContent='Choisissez le compte.';return;}b.disabled=true;b.textContent='Analyse…';document.getElementById('reimport-cleanup-apply').disabled=true;if(source==='pdf'){const fichier=document.getElementById('reimport-cleanup-pdf').files[0];if(!fichier){b.disabled=false;b.textContent='Analyser sans modifier';s.textContent='Choisissez un relevé PDF.';return;}try{s.textContent='Lecture du PDF…';const lu=await lirePdfReimport_(fichier),lignes=lu.operations.map(o=>({date:o.date,libelle:o.libelle,commentaire:'[REIMPORT_PDF] Libellé bancaire : '+String(o.details||o.libelle||''),type:o.montant<0?'depense':'revenu',montant:o.montant,valide:true}));envoyerAnalyse_(lignes,compte,s,b);}catch(e){b.disabled=false;b.textContent='Analyser sans modifier';s.textContent='Erreur PDF : '+(e.message||String(e));}}else{const texte=document.getElementById('reimport-cleanup-text').value;if(!texte.trim()){b.disabled=false;b.textContent='Analyser sans modifier';s.textContent='Collez d’abord les opérations.';return;}google.script.run.withSuccessHandler(parsed=>{const lignes=(parsed?.lignes||[]).map(x=>({...x,montant:x.type==='depense'?-Math.abs(Number(x.montant||0)):Math.abs(Number(x.montant||0))}));envoyerAnalyse_(lignes,compte,s,b);}).withFailureHandler(e=>{b.disabled=false;b.textContent='Analyser sans modifier';s.textContent='Erreur : '+(e.message||e);}).analyserCollerHelloBank(texte,compte);}}
-function rendre(r){document.getElementById('reimport-cleanup-summary').innerHTML=`<div class="import-stat"><span>Lignes</span><strong>${r.total||0}</strong></div><div class="import-stat"><span>Correspondances sûres</span><strong>${r.sures||0}</strong></div><div class="import-stat"><span>Ambiguës</span><strong>${r.ambigues||0}</strong></div><div class="import-stat"><span>Nouvelles</span><strong>${r.nouvelles||0}</strong></div>`;document.getElementById('reimport-cleanup-filters').classList.remove('hidden');document.getElementById('reimport-cleanup-apply').disabled=!(r.sures>0);rendreListe((r.ambigues||r.nouvelles)?'residuels':'Correspondance sûre');}
-function rendreListe(filtre){if(!analyse)return;let lignes=analyse.lignes||[];if(filtre==='residuels')lignes=lignes.filter(x=>x.statut!=='Correspondance sûre');else lignes=lignes.filter(x=>x.statut===filtre);document.getElementById('reimport-cleanup-preview').innerHTML=lignes.map((x,i)=>{const idx=(analyse.lignes||[]).indexOf(x),cands=x.candidats||[],arbitrage=x.statut!=='Correspondance sûre';return `<div style="padding:12px 0;border-bottom:1px solid var(--line)" data-reimport-index="${idx}"><strong>${echapper(x.libelle)}</strong><br><small>PDF : ${formaterDate(x.date)} · ${money.format(Number(x.montant||0))} · ${echapper(x.statut)}${x.score?' · score '+x.score:''}</small>${arbitrage?`<div style="margin-top:8px"><select class="reimport-candidate" style="width:100%"><option value="">— Choisir une opération BudgetSoft —</option>${cands.map(c=>`<option value="${echapperAttribut(c.id)}">${formaterDate(c.date)} · ${money.format(Number(c.montant||0))} · ${echapper(c.libelle)} · ${echapper(c.categorie||'Sans catégorie')} · score ${c.score}</option>`).join('')}</select><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px"><button class="primary-button" onclick="arbitrerReimportUI(${idx},'rapprocher',this)">Rapprocher</button><button class="secondary-button" onclick="arbitrerReimportUI(${idx},'nouvelle',this)">Réellement nouvelle</button><button class="secondary-button" onclick="arbitrerReimportUI(${idx},'ignorer',this)">Ignorer</button></div></div>`:`<br><small>BudgetSoft : ${echapper(x.ancien_libelle||'')} · ${echapper(x.categorie||'Sans catégorie')}</small>`}</div>`;}).join('')||'<div class="empty-state">Aucune opération dans ce filtre.</div>';}
-window.arbitrerReimportUI=function(idx,decision,b){const ligne=analyse?.lignes?.[idx];if(!ligne)return;const bloc=b.closest('[data-reimport-index]'),candidate=bloc.querySelector('.reimport-candidate')?.value||'';if(decision==='rapprocher'&&!candidate){alert('Choisissez d’abord l’opération BudgetSoft correspondante.');return;}if(decision==='nouvelle'&&!confirm('Importer cette ligne comme une opération réellement nouvelle ?'))return;bloc.querySelectorAll('button,select').forEach(x=>x.disabled=true);google.script.run.withSuccessHandler(r=>{ligne.statut='Traité';document.getElementById('reimport-cleanup-status').textContent='Arbitrage enregistré : '+r.statut+'.';rendreListe('residuels');if(typeof charger==='function')charger();}).withFailureHandler(e=>{document.getElementById('reimport-cleanup-status').textContent='Erreur : '+(e.message||e);bloc.querySelectorAll('button,select').forEach(x=>x.disabled=false);}).arbitrerReimportNettoyage(ligne,decision,candidate);};
-function appliquer(){if(!analyse)return;const b=document.getElementById('reimport-cleanup-apply'),s=document.getElementById('reimport-cleanup-status');if(!confirm(`Remplacer ${analyse.sures||0} correspondance(s) sûre(s) ?`))return;b.disabled=true;b.textContent='Remplacement…';google.script.run.withSuccessHandler(r=>{b.textContent='Terminé';s.textContent=`${r.remplacees||0} opération(s) nettoyée(s). Les cas résiduels restent disponibles dans À arbitrer.`;if(typeof charger==='function')charger();}).withFailureHandler(e=>{b.disabled=false;b.textContent='Remplacer les correspondances sûres';s.textContent='Erreur : '+(e.message||e);}).appliquerReimportNettoyage(analyse.lignes);}
-document.addEventListener('DOMContentLoaded',()=>setTimeout(installer,150));})();
+(function(){
+  var analyseReimport = null;
+
+  function installerReimportCleanup(){
+    var toolbar = document.querySelector('#operations .toolbar-buttons');
+    var bouton = document.getElementById('reimport-cleanup-button');
+    if(!bouton && toolbar){
+      bouton = document.createElement('button');
+      bouton.id = 'reimport-cleanup-button';
+      bouton.type = 'button';
+      bouton.className = 'secondary-button';
+      bouton.textContent = '🧼 Nettoyer par réimportation';
+      toolbar.prepend(bouton);
+    }
+    if(bouton) bouton.onclick = ouvrirReimportCleanup;
+
+    if(document.getElementById('reimport-cleanup-modal')) return;
+
+    var modal = document.createElement('div');
+    modal.id = 'reimport-cleanup-modal';
+    modal.className = 'modal hidden';
+    modal.innerHTML = ''+
+      '<div class="modal-card wide-modal" style="max-height:94vh;overflow:auto">'+
+        '<div class="modal-heading">'+
+          '<div><p class="panel-kicker">Nettoyage sécurisé</p><h2>Réimporter sans perdre vos catégories</h2></div>'+
+          '<button class="modal-close" id="close-reimport-cleanup">×</button>'+
+        '</div>'+
+        '<div class="warning-box"><strong>Mode remplacement.</strong> Les correspondances sûres remplacent uniquement les données bancaires source. Les cas résiduels peuvent ensuite être arbitrés manuellement.</div>'+
+        '<label>Compte<select id="reimport-cleanup-account"></select></label>'+
+        '<div class="form-grid" style="margin-top:12px"><label>Source<select id="reimport-cleanup-source"><option value="pdf">Relevé PDF Hello bank!</option><option value="coller">Copier-coller Hello bank!</option></select></label></div>'+
+        '<div id="reimport-cleanup-pdf-zone" style="margin-top:12px"><label>Relevé PDF<input type="file" id="reimport-cleanup-pdf" accept="application/pdf"></label></div>'+
+        '<div id="reimport-cleanup-paste-zone" class="hidden" style="margin-top:12px"><label>Opérations copiées<textarea id="reimport-cleanup-text" class="import-area" rows="12"></textarea></label></div>'+
+        '<div id="reimport-cleanup-status" class="helper-text" style="margin-top:10px"></div>'+
+        '<div id="reimport-cleanup-summary" class="import-summary" style="margin-top:12px"></div>'+
+        '<div id="reimport-cleanup-filters" class="hidden" style="margin:12px 0;gap:8px;flex-wrap:wrap">'+
+          '<button type="button" class="secondary-button" data-filter="residuels">À arbitrer</button>'+
+          '<button type="button" class="secondary-button" data-filter="Ambigu">Ambiguës</button>'+
+          '<button type="button" class="secondary-button" data-filter="Nouveau">Nouvelles</button>'+
+          '<button type="button" class="secondary-button" data-filter="Correspondance sûre">Sûres</button>'+
+        '</div>'+
+        '<div id="reimport-cleanup-preview" class="import-preview" style="max-height:420px;overflow:auto"></div>'+
+        '<div class="form-actions">'+
+          '<button type="button" class="secondary-button" id="reimport-cleanup-analyze">Analyser sans modifier</button>'+
+          '<button type="button" class="primary-button" id="reimport-cleanup-apply" disabled>Remplacer les correspondances sûres</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(modal);
+
+    document.getElementById('close-reimport-cleanup').onclick = function(){ modal.classList.add('hidden'); };
+    document.getElementById('reimport-cleanup-source').onchange = changerSourceReimport;
+    document.getElementById('reimport-cleanup-analyze').onclick = analyserReimportCleanup;
+    document.getElementById('reimport-cleanup-apply').onclick = appliquerReimportCleanup;
+    modal.addEventListener('click', function(e){ if(e.target === modal) modal.classList.add('hidden'); });
+    document.querySelectorAll('#reimport-cleanup-filters button').forEach(function(b){
+      b.onclick = function(){ rendreListeReimport(b.dataset.filter); };
+    });
+  }
+
+  function remplirComptesReimport(){
+    var s = document.getElementById('reimport-cleanup-account');
+    if(!s) return;
+    var comptes = (state.data && state.data.Comptes ? state.data.Comptes : []).filter(function(c){ return estActif(c.actif); });
+    s.innerHTML = comptes.map(function(c){ return '<option value="'+echapperAttribut(c.id)+'">'+echapper(c.nom)+'</option>'; }).join('');
+  }
+
+  function changerSourceReimport(){
+    var pdf = document.getElementById('reimport-cleanup-source').value === 'pdf';
+    document.getElementById('reimport-cleanup-pdf-zone').classList.toggle('hidden', !pdf);
+    document.getElementById('reimport-cleanup-paste-zone').classList.toggle('hidden', pdf);
+    analyseReimport = null;
+    document.getElementById('reimport-cleanup-apply').disabled = true;
+    document.getElementById('reimport-cleanup-summary').innerHTML = '';
+    document.getElementById('reimport-cleanup-preview').innerHTML = '';
+    var filtres = document.getElementById('reimport-cleanup-filters');
+    filtres.classList.add('hidden');
+    filtres.style.display = 'none';
+  }
+
+  function ouvrirReimportCleanup(){
+    installerReimportCleanup();
+    remplirComptesReimport();
+    analyseReimport = null;
+    document.getElementById('reimport-cleanup-source').value = 'pdf';
+    document.getElementById('reimport-cleanup-pdf').value = '';
+    document.getElementById('reimport-cleanup-text').value = '';
+    changerSourceReimport();
+    document.getElementById('reimport-cleanup-status').textContent = '';
+    document.getElementById('reimport-cleanup-modal').classList.remove('hidden');
+  }
+
+  async function lirePdfReimport(fichier){
+    var pdfjs = await chargerPdfJs();
+    var data = await fichier.arrayBuffer();
+    var pdf = await pdfjs.getDocument({data:data}).promise;
+    var operations = [], textes = [];
+    for(var p=1; p<=pdf.numPages; p++){
+      var page = await pdf.getPage(p);
+      var viewport = page.getViewport({scale:1});
+      var contenu = await page.getTextContent();
+      operations = operations.concat(extraireOperationsPageHelloBank(contenu.items, viewport.width));
+      textes.push(contenu.items.map(function(i){ return i.str; }).join(' '));
+    }
+    var meta = extraireMetaReleveHelloBank(textes.join(' '));
+    var controle = controlerTotauxPdf(operations, meta);
+    if(controle.verifiable && !controle.conforme){
+      throw new Error('Totaux PDF non conformes : débits '+money.format(controle.debitsCalcules)+' / PDF '+money.format(controle.debitsPdf)+' ; crédits '+money.format(controle.creditsCalcules)+' / PDF '+money.format(controle.creditsPdf)+'.');
+    }
+    return {operations:operations, meta:meta, controle:controle, pages:pdf.numPages};
+  }
+
+  function envoyerAnalyseReimport(lignes, compte, status, bouton){
+    google.script.run
+      .withSuccessHandler(function(r){
+        analyseReimport = r;
+        bouton.disabled = false;
+        bouton.textContent = 'Analyser sans modifier';
+        status.textContent = 'Analyse terminée. Aucune donnée n’a été modifiée.';
+        rendreResumeReimport(r || {});
+      })
+      .withFailureHandler(function(e){
+        bouton.disabled = false;
+        bouton.textContent = 'Analyser sans modifier';
+        status.textContent = 'Erreur : '+(e && e.message ? e.message : String(e));
+      })
+      .analyserReimportNettoyage(lignes, compte);
+  }
+
+  async function analyserReimportCleanup(){
+    var source = document.getElementById('reimport-cleanup-source').value;
+    var compte = document.getElementById('reimport-cleanup-account').value;
+    var status = document.getElementById('reimport-cleanup-status');
+    var bouton = document.getElementById('reimport-cleanup-analyze');
+    if(!compte){ status.textContent = 'Choisissez le compte.'; return; }
+    bouton.disabled = true;
+    bouton.textContent = 'Analyse…';
+    document.getElementById('reimport-cleanup-apply').disabled = true;
+
+    if(source === 'pdf'){
+      var fichier = document.getElementById('reimport-cleanup-pdf').files[0];
+      if(!fichier){ bouton.disabled=false; bouton.textContent='Analyser sans modifier'; status.textContent='Choisissez un relevé PDF.'; return; }
+      try{
+        status.textContent = 'Lecture du PDF…';
+        var lu = await lirePdfReimport(fichier);
+        var lignes = lu.operations.map(function(o){
+          return {date:o.date, libelle:o.libelle, commentaire:'[REIMPORT_PDF] Libellé bancaire : '+String(o.details||o.libelle||''), type:o.montant<0?'depense':'revenu', montant:o.montant, valide:true};
+        });
+        envoyerAnalyseReimport(lignes, compte, status, bouton);
+      }catch(e){
+        bouton.disabled=false; bouton.textContent='Analyser sans modifier'; status.textContent='Erreur PDF : '+(e && e.message ? e.message : String(e));
+      }
+    }else{
+      var texte = document.getElementById('reimport-cleanup-text').value;
+      if(!texte.trim()){ bouton.disabled=false; bouton.textContent='Analyser sans modifier'; status.textContent='Collez d’abord les opérations.'; return; }
+      google.script.run
+        .withSuccessHandler(function(parsed){
+          var lignes = (parsed && parsed.lignes ? parsed.lignes : []).map(function(x){
+            x.montant = String(x.type).toLowerCase()==='depense' ? -Math.abs(Number(x.montant||0)) : Math.abs(Number(x.montant||0));
+            return x;
+          });
+          envoyerAnalyseReimport(lignes, compte, status, bouton);
+        })
+        .withFailureHandler(function(e){ bouton.disabled=false; bouton.textContent='Analyser sans modifier'; status.textContent='Erreur : '+(e && e.message ? e.message : String(e)); })
+        .analyserCollerHelloBank(texte, compte);
+    }
+  }
+
+  function rendreResumeReimport(r){
+    document.getElementById('reimport-cleanup-summary').innerHTML =
+      '<div class="import-stat"><span>Lignes</span><strong>'+(r.total||0)+'</strong></div>'+
+      '<div class="import-stat"><span>Correspondances sûres</span><strong>'+(r.sures||0)+'</strong></div>'+
+      '<div class="import-stat"><span>Ambiguës</span><strong>'+(r.ambigues||0)+'</strong></div>'+
+      '<div class="import-stat"><span>Nouvelles</span><strong>'+(r.nouvelles||0)+'</strong></div>';
+    var filtres = document.getElementById('reimport-cleanup-filters');
+    filtres.classList.remove('hidden');
+    filtres.style.display = 'flex';
+    document.getElementById('reimport-cleanup-apply').disabled = !(r.sures>0);
+    rendreListeReimport((r.ambigues||r.nouvelles) ? 'residuels' : 'Correspondance sûre');
+  }
+
+  function rendreListeReimport(filtre){
+    if(!analyseReimport) return;
+    var toutes = analyseReimport.lignes || [];
+    var lignes = filtre==='residuels' ? toutes.filter(function(x){ return x.statut !== 'Correspondance sûre' && x.statut !== 'Traité'; }) : toutes.filter(function(x){ return x.statut === filtre; });
+    var html = [];
+    lignes.forEach(function(x){
+      var idx = toutes.indexOf(x);
+      var cands = x.candidats || [];
+      var bloc = '<div style="padding:12px 0;border-bottom:1px solid var(--line)" data-reimport-index="'+idx+'">';
+      bloc += '<strong>'+echapper(x.libelle||'')+'</strong><br>';
+      bloc += '<small>PDF : '+formaterDate(x.date)+' · '+money.format(Number(x.montant||0))+' · '+echapper(x.statut||'')+(x.score?' · score '+x.score:'')+'</small>';
+      if(x.statut !== 'Correspondance sûre'){
+        bloc += '<div style="margin-top:8px"><select class="reimport-candidate" style="width:100%"><option value="">— Choisir une opération BudgetSoft —</option>';
+        cands.forEach(function(c){
+          bloc += '<option value="'+echapperAttribut(c.id)+'">'+formaterDate(c.date)+' · '+money.format(Number(c.montant||0))+' · '+echapper(c.libelle||'')+' · '+echapper(c.categorie||'Sans catégorie')+' · score '+c.score+'</option>';
+        });
+        bloc += '</select><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px">';
+        bloc += '<button type="button" class="primary-button reimport-arbitrate" data-action="rapprocher" data-index="'+idx+'">Rapprocher</button>';
+        bloc += '<button type="button" class="secondary-button reimport-arbitrate" data-action="nouvelle" data-index="'+idx+'">Réellement nouvelle</button>';
+        bloc += '<button type="button" class="secondary-button reimport-arbitrate" data-action="ignorer" data-index="'+idx+'">Ignorer</button>';
+        bloc += '</div></div>';
+      }else{
+        bloc += '<br><small>BudgetSoft : '+echapper(x.ancien_libelle||'')+' · '+echapper(x.categorie||'Sans catégorie')+'</small>';
+      }
+      bloc += '</div>';
+      html.push(bloc);
+    });
+    var zone = document.getElementById('reimport-cleanup-preview');
+    zone.innerHTML = html.join('') || '<div class="empty-state">Aucune opération dans ce filtre.</div>';
+    zone.querySelectorAll('.reimport-arbitrate').forEach(function(b){
+      b.onclick = function(){ arbitrerReimport(Number(b.dataset.index), b.dataset.action, b); };
+    });
+  }
+
+  function arbitrerReimport(idx, decision, bouton){
+    var ligne = analyseReimport && analyseReimport.lignes ? analyseReimport.lignes[idx] : null;
+    if(!ligne) return;
+    var bloc = bouton.closest('[data-reimport-index]');
+    var select = bloc.querySelector('.reimport-candidate');
+    var candidate = select ? select.value : '';
+    if(decision==='rapprocher' && !candidate){ alert('Choisissez d’abord l’opération BudgetSoft correspondante.'); return; }
+    if(decision==='nouvelle' && !confirm('Importer cette ligne comme une opération réellement nouvelle ?')) return;
+    bloc.querySelectorAll('button,select').forEach(function(x){ x.disabled=true; });
+    google.script.run
+      .withSuccessHandler(function(r){
+        ligne.statut = 'Traité';
+        document.getElementById('reimport-cleanup-status').textContent = 'Arbitrage enregistré : '+r.statut+'.';
+        rendreListeReimport('residuels');
+        if(typeof charger==='function') charger();
+      })
+      .withFailureHandler(function(e){
+        document.getElementById('reimport-cleanup-status').textContent = 'Erreur : '+(e && e.message ? e.message : String(e));
+        bloc.querySelectorAll('button,select').forEach(function(x){ x.disabled=false; });
+      })
+      .arbitrerReimportNettoyage(ligne, decision, candidate);
+  }
+
+  function appliquerReimportCleanup(){
+    if(!analyseReimport) return;
+    var bouton = document.getElementById('reimport-cleanup-apply');
+    var status = document.getElementById('reimport-cleanup-status');
+    if(!confirm('Remplacer '+(analyseReimport.sures||0)+' correspondance(s) sûre(s) ?')) return;
+    bouton.disabled=true; bouton.textContent='Remplacement…';
+    google.script.run
+      .withSuccessHandler(function(r){
+        bouton.textContent='Terminé';
+        status.textContent=(r.remplacees||0)+' opération(s) nettoyée(s). Les cas résiduels restent disponibles dans À arbitrer.';
+        if(typeof charger==='function') charger();
+      })
+      .withFailureHandler(function(e){ bouton.disabled=false; bouton.textContent='Remplacer les correspondances sûres'; status.textContent='Erreur : '+(e && e.message ? e.message : String(e)); })
+      .appliquerReimportNettoyage(analyseReimport.lignes);
+  }
+
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(installerReimportCleanup,100); });
+  else setTimeout(installerReimportCleanup,100);
+})();
 </script>
