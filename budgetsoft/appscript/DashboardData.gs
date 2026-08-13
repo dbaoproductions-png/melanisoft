@@ -29,7 +29,16 @@ function chargerDashboardReel() {
   function v(c,noms,def){for(const n of noms){if(c[n]!==undefined&&c[n]!==null&&String(c[n]).trim()!=='')return c[n];}return def;}
   function fixes(apres,jusqua){const charges=lireTable_('Charges_fixes').filter(c=>convertirBooleen_(v(c,['actif','active','est_actif'],true))),deb=dateJourCycle_(apres),fin=dateJourCycle_(jusqua),items=[];charges.forEach(c=>{const freq=normaliserTexteCycle_(v(c,['frequence','periodicite','rythme'],'Mensuelle'));if(freq&&freq.indexOf('MENSUEL')<0)return;const j=Number(v(c,['jour_execution','jour','jour_echeance','jour_prelevement','jour_du_mois'],0)),m=Math.abs(Number(String(v(c,['montant','montant_attendu','montant_prevu','valeur'],0)).replace(',','.')));if(!j||!Number.isFinite(m)||m<=0)return;let d=new Date(deb.getFullYear(),deb.getMonth(),Math.min(31,j),12);if(d<=deb)d=new Date(deb.getFullYear(),deb.getMonth()+1,Math.min(31,j),12);if(d<=fin)items.push({id:String(c.id||''),libelle:String(v(c,['libelle','nom','intitule'],'Charge fixe')),montant:arrondirCycle_(m),date:d.toISOString()});});return items.sort((a,b)=>new Date(a.date)-new Date(b.date));}
 
-  function cbDifferees(debut,fin){const a=dateJourCycle_(debut),b=dateJourCycle_(fin);return operations.map(o=>{const dateAchat=new Date(o.date_achat||o.date),dateDebit=new Date(o.date_comptable||o.date),montant=Math.abs(Number(o.montant||0));return{ o,dateAchat,dateDebit,montant,libelle:String(o.libelle||'Carte différée'),estCarte:!!String(o.carte_fin||'').trim()||/\b(?:paiement\s+)?cb\b/i.test(String(o.libelle_bancaire||o.libelle||''))};}).filter(x=>x.estCarte&&!isNaN(x.dateDebit)&&x.dateDebit>=a&&x.dateDebit<=b&&x.dateDebit>reference&&x.montant>0);}
+  // Les objets renvoyés au navigateur doivent être sérialisables : pas de Date ni d'opération brute.
+  function cbDifferees(debut,fin){
+    const a=dateJourCycle_(debut),b=dateJourCycle_(fin);
+    return operations.map(o=>{
+      const dateAchat=new Date(o.date_achat||o.date),dateDebit=new Date(o.date_comptable||o.date),montant=Math.abs(Number(o.montant||0));
+      const estCarte=!!String(o.carte_fin||'').trim()||/\b(?:paiement\s+)?cb\b/i.test(String(o.libelle_bancaire||o.libelle||''));
+      if(!estCarte||isNaN(dateDebit)||dateDebit<a||dateDebit>b||dateDebit<=reference||!Number.isFinite(montant)||montant<=0)return null;
+      return{id:String(o.id||''),dateAchat:isNaN(dateAchat)?null:dateAchat.toISOString(),dateDebit:dateDebit.toISOString(),montant:arrondirCycle_(montant),libelle:String(o.libelle_bancaire||o.libelle||'Carte différée'),carteFin:String(o.carte_fin||'')};
+    }).filter(Boolean);
+  }
 
   const courant=periodePour(reference),deb=dateJourCycle_(new Date(courant.debut)),fin=dateJourCycle_(new Date(courant.fin)),st=stats(courant,reference),duree=Math.max(1,ecartJoursCycle_(deb,fin)+1),jour=Math.max(1,Math.min(duree,ecartJoursCycle_(deb,reference)+1)),joursRestants=Math.max(0,ecartJoursCycle_(reference,fin));
   const solde=soldeGlobal(reference),fixesCourantes=fixes(reference,fin),totalFixes=arrondirCycle_(fixesCourantes.reduce((s,x)=>s+x.montant,0)),cbCourantes=cbDifferees(reference,fin),totalCb=arrondirCycle_(cbCourantes.reduce((s,x)=>s+x.montant,0)),disponible=solde.fiable?arrondirCycle_(solde.solde-totalFixes-totalCb):null,budgetJour=disponible!=null&&joursRestants>0?arrondirCycle_(disponible/joursRestants):disponible;
