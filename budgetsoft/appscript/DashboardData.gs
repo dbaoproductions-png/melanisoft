@@ -1,3 +1,4 @@
+// DashboardData v1.2 — solde bancaire sur date_comptable + CB différées sérialisables
 function chargerDashboardReel() {
   verifierInitialisation_();
   const operations=lireOperationsBancaires_().map(enrichirDepuisCommentaireBanque_),comptes=lireTable_('Comptes').filter(c=>convertirBooleen_(c.actif)),parametres=Object.fromEntries(lireTable_('Parametres').map(p=>[String(p.cle),p.valeur])),maintenant=new Date();
