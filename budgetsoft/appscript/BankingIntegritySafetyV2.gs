@@ -1,4 +1,4 @@
-const BANKING_SAFETY_V2='2.5';
+const BANKING_SAFETY_V2='2.6';
 
 function restaurerOperationsDepuisSauvegardeV2(nom){
   const ss=SpreadsheetApp.getActiveSpreadsheet(),src=ss.getSheetByName(String(nom||'')),dst=ss.getSheetByName('Operations');
@@ -19,10 +19,10 @@ function estRecurrenceV23_(o){return /\[RECURRENCE:/i.test(String(o.commentaire|
 function dateJourV23_(v){return isoJourBanque_(v||'');}
 function empreinteExacteV23_(o){return [dateJourV23_(o.date_comptable||o.date),centimesBanque_(o.montant),normaliserTexteBanqueFiable_(o.libelle_bancaire||o.libelle)].join('|');}
 function identiteProcheV23_(a,b){const x=normaliserTexteBanqueFiable_(a||''),y=normaliserTexteBanqueFiable_(b||'');if(!x||!y)return false;if(x.includes(y)||y.includes(x))return true;const ax=x.split(' ').filter(w=>w.length>=4),ay=new Set(y.split(' ').filter(w=>w.length>=4));let n=0;ax.forEach(w=>{if(ay.has(w))n++;});return n>=2;}
-// normaliserEntreeBancaire_ conserve l'architecture commune, mais son fallback historique
-// remplit date_achat avec date_comptable. Pour le flux V3, on restaure explicitement le vide
-// lorsque la source n'a fourni aucune vraie date d'achat.
-function preparerFluxV23_(lignes,compte){return(lignes||[]).map(x=>{const avaitAchat=!!x.date_achat;const n=normaliserEntreeBancaire_(Object.assign({},x,{compte:x.compte||compte}),'flux');if(!avaitAchat){n.date_achat='';n.date=n.date_comptable;}return n;}).filter(x=>x.compte&&Number.isFinite(x.montant)&&x.date_comptable);}
+// Le normaliseur commun peut recalculer les champs dérivés. Pour le flux HelloBank,
+// on réapplique après normalisation les valeurs déjà extraites par le pont V3.4 :
+// N reste la source brute, O/P/C sont des enrichissements, M reste vide sans vraie date d'achat.
+function preparerFluxV23_(lignes,compte){return(lignes||[]).map(x=>{const avaitAchat=!!x.date_achat;const n=normaliserEntreeBancaire_(Object.assign({},x,{compte:x.compte||compte}),'flux');if(!avaitAchat){n.date_achat='';n.date=n.date_comptable;}if(x.libelle_bancaire)n.libelle_bancaire=x.libelle_bancaire;if(x.marchand_normalise)n.marchand_normalise=x.marchand_normalise;else if(typeof hb3Contrepartie_==='function'&&n.libelle_bancaire)n.marchand_normalise=hb3Contrepartie_(n.libelle_bancaire);if(x.carte_fin)n.carte_fin=x.carte_fin;else if(typeof hb3CarteFin_==='function'&&n.libelle_bancaire)n.carte_fin=hb3CarteFin_(n.libelle_bancaire);if(x.libelle)n.libelle=x.libelle;return n;}).filter(x=>x.compte&&Number.isFinite(x.montant)&&x.date_comptable);}
 
 function planifierSnapshotV23_(incoming,ops,compte){
   const existants=ops.filter(o=>String(o.compte)===String(compte)),groupIn={},groupEx={};
