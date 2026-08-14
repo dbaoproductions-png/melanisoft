@@ -4,35 +4,24 @@
   document.addEventListener('DOMContentLoaded',()=>{
     const bouton=document.querySelector('.nav-item[data-view="charges_fixes"]');
     if(!bouton)return;
-    bouton.addEventListener('click',e=>{
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      ouvrirChargesFixes();
-    },true);
+    bouton.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();ouvrirChargesFixes();},true);
   });
   window.ouvrirChargesFixes=ouvrirChargesFixes;
-  function ouvrirChargesFixes(){
-    state.currentView='charges_fixes';
-    document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view==='charges_fixes'));
-    document.getElementById('page-title').textContent=TITRE[0];
-    document.getElementById('page-eyebrow').textContent=TITRE[2];
-    ['dashboard','comptes','operations','charges_fixes'].forEach(id=>document.getElementById(id)?.classList.toggle('active',id==='charges_fixes'));
-    document.getElementById('generic-view')?.classList.remove('active');
-    if(typeof rendreOperationsPage==='function')rendreOperationsPage();
-    mettreAJourIndicateurs();
-    if(typeof chargerRapprochementsChargesFixesUI==='function')chargerRapprochementsChargesFixesUI();
-  }
-  function mettreAJourIndicateurs(){
-    const charges=(state.data?.Charges_fixes||[]),actives=charges.filter(c=>estActif(c.actif));
-    const count=document.getElementById('fixed-charge-count');if(count)count.textContent=String(actives.length);
-    const total=document.getElementById('fixed-charge-monthly-total');if(total)total.textContent=money.format(actives.reduce((s,c)=>s+equivalentMensuel(c),0));
-    if(typeof google!=='undefined'&&google.script?.run){google.script.run.withSuccessHandler(l=>{const n=(l||[]).filter(r=>String(r.statut)==='À valider').length;const x=document.getElementById('fixed-charge-match-count');if(x)x.textContent=String(n);}).lireRapprochementsChargesFixes();}
-  }
+  function ouvrirChargesFixes(){state.currentView='charges_fixes';document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view==='charges_fixes'));document.getElementById('page-title').textContent=TITRE[0];document.getElementById('page-eyebrow').textContent=TITRE[2];['dashboard','comptes','operations','charges_fixes'].forEach(id=>document.getElementById(id)?.classList.toggle('active',id==='charges_fixes'));document.getElementById('generic-view')?.classList.remove('active');if(typeof rendreOperationsPage==='function')rendreOperationsPage();mettreAJourIndicateurs();if(typeof chargerRapprochementsChargesFixesUI==='function')chargerRapprochementsChargesFixesUI();}
+  function mettreAJourIndicateurs(){const charges=(state.data?.Charges_fixes||[]),actives=charges.filter(c=>estActif(c.actif));const count=document.getElementById('fixed-charge-count');if(count)count.textContent=String(actives.length);const total=document.getElementById('fixed-charge-monthly-total');if(total)total.textContent=money.format(actives.reduce((s,c)=>s+equivalentMensuel(c),0));if(typeof google!=='undefined'&&google.script?.run){google.script.run.withSuccessHandler(l=>{const n=(l||[]).filter(r=>String(r.statut)==='À valider').length;const x=document.getElementById('fixed-charge-match-count');if(x)x.textContent=String(n);}).lireRapprochementsChargesFixes();}}
   function equivalentMensuel(c){const m=Math.abs(nombre(c.montant));switch(String(c.frequence||'Mensuelle').toLowerCase()){case'quotidienne':return m*30.4375;case'hebdomadaire':return m*52/12;case'trimestrielle':return m/3;case'semestrielle':return m/6;case'annuelle':return m/12;default:return m;}}
-  const ancienneRendreCharges=window.rendreChargesFixes;
-  if(typeof ancienneRendreCharges==='function')window.rendreChargesFixes=function(){ancienneRendreCharges.apply(this,arguments);mettreAJourIndicateurs();};
-  const ancienneSauvegarde=window.sauvegarderChargeFixe;
-  if(typeof ancienneSauvegarde==='function')window.sauvegarderChargeFixe=function(charge){document.getElementById('save-fixed-charge').disabled=true;google.script.run.withSuccessHandler(()=>{document.getElementById('save-fixed-charge').disabled=false;fermerChargeFixe();charger();setTimeout(ouvrirChargesFixes,100);}).withFailureHandler(err=>{document.getElementById('save-fixed-charge').disabled=false;afficherErreur(err.message||String(err));}).enregistrerLigne('Charges_fixes',charge);};
+  const ancienneRendreCharges=window.rendreChargesFixes;if(typeof ancienneRendreCharges==='function')window.rendreChargesFixes=function(){ancienneRendreCharges.apply(this,arguments);mettreAJourIndicateurs();};
+  const ancienneSauvegarde=window.sauvegarderChargeFixe;if(typeof ancienneSauvegarde==='function')window.sauvegarderChargeFixe=function(charge){document.getElementById('save-fixed-charge').disabled=true;google.script.run.withSuccessHandler(()=>{document.getElementById('save-fixed-charge').disabled=false;fermerChargeFixe();charger();setTimeout(ouvrirChargesFixes,100);}).withFailureHandler(err=>{document.getElementById('save-fixed-charge').disabled=false;afficherErreur(err.message||String(err));}).enregistrerLigne('Charges_fixes',charge);};
   window.supprimerChargeFixe=function(id){if(!confirm('Supprimer cette charge fixe du référentiel ? Les opérations bancaires réelles ne seront pas modifiées.'))return;google.script.run.withSuccessHandler(()=>{charger();setTimeout(ouvrirChargesFixes,100);}).withFailureHandler(err=>afficherErreur(err.message||String(err))).supprimerLigne('Charges_fixes',id);};
 })();
+
+// Adaptateur du formulaire manuel au schéma bancaire actuel.
+// Le formulaire reste simple ; les colonnes techniques sont gérées côté serveur.
+window.enregistrerOperation=function(e){
+  e.preventDefault();
+  const operation={id:document.getElementById('operation-id').value,date:document.getElementById('operation-date').value,libelle:document.getElementById('operation-label').value.trim(),categorie:document.getElementById('operation-category').value,compte:document.getElementById('operation-account').value,montant:nombre(document.getElementById('operation-amount').value),type:document.getElementById('operation-type').value,commentaire:document.getElementById('operation-comment').value.trim()};
+  if(!operation.libelle||!operation.compte){afficherErreur('Le libellé et le compte sont obligatoires.');return;}
+  document.getElementById('save-operation').disabled=true;
+  google.script.run.withSuccessHandler(()=>{document.getElementById('save-operation').disabled=false;fermerOperation();charger();ouvrirVue('operations');}).withFailureHandler(err=>{document.getElementById('save-operation').disabled=false;afficherErreur(err.message||String(err));}).enregistrerOperationManuelle(operation);
+};
 </script>
