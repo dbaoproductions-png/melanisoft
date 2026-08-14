@@ -9,14 +9,29 @@
     return /^\s*\d{2}[.\/]\d{2}(?:[.\/]\d{2,4})?\s*$/.test(String(texte || ''));
   }
 
-  function dateCourtePdf_(iso) {
-    var d = new Date(iso);
-    if (isNaN(d)) return String(iso || '—');
-    return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear();
+  function dateIsoLocale_(annee, mois, jour) {
+    return String(annee).padStart(4,'0')+'-'+String(mois).padStart(2,'0')+'-'+String(jour).padStart(2,'0');
   }
 
-  // Laboratoire PDF : aucune opération détectée ne doit disparaître silencieusement.
-  // Analyse et import utilisent le même lot sprint0809.pdfOperations.
+  function dateCourtePdf_(iso) {
+    var m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? m[3]+'/'+m[2]+'/'+m[1] : String(iso || '—');
+  }
+
+  function nettoyerSuitePdf_(cellules) {
+    return (cellules||[]).filter(function(c){
+      return c.ratio>=0.12 && c.ratio<0.68 && !estDateSeulePdf_(c.texte);
+    }).map(function(c){return c.texte;}).join(' ').replace(/\s+/g,' ').trim();
+  }
+
+  function estBruitPdf_(texte) {
+    return !texte || /RELEVE DE COMPTE|Date Nature|Hello bank|RIB\s*:|P\.\s*\d+\/|TOTAL DES OPERATIONS|SOLDE CREDITEUR|SOLDE DEBITEUR/i.test(texte);
+  }
+
+  // Une opération est définie par son ancre physique : Date + montant débit/crédit.
+  // Seules les lignes situées après cette ancre et avant l'ancre suivante peuvent
+  // appartenir à l'opération. Aucune information de l'opération suivante ne peut
+  // donc être concaténée à la précédente.
   window.extraireOperationsPageHelloBank = function (items, largeur) {
     var lignes = new Map();
     (items || []).forEach(function (item) {
@@ -24,58 +39,69 @@
       if (!texte) return;
       var y = Math.round(item.transform[5]);
       if (!lignes.has(y)) lignes.set(y, []);
-      lignes.get(y).push({texte:texte,x:item.transform[4],ratio:item.transform[4]/largeur});
+      lignes.get(y).push({texte:texte,x:item.transform[4],ratio:item.transform[4]/largeur,y:y});
     });
 
     var ord = Array.from(lignes.entries())
       .sort(function (a,b) { return b[0]-a[0]; })
-      .map(function (entry) { return entry[1].sort(function(a,b){return a.x-b.x;}); });
+      .map(function (entry) { return {y:entry[0], cellules:entry[1].sort(function(a,b){return a.x-b.x;})}; });
 
-    var resultats = [];
-    var courant = null;
-    var annee = extraireAnneeReleve(ord);
-
-    ord.forEach(function (cellules) {
-      var dateCell = cellules.find(function(c){return c.ratio < 0.16 && /^\d{2}\.\d{2}$/.test(c.texte);});
-      var mc = extraireMontantLigne_(cellules);
-
-      if (dateCell && mc) {
-        if (courant) resultats.push(finaliserOperationPdf(courant));
-        var dm=dateCell.texte.split('.').map(Number), jour=dm[0], mois=dm[1], credit=mc.ratio>0.82;
-        var description=cellules.filter(function(c){
-          return c!==dateCell && c.ratio>=0.12 && c.ratio<0.60 && !estDateSeulePdf_(c.texte);
-        }).map(function(c){return c.texte;}).join(' ').replace(/\s+/g,' ').trim();
-        courant={
-          date:new Date(annee,mois-1,jour,12).toISOString(),
-          details:description,
-          montant:(credit?1:-1)*parseMontantPdf(mc.texte),
-          _ligneBrute:cellules.map(function(c){return c.texte;}).join(' | ')
-        };
-      } else if (courant) {
-        var suite=cellules.filter(function(c){return c.ratio>=0.12 && c.ratio<0.60 && !estDateSeulePdf_(c.texte);})
-          .map(function(c){return c.texte;}).join(' ').replace(/\s+/g,' ').trim();
-        if (suite && !/RELEVE DE COMPTE|Date Nature|Hello bank|RIB\s*:|P\.\s*\d+\//i.test(suite)) {
-          courant.details=(courant.details+' '+suite).replace(/\s+/g,' ').trim();
-        }
-      }
+    var annee = extraireAnneeReleve(ord.map(function(l){return l.cellules;}));
+    var ancres=[];
+    ord.forEach(function(ligne,index){
+      var cellules=ligne.cellules;
+      var dateCell=cellules.find(function(c){return c.ratio<0.16 && /^\d{2}\.\d{2}$/.test(c.texte);});
+      var mc=extraireMontantLigne_(cellules);
+      if(dateCell && mc) ancres.push({index:index,y:ligne.y,dateCell:dateCell,montantCell:mc});
     });
 
-    if (courant) resultats.push(finaliserOperationPdf(courant));
+    var resultats=[];
+    ancres.forEach(function(ancre,position){
+      var prochaine=position+1<ancres.length?ancres[position+1].index:ord.length;
+      var cellulesAncre=ord[ancre.index].cellules;
+      var dm=ancre.dateCell.texte.split('.').map(Number),jour=dm[0],mois=dm[1],credit=ancre.montantCell.ratio>0.82;
+      var fragments=[];
 
-    // On ne supprime que les lignes manifestement non-opérationnelles.
-    // Une opération sans vrai libellé reste présente et sera marquée invalide.
-    return resultats.filter(function(o){return !/^SOLDE|^TOTAL DES OPERATIONS/i.test(String(o.details||'').trim());})
-      .map(function(o){
-        var d=String(o.details||'').trim();
-        if (!d || estDateSeulePdf_(d)) o._parseError='LIBELLE_BANCAIRE_INCOMPLET';
-        return o;
-      });
+      var descriptionAncre=cellulesAncre.filter(function(c){
+        return c!==ancre.dateCell && c!==ancre.montantCell && c.ratio>=0.12 && c.ratio<0.68 && !estDateSeulePdf_(c.texte);
+      }).map(function(c){return c.texte;}).join(' ').replace(/\s+/g,' ').trim();
+      if(!estBruitPdf_(descriptionAncre)) fragments.push(descriptionAncre);
+
+      for(var i=ancre.index+1;i<prochaine;i++){
+        var suite=nettoyerSuitePdf_(ord[i].cellules);
+        if(!estBruitPdf_(suite)) fragments.push(suite);
+      }
+
+      var libelleBancaire=fragments.join(' ').replace(/\s+/g,' ').trim();
+      var dateComptable=dateIsoLocale_(annee,mois,jour);
+      var brut=ord.slice(ancre.index,prochaine).map(function(l){return l.cellules.map(function(c){return c.texte;}).join(' | ');}).join(' || ');
+      var operation={
+        date:dateComptable,
+        date_comptable:dateComptable,
+        date_achat:null,
+        libelle:libelleBancaire,
+        libelle_bancaire:libelleBancaire,
+        details:libelleBancaire,
+        montant:(credit?1:-1)*parseMontantPdf(ancre.montantCell.texte),
+        source_bancaire:'HELLOBANK_PDF',
+        _ligneBrute:brut
+      };
+
+      var achat=libelleBancaire.match(/\bDU\s+(\d{2})(\d{2})(\d{2})\b/i);
+      if(achat) operation.date_achat=dateIsoLocale_(2000+Number(achat[3]),Number(achat[2]),Number(achat[1]));
+      var carte=libelleBancaire.match(/(?:CARTE|CB)\s+\d*X+(\d{4})/i);
+      if(carte) operation.carte_fin=carte[1];
+      if(!libelleBancaire || estDateSeulePdf_(libelleBancaire)) operation._parseError='LIBELLE_BANCAIRE_INCOMPLET';
+      resultats.push(operation);
+    });
+
+    return resultats.filter(function(o){return !/^SOLDE|^TOTAL DES OPERATIONS/i.test(String(o.libelle_bancaire||'').trim());});
   };
 
   function invalidesPdf_() {
     var operations=(window.sprint0809&&sprint0809.pdfOperations)||[];
     return operations.filter(function(o){
-      var details=String(o&&o.details||'').trim();
+      var details=String(o&&o.libelle_bancaire||o&&o.details||'').trim();
       return o&&o._parseError || !details || estDateSeulePdf_(details);
     });
   }
@@ -84,14 +110,25 @@
     var invalides=invalidesPdf_();
     if (!invalides.length) return '';
     return invalides.map(function(o,i){
-      return '#'+(i+1)+' '+dateCourtePdf_(o.date)+' · '+Number(o.montant||0).toLocaleString('fr-FR',{style:'currency',currency:'EUR'})+' · brut: '+String(o._ligneBrute||'').slice(0,180);
+      return '#'+(i+1)+' '+dateCourtePdf_(o.date_comptable||o.date)+' · '+Number(o.montant||0).toLocaleString('fr-FR',{style:'currency',currency:'EUR'})+' · brut: '+String(o._ligneBrute||'').slice(0,180);
     }).join(' || ');
   }
 
   function verifierLotPdfAvantImport_() {
+    var operations=(window.sprint0809&&sprint0809.pdfOperations)||[];
     var invalides=invalidesPdf_();
-    if (invalides.length) {
-      throw new Error('Import PDF refusé : '+invalides.length+' opération(s) ont un libellé bancaire incomplet. '+resumeInvalidesPdf_());
+    if (invalides.length) throw new Error('Import PDF refusé : '+invalides.length+' opération(s) ont un libellé bancaire incomplet. '+resumeInvalidesPdf_());
+
+    // Garde-fous du relevé de référence : ils ne bloquent que si le lot analysé
+    // correspond aux totaux de ce relevé, afin de ne pas imposer 192 lignes aux autres mois.
+    var debits=operations.filter(function(o){return Number(o.montant)<0;}).reduce(function(s,o){return s+Math.abs(Number(o.montant)||0);},0);
+    var credits=operations.filter(function(o){return Number(o.montant)>0;}).reduce(function(s,o){return s+Math.abs(Number(o.montant)||0);},0);
+    var estReference=Math.abs(debits-7819.12)<0.01 && Math.abs(credits-6907.46)<0.01;
+    if(estReference){
+      if(operations.length!==192) throw new Error('Test de référence échoué : 192 opérations attendues, '+operations.length+' détectées.');
+      var attendus=[1.80,4.60,32.80,81.98];
+      attendus.forEach(function(m){if(!operations.some(function(o){return Math.abs(Math.abs(Number(o.montant))-m)<0.001;}))throw new Error('Test de référence échoué : opération '+m.toFixed(2)+' € absente.');});
+      if(operations.some(function(o){return String(o.date_comptable||o.date).indexOf('2026-01-31')===0 && /30\.01/.test(String(o._ligneBrute||''));}))throw new Error('Test de référence échoué : une date du 30 janvier a été transformée en 31 janvier.');
     }
   }
 
@@ -100,7 +137,6 @@
     setTimeout(retirerAncienMoisBudgetaire,500);
   });
 
-  // Après chaque analyse, complète le diagnostic sans modifier le lot analysé.
   document.addEventListener('click', function(event){
     var bouton=event.target&&event.target.closest?event.target.closest('#analyze-pdf'):null;
     if(!bouton) return;
