@@ -1,0 +1,21 @@
+<script>
+(function(){
+  const etat={liste:[]};
+  document.addEventListener('DOMContentLoaded',()=>{
+    document.querySelector('[data-view="charges_fixes"]')?.addEventListener('click',()=>setTimeout(charger,0));
+  });
+  window.chargerRapprochementsChargesFixesUI=charger;
+  function charger(){
+    const zone=document.getElementById('fixed-charge-matches-list');if(!zone)return;
+    zone.innerHTML='<div class="loading">Analyse des opérations réelles…</div>';
+    google.script.run.withSuccessHandler(l=>{etat.liste=l||[];rendre();}).withFailureHandler(e=>{zone.innerHTML='<div class="error">'+echapper(e.message||String(e))+'</div>';}).analyserRapprochementsChargesFixes();
+  }
+  function rendre(){
+    const zone=document.getElementById('fixed-charge-matches-list');if(!zone)return;
+    const liste=etat.liste.filter(r=>String(r.statut)==='À valider');
+    if(!liste.length){zone.innerHTML='<div class="empty-state">Aucun rapprochement de charge fixe à valider.</div>';return;}
+    zone.innerHTML=liste.map(r=>`<article class="reconciliation-item"><div class="reconciliation-head"><strong>${echapper(r.libelle_charge||'Charge fixe')}</strong><span class="reconciliation-score">${Number(r.score)||0}/100</span></div><div class="reconciliation-compare"><div class="reconciliation-side"><small>Référentiel</small><strong>${money.format(Math.abs(Number(r.montant_attendu)||0))}</strong><span>${echapper(r.libelle_charge||'')}</span></div><div class="reconciliation-side bank"><small>Opération réelle</small><strong>${money.format(Math.abs(Number(r.montant_reel)||0))}</strong><span>${echapper(r.libelle_operation||'')} · ${formaterDate(r.date_operation)}</span></div></div><div class="reconciliation-meta"><span>Écart montant : ${money.format(Math.abs(Number(r.ecart_montant)||0))}</span><span>Écart date : ${Number(r.ecart_jours)||0} jour(s)</span></div><div class="reconciliation-actions"><button class="primary-button" onclick="deciderChargeFixe('${echapperAttribut(r.id)}','valider',this)">Valider le rapprochement</button><button class="secondary-button" onclick="deciderChargeFixe('${echapperAttribut(r.id)}','ignorer',this)">Ignorer</button></div></article>`).join('');
+  }
+  window.deciderChargeFixe=function(id,decision,b){const c=b.closest('.reconciliation-item');c.querySelectorAll('button').forEach(x=>x.disabled=true);google.script.run.withSuccessHandler(()=>{charger();if(typeof charger==='function')window.charger();}).withFailureHandler(e=>{afficherErreur(e.message||String(e));c.querySelectorAll('button').forEach(x=>x.disabled=false);}).deciderRapprochementChargeFixe(id,decision);};
+})();
+</script>
