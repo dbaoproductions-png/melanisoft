@@ -1,10 +1,13 @@
-const ANALYSES_VERSION = '1.5';
+const ANALYSES_VERSION = '1.6';
 
 function chargerAnalysesBudgetaires(nombrePeriodes) {
   verifierInitialisation_();
   const operations = lireTable_('Operations');
   const budgets = lireTable_('Budget');
   const parametres = lireTable_('Parametres');
+  const categoriesRef = lireTable_('Categories');
+  const typesCategories = Object.fromEntries(categoriesRef.map(c => [String(c.nom || '').trim(), String(c.type || '').toLowerCase()]));
+  const estTresorerie = o => String(o.type || '').toLowerCase() === 'tresorerie' || typesCategories[String(o.categorie || '').trim()] === 'tresorerie';
   const dictionnaire = Object.fromEntries(parametres.map(p => [String(p.cle), p.valeur]));
   const jour = bornerJourBudgetaire_(dictionnaire.jour_debut_mois || 28);
   const nb = Math.max(3, Math.min(12, parseInt(nombrePeriodes, 10) || 6));
@@ -20,9 +23,11 @@ function chargerAnalysesBudgetaires(nombrePeriodes) {
       const date = new Date(o.date);
       return !isNaN(date) && date >= debut && date <= fin;
     });
-    const revenus = mouvements.filter(o => Number(o.montant || 0) > 0)
+    const mouvementsBudgetaires = mouvements.filter(o => !estTresorerie(o));
+    const tresorerie = mouvements.filter(estTresorerie).reduce((s, o) => s + Number(o.montant || 0), 0);
+    const revenus = mouvementsBudgetaires.filter(o => Number(o.montant || 0) > 0)
       .reduce((s, o) => s + Number(o.montant || 0), 0);
-    const depenses = mouvements.filter(o => Number(o.montant || 0) < 0)
+    const depenses = mouvementsBudgetaires.filter(o => Number(o.montant || 0) < 0)
       .reduce((s, o) => s + Math.abs(Number(o.montant || 0)), 0);
     periodes.push({
       cle: periode.cle,
@@ -32,7 +37,8 @@ function chargerAnalysesBudgetaires(nombrePeriodes) {
       revenus,
       depenses,
       solde: revenus - depenses,
-      tauxEpargne: revenus > 0 ? Math.round(((revenus - depenses) / revenus) * 1000) / 10 : 0
+      tauxEpargne: revenus > 0 ? Math.round(((revenus - depenses) / revenus) * 1000) / 10 : 0,
+      tresorerie
     });
   }
 
@@ -45,7 +51,7 @@ function chargerAnalysesBudgetaires(nombrePeriodes) {
   });
 
   const categoriesMap = {};
-  mouvementsCourants.filter(o => Number(o.montant || 0) < 0).forEach(o => {
+  mouvementsCourants.filter(o => !estTresorerie(o) && Number(o.montant || 0) < 0).forEach(o => {
     const categorie = String(o.categorie || 'Sans catégorie').trim() || 'Sans catégorie';
     categoriesMap[categorie] = (categoriesMap[categorie] || 0) + Math.abs(Number(o.montant || 0));
   });
@@ -56,7 +62,7 @@ function chargerAnalysesBudgetaires(nombrePeriodes) {
     part: totalDepenses > 0 ? Math.round((montant / totalDepenses) * 1000) / 10 : 0
   })).sort((a, b) => b.montant - a.montant);
 
-  const budgetCourant = budgets.filter(b => String(b.mois) === String(courante.cle) && String(b.type).toLowerCase() === 'depense');
+  const budgetCourant = budgets.filter(b => String(b.mois) === String(courante.cle) && String(b.type).toLowerCase() === 'depense' && typesCategories[String(b.poste || '').trim()] !== 'tresorerie');
   const alertes = budgetCourant.map(b => {
     const reel = categoriesMap[String(b.poste)] || 0;
     const prevu = Number(b.prevu || 0);
@@ -86,7 +92,8 @@ function chargerAnalysesBudgetaires(nombrePeriodes) {
       depensesMoyennes: moyenne('depenses'),
       epargneMoyenne: moyenne('solde'),
       tauxEpargneMoyen: moyenne('revenus') > 0 ? Math.round((moyenne('solde') / moyenne('revenus')) * 1000) / 10 : 0,
-      evolutionDepenses
+      evolutionDepenses,
+      mouvementTresorerieMoyen: moyenne('tresorerie')
     }
   };
 }
