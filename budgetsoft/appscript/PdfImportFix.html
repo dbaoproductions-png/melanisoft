@@ -9,10 +9,14 @@
     return /^\s*\d{2}[.\/]\d{2}(?:[.\/]\d{2,4})?\s*$/.test(String(texte || ''));
   }
 
-  // Correctif laboratoire : une cellule de date de la colonne gauche pouvait aussi
-  // entrer dans la zone de description (ratio compris entre 0,12 et 0,16).
-  // Cette fonction est LE parseur PDF utilisé par l'analyse. L'import reprend
-  // ensuite exactement sprint0809.pdfOperations, sans reparsing du PDF.
+  function dateCourtePdf_(iso) {
+    var d = new Date(iso);
+    if (isNaN(d)) return String(iso || '—');
+    return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear();
+  }
+
+  // Laboratoire PDF : aucune opération détectée ne doit disparaître silencieusement.
+  // Analyse et import utilisent le même lot sprint0809.pdfOperations.
   window.extraireOperationsPageHelloBank = function (items, largeur) {
     var lignes = new Map();
     (items || []).forEach(function (item) {
@@ -20,119 +24,114 @@
       if (!texte) return;
       var y = Math.round(item.transform[5]);
       if (!lignes.has(y)) lignes.set(y, []);
-      lignes.get(y).push({
-        texte: texte,
-        x: item.transform[4],
-        ratio: item.transform[4] / largeur
-      });
+      lignes.get(y).push({texte:texte,x:item.transform[4],ratio:item.transform[4]/largeur});
     });
 
     var ord = Array.from(lignes.entries())
-      .sort(function (a, b) { return b[0] - a[0]; })
-      .map(function (entry) {
-        return entry[1].sort(function (a, b) { return a.x - b.x; });
-      });
+      .sort(function (a,b) { return b[0]-a[0]; })
+      .map(function (entry) { return entry[1].sort(function(a,b){return a.x-b.x;}); });
 
     var resultats = [];
     var courant = null;
     var annee = extraireAnneeReleve(ord);
 
     ord.forEach(function (cellules) {
-      var dateCell = cellules.find(function (c) {
-        return c.ratio < 0.16 && /^\d{2}\.\d{2}$/.test(c.texte);
-      });
+      var dateCell = cellules.find(function(c){return c.ratio < 0.16 && /^\d{2}\.\d{2}$/.test(c.texte);});
       var mc = extraireMontantLigne_(cellules);
 
       if (dateCell && mc) {
         if (courant) resultats.push(finaliserOperationPdf(courant));
-
-        var morceauxDate = dateCell.texte.split('.').map(Number);
-        var jour = morceauxDate[0], mois = morceauxDate[1];
-        var credit = mc.ratio > 0.82;
-
-        var description = cellules
-          .filter(function (c) {
-            return c !== dateCell &&
-              c.ratio >= 0.12 && c.ratio < 0.60 &&
-              !estDateSeulePdf_(c.texte);
-          })
-          .map(function (c) { return c.texte; })
-          .join(' ')
-          .replace(/\s+/g, ' ')
-          .trim();
-
-        courant = {
-          date: new Date(annee, mois - 1, jour, 12).toISOString(),
-          details: description,
-          montant: (credit ? 1 : -1) * parseMontantPdf(mc.texte)
+        var dm=dateCell.texte.split('.').map(Number), jour=dm[0], mois=dm[1], credit=mc.ratio>0.82;
+        var description=cellules.filter(function(c){
+          return c!==dateCell && c.ratio>=0.12 && c.ratio<0.60 && !estDateSeulePdf_(c.texte);
+        }).map(function(c){return c.texte;}).join(' ').replace(/\s+/g,' ').trim();
+        courant={
+          date:new Date(annee,mois-1,jour,12).toISOString(),
+          details:description,
+          montant:(credit?1:-1)*parseMontantPdf(mc.texte),
+          _ligneBrute:cellules.map(function(c){return c.texte;}).join(' | ')
         };
       } else if (courant) {
-        var suite = cellules
-          .filter(function (c) {
-            return c.ratio >= 0.12 && c.ratio < 0.60 && !estDateSeulePdf_(c.texte);
-          })
-          .map(function (c) { return c.texte; })
-          .join(' ')
-          .replace(/\s+/g, ' ')
-          .trim();
-
+        var suite=cellules.filter(function(c){return c.ratio>=0.12 && c.ratio<0.60 && !estDateSeulePdf_(c.texte);})
+          .map(function(c){return c.texte;}).join(' ').replace(/\s+/g,' ').trim();
         if (suite && !/RELEVE DE COMPTE|Date Nature|Hello bank|RIB\s*:|P\.\s*\d+\//i.test(suite)) {
-          courant.details = (courant.details + ' ' + suite).replace(/\s+/g, ' ').trim();
+          courant.details=(courant.details+' '+suite).replace(/\s+/g,' ').trim();
         }
       }
     });
 
     if (courant) resultats.push(finaliserOperationPdf(courant));
 
-    return resultats.filter(function (o) {
-      var details = String(o.details || '').trim();
-      return details &&
-        !estDateSeulePdf_(details) &&
-        !/^SOLDE|^TOTAL DES OPERATIONS/i.test(details);
-    });
+    // On ne supprime que les lignes manifestement non-opérationnelles.
+    // Une opération sans vrai libellé reste présente et sera marquée invalide.
+    return resultats.filter(function(o){return !/^SOLDE|^TOTAL DES OPERATIONS/i.test(String(o.details||'').trim());})
+      .map(function(o){
+        var d=String(o.details||'').trim();
+        if (!d || estDateSeulePdf_(d)) o._parseError='LIBELLE_BANCAIRE_INCOMPLET';
+        return o;
+      });
   };
 
-  function verifierLotPdfAvantImport_() {
-    var operations = (window.sprint0809 && sprint0809.pdfOperations) || [];
-    var invalides = operations.filter(function (o) {
-      var details = String(o && o.details || '').trim();
-      return !details || estDateSeulePdf_(details);
+  function invalidesPdf_() {
+    var operations=(window.sprint0809&&sprint0809.pdfOperations)||[];
+    return operations.filter(function(o){
+      var details=String(o&&o.details||'').trim();
+      return o&&o._parseError || !details || estDateSeulePdf_(details);
     });
+  }
+
+  function resumeInvalidesPdf_() {
+    var invalides=invalidesPdf_();
+    if (!invalides.length) return '';
+    return invalides.map(function(o,i){
+      return '#'+(i+1)+' '+dateCourtePdf_(o.date)+' · '+Number(o.montant||0).toLocaleString('fr-FR',{style:'currency',currency:'EUR'})+' · brut: '+String(o._ligneBrute||'').slice(0,180);
+    }).join(' || ');
+  }
+
+  function verifierLotPdfAvantImport_() {
+    var invalides=invalidesPdf_();
     if (invalides.length) {
-      throw new Error(
-        'Import PDF refusé : ' + invalides.length +
-        ' opération(s) ont un libellé bancaire vide ou réduit à une date. Relancez l’analyse avec le parseur corrigé.'
-      );
+      throw new Error('Import PDF refusé : '+invalides.length+' opération(s) ont un libellé bancaire incomplet. '+resumeInvalidesPdf_());
     }
   }
 
   document.addEventListener('DOMContentLoaded', function () {
-    setTimeout(retirerAncienMoisBudgetaire, 0);
-    setTimeout(retirerAncienMoisBudgetaire, 500);
+    setTimeout(retirerAncienMoisBudgetaire,0);
+    setTimeout(retirerAncienMoisBudgetaire,500);
   });
+
+  // Après chaque analyse, complète le diagnostic sans modifier le lot analysé.
+  document.addEventListener('click', function(event){
+    var bouton=event.target&&event.target.closest?event.target.closest('#analyze-pdf'):null;
+    if(!bouton) return;
+    setTimeout(function verifier(){
+      var status=document.getElementById('pdf-status');
+      var ops=(window.sprint0809&&sprint0809.pdfOperations)||[];
+      if(!status||!ops.length){setTimeout(verifier,250);return;}
+      var invalides=invalidesPdf_();
+      if(invalides.length && status.textContent.indexOf('libellé(s) incomplet(s)')<0){
+        status.textContent += ' ⛔ '+invalides.length+' libellé(s) incomplet(s) : '+resumeInvalidesPdf_();
+        var importer=document.getElementById('confirm-pdf-import');
+        if(importer){importer.disabled=true;importer.textContent='Import bloqué — libellés incomplets';}
+      }
+    },400);
+  },true);
 
   document.addEventListener('click', function (event) {
     retirerAncienMoisBudgetaire();
-    var bouton = event.target && event.target.closest ? event.target.closest('#confirm-pdf-import') : null;
-    if (!bouton) return;
-    if (bouton.disabled) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    var status = document.getElementById('pdf-status');
-    bouton.disabled = true;
-    bouton.textContent = 'Import en cours…';
-
+    var bouton=event.target&&event.target.closest?event.target.closest('#confirm-pdf-import'):null;
+    if(!bouton||bouton.disabled)return;
+    event.preventDefault();event.stopPropagation();
+    var status=document.getElementById('pdf-status');
+    bouton.disabled=true; bouton.textContent='Import en cours…';
     try {
       verifierLotPdfAvantImport_();
-      if (status) status.textContent = 'Import du relevé analysé en cours…';
+      if(status)status.textContent='Import du relevé analysé en cours…';
       confirmerImportPdf();
-    } catch (e) {
-      bouton.disabled = false;
-      bouton.textContent = 'Importer les opérations';
-      if (status) status.textContent = 'Erreur avant envoi : ' + (e && e.message ? e.message : String(e));
+    } catch(e) {
+      bouton.disabled=false; bouton.textContent='Importer les opérations';
+      if(status)status.textContent='Erreur avant envoi : '+(e&&e.message?e.message:String(e));
     }
-  }, true);
+  },true);
 })();
 </script>
