@@ -18,20 +18,32 @@
     return m ? m[3]+'/'+m[2]+'/'+m[1] : String(iso || '—');
   }
 
-  function nettoyerSuitePdf_(cellules) {
-    return (cellules||[]).filter(function(c){
-      return c.ratio>=0.12 && c.ratio<0.68 && !estDateSeulePdf_(c.texte);
-    }).map(function(c){return c.texte;}).join(' ').replace(/\s+/g,' ').trim();
-  }
-
   function estBruitPdf_(texte) {
     return !texte || /RELEVE DE COMPTE|Date Nature|Hello bank|RIB\s*:|P\.\s*\d+\/|TOTAL DES OPERATIONS|SOLDE CREDITEUR|SOLDE DEBITEUR/i.test(texte);
   }
 
+  function texteEntreBornesPdf_(cellules, xMin, xMax) {
+    return (cellules || []).filter(function(c){
+      return c.x > xMin && c.x < xMax && !estDateSeulePdf_(c.texte);
+    }).map(function(c){ return c.texte; }).join(' ').replace(/\s+/g,' ').trim();
+  }
+
+  function nettoyerSuitePdf_(cellules, largeur) {
+    var xMin = largeur * 0.075;
+    var xMax = largeur * 0.69;
+    return texteEntreBornesPdf_(cellules, xMin, xMax);
+  }
+
+  function montantProbablePdf_(cellules) {
+    var candidats=(cellules||[]).filter(function(c){
+      return c.ratio>0.68 && /^-?\d{1,3}(?:[ .]\d{3})*,\d{2}$/.test(String(c.texte||'').trim());
+    }).sort(function(a,b){return b.x-a.x;});
+    return candidats[0] || null;
+  }
+
   // Une opération est définie par son ancre physique : Date + montant débit/crédit.
-  // Seules les lignes situées après cette ancre et avant l'ancre suivante peuvent
-  // appartenir à l'opération. Aucune information de l'opération suivante ne peut
-  // donc être concaténée à la précédente.
+  // Le texte métier est pris entre la date et le montant, et non plus avec un seuil
+  // fixe à 12 % de la page : cela récupère les libellés décalés vers la gauche.
   window.extraireOperationsPageHelloBank = function (items, largeur) {
     var lignes = new Map();
     (items || []).forEach(function (item) {
@@ -50,8 +62,9 @@
     var ancres=[];
     ord.forEach(function(ligne,index){
       var cellules=ligne.cellules;
-      var dateCell=cellules.find(function(c){return c.ratio<0.16 && /^\d{2}\.\d{2}$/.test(c.texte);});
-      var mc=extraireMontantLigne_(cellules);
+      var dates=cellules.filter(function(c){return c.ratio<0.20 && /^\d{2}\.\d{2}$/.test(c.texte);}).sort(function(a,b){return a.x-b.x;});
+      var dateCell=dates[0] || null;
+      var mc=extraireMontantLigne_(cellules) || montantProbablePdf_(cellules);
       if(dateCell && mc) ancres.push({index:index,y:ligne.y,dateCell:dateCell,montantCell:mc});
     });
 
@@ -62,19 +75,27 @@
       var dm=ancre.dateCell.texte.split('.').map(Number),jour=dm[0],mois=dm[1],credit=ancre.montantCell.ratio>0.82;
       var fragments=[];
 
-      var descriptionAncre=cellulesAncre.filter(function(c){
-        return c!==ancre.dateCell && c!==ancre.montantCell && c.ratio>=0.12 && c.ratio<0.68 && !estDateSeulePdf_(c.texte);
-      }).map(function(c){return c.texte;}).join(' ').replace(/\s+/g,' ').trim();
+      var marge = Math.max(4, largeur * 0.008);
+      var descriptionAncre=texteEntreBornesPdf_(cellulesAncre, ancre.dateCell.x + marge, ancre.montantCell.x - marge);
       if(!estBruitPdf_(descriptionAncre)) fragments.push(descriptionAncre);
 
       for(var i=ancre.index+1;i<prochaine;i++){
-        var suite=nettoyerSuitePdf_(ord[i].cellules);
+        var suite=nettoyerSuitePdf_(ord[i].cellules, largeur);
         if(!estBruitPdf_(suite)) fragments.push(suite);
       }
 
       var libelleBancaire=fragments.join(' ').replace(/\s+/g,' ').trim();
       var dateComptable=dateIsoLocale_(annee,mois,jour);
       var brut=ord.slice(ancre.index,prochaine).map(function(l){return l.cellules.map(function(c){return c.texte;}).join(' | ');}).join(' || ');
+
+      // Ultime récupération : si le texte filtré est vide, on reprend tout ce qui
+      // est physiquement entre la première date et le montant sur la ligne ancre.
+      if(!libelleBancaire){
+        libelleBancaire=cellulesAncre.filter(function(c){
+          return c!==ancre.dateCell && c!==ancre.montantCell && c.x>ancre.dateCell.x && c.x<ancre.montantCell.x && !estDateSeulePdf_(c.texte);
+        }).map(function(c){return c.texte;}).join(' ').replace(/\s+/g,' ').trim();
+      }
+
       var operation={
         date:dateComptable,
         date_comptable:dateComptable,
@@ -119,8 +140,6 @@
     var invalides=invalidesPdf_();
     if (invalides.length) throw new Error('Import PDF refusé : '+invalides.length+' opération(s) ont un libellé bancaire incomplet. '+resumeInvalidesPdf_());
 
-    // Garde-fous du relevé de référence : ils ne bloquent que si le lot analysé
-    // correspond aux totaux de ce relevé, afin de ne pas imposer 192 lignes aux autres mois.
     var debits=operations.filter(function(o){return Number(o.montant)<0;}).reduce(function(s,o){return s+Math.abs(Number(o.montant)||0);},0);
     var credits=operations.filter(function(o){return Number(o.montant)>0;}).reduce(function(s,o){return s+Math.abs(Number(o.montant)||0);},0);
     var estReference=Math.abs(debits-7819.12)<0.01 && Math.abs(credits-6907.46)<0.01;
@@ -129,6 +148,8 @@
       var attendus=[1.80,4.60,32.80,81.98];
       attendus.forEach(function(m){if(!operations.some(function(o){return Math.abs(Math.abs(Number(o.montant))-m)<0.001;}))throw new Error('Test de référence échoué : opération '+m.toFixed(2)+' € absente.');});
       if(operations.some(function(o){return String(o.date_comptable||o.date).indexOf('2026-01-31')===0 && /30\.01/.test(String(o._ligneBrute||''));}))throw new Error('Test de référence échoué : une date du 30 janvier a été transformée en 31 janvier.');
+      var vides=operations.filter(function(o){return !String(o.libelle_bancaire||'').trim();});
+      if(vides.length) throw new Error('Test de référence échoué : '+vides.length+' libellé(s) bancaire(s) vide(s).');
     }
   }
 
