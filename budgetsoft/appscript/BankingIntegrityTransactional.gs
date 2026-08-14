@@ -1,8 +1,50 @@
 const BANKING_LOG_SHEET='Journal_imports_bancaires';
 const BANKING_LOG_HEADERS=['horodatage','source','compte','recues','remplacees','creees','ambigues','debits_lot','credits_lot','sauvegarde','statut','detail'];
 function journalBanque_(data){const ss=SpreadsheetApp.getActiveSpreadsheet();let f=ss.getSheetByName(BANKING_LOG_SHEET);if(!f){f=ss.insertSheet(BANKING_LOG_SHEET);f.getRange(1,1,1,BANKING_LOG_HEADERS.length).setValues([BANKING_LOG_HEADERS]);f.setFrozenRows(1);if(!f.isSheetHidden())f.hideSheet();}f.appendRow(BANKING_LOG_HEADERS.map(h=>data[h]??''));}
-function candidatsBancairesTransaction_(n,ops,used){return ops.filter(o=>!used.has(o._row)&&String(o.compte)===String(n.compte)&&centimesBanque_(o.montant)===centimesBanque_(n.montant)).map(o=>({o,score:scoreMatchBancaire_(n,o),memeAchat:isoJourBanque_(n.date_achat||n.date)===isoJourBanque_(o.date_achat||o.date),memeCompta:isoJourBanque_(n.date_comptable||n.date)===isoJourBanque_(o.date_comptable||o.date)})).sort((a,b)=>b.score-a.score);}
-function planifierUpsertBancaire_(incoming,ops,source){const used=new Set(),actions=[];incoming.forEach(n=>{const all=candidatsBancairesTransaction_(n,ops,used),forts=all.filter(c=>c.score>=60),best=forts[0],second=forts[1];if(best&&best.score>=75&&(!second||best.score-second.score>=8)){used.add(best.o._row);actions.push({kind:'replace',n,o:best.o,score:best.score});return;}const plausibles=all.filter(c=>c.memeAchat||c.memeCompta||c.score>=45).slice(0,5);if(plausibles.length){actions.push({kind:'ambiguous',n,candidates:plausibles});return;}actions.push({kind:'create',n});});return actions;}
+
+function estMemeMouvementDefinitifPdf_(n,o){
+  if(String(o.statut_bancaire||'').toLowerCase()!=='definitif')return false;
+  if(String(o.source_bancaire||'').toLowerCase()!=='pdf')return false;
+  if(centimesBanque_(o.montant)!==centimesBanque_(n.montant))return false;
+  const nc=isoJourBanque_(n.date_comptable||n.date),oc=isoJourBanque_(o.date_comptable||o.date);
+  if(!nc||!oc||nc!==oc)return false;
+  const na=isoJourBanque_(n.date_achat||n.date),oa=isoJourBanque_(o.date_achat||o.date);
+  if(na&&oa&&na!==oa)return false;
+  const nl=normaliserTexteBanqueFiable_(n.libelle_bancaire||n.libelle),ol=normaliserTexteBanqueFiable_(o.libelle_bancaire||o.libelle);
+  if(nl&&ol&&nl!==ol)return false;
+  const ncFin=String(n.carte_fin||''),ocFin=String(o.carte_fin||'');
+  if(ncFin&&ocFin&&ncFin!==ocFin)return false;
+  return true;
+}
+
+function candidatsBancairesTransaction_(n,ops,used,source){
+  return ops.filter(o=>{
+    if(used.has(o._row))return false;
+    if(String(o.compte)!==String(n.compte))return false;
+    if(centimesBanque_(o.montant)!==centimesBanque_(n.montant))return false;
+    if(source==='pdf'){
+      const statut=String(o.statut_bancaire||'').toLowerCase();
+      if(statut==='definitif'&&!estMemeMouvementDefinitifPdf_(n,o))return false;
+    }
+    return true;
+  }).map(o=>({o,score:scoreMatchBancaire_(n,o),memeAchat:isoJourBanque_(n.date_achat||n.date)===isoJourBanque_(o.date_achat||o.date),memeCompta:isoJourBanque_(n.date_comptable||n.date)===isoJourBanque_(o.date_comptable||o.date)})).sort((a,b)=>b.score-a.score);
+}
+
+function planifierUpsertBancaire_(incoming,ops,source){
+  const used=new Set(),actions=[];
+  incoming.forEach(n=>{
+    const all=candidatsBancairesTransaction_(n,ops,used,source),forts=all.filter(c=>c.score>=60),best=forts[0],second=forts[1];
+    if(best&&best.score>=75&&(!second||best.score-second.score>=8)){
+      used.add(best.o._row);
+      actions.push({kind:'replace',n,o:best.o,score:best.score});
+      return;
+    }
+    const plausibles=all.filter(c=>c.memeAchat||c.memeCompta||c.score>=45).slice(0,5);
+    if(plausibles.length){actions.push({kind:'ambiguous',n,candidates:plausibles});return;}
+    actions.push({kind:'create',n});
+  });
+  return actions;
+}
 function checksumOperationsBanque_(ops){let deb=0,cred=0;const ids=new Set();ops.forEach(o=>{const m=Number(o.montant||0);if(m<0)deb+=Math.abs(m);else cred+=m;if(o.id)ids.add(String(o.id));});return{nombre:ops.length,debits:Math.round(deb*100)/100,credits:Math.round(cred*100)/100,ids:ids.size};}
 function diagnosticTexteTransaction_(v){const s=String(v==null?'':v);return JSON.stringify(s)+' [len='+s.length+']';}
 function verifierActionsAppliquees_(actions,opsApres){const byId=new Map(opsApres.map(o=>[String(o.id),o])),erreurs=[];actions.filter(a=>a.kind!=='ambiguous').forEach(a=>{let o;if(a.kind==='replace')o=byId.get(String(a.o.id));else o=byId.get(String(a.newId));if(!o){erreurs.push('Opération absente après écriture : '+(a.kind==='replace'?a.o.id:a.newId));return;}if(centimesBanque_(o.montant)!==centimesBanque_(a.n.montant))erreurs.push('Montant différent après écriture : '+o.id);if(isoJourBanque_(o.date_comptable)!==isoJourBanque_(a.n.date_comptable))erreurs.push('Date comptable différente après écriture : '+o.id);if(isoJourBanque_(o.date_achat)!==isoJourBanque_(a.n.date_achat))erreurs.push('Date achat différente après écriture : '+o.id);const attendu=String(a.n.libelle_bancaire||'').trim(),relu=String(o.libelle_bancaire||'').trim();if(relu!==attendu)erreurs.push('Libellé bancaire différent après écriture : '+o.id+' | AVANT='+diagnosticTexteTransaction_(attendu)+' | APRES='+diagnosticTexteTransaction_(relu));});return erreurs;}
