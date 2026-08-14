@@ -22,6 +22,29 @@
     return !texte || /RELEVE DE COMPTE|Date Nature|Hello bank|RIB\s*:|P\.\s*\d+\/|TOTAL DES OPERATIONS|SOLDE CREDITEUR|SOLDE DEBITEUR/i.test(texte);
   }
 
+  // Coupe uniquement les blocs de pied de page Hello bank!/BNP qui peuvent être
+  // rattachés par PDF.js à la dernière opération d'une page. On travaille sur des
+  // amorces longues et spécifiques afin de ne jamais supprimer un vrai libellé métier.
+  function nettoyerPiedPagePdf_(texte) {
+    var s=String(texte||'').replace(/\s+/g,' ').trim();
+    if(!s) return s;
+    var marqueurs=[
+      /\bune marque de BNP PARIBAS\b/i,
+      /\bd['’]un appel local\b/i,
+      /\bsur services et op[eé]rations bancaires\b/i,
+      /\bde votre autorisation de d[eé]bit\b/i,
+      /\bmontant de votre autorisation de d[eé]bit\b/i,
+      /\btaux annuel effectif global\b/i,
+      /\bTAEG\b/i
+    ];
+    var coupe=s.length;
+    marqueurs.forEach(function(re){
+      var m=re.exec(s);
+      if(m && m.index<coupe) coupe=m.index;
+    });
+    return s.slice(0,coupe).replace(/[\s;,:\-–—]+$/,'').trim();
+  }
+
   function texteEntreBornesPdf_(cellules, xMin, xMax) {
     return (cellules || []).filter(function(c){
       return c.x > xMin && c.x < xMax && !estDateSeulePdf_(c.texte);
@@ -100,7 +123,7 @@
         if(!estBruitPdf_(suite)) fragments.push(suite);
       }
 
-      var libelleBancaire=fragments.join(' ').replace(/\s+/g,' ').trim();
+      var libelleBancaire=nettoyerPiedPagePdf_(fragments.join(' ').replace(/\s+/g,' ').trim());
       var dateComptable=dateIsoLocale_(annee,mois,jour);
       var brut=ord.slice(ancre.index,prochaine).map(function(l){return l.cellules.map(function(c){return c.texte;}).join(' | ');}).join(' || ');
 
@@ -108,6 +131,7 @@
         libelleBancaire=cellulesAncre.filter(function(c){
           return c!==ancre.dateCell && c!==ancre.montantCell && c.x>ancre.dateCell.x && c.x<ancre.montantCell.x && !estDateSeulePdf_(c.texte);
         }).map(function(c){return c.texte;}).join(' ').replace(/\s+/g,' ').trim();
+        libelleBancaire=nettoyerPiedPagePdf_(libelleBancaire);
       }
 
       var operation={
