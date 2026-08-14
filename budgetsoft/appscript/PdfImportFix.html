@@ -41,22 +41,38 @@
     return candidats[0] || null;
   }
 
-  // Une opération est définie par son ancre physique : Date + montant débit/crédit.
-  // Le texte métier est pris entre la date et le montant, et non plus avec un seuil
-  // fixe à 12 % de la page : cela récupère les libellés décalés vers la gauche.
-  window.extraireOperationsPageHelloBank = function (items, largeur) {
-    var lignes = new Map();
-    (items || []).forEach(function (item) {
-      var texte = String(item.str || '').trim();
-      if (!texte) return;
-      var y = Math.round(item.transform[5]);
-      if (!lignes.has(y)) lignes.set(y, []);
-      lignes.get(y).push({texte:texte,x:item.transform[4],ratio:item.transform[4]/largeur,y:y});
-    });
+  // PDF.js peut donner des ordonnées légèrement différentes à des fragments qui
+  // appartiennent visuellement à la même ligne. On regroupe donc les baselines
+  // distantes de 3 points au maximum. L'espacement réel entre deux lignes du relevé
+  // est nettement supérieur, ce qui évite de fusionner deux opérations distinctes.
+  function regrouperLignesPdf_(items, largeur) {
+    var cellules=(items || []).map(function(item){
+      var texte=String(item.str || '').trim();
+      if(!texte) return null;
+      var y=Number(item.transform && item.transform[5]);
+      var x=Number(item.transform && item.transform[4]);
+      return {texte:texte,x:x,ratio:x/largeur,y:y};
+    }).filter(Boolean).sort(function(a,b){return b.y-a.y || a.x-b.x;});
 
-    var ord = Array.from(lignes.entries())
-      .sort(function (a,b) { return b[0]-a[0]; })
-      .map(function (entry) { return {y:entry[0], cellules:entry[1].sort(function(a,b){return a.x-b.x;})}; });
+    var lignes=[];
+    cellules.forEach(function(c){
+      var ligne=lignes.length ? lignes[lignes.length-1] : null;
+      if(!ligne || Math.abs(ligne.yReference-c.y)>3){
+        ligne={yReference:c.y,y:c.y,cellules:[]};
+        lignes.push(ligne);
+      }
+      ligne.cellules.push(c);
+      ligne.y=ligne.cellules.reduce(function(s,v){return s+v.y;},0)/ligne.cellules.length;
+    });
+    lignes.forEach(function(l){l.cellules.sort(function(a,b){return a.x-b.x;});});
+    return lignes;
+  }
+
+  // Une opération est définie par son ancre physique : Date + montant débit/crédit.
+  // Le texte métier est pris entre la date et le montant. Les fragments ayant des
+  // baselines voisines ont préalablement été réunis pour refléter la ligne visuelle.
+  window.extraireOperationsPageHelloBank = function (items, largeur) {
+    var ord = regrouperLignesPdf_(items, largeur);
 
     var annee = extraireAnneeReleve(ord.map(function(l){return l.cellules;}));
     var ancres=[];
@@ -88,8 +104,6 @@
       var dateComptable=dateIsoLocale_(annee,mois,jour);
       var brut=ord.slice(ancre.index,prochaine).map(function(l){return l.cellules.map(function(c){return c.texte;}).join(' | ');}).join(' || ');
 
-      // Ultime récupération : si le texte filtré est vide, on reprend tout ce qui
-      // est physiquement entre la première date et le montant sur la ligne ancre.
       if(!libelleBancaire){
         libelleBancaire=cellulesAncre.filter(function(c){
           return c!==ancre.dateCell && c!==ancre.montantCell && c.x>ancre.dateCell.x && c.x<ancre.montantCell.x && !estDateSeulePdf_(c.texte);
