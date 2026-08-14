@@ -1,4 +1,4 @@
-const HELLOBANK_CLIPBOARD_V3='3.1';
+const HELLOBANK_CLIPBOARD_V3='3.2';
 
 function hb3Date_(s){
   const m=String(s||'').match(/(\d{2})\/(\d{2})\/(\d{4})/);if(!m)return'';
@@ -13,6 +13,51 @@ function hb3Montant_(s){
   let t=m[1].replace(/\s/g,'').replace('−','-').replace(',','.');return Number(t);
 }
 function hb3Ignorer_(s){return !s||/^cat[ée]gorie\s*libell[ée]\s*montant(?:\s*pointage)?$/i.test(s)||/^(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\b/i.test(s);}
+
+// N reste volontairement le texte bancaire original. Ces fonctions ne servent
+// qu'à construire les champs dérivés C/O/P sans altérer la donnée source.
+function hb3CarteFin_(texte){
+  const s=String(texte||'');
+  const m=s.match(/\b(?:CARTE|CARD)\s+\d*[Xx*]+(\d{4})\b/i)||s.match(/\b\d{4}[Xx*]{4,}(\d{4})\b/);
+  return m?m[1]:'';
+}
+function hb3Contrepartie_(texte){
+  const brut=String(texte||'').replace(/\s+/g,' ').trim();if(!brut)return'';
+  let m;
+  if(/^paiement\s+cb\b/i.test(brut)){
+    let s=brut.replace(/^paiement\s+cb\s+du\s+\d{6}\s+/i,'');
+    s=s.replace(/\s+carte\s+\d*[Xx*]+\d{4}.*$/i,'').replace(/\s+(?:fra|irl|nld|esp|deu)\s+\d+[,.]\d{2}\s*eur.*$/i,'').trim();
+    return normaliserTexteBanqueFiable_(s).slice(0,90);
+  }
+  m=brut.match(/^virement\s+instantane\s+emis\b.*?\/ben\s+(.+?)(?:\s+\/refdo\b|\s+\/refben\b|$)/i);
+  if(m)return normaliserTexteBanqueFiable_(m[1]).slice(0,90);
+  m=brut.match(/^virement(?:\s+instantane)?\s+recu\b.*?\/de\s+(.+?)(?:\s+\/ref\b|\s+\/motif\b|$)/i);
+  if(m)return normaliserTexteBanqueFiable_(m[1]).slice(0,90);
+  m=brut.match(/^virement\s+\/de\s+(.+?)(?:\s+\/motif\b|\s+\/ref\b|$)/i);
+  if(m)return normaliserTexteBanqueFiable_(m[1]).slice(0,90);
+  m=brut.match(/^prelevement\s+(.+?)(?:\s+ech\/|$)/i);
+  if(m)return normaliserTexteBanqueFiable_(m[1]).slice(0,90);
+  if(/^retrait\s+distributeur\b/i.test(brut)){
+    m=brut.match(/\b(?:banque|bnp|credit|cr[eé]dit)\s+(.+?)(?:\s+\d{6,}|$)/i);
+    return normaliserTexteBanqueFiable_(m?m[0]:'retrait distributeur').slice(0,90);
+  }
+  if(/^remise\s+cheques?\b/i.test(brut))return 'remise cheques';
+  if(/^commissions?\b/i.test(brut))return normaliserTexteBanqueFiable_(brut.replace(/^commissions?\s+/i,'')).slice(0,90);
+  return normaliserTexteBanqueFiable_(marchandBanque_(brut,brut)||'').slice(0,90);
+}
+function hb3LibelleLisible_(texte,contrepartie){
+  const brut=String(texte||'').trim(),cp=String(contrepartie||'').trim();
+  const joli=cp?(typeof titreLibelle==='function'?titreLibelle(cp):cp):'';
+  if(/^virement\s+instantane\s+emis\b/i.test(brut)&&joli)return 'Virement à '+joli;
+  if(/^virement(?:\s+instantane)?\s+recu\b/i.test(brut)&&joli)return 'Virement reçu de '+joli;
+  if(/^virement\s+\/de\b/i.test(brut)&&joli)return 'Virement reçu de '+joli;
+  if(/^prelevement\b/i.test(brut)&&joli)return 'Prélèvement '+joli;
+  if(/^retrait\s+distributeur\b/i.test(brut))return joli&&joli!=='Retrait Distributeur'?'Retrait '+joli:'Retrait distributeur';
+  if(/^remise\s+cheques?\b/i.test(brut))return 'Remise de chèques';
+  if(/^commissions?\b/i.test(brut)&&joli)return 'Commission '+joli;
+  return joli||(typeof titreLibelle==='function'?titreLibelle(brut):brut);
+}
+
 function hb3Parser_(texte,compte){
   const lines=String(texte||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean),out=[];let lib='';
   for(let i=0;i<lines.length;i++){
@@ -27,8 +72,8 @@ function hb3Parser_(texte,compte){
       const dc=hb3Date_(debitLine),da=hb3Achat_(lib)||'';
       if(!dc||!lib)continue;
       const signed=/^Cr[ée]dit/i.test(debitLine)?Math.abs(amount):-Math.abs(amount);
-      const carte=extraireCarteFinBanque_(lib),marchand=marchandBanque_(lib,lib);
-      out.push({compte:String(compte||''),date:da||dc,date_achat:da,date_comptable:dc,libelle_bancaire:lib,libelle:titreLibelle(marchand||lib),marchand_normalise:marchand,carte_fin:carte,montant:signed,type:signed<0?'depense':'revenu',source_bancaire:'flux',statut_bancaire:'provisoire'});
+      const carte=hb3CarteFin_(lib),contrepartie=hb3Contrepartie_(lib),libelleLisible=hb3LibelleLisible_(lib,contrepartie);
+      out.push({compte:String(compte||''),date:da||dc,date_achat:da,date_comptable:dc,libelle_bancaire:lib,libelle:libelleLisible,marchand_normalise:contrepartie,carte_fin:carte,montant:signed,type:signed<0?'depense':'revenu',source_bancaire:'flux',statut_bancaire:'provisoire'});
       lib='';continue;
     }
     lib=s;
@@ -36,15 +81,12 @@ function hb3Parser_(texte,compte){
   return out;
 }
 function hb3Identity_(o){
-  const amount=centimesBanque_(o.montant),achat=isoJourBanque_(o.date_achat||o.date),carte=String(o.carte_fin||''),march=normaliserTexteBanqueFiable_(o.marchand_normalise||marchandBanque_(o.libelle_bancaire,o.libelle)).replace(/\s/g,'').slice(0,60);
+  const amount=centimesBanque_(o.montant),achat=isoJourBanque_(o.date_achat||o.date),carte=String(o.carte_fin||''),march=normaliserTexteBanqueFiable_(o.marchand_normalise||hb3Contrepartie_(o.libelle_bancaire||o.libelle)).replace(/\s/g,'').slice(0,60);
   if(carte)return ['CB',String(o.compte||''),achat,amount,carte,march].join('|');
   const raw=normaliserTexteBanqueFiable_(o.libelle_bancaire||o.libelle).replace(/\s/g,'').slice(0,120);
   return ['OP',String(o.compte||''),isoJourBanque_(o.date_comptable||o.date),amount,raw].join('|');
 }
 
-// Le moteur transactionnel historique complète date_achat par date_comptable lorsqu'elle
-// est absente. Après écriture du flux, on rétablit la sémantique du schéma actuel :
-// date_achat n'existe que lorsqu'une vraie date d'achat est fournie par le site bancaire.
 function hb3ReparerDatesAchatFlux_(lignes,compte){
   const sansAchat=(lignes||[]).filter(o=>!o.date_achat&&!hb3Achat_(o.libelle_bancaire||o.libelle));
   if(!sansAchat.length)return 0;
@@ -57,9 +99,7 @@ function hb3ReparerDatesAchatFlux_(lignes,compte){
     if(String(o.source_bancaire||'').toLowerCase()!=='flux'||String(o.statut_bancaire||'').toLowerCase()!=='provisoire')return;
     const k=[isoJourBanque_(o.date_comptable||o.date),centimesBanque_(o.montant),normaliserTexteBanqueFiable_(o.libelle_bancaire||o.libelle)].join('|');
     if(!signatures[k])return;
-    o.date_achat='';
-    o.date=o.date_comptable||o.date;
-    n++;
+    o.date_achat='';o.date=o.date_comptable||o.date;n++;
   });
   if(n){const values=ops.map(o=>serialiserOpBancaire_(o,headers));f.clearContents();f.getRange(1,1,1,headers.length).setValues([headers]);if(values.length)f.getRange(2,1,values.length,headers.length).setValues(values);f.setFrozenRows(1);SpreadsheetApp.flush();}
   return n;
