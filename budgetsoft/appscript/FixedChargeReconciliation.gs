@@ -25,7 +25,7 @@ function analyserRapprochementsChargesFixes(){
   verifierInitialisation_();
   initialiserRapprochementsChargesFixes_();
   const charges=lireTable_('Charges_fixes').filter(c=>convertirBooleen_(c.actif));
-  const operations=lireTable_('Operations').filter(o=>!/[RECURRENCE:/.test(String(o.commentaire||'')));
+  const operations=lireTable_('Operations').filter(o=>!/\[RECURRENCE:/.test(String(o.commentaire||'')));
   const existants=lireRapprochementsChargesFixes();
   const dejaTraites=new Set(existants.filter(r=>String(r.statut)!=='À valider').map(r=>String(r.charge_fixe_id)+'|'+String(r.operation_id)));
   const candidats=[];
