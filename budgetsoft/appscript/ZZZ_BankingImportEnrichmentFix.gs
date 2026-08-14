@@ -15,6 +15,33 @@ function estOperationCarteBudgetSoft_(texte) {
     || /\bCB\s+DU\s+\d{6}\b/i.test(s);
 }
 
+function recupererLibelleDepuisLigneBrutePdf_(brut) {
+  const texte = String(brut || '').trim();
+  if (!texte) return '';
+
+  const bruit = /^(?:RELEVE DE COMPTE|Date Nature|Hello bank|RIB\s*:|P\.\s*\d+\/|TOTAL DES OPERATIONS|SOLDE CREDITEUR|SOLDE DEBITEUR|\d{10,})/i;
+  const morceaux = texte
+    .split(/\s*\|\|\s*|\s*\|\s*/)
+    .map(v => String(v || '').replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .filter(v => !bruit.test(v))
+    .filter(v => !/^\d{2}[.\/]\d{2}(?:[.\/]\d{2,4})?$/.test(v))
+    .filter(v => !/^[-+]?\d{1,3}(?:[ .]\d{3})*(?:,\d{2})$/.test(v))
+    .filter(v => !/^[-+]?\d+[.,]\d{2}\s*EUR$/i.test(v));
+
+  // La premiere cellule peut contenir date + nature + date de valeur + montant
+  // en un seul bloc. On retire seulement les marqueurs bancaires structurants.
+  let candidat = morceaux.join(' ')
+    .replace(/^\s*\d{2}[.\/]\d{2}\s+/, '')
+    .replace(/\s+\d{2}[.\/]\d{2}\s+[-+]?\d{1,3}(?:[ .]\d{3})*(?:,\d{2})\s*$/, '')
+    .replace(/\s+[-+]?\d{1,3}(?:[ .]\d{3})*(?:,\d{2})\s*$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!candidat || bruit.test(candidat)) return '';
+  return candidat;
+}
+
 function marchandCarteBudgetSoft_(texte) {
   let s = String(texte || '').replace(/\s+/g, ' ').trim();
   s = s
@@ -101,8 +128,17 @@ function normaliserEntreeBancaire_(x, source) {
   x = x || {};
   source = source === 'pdf' ? 'pdf' : 'flux';
 
-  const libelleBancaire = String(x.libelle_bancaire || x.details || x.libelle || '').trim();
-  if (source === 'pdf' && !libelleBancaire) throw new Error('Import PDF refusé : opération bancaire sans libellé.');
+  let libelleBancaire = String(x.libelle_bancaire || x.details || x.libelle || '').trim();
+  if (source === 'pdf' && !libelleBancaire) {
+    libelleBancaire = recupererLibelleDepuisLigneBrutePdf_(x._ligneBrute);
+  }
+  if (source === 'pdf' && !libelleBancaire) {
+    const dateDiag = String(x.date_comptable || x.date || '?');
+    const montantDiag = String(x.montant == null ? '?' : x.montant);
+    const brutDiag = String(x._ligneBrute || '').replace(/\s+/g, ' ').trim().slice(0, 220);
+    throw new Error('Import PDF refusé : opération bancaire sans libellé. Date=' + dateDiag + ' ; montant=' + montantDiag + ' ; brut=' + (brutDiag || '[vide]'));
+  }
+
   const compte = String(x.compte || '').trim();
   const montant = Number(x.montant);
   const type = String(x.type || (montant < 0 ? 'depense' : 'revenu')).toLowerCase();
