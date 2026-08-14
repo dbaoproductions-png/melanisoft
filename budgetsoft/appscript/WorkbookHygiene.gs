@@ -38,7 +38,9 @@ function assurerHygieneClasseurBudgetSoft_() {
     'Journal',
     'Corrections_a_valider',
     'Rapprochements_a_valider',
-    'Reimport_nettoyage'
+    'Reimport_nettoyage',
+    'Regles_categories',
+    'Correspondances_bancaires'
   ].forEach(nom => {
     const feuille = ss.getSheetByName(nom);
     if (feuille && !feuille.isSheetHidden()) feuille.hideSheet();
@@ -61,7 +63,8 @@ function nettoyerOngletsTechniquesBudgetSoft() {
     /^Operations_backup_\d{8}_\d{6}$/,
     /^Operations_avant_restauration_\d{8}_\d{6}$/,
     /^Operations_avant_PDF_\d{8}_\d{6}$/,
-    /^Operations_avant_flux_\d{8}_\d{6}$/
+    /^Operations_avant_flux_\d{8}_\d{6}$/,
+    /^Operations_avant_reset(?:_\d+)?_\d{8}_\d{6}$/
   ];
 
   ss.getSheets().slice().forEach(feuille => {
