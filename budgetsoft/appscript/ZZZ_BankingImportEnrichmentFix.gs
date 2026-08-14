@@ -102,6 +102,7 @@ function normaliserEntreeBancaire_(x, source) {
   source = source === 'pdf' ? 'pdf' : 'flux';
 
   const libelleBancaire = String(x.libelle_bancaire || x.details || x.libelle || '').trim();
+  if (source === 'pdf' && !libelleBancaire) throw new Error('Import PDF refusé : opération bancaire sans libellé.');
   const compte = String(x.compte || '').trim();
   const montant = Number(x.montant);
   const type = String(x.type || (montant < 0 ? 'depense' : 'revenu')).toLowerCase();
