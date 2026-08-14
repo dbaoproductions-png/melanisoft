@@ -24,25 +24,27 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Check required secrets
+      - name: Check clasp authentication secret
         shell: bash
         env:
           CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
-          CLASP_JSON_TEST: ${{ secrets.CLASP_JSON_TEST }}
         run: |
           set -euo pipefail
           test -n "$CLASPRC_JSON" || { echo 'Missing GitHub secret CLASPRC_JSON'; exit 1; }
-          test -n "$CLASP_JSON_TEST" || { echo 'Missing GitHub secret CLASP_JSON_TEST'; exit 1; }
 
-      - name: Install clasp credentials
+      - name: Install clasp configuration
         shell: bash
         env:
           CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
-          CLASP_JSON_TEST: ${{ secrets.CLASP_JSON_TEST }}
         run: |
           set -euo pipefail
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
-          printf '%s' "$CLASP_JSON_TEST" > .clasp.json
+          cat > .clasp.json <<'JSON'
+          {
+            "scriptId": "1tvGARYmwH11M0XfsoRKmtLoETCL6_8fmXD16iU39oGWgHHULGiYbDT-n",
+            "rootDir": "budgetsoft/appscript"
+          }
+          JSON
           chmod 600 "$HOME/.clasprc.json" .clasp.json
 
       - name: Validate Apps Script source
@@ -50,10 +52,7 @@ jobs:
         run: |
           set -euo pipefail
           test -d budgetsoft/appscript
-          test -f budgetsoft/appscript/appsscript.json || {
-            echo 'Missing budgetsoft/appscript/appsscript.json. Export the TEST manifest before first deployment.'
-            exit 1
-          }
+          test -f budgetsoft/appscript/appsscript.json
           echo "Files prepared:"
           find budgetsoft/appscript -maxdepth 1 -type f \( -name '*.gs' -o -name '*.html' -o -name 'appsscript.json' \) -printf '%f\n' | sort
 
