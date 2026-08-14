@@ -1,5 +1,58 @@
 <script>
 (function(){
+  function installerOngletChargesFixes_(){
+    if(document.querySelector('.nav-item[data-view="charges"]'))return;
+    const nav=document.querySelector('.nav');
+    const operationsNav=document.querySelector('.nav-item[data-view="operations"]');
+    if(!nav||!operationsNav)return;
+
+    const bouton=document.createElement('button');
+    bouton.className='nav-item';
+    bouton.dataset.view='charges';
+    bouton.innerHTML='🔁 <span>Charges fixes</span>';
+    operationsNav.insertAdjacentElement('afterend',bouton);
+
+    const main=document.querySelector('.main');
+    const operations=document.getElementById('operations');
+    if(!main||!operations)return;
+    let section=document.getElementById('charges');
+    if(!section){
+      section=document.createElement('section');
+      section.id='charges';
+      section.className='view';
+      section.innerHTML='<div class="section-toolbar"><div><p class="section-intro">Référentiel prévisionnel des dépenses récurrentes. Une charge fixe n’est jamais ajoutée aux opérations : elle est validée par rapprochement avec un mouvement bancaire réel.</p></div><div class="toolbar-buttons" id="fixed-charge-toolbar"></div></div><div id="fixed-charge-host"></div>';
+      operations.insertAdjacentElement('afterend',section);
+    }
+
+    const host=document.getElementById('fixed-charge-host');
+    const toolbar=document.getElementById('fixed-charge-toolbar');
+    const panel=operations.querySelector('.fixed-charge-panel');
+    if(panel&&host)host.appendChild(panel);
+    ['import-fixed-charges-button','add-fixed-charge-button'].forEach(function(id){
+      const el=document.getElementById(id);if(el&&toolbar)toolbar.appendChild(el);
+    });
+
+    const intro=operations.querySelector('.section-intro');
+    if(intro)intro.textContent='Opérations bancaires réellement constatées ou saisies. Les charges prévisionnelles sont gérées séparément.';
+    const kicker=section.querySelector('.panel-kicker');if(kicker)kicker.textContent='Référentiel prévisionnel';
+    const titre=section.querySelector('.fixed-charge-panel h2');if(titre)titre.textContent='Charges fixes';
+    const aide=section.querySelector('.fixed-charge-panel .helper-text');if(aide)aide.textContent='Le montant et la nature peuvent évoluer. La validation provient toujours d’une opération bancaire réelle rapprochée.';
+
+    titles.charges=['Charges fixes','🔁','Prévisions et rapprochements'];
+    const ouvrirVueBase=ouvrirVue;
+    ouvrirVue=function(view){
+      if(view!=='charges')return ouvrirVueBase(view);
+      state.currentView='charges';
+      document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view==='charges'));
+      document.getElementById('page-title').textContent='Charges fixes';
+      document.getElementById('page-eyebrow').textContent='Prévisions et rapprochements';
+      ['dashboard','comptes','operations','charges'].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.toggle('active',id==='charges');});
+      const generic=document.getElementById('generic-view');if(generic)generic.classList.remove('active');
+      rendreOperationsPage();
+    };
+    bouton.addEventListener('click',()=>ouvrirVue('charges'));
+  }
+
   function installerOptionChargeFixeOperation(){
     const form=document.getElementById('operation-form');
     if(!form||document.getElementById('operation-to-fixed-charge'))return;
@@ -9,7 +62,7 @@
     bloc.id='operation-fixed-charge-block';
     bloc.className='full-field';
     bloc.style.marginTop='10px';
-    bloc.innerHTML=`<label class="checkbox-line"><input type="checkbox" id="operation-to-fixed-charge"> Enregistrer aussi comme charge fixe</label><p class="helper-text">Crée la règle récurrente et rattache aussi les opérations bancaires équivalentes déjà présentes dans l’historique.</p>`;
+    bloc.innerHTML=`<label class="checkbox-line"><input type="checkbox" id="operation-to-fixed-charge"> Créer aussi une fiche de charge fixe</label><p class="helper-text">L’opération reste un mouvement réel. La fiche créée sert uniquement de prévision et de règle de rapprochement pour les prochains relevés.</p>`;
     actions.parentNode.insertBefore(bloc,actions);
   }
 
@@ -29,25 +82,16 @@
   function preparerChargeFixeDepuisOperation_(operation){
     const date=new Date(operation.date+'T12:00:00');
     return {
-      id:'',
-      libelle:operation.libelle,
-      categorie:operation.categorie||'',
-      compte:operation.compte||'',
-      montant:Math.abs(operation.montant),
-      type:'depense',
-      jour_execution:isNaN(date)?1:date.getDate(),
-      date_debut:isNaN(date)?'':dateInput(date),
-      date_fin:'',
-      actif:true,
-      commentaire:'Créée depuis une opération existante',
-      frequence:'Mensuelle',
-      libelle_bancaire:operation.libelle,
-      tolerance:0.50,
-      nature:'Autre'
+      id:'', libelle:operation.libelle, categorie:operation.categorie||'', compte:operation.compte||'',
+      montant:Math.abs(operation.montant), type:'depense', jour_execution:isNaN(date)?1:date.getDate(),
+      date_debut:isNaN(date)?'':dateInput(date), date_fin:'', actif:true,
+      commentaire:'Créée depuis une opération réelle', frequence:'Mensuelle',
+      libelle_bancaire:operation.libelle, tolerance:0.50, nature:'Autre', statut_rapprochement:'À rapprocher'
     };
   }
 
   document.addEventListener('DOMContentLoaded',()=>{
+    installerOngletChargesFixes_();
     installerOptionChargeFixeOperation();
     const form=document.getElementById('operation-form');
     if(!form||form.dataset.fixedChargeBridge)return;
@@ -56,29 +100,17 @@
     form.addEventListener('submit',function(e){
       const coche=document.getElementById('operation-to-fixed-charge');
       if(!coche||!coche.checked)return;
-
-      e.preventDefault();
-      e.stopImmediatePropagation();
-
+      e.preventDefault();e.stopImmediatePropagation();
       const operation=lireOperationFormulaire_();
       if(!operation.libelle||!operation.compte){afficherErreur('Le libellé et le compte sont obligatoires.');return;}
       const charge=preparerChargeFixeDepuisOperation_(operation);
-      const bouton=document.getElementById('save-operation');
-      bouton.disabled=true;
-
+      const bouton=document.getElementById('save-operation');bouton.disabled=true;
       google.script.run.withSuccessHandler(r=>{
-        bouton.disabled=false;
-        coche.checked=false;
-        fermerOperation();
-        charger();
-        ouvrirVue('operations');
-        const n=r&&r.retrospectif?Number(r.retrospectif.rattachees||0):0;
-        if(typeof afficherToast==='function') afficherToast('Charge fixe créée · '+n+' opération(s) historique(s) rattachée(s).');
+        bouton.disabled=false;coche.checked=false;fermerOperation();charger();ouvrirVue('charges');
+        const n=r&&r.retrospectif?Number(r.retrospectif.trouvees||0):0;
+        if(typeof afficherToast==='function') afficherToast('Charge fixe créée · '+n+' opération(s) historique(s) similaire(s) repérée(s), sans modification de l’historique.');
         if(typeof chargerDashboardTroisCadres==='function')setTimeout(chargerDashboardTroisCadres,300);
-      }).withFailureHandler(err=>{
-        bouton.disabled=false;
-        afficherErreur(err.message||String(err));
-      }).enregistrerOperationAvecChargeFixe(operation,charge);
+      }).withFailureHandler(err=>{bouton.disabled=false;afficherErreur(err.message||String(err));}).enregistrerOperationAvecChargeFixe(operation,charge);
     },true);
   });
 })();
