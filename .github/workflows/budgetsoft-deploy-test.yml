@@ -1,0 +1,67 @@
+name: BudgetSoft - Deploy TEST
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: budgetsoft-appscript-test
+  cancel-in-progress: false
+
+jobs:
+  deploy-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check required secrets
+        shell: bash
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          CLASP_JSON_TEST: ${{ secrets.CLASP_JSON_TEST }}
+        run: |
+          set -euo pipefail
+          test -n "$CLASPRC_JSON" || { echo 'Missing GitHub secret CLASPRC_JSON'; exit 1; }
+          test -n "$CLASP_JSON_TEST" || { echo 'Missing GitHub secret CLASP_JSON_TEST'; exit 1; }
+
+      - name: Install clasp credentials
+        shell: bash
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          CLASP_JSON_TEST: ${{ secrets.CLASP_JSON_TEST }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          printf '%s' "$CLASP_JSON_TEST" > .clasp.json
+          chmod 600 "$HOME/.clasprc.json" .clasp.json
+
+      - name: Validate Apps Script source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d budgetsoft/appscript
+          test -f budgetsoft/appscript/appsscript.json || {
+            echo 'Missing budgetsoft/appscript/appsscript.json. Export the TEST manifest before first deployment.'
+            exit 1
+          }
+          echo "Files prepared:"
+          find budgetsoft/appscript -maxdepth 1 -type f \( -name '*.gs' -o -name '*.html' -o -name 'appsscript.json' \) -printf '%f\n' | sort
+
+      - name: Show clasp status
+        run: npx --yes @google/clasp@3 show-file-status
+
+      - name: Push exact GitHub commit to Apps Script TEST
+        run: npx --yes @google/clasp@3 push --force
+
+      - name: Create Apps Script version
+        run: npx --yes @google/clasp@3 create-version --description "BudgetSoft TEST ${{ github.sha }}"
