@@ -5,6 +5,107 @@
     if (carte) carte.remove();
   }
 
+  function estDateSeulePdf_(texte) {
+    return /^\s*\d{2}[.\/]\d{2}(?:[.\/]\d{2,4})?\s*$/.test(String(texte || ''));
+  }
+
+  // Correctif laboratoire : une cellule de date de la colonne gauche pouvait aussi
+  // entrer dans la zone de description (ratio compris entre 0,12 et 0,16).
+  // Cette fonction est LE parseur PDF utilisé par l'analyse. L'import reprend
+  // ensuite exactement sprint0809.pdfOperations, sans reparsing du PDF.
+  window.extraireOperationsPageHelloBank = function (items, largeur) {
+    var lignes = new Map();
+    (items || []).forEach(function (item) {
+      var texte = String(item.str || '').trim();
+      if (!texte) return;
+      var y = Math.round(item.transform[5]);
+      if (!lignes.has(y)) lignes.set(y, []);
+      lignes.get(y).push({
+        texte: texte,
+        x: item.transform[4],
+        ratio: item.transform[4] / largeur
+      });
+    });
+
+    var ord = Array.from(lignes.entries())
+      .sort(function (a, b) { return b[0] - a[0]; })
+      .map(function (entry) {
+        return entry[1].sort(function (a, b) { return a.x - b.x; });
+      });
+
+    var resultats = [];
+    var courant = null;
+    var annee = extraireAnneeReleve(ord);
+
+    ord.forEach(function (cellules) {
+      var dateCell = cellules.find(function (c) {
+        return c.ratio < 0.16 && /^\d{2}\.\d{2}$/.test(c.texte);
+      });
+      var mc = extraireMontantLigne_(cellules);
+
+      if (dateCell && mc) {
+        if (courant) resultats.push(finaliserOperationPdf(courant));
+
+        var morceauxDate = dateCell.texte.split('.').map(Number);
+        var jour = morceauxDate[0], mois = morceauxDate[1];
+        var credit = mc.ratio > 0.82;
+
+        var description = cellules
+          .filter(function (c) {
+            return c !== dateCell &&
+              c.ratio >= 0.12 && c.ratio < 0.60 &&
+              !estDateSeulePdf_(c.texte);
+          })
+          .map(function (c) { return c.texte; })
+          .join(' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        courant = {
+          date: new Date(annee, mois - 1, jour, 12).toISOString(),
+          details: description,
+          montant: (credit ? 1 : -1) * parseMontantPdf(mc.texte)
+        };
+      } else if (courant) {
+        var suite = cellules
+          .filter(function (c) {
+            return c.ratio >= 0.12 && c.ratio < 0.60 && !estDateSeulePdf_(c.texte);
+          })
+          .map(function (c) { return c.texte; })
+          .join(' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        if (suite && !/RELEVE DE COMPTE|Date Nature|Hello bank|RIB\s*:|P\.\s*\d+\//i.test(suite)) {
+          courant.details = (courant.details + ' ' + suite).replace(/\s+/g, ' ').trim();
+        }
+      }
+    });
+
+    if (courant) resultats.push(finaliserOperationPdf(courant));
+
+    return resultats.filter(function (o) {
+      var details = String(o.details || '').trim();
+      return details &&
+        !estDateSeulePdf_(details) &&
+        !/^SOLDE|^TOTAL DES OPERATIONS/i.test(details);
+    });
+  };
+
+  function verifierLotPdfAvantImport_() {
+    var operations = (window.sprint0809 && sprint0809.pdfOperations) || [];
+    var invalides = operations.filter(function (o) {
+      var details = String(o && o.details || '').trim();
+      return !details || estDateSeulePdf_(details);
+    });
+    if (invalides.length) {
+      throw new Error(
+        'Import PDF refusé : ' + invalides.length +
+        ' opération(s) ont un libellé bancaire vide ou réduit à une date. Relancez l’analyse avec le parseur corrigé.'
+      );
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     setTimeout(retirerAncienMoisBudgetaire, 0);
     setTimeout(retirerAncienMoisBudgetaire, 500);
@@ -20,11 +121,12 @@
     event.stopPropagation();
 
     var status = document.getElementById('pdf-status');
-    if (status) status.textContent = 'Import du relevé en cours…';
     bouton.disabled = true;
     bouton.textContent = 'Import en cours…';
 
     try {
+      verifierLotPdfAvantImport_();
+      if (status) status.textContent = 'Import du relevé analysé en cours…';
       confirmerImportPdf();
     } catch (e) {
       bouton.disabled = false;
