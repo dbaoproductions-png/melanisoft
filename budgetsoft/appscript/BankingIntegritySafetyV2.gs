@@ -1,4 +1,4 @@
-const BANKING_SAFETY_V2='2.4';
+const BANKING_SAFETY_V2='2.5';
 
 function restaurerOperationsDepuisSauvegardeV2(nom){
   const ss=SpreadsheetApp.getActiveSpreadsheet(),src=ss.getSheetByName(String(nom||'')),dst=ss.getSheetByName('Operations');
@@ -19,7 +19,10 @@ function estRecurrenceV23_(o){return /\[RECURRENCE:/i.test(String(o.commentaire|
 function dateJourV23_(v){return isoJourBanque_(v||'');}
 function empreinteExacteV23_(o){return [dateJourV23_(o.date_comptable||o.date),centimesBanque_(o.montant),normaliserTexteBanqueFiable_(o.libelle_bancaire||o.libelle)].join('|');}
 function identiteProcheV23_(a,b){const x=normaliserTexteBanqueFiable_(a||''),y=normaliserTexteBanqueFiable_(b||'');if(!x||!y)return false;if(x.includes(y)||y.includes(x))return true;const ax=x.split(' ').filter(w=>w.length>=4),ay=new Set(y.split(' ').filter(w=>w.length>=4));let n=0;ax.forEach(w=>{if(ay.has(w))n++;});return n>=2;}
-function preparerFluxV23_(lignes,compte){return(lignes||[]).map(x=>normaliserEntreeBancaire_(Object.assign({},x,{compte:x.compte||compte}),'flux')).filter(x=>x.compte&&Number.isFinite(x.montant)&&x.date_comptable);}
+// normaliserEntreeBancaire_ conserve l'architecture commune, mais son fallback historique
+// remplit date_achat avec date_comptable. Pour le flux V3, on restaure explicitement le vide
+// lorsque la source n'a fourni aucune vraie date d'achat.
+function preparerFluxV23_(lignes,compte){return(lignes||[]).map(x=>{const avaitAchat=!!x.date_achat;const n=normaliserEntreeBancaire_(Object.assign({},x,{compte:x.compte||compte}),'flux');if(!avaitAchat){n.date_achat='';n.date=n.date_comptable;}return n;}).filter(x=>x.compte&&Number.isFinite(x.montant)&&x.date_comptable);}
 
 function planifierSnapshotV23_(incoming,ops,compte){
   const existants=ops.filter(o=>String(o.compte)===String(compte)),groupIn={},groupEx={};
@@ -49,11 +52,11 @@ function importerFluxBancaireControleV2(lignes,compte){
     const supprimer=new Set(p.absorbees.map(x=>String(x.placeholder.id)).concat(p.orphelines.map(x=>String(x.id))));
     const matchById=new Map(p.matches.map(m=>[String(m.o.id),m]));
     const nouveaux=[];
-    const out=ops.filter(o=>!supprimer.has(String(o.id))).map(o=>{const m=matchById.get(String(o.id));if(!m)return o;const n=m.n,comment=[String(o.commentaire||''),String(n.commentaire||'')].filter(Boolean).join(' ');return Object.assign({},o,{date:n.date,date_comptable:n.date_comptable,date_achat:n.date_achat,libelle_bancaire:n.libelle_bancaire,marchand_normalise:n.marchand_normalise,carte_fin:n.carte_fin,source_bancaire:'flux',statut_bancaire:'provisoire',commentaire:comment,modifie_le:new Date()});});
-    p.nouvelles.forEach(a=>{const now=new Date(),n=a.n,nouveau=Object.assign({id:Utilities.getUuid(),categorie:'',commentaire:'',cree_le:now,modifie_le:now},n);nouveau.cle_rapprochement=cleBanqueFiable_(nouveau,1,1);out.push(nouveau);nouveaux.push(nouveau.id);});
+    const out=ops.filter(o=>!supprimer.has(String(o.id))).map(o=>{const m=matchById.get(String(o.id));if(!m)return o;const n=m.n,comment=[String(o.commentaire||''),String(n.commentaire||'')].filter(Boolean).join(' ');const maj=Object.assign({},o,{date:n.date,date_comptable:n.date_comptable,date_achat:n.date_achat,libelle:n.libelle||o.libelle,libelle_bancaire:n.libelle_bancaire,marchand_normalise:n.marchand_normalise,carte_fin:n.carte_fin,source_bancaire:'flux',statut_bancaire:'provisoire',commentaire:comment,modifie_le:new Date()});maj.cle_rapprochement=cleTransactionUnique_(maj);return maj;});
+    p.nouvelles.forEach(a=>{const now=new Date(),n=a.n,nouveau=Object.assign({id:Utilities.getUuid(),categorie:'',commentaire:'',cree_le:now,modifie_le:now},n);nouveau.cle_rapprochement=cleTransactionUnique_(nouveau);out.push(nouveau);nouveaux.push(nouveau.id);});
     const vals=out.map(o=>serialiserOpBancaire_(o,headers));f.clearContents();f.getRange(1,1,1,headers.length).setValues([headers]);if(vals.length)f.getRange(2,1,vals.length,headers.length).setValues(vals);SpreadsheetApp.flush();
-    const apres=checksumOperationsBanque_(lireOperationsBancaires_());const attendu=avant.nombre-p.absorbees.length-p.orphelines.length+p.nouvelles.length;
-    if(apres.nombre!==attendu||apres.ids!==apres.nombre){f.clearContents();const bv=backup.getDataRange().getValues();f.getRange(1,1,bv.length,bv[0].length).setValues(bv);SpreadsheetApp.flush();throw new Error('Contrôle après écriture échoué ; restauration automatique effectuée.');}
+    const apresOps=lireOperationsBancaires_(),apres=checksumOperationsBanque_(apresOps),attendu=avant.nombre-p.absorbees.length-p.orphelines.length+p.nouvelles.length;const cles=apresOps.map(o=>String(o.cle_rapprochement||'').trim()).filter(Boolean);
+    if(apres.nombre!==attendu||apres.ids!==apres.nombre||cles.length!==new Set(cles).size){f.clearContents();const bv=backup.getDataRange().getValues();f.getRange(1,1,bv.length,bv[0].length).setValues(bv);SpreadsheetApp.flush();throw new Error('Contrôle après écriture échoué ; restauration automatique effectuée.');}
     return{bloque:false,recues:incoming.length,remplacees:p.matches.length,creees:p.nouvelles.length,placeholdersSupprimes:p.absorbees.length,orphelinesSupprimees:p.orphelines.length,controle:ctl,sauvegarde:backup.getName(),totalApres:apres.nombre};
   }finally{lock.releaseLock();}
 }
