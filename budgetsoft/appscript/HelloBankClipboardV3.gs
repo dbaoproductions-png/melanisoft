@@ -1,4 +1,4 @@
-const HELLOBANK_CLIPBOARD_V3='3.3';
+const HELLOBANK_CLIPBOARD_V3='3.4';
 
 function hb3Date_(s){
   const m=String(s||'').match(/(\d{2})\/(\d{2})\/(\d{4})/);if(!m)return'';
@@ -14,12 +14,8 @@ function hb3Montant_(s){
 }
 function hb3Ignorer_(s){return !s||/^cat[ée]gorie\s*libell[ée]\s*montant(?:\s*pointage)?$/i.test(s)||/^(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\b/i.test(s);}
 
-// N reste volontairement le texte bancaire original. Ces fonctions ne servent
-// qu'à construire les champs dérivés C/O/P sans altérer la donnée source.
 function hb3CarteFin_(texte){
   const s=String(texte||'');
-  // Hello bank peut écrire : "carte 4609xxxxxxxx8938" ou "4609********8938".
-  // On prend toujours les 4 derniers chiffres après le masque, jamais le préfixe.
   const m=s.match(/\b(?:CARTE|CARD)\s+\d{0,8}[Xx*]{4,}(\d{4})\b/i)||s.match(/\b\d{0,8}[Xx*]{4,}(\d{4})\b/);
   return m?m[1]:'';
 }
@@ -61,6 +57,9 @@ function hb3LibelleLisible_(texte,contrepartie){
   return joli||(typeof titreLibelle==='function'?titreLibelle(brut):brut);
 }
 
+// Le parseur V3 historique reste disponible pour les variantes contenant explicitement
+// "Débitée/Créditée le". Le copier-coller courant de Hello bank est toutefois mieux
+// découpé par analyserCollerHelloBank(), qui sait gérer les en-têtes de jours.
 function hb3Parser_(texte,compte){
   const lines=String(texte||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean),out=[];let lib='';
   for(let i=0;i<lines.length;i++){
@@ -83,6 +82,21 @@ function hb3Parser_(texte,compte){
   }
   return out;
 }
+
+// Pont V3.4 : on conserve le découpage éprouvé du parseur HelloBankPaste (199 lignes
+// sur le jeu de test), puis on enrichit sans toucher au libellé bancaire brut N.
+function analyserCollerHelloBankEnrichiV34(texte,compte){
+  const legacy=analyserCollerHelloBank(texte,compte),lignes=(legacy.lignes||[]).map(x=>{
+    const brut=String(x.libelle||'').trim();
+    const dc=String(x.date||'');
+    const da=String(x.dateAchat||'')||isoJourBanque_(hb3Achat_(brut));
+    const cp=hb3Contrepartie_(brut),carte=hb3CarteFin_(brut);
+    const signed=String(x.type||'').toLowerCase()==='depense'?-Math.abs(Number(x.montant||0)):Math.abs(Number(x.montant||0));
+    return {date:da||dc,date_comptable:dc,date_achat:da||'',libelle:hb3LibelleLisible_(brut,cp),libelle_bancaire:brut,marchand_normalise:cp,carte_fin:carte,montant:signed,type:signed<0?'depense':'revenu',compte:String(compte||''),source_bancaire:'flux',statut_bancaire:'provisoire'};
+  });
+  return {version:HELLOBANK_CLIPBOARD_V3,lignes:lignes,total:lignes.length,legacy:{total:legacy.total,importables:legacy.importables,doublons:legacy.doublons,avantReleve:legacy.avantReleve}};
+}
+
 function hb3Identity_(o){
   const amount=centimesBanque_(o.montant),achat=isoJourBanque_(o.date_achat||o.date),carte=String(o.carte_fin||''),march=normaliserTexteBanqueFiable_(o.marchand_normalise||hb3Contrepartie_(o.libelle_bancaire||o.libelle)).replace(/\s/g,'').slice(0,60);
   if(carte)return ['CB',String(o.compte||''),achat,amount,carte,march].join('|');
@@ -90,40 +104,19 @@ function hb3Identity_(o){
   return ['OP',String(o.compte||''),isoJourBanque_(o.date_comptable||o.date),amount,raw].join('|');
 }
 
-// Répare après écriture les seuls champs dérivés du flux. C'est volontaire :
-// libelle_bancaire (N), montant et dates comptables ne sont jamais réécrits depuis
-// une version normalisée. Q reçoit l'ID pour être unique même entre opérations identiques.
 function hb3ReparerEnrichissementFlux_(lignes,compte){
   const signatures={};
-  (lignes||[]).forEach(o=>{
-    const k=[isoJourBanque_(o.date_comptable||o.date),centimesBanque_(o.montant),normaliserTexteBanqueFiable_(o.libelle_bancaire||o.libelle)].join('|');
-    signatures[k]=(signatures[k]||0)+1;
-  });
-  const f=SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Operations'),headers=assurerColonnesBancaires_(),ops=lireOperationsBancaires_();
-  let n=0;
+  (lignes||[]).forEach(o=>{const k=[isoJourBanque_(o.date_comptable||o.date),centimesBanque_(o.montant),normaliserTexteBanqueFiable_(o.libelle_bancaire||o.libelle)].join('|');signatures[k]=(signatures[k]||0)+1;});
+  const f=SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Operations'),headers=assurerColonnesBancaires_(),ops=lireOperationsBancaires_();let n=0;
   ops.forEach(o=>{
     if(String(o.compte||'')!==String(compte||''))return;
     if(String(o.source_bancaire||'').toLowerCase()!=='flux'||String(o.statut_bancaire||'').toLowerCase()!=='provisoire')return;
-    const k=[isoJourBanque_(o.date_comptable||o.date),centimesBanque_(o.montant),normaliserTexteBanqueFiable_(o.libelle_bancaire||o.libelle)].join('|');
-    if(!signatures[k])return;
-    const brut=String(o.libelle_bancaire||'').trim();
-    const da=hb3Achat_(brut)||'';
-    const cp=hb3Contrepartie_(brut);
-    o.date_achat=da;
-    o.date=da||o.date_comptable||o.date;
-    o.carte_fin=hb3CarteFin_(brut);
-    o.marchand_normalise=cp;
-    o.libelle=hb3LibelleLisible_(brut,cp);
-    if(typeof cleTransactionUnique_==='function')o.cle_rapprochement=cleTransactionUnique_(o);
-    else o.cle_rapprochement=cleBanqueFiable_(o,1,1)+'|ID:'+String(o.id||Utilities.getUuid());
-    n++;
+    const k=[isoJourBanque_(o.date_comptable||o.date),centimesBanque_(o.montant),normaliserTexteBanqueFiable_(o.libelle_bancaire||o.libelle)].join('|');if(!signatures[k])return;
+    const brut=String(o.libelle_bancaire||'').trim(),da=hb3Achat_(brut)||'',cp=hb3Contrepartie_(brut);
+    o.date_achat=da;o.date=da||o.date_comptable||o.date;o.carte_fin=hb3CarteFin_(brut);o.marchand_normalise=cp;o.libelle=hb3LibelleLisible_(brut,cp);
+    if(typeof cleTransactionUnique_==='function')o.cle_rapprochement=cleTransactionUnique_(o);else o.cle_rapprochement=cleBanqueFiable_(o,1,1)+'|ID:'+String(o.id||Utilities.getUuid());n++;
   });
-  if(n){
-    const values=ops.map(o=>serialiserOpBancaire_(o,headers));
-    f.clearContents();f.getRange(1,1,1,headers.length).setValues([headers]);
-    if(values.length)f.getRange(2,1,values.length,headers.length).setValues(values);
-    f.setFrozenRows(1);SpreadsheetApp.flush();
-  }
+  if(n){const values=ops.map(o=>serialiserOpBancaire_(o,headers));f.clearContents();f.getRange(1,1,1,headers.length).setValues([headers]);if(values.length)f.getRange(2,1,values.length,headers.length).setValues(values);f.setFrozenRows(1);SpreadsheetApp.flush();}
   return n;
 }
 
@@ -138,7 +131,6 @@ function importerCollerHelloBankV3(texte,compte){
   const sim=analyserCollerHelloBankV3(texte,compte);if(!sim.pret)throw new Error('Import refusé : simulation vide ou ambiguë.');
   const lignes=hb3Parser_(texte,compte),ops=lireOperationsBancaires_().map(enrichirDepuisCommentaireBanque_),existing=new Map();ops.filter(o=>String(o.compte||'')===String(compte||'')).forEach(o=>existing.set(hb3Identity_(o),o));
   const nouvelles=lignes.filter(n=>!existing.has(hb3Identity_(n)));if(!nouvelles.length)return{ok:true,creees:0,existantes:lignes.length,message:'Import idempotent : aucune nouvelle opération.'};
-  const res=upsertOperationsBancairesTransactionnel(nouvelles,compte,'flux',null);
-  const enrichies=hb3ReparerEnrichissementFlux_(nouvelles,compte);
+  const res=upsertOperationsBancairesTransactionnel(nouvelles,compte,'flux',null),enrichies=hb3ReparerEnrichissementFlux_(nouvelles,compte);
   return Object.assign({ok:true,existantes:sim.existantes,enrichies:enrichies},res);
 }
