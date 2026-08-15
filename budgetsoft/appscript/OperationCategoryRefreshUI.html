@@ -1,0 +1,36 @@
+<script>
+(function(){
+  function categoriesActives_(categories){return (categories||[]).filter(c=>typeof estActif==='function'?estActif(c.actif):String(c.actif).toLowerCase()!=='false');}
+  function rafraichirCategoriesPuis_(suite){
+    google.script.run
+      .withSuccessHandler(categories=>{
+        if(typeof state!=='undefined'&&state.data)state.data.Categories=categories||[];
+        if(typeof remplirCategories==='function'){
+          remplirCategories('operation-category',categoriesActives_(categories));
+          if(document.getElementById('fixed-charge-category'))remplirCategories('fixed-charge-category',categoriesActives_(categories));
+        }
+        suite();
+      })
+      .withFailureHandler(()=>suite())
+      .lireTable('Categories');
+  }
+
+  document.addEventListener('DOMContentLoaded',()=>{
+    const ouvrirOperationOriginal=window.ouvrirOperation;
+    if(typeof ouvrirOperationOriginal==='function'&&!window.__budgetsoftOperationCategoryRefresh){
+      window.__budgetsoftOperationCategoryRefresh=true;
+      window.ouvrirOperation=function(operation){
+        rafraichirCategoriesPuis_(()=>ouvrirOperationOriginal(operation));
+      };
+    }
+
+    const ouvrirChargeFixeOriginal=window.ouvrirChargeFixe;
+    if(typeof ouvrirChargeFixeOriginal==='function'&&!window.__budgetsoftFixedCategoryRefresh){
+      window.__budgetsoftFixedCategoryRefresh=true;
+      window.ouvrirChargeFixe=function(charge){
+        rafraichirCategoriesPuis_(()=>ouvrirChargeFixeOriginal(charge));
+      };
+    }
+  });
+})();
+</script>
