@@ -1,0 +1,32 @@
+<script>
+(function(){
+  function esc_(v){return typeof echapper==='function'?echapper(String(v??'')):String(v??'').replace(/[&<>"']/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));}
+  function label_(k){return ({id:'ID',date:'Date',type:'Type',libelle:'Libellé',montant:'Montant',compte:'Compte',categorie:'Catégorie',commentaire:'Commentaire',libelle_bancaire:'Libellé bancaire',marchand_normalise:'Marchand normalisé',source:'Source',date_comptable:'Date comptable',date_operation:'Date opération',reference:'Référence'})[k]||String(k).replace(/_/g,' ').replace(/^./,c=>c.toUpperCase());}
+  function trouverOperation_(id){return (state.data?.Operations||[]).find(o=>String(o.id)===String(id));}
+  function idLigne_(row){const btn=row.querySelector('button[onclick*="modifierOperation"]');if(!btn)return'';const m=String(btn.getAttribute('onclick')||'').match(/modifierOperation\(['"]([^'"]+)['"]\)/);return m?m[1]:'';}
+  function contenuDetails_(o){
+    const ordre=['id','date','date_comptable','date_operation','type','libelle','libelle_bancaire','marchand_normalise','montant','compte','categorie','commentaire','source','reference'];
+    const deja=new Set();const champs=[];
+    ordre.concat(Object.keys(o||{})).forEach(k=>{if(deja.has(k))return;deja.add(k);const v=o?.[k];if(v===undefined||v===null||String(v).trim()==='')return;let valeur=v;if(k==='montant'&&typeof money!=='undefined')valeur=money.format(Number(v)||0);else if(k.includes('date')&&typeof formaterDate==='function')valeur=formaterDate(v);champs.push(`<div style="min-width:180px"><strong style="display:block;font-size:11px;text-transform:uppercase;opacity:.65;margin-bottom:3px">${esc_(label_(k))}</strong><span style="white-space:pre-wrap;overflow-wrap:anywhere">${esc_(valeur)}</span></div>`);});
+    return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px 18px;padding:14px 16px;background:#fafafa;border-top:1px solid var(--line)">${champs.join('')}</div>`;
+  }
+  function basculerDetails_(row,id,btn){
+    const suivant=row.nextElementSibling;if(suivant?.classList.contains('operation-details-row')){suivant.remove();btn.setAttribute('aria-expanded','false');btn.textContent='i';return;}
+    document.querySelectorAll('.operation-details-row').forEach(x=>x.remove());document.querySelectorAll('.operation-info-button').forEach(x=>{x.setAttribute('aria-expanded','false');x.textContent='i';});
+    const o=trouverOperation_(id);if(!o)return;
+    const detail=document.createElement('div');detail.className='operation-details-row';detail.innerHTML=contenuDetails_(o);row.after(detail);btn.setAttribute('aria-expanded','true');btn.textContent='×';
+  }
+  function decorerDetails_(){
+    const zone=document.getElementById('operations-list');if(!zone||zone.classList.contains('empty-state'))return;
+    [...zone.querySelectorAll('.operation-table-row:not(.header)')].forEach(row=>{
+      if(row.querySelector('.operation-info-button'))return;const id=idLigne_(row);if(!id)return;
+      const cible=row.querySelector('.operation-label')||row.children[1];if(!cible)return;
+      const btn=document.createElement('button');btn.type='button';btn.className='operation-info-button';btn.textContent='i';btn.title='Afficher toutes les informations de cette opération';btn.setAttribute('aria-expanded','false');btn.style.cssText='flex:0 0 auto;width:20px;height:20px;border:1px solid #b8c1cc;border-radius:50%;background:#fff;font:700 12px/18px Georgia,serif;cursor:pointer;padding:0;margin-right:7px;color:#475569';
+      btn.onclick=e=>{e.preventDefault();e.stopPropagation();basculerDetails_(row,id,btn);};
+      cible.style.display='flex';cible.style.alignItems='flex-start';cible.insertBefore(btn,cible.firstChild);
+    });
+  }
+  const ancien=window.rendreListeOperations;if(typeof ancien==='function'&&!ancien.__avecDetailsOperation){const wrapper=function(){const r=ancien.apply(this,arguments);setTimeout(decorerDetails_,0);return r;};wrapper.__avecDetailsOperation=true;window.rendreListeOperations=wrapper;}
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(decorerDetails_,400));setTimeout(decorerDetails_,700);
+})();
+</script>
