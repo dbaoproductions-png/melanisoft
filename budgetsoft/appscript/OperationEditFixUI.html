@@ -1,0 +1,56 @@
+<script>
+(function(){
+  function actif_(v){return typeof estActif==='function'?estActif(v):v!==false&&String(v).toLowerCase()!=='false'&&String(v)!=='0';}
+  function valeurDate_(v){return typeof dateInput==='function'?dateInput(v):'';}
+  function n_(v){return typeof nombre==='function'?nombre(v):(Number(v)||0);}
+  function remplirComptes_(operation){
+    const s=document.getElementById('operation-account');if(!s)return;
+    const comptes=((state&&state.data&&state.data.Comptes)||[]).filter(c=>actif_(c.actif));
+    s.innerHTML='<option value="">Choisir un compte</option>'+comptes.map(c=>`<option value="${typeof echapperAttribut==='function'?echapperAttribut(c.id):c.id}">${typeof echapper==='function'?echapper(c.nom):c.nom}</option>`).join('');
+    s.value=operation?.compte||'';
+  }
+  function remplirCategories_(cats,operation){
+    const s=document.getElementById('operation-category');if(!s)return;
+    const groupes={depense:'Dépenses',revenu:'Revenus',tresorerie:'Mouvements de trésorerie',epargne:'Épargne'};
+    let html='<option value="">Sans catégorie</option>';
+    Object.keys(groupes).forEach(t=>{
+      const xs=(cats||[]).filter(c=>actif_(c.actif)&&String(c.type||'').toLowerCase()===t).sort((a,b)=>String(a.nom||'').localeCompare(String(b.nom||''),'fr'));
+      if(!xs.length)return;
+      html+=`<optgroup label="${groupes[t]}">`+xs.map(c=>`<option value="${typeof echapperAttribut==='function'?echapperAttribut(c.nom):c.nom}">${typeof echapper==='function'?echapper(c.nom):c.nom}</option>`).join('')+'</optgroup>';
+    });
+    s.innerHTML=html;
+    s.value=operation?.categorie||'';
+  }
+  function typeAffiche_(operation,cats){
+    const cat=(cats||[]).find(c=>String(c.nom||'')===String(operation?.categorie||''));
+    if(cat&&String(cat.type||'').toLowerCase()==='tresorerie')return n_(operation?.montant)<0?'tresorerie_sortie':'tresorerie_entree';
+    return String(operation?.type||'').toLowerCase()==='revenu'?'revenu':'depense';
+  }
+  function afficher_(operation,cats){
+    const form=document.getElementById('operation-form');if(!form)return;
+    form.reset();
+    remplirComptes_(operation);remplirCategories_(cats,operation);
+    document.getElementById('operation-id').value=operation?.id||'';
+    document.getElementById('operation-date').value=valeurDate_(operation?.date);
+    document.getElementById('operation-type').value=typeAffiche_(operation,cats);
+    document.getElementById('operation-label').value=operation?.libelle||'';
+    document.getElementById('operation-amount').value=Math.abs(n_(operation?.montant)).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2});
+    document.getElementById('operation-account').value=operation?.compte||'';
+    document.getElementById('operation-category').value=operation?.categorie||'';
+    document.getElementById('operation-comment').value=String(operation?.commentaire||'').replace(/\s*\[RECURRENCE:[^\]]+\]/g,'');
+    document.getElementById('operation-modal-title').textContent=operation?'Modifier l’opération':'Ajouter une opération';
+    document.getElementById('operation-modal').classList.remove('hidden');
+    setTimeout(()=>document.getElementById('operation-label')?.focus(),50);
+  }
+  function ouvrirFiable_(operation){
+    const secours=((state&&state.data&&state.data.Categories)||[]);
+    google.script.run.withSuccessHandler(cats=>{const fraiches=Array.isArray(cats)?cats:secours;if(state?.data)state.data.Categories=fraiches;afficher_(operation,fraiches);}).withFailureHandler(()=>afficher_(operation,secours)).lireTable('Categories');
+  }
+  window.modifierOperation=function(id){
+    const ops=((state&&state.data&&state.data.Operations)||[]),operation=ops.find(o=>String(o.id)===String(id));
+    if(!operation){if(typeof afficherErreur==='function')afficherErreur('Opération introuvable dans les données chargées.');return;}
+    ouvrirFiable_(operation);
+  };
+  window.ouvrirOperation=function(operation){ouvrirFiable_(operation||null);};
+})();
+</script>
