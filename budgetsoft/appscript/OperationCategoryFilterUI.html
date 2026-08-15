@@ -1,0 +1,56 @@
+<script>
+(function(){
+  function categoriesActives_(){return (state.data?.Categories||[]).filter(c=>typeof estActif==='function'?estActif(c.actif):String(c.actif).toLowerCase()!=='false');}
+  function installerFiltreCategorie_(){
+    const zone=document.querySelector('#operations .filters');
+    if(!zone)return;
+    let select=document.getElementById('operation-category-filter');
+    if(!select){
+      select=document.createElement('select');
+      select.id='operation-category-filter';
+      select.innerHTML='<option value="">Toutes les catégories</option>';
+      const type=document.getElementById('operation-type-filter');
+      if(type&&type.nextSibling)zone.insertBefore(select,type.nextSibling);else zone.appendChild(select);
+      select.addEventListener('input',()=>{if(typeof rendreListeOperations==='function')rendreListeOperations();});
+    }
+    const valeur=select.value;
+    const groupes={depense:'Dépenses',revenu:'Revenus',tresorerie:'Mouvements de trésorerie',epargne:'Épargne'};
+    let html='<option value="">Toutes les catégories</option><option value="__sans__">Sans catégorie</option>';
+    Object.keys(groupes).forEach(t=>{
+      const xs=categoriesActives_().filter(c=>String(c.type||'').toLowerCase()===t).sort((a,b)=>String(a.nom).localeCompare(String(b.nom),'fr'));
+      if(!xs.length)return;
+      html+=`<optgroup label="${groupes[t]}">`+xs.map(c=>`<option value="${typeof echapperAttribut==='function'?echapperAttribut(c.nom):c.nom}">${typeof echapper==='function'?echapper(c.nom):c.nom}</option>`).join('')+'</optgroup>';
+    });
+    select.innerHTML=html;
+    if([...select.options].some(o=>o.value===valeur))select.value=valeur;
+  }
+  function brancherFiltrage_(){
+    const ancienne=window.operationsFiltrees;
+    if(typeof ancienne!=='function'||ancienne.__avecFiltreCategorie)return;
+    const wrapper=function(){
+      const base=ancienne.apply(this,arguments);
+      const select=document.getElementById('operation-category-filter');
+      const categorie=select?select.value:'';
+      if(!categorie)return base;
+      if(categorie==='__sans__')return base.filter(o=>!String(o.categorie||'').trim());
+      return base.filter(o=>String(o.categorie||'').trim()===categorie);
+    };
+    wrapper.__avecFiltreCategorie=true;
+    window.operationsFiltrees=wrapper;
+  }
+  const ancienRendreOperationsPage=window.rendreOperationsPage;
+  if(typeof ancienRendreOperationsPage==='function'&&!ancienRendreOperationsPage.__avecFiltreCategorie){
+    const wrapper=function(){const r=ancienRendreOperationsPage.apply(this,arguments);installerFiltreCategorie_();return r;};
+    wrapper.__avecFiltreCategorie=true;
+    window.rendreOperationsPage=wrapper;
+  }
+  const ancienReset=window.reinitialiserFiltresOperations;
+  if(typeof ancienReset==='function'&&!ancienReset.__avecFiltreCategorie){
+    const wrapper=function(){const s=document.getElementById('operation-category-filter');if(s)s.value='';return ancienReset.apply(this,arguments);};
+    wrapper.__avecFiltreCategorie=true;
+    window.reinitialiserFiltresOperations=wrapper;
+  }
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>{installerFiltreCategorie_();brancherFiltrage_();},150));
+  setTimeout(()=>{installerFiltreCategorie_();brancherFiltrage_();},300);
+})();
+</script>
