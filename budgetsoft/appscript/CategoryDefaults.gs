@@ -20,6 +20,7 @@ const CATEGORIES_BUDGETSOFT_CIBLES_ = [
   {nom:'Voitures',type:'depense'},
   {nom:'Achats personnels',type:'depense'},
   {nom:'Énergies',type:'depense'},
+  {nom:'Dépenses diverses',type:'depense'},
 
   // Revenus
   {nom:'Salaires',type:'revenu'},
@@ -37,6 +38,7 @@ const CATEGORIES_BUDGETSOFT_CIBLES_ = [
   // Mouvements qui modifient la trésorerie mais ne constituent pas un revenu/dépense économique
   {nom:'Crédits de trésorerie',type:'tresorerie'},
   {nom:'Virements internes',type:'tresorerie'},
+  {nom:'Remboursements',type:'tresorerie'},
 
   // Épargne
   {nom:'Épargne',type:'epargne'}
@@ -50,6 +52,10 @@ const RENOMMAGES_CATEGORIES_BUDGETSOFT_ = {
   'frais bancaires':'Frais bancaires',
   'salaire':'Salaires',
   'divers':'Revenus divers',
+  'dépense diverse':'Dépenses diverses',
+  'depense diverse':'Dépenses diverses',
+  'dépenses diverses':'Dépenses diverses',
+  'depenses diverses':'Dépenses diverses',
   'bricolage':'Maison / entretien',
   'voiture':'Voitures',
   'énergie':'Énergies',
