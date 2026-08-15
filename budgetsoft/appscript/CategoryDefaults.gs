@@ -8,6 +8,7 @@ const CATEGORIES_BUDGETSOFT_CIBLES_ = [
   {nom:'Restaurants / sorties',type:'depense'},
   {nom:'Voyages / vacances',type:'depense'},
   {nom:'Maison / entretien',type:'depense'},
+  {nom:'Frais professionnels',type:'depense'},
   {nom:'Crédits',type:'depense'},
   {nom:'Assurances',type:'depense'},
   {nom:'Télécommunications',type:'depense'},
@@ -106,7 +107,6 @@ function installerArchitectureCategoriesBudgetSoft(){
   const renommages={};
   Object.entries(RENOMMAGES_CATEGORIES_BUDGETSOFT_).forEach(([ancien,nouveau])=>renommages[ancien]=nouveau);
 
-  // Les références sont migrées avant la déduplication du référentiel.
   const referencesModifiees=migrerReferencesCategoriesBudgetSoft_(renommages);
 
   const parNom=new Map();
@@ -159,7 +159,6 @@ function installerArchitectureCategoriesBudgetSoft(){
   };
 }
 
-// Compatibilité avec le nom de fonction utilisé lors de l'étape précédente.
 function installerCategoriesRevenusBudgetSoft(){
   return installerArchitectureCategoriesBudgetSoft();
 }
