@@ -15,6 +15,38 @@ function chargerEngagementsBancairesFuturs() {
   function dateComptable_(o) {
     return new Date(o.date_comptable || o.date);
   }
+  function montant_(o) {
+    return Math.abs(Number(o && o.montant || 0));
+  }
+  function compteCompatible_(charge, op) {
+    const a=String(charge && charge.compte || '').trim(), b=String(op && op.compte || '').trim();
+    return !a || !b || a===b;
+  }
+  function scoreCouverture_(charge, op) {
+    if (!compteCompatible_(charge, op)) return -1;
+    const mc=montant_(charge), mo=montant_(op);
+    if (!Number.isFinite(mc)||!Number.isFinite(mo)||mc<=0||mo<=0) return -1;
+    const tolerance=Math.max(Number(charge.tolerance||0.5),Math.max(1,mc*0.05));
+    const ecart=Math.abs(mc-mo);
+    if (ecart>tolerance) return -1;
+    const d=dateComptable_(op);
+    if (isNaN(d)) return -1;
+    const jour=Number(charge.jour_execution||charge.jour||charge.jour_echeance||d.getDate());
+    const ecartJours=Math.abs(d.getDate()-Math.max(1,Math.min(31,jour)));
+    const texteCharge=normaliserTexteChargeFixe_([charge.libelle,charge.libelle_bancaire].join(' '));
+    const brut=typeof brutAudit_==='function'?brutAudit_(op):[op.libelle_bancaire,op.libelle,op.commentaire].filter(Boolean).join(' ');
+    const texteOp=normaliserTexteChargeFixe_(brut);
+    const motifCharge=typeof extraireMotifStableBanque_==='function'?extraireMotifStableBanque_(charge.libelle_bancaire||charge.libelle):texteCharge;
+    const motifOp=typeof extraireMotifStableBanque_==='function'?extraireMotifStableBanque_(brut):texteOp;
+    let lib=0;
+    if(motifCharge&&motifOp&&motifCharge===motifOp)lib=60;
+    else if(motifCharge&&texteOp.includes(motifCharge))lib=50;
+    else if(texteCharge&&texteOp&&(texteOp.includes(texteCharge)||texteCharge.includes(texteOp)))lib=40;
+    else lib=similariteMotsChargeFixe_(texteCharge,texteOp)*40;
+    const scoreMontant=25;
+    const scoreDate=ecartJours<=3?15:ecartJours<=7?10:ecartJours<=12?5:0;
+    return Math.round(Math.min(100,lib+scoreMontant+scoreDate));
+  }
 
   const futurs = operations.filter(o => {
     const d = dateComptable_(o);
@@ -26,20 +58,22 @@ function chargerEngagementsBancairesFuturs() {
   const charges = lireTable_('Charges_fixes').filter(x => convertirBooleen_(x.actif));
   const chargesCouvertes = new Set();
   const operationsUtilisees = new Set();
+  const rapprochements=[];
 
-  // Une opération future annoncée par la banque remplace la prévision de charge fixe
-  // si le moteur de rapprochement lui attribue un score suffisamment sûr.
+  // Ici on compare avec la date comptable réelle de l'opération future.
+  // Le moteur historique de rapprochement utilise operation.date, qui peut être la date d'achat
+  // ou une autre date métier et n'est donc pas suffisamment fiable pour les engagements futurs.
   charges.forEach(charge => {
     let meilleur = null;
     prelevements.forEach(op => {
       if (operationsUtilisees.has(String(op.id))) return;
-      let r = null;
-      try { r = evaluerRapprochementChargeFixe_(charge, op); } catch (e) { r = null; }
-      if (r && Number(r.score) >= 75 && (!meilleur || Number(r.score) > Number(meilleur.score))) meilleur = Object.assign({operation:op}, r);
+      const score=scoreCouverture_(charge,op);
+      if(score>=65&&(!meilleur||score>meilleur.score))meilleur={operation:op,score:score};
     });
     if (meilleur) {
       chargesCouvertes.add(String(charge.id));
       operationsUtilisees.add(String(meilleur.operation.id));
+      rapprochements.push({chargeId:String(charge.id),operationId:String(meilleur.operation.id),score:meilleur.score,montant:montant_(meilleur.operation),libelle:String(meilleur.operation.libelle_bancaire||meilleur.operation.libelle||'')});
     }
   });
 
@@ -62,6 +96,7 @@ function chargerEngagementsBancairesFuturs() {
     chargesFixesRestantes: sommeCharges,
     nombreChargesFixesRestantes: chargesRestantes.length,
     chargesFixesCouvertes: chargesCouvertes.size,
+    rapprochements:rapprochements,
     detailPrelevements: prelevements.slice().sort((a,b)=>dateComptable_(a)-dateComptable_(b)).map(o => ({
       id:String(o.id || ''),
       date:dateComptable_(o).toISOString(),
