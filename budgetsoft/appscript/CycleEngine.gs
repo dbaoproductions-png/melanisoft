@@ -117,8 +117,30 @@ function appliquerDateDebitDiffere(operation) {
 }
 
 function importerOperationsHelloBankCycle(operations, compte, meta) {
+  // Barrière serveur : aucun import ni aucune écriture de solde/historique ne
+  // démarre tant que le relevé n'est pas certifié cohérent.
+  const controleReleve = controlerReleveAvantImport(meta, compte);
+  if (!controleReleve || controleReleve.ok !== true) {
+    throw new Error(controleReleve && controleReleve.message
+      ? controleReleve.message
+      : 'Import bloqué : le contrôle du relevé bancaire a échoué.');
+  }
+
   const transformees = (operations || []).map(appliquerDateDebitDiffere);
   const resultat = importerOperationsHelloBank(transformees, compte);
+  resultat.controleReleve = controleReleve;
+
+  // importerOperationsHelloBank peut signaler des erreurs ligne par ligne sans
+  // lever d'exception. Dans ce cas les éventuelles lignes écrites restent à
+  // traiter, mais le relevé n'est surtout pas certifié ni mémorisé comme point
+  // de solde fiable.
+  const erreursImport = Array.isArray(resultat.erreurs) ? resultat.erreurs : [];
+  if (erreursImport.length) {
+    resultat.controleReleveEnregistre = false;
+    resultat.controleReleveMessage = 'Contrôle non enregistré : import partiel (' + erreursImport.length + ' erreur(s)).';
+    return resultat;
+  }
+
   if (meta) {
     const historique = lireHistoriqueReleves_(compte);
     const releve = { dateOuverture: meta.dateOuverture || null, soldeOuverture: Number.isFinite(Number(meta.soldeOuverture)) ? Number(meta.soldeOuverture) : null, dateCloture: meta.dateCloture || null, soldeCloture: Number.isFinite(Number(meta.soldeCloture)) ? Number(meta.soldeCloture) : null, importeLe: new Date().toISOString() };
@@ -129,6 +151,14 @@ function importerOperationsHelloBankCycle(operations, compte, meta) {
     if (precedent && precedent.soldeCloture != null && releve.soldeOuverture != null) { const ecart = arrondirCycle_(Number(releve.soldeOuverture) - Number(precedent.soldeCloture)); resultat.continuite = Math.abs(ecart) < 0.01; resultat.ecartContinuite = ecart; } else resultat.continuite = null;
     historique.push(releve); historique.sort((a,b)=>new Date(a.dateOuverture || a.dateCloture || 0)-new Date(b.dateOuverture || b.dateCloture || 0)); enregistrerHistoriqueReleves_(compte, historique);
   }
+
+  enregistrerControleReleve(controleReleve, {
+    source:'HELLOBANK_PDF',
+    importees:Number(resultat.importees || 0),
+    doublons:Number(resultat.doublons || 0),
+    rapprochees:Number(resultat.rapprochees || 0)
+  });
+  resultat.controleReleveEnregistre = true;
   return resultat;
 }
 
