@@ -12,12 +12,8 @@ function chargerEngagementsBancairesFuturs() {
   function estCarte_(o) {
     return !!String(o.carte_fin || '').trim() || /\b(?:paiement\s+)?cb\b/i.test(String(o.libelle_bancaire || o.libelle || ''));
   }
-  function dateComptable_(o) {
-    return new Date(o.date_comptable || o.date);
-  }
-  function montant_(o) {
-    return Math.abs(Number(o && o.montant || 0));
-  }
+  function dateComptable_(o) { return new Date(o.date_comptable || o.date); }
+  function montant_(o) { return Math.abs(Number(o && o.montant || 0)); }
   function compteCompatible_(charge, op) {
     const a=String(charge && charge.compte || '').trim(), b=String(op && op.compte || '').trim();
     return !a || !b || a===b;
@@ -38,14 +34,17 @@ function chargerEngagementsBancairesFuturs() {
     const texteOp=normaliserTexteChargeFixe_(brut);
     const motifCharge=typeof extraireMotifStableBanque_==='function'?extraireMotifStableBanque_(charge.libelle_bancaire||charge.libelle):texteCharge;
     const motifOp=typeof extraireMotifStableBanque_==='function'?extraireMotifStableBanque_(brut):texteOp;
-    let lib=0;
-    if(motifCharge&&motifOp&&motifCharge===motifOp)lib=60;
-    else if(motifCharge&&texteOp.includes(motifCharge))lib=50;
-    else if(texteCharge&&texteOp&&(texteOp.includes(texteCharge)||texteCharge.includes(texteOp)))lib=40;
-    else lib=similariteMotsChargeFixe_(texteCharge,texteOp)*40;
-    const scoreMontant=25;
-    const scoreDate=ecartJours<=3?15:ecartJours<=7?10:ecartJours<=12?5:0;
-    return Math.round(Math.min(100,lib+scoreMontant+scoreDate));
+    let scoreLibelle=0;
+    if(motifCharge&&motifOp&&motifCharge===motifOp)scoreLibelle=25;
+    else if(motifCharge&&texteOp.includes(motifCharge))scoreLibelle=22;
+    else if(texteCharge&&texteOp&&(texteOp.includes(texteCharge)||texteCharge.includes(texteOp)))scoreLibelle=20;
+    else scoreLibelle=similariteMotsChargeFixe_(texteCharge,texteOp)*20;
+
+    // Pour une charge fixe déjà connue, montant + compte + échéance constituent la preuve principale.
+    // Les libellés du flux Hello bank! peuvent être fortement tronqués (ex. « impo », « audiens sante p »).
+    const scoreMontant=ecart<=Math.max(0.01,Number(charge.tolerance||0.5))?50:35;
+    const scoreDate=ecartJours<=3?25:ecartJours<=7?15:ecartJours<=12?5:0;
+    return Math.round(Math.min(100,scoreLibelle+scoreMontant+scoreDate));
   }
 
   const futurs = operations.filter(o => {
@@ -60,15 +59,12 @@ function chargerEngagementsBancairesFuturs() {
   const operationsUtilisees = new Set();
   const rapprochements=[];
 
-  // Ici on compare avec la date comptable réelle de l'opération future.
-  // Le moteur historique de rapprochement utilise operation.date, qui peut être la date d'achat
-  // ou une autre date métier et n'est donc pas suffisamment fiable pour les engagements futurs.
   charges.forEach(charge => {
     let meilleur = null;
     prelevements.forEach(op => {
       if (operationsUtilisees.has(String(op.id))) return;
       const score=scoreCouverture_(charge,op);
-      if(score>=65&&(!meilleur||score>meilleur.score))meilleur={operation:op,score:score};
+      if(score>=75&&(!meilleur||score>meilleur.score))meilleur={operation:op,score:score};
     });
     if (meilleur) {
       chargesCouvertes.add(String(charge.id));
