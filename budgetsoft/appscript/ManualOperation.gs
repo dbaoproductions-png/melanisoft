@@ -23,5 +23,12 @@ function enregistrerOperationManuelle(operation){
     if(p>=0)f.getRange(p+2,qCol).setValue('MANUEL|ID:'+saved.id);
     saved.cle_rapprochement='MANUEL|ID:'+saved.id;
   }
+  // Si l'opération correspond à une charge fixe connue, les données de référence
+  // suivent automatiquement la correction (montant, catégorie, compte, libellé),
+  // sans toucher à la fréquence ni au calendrier prévisionnel.
+  if(existante&&typeof synchroniserChargeFixeDepuisOperation_==='function'){
+    const synchro=synchroniserChargeFixeDepuisOperation_(saved);
+    if(synchro&&synchro.charge)saved.charge_fixe_id=synchro.charge.id;
+  }
   return saved;
 }
