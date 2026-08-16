@@ -3,15 +3,17 @@
   function euro_(v){return typeof money!=='undefined'?money.format(Number(v||0)):Number(v||0).toFixed(2)+' €';}
   function date_(v){if(!v)return'—';const d=new Date(v);return isNaN(d)?'—':d.toLocaleDateString('fr-FR');}
   function esc_(s){return typeof echapper==='function'?echapper(String(s??'')):String(s??'');}
+  function taux_(v){const n=Number(v||0);return n?`${n.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})} %`:'—';}
 
   function rendreCredits_(data){
     const zone=document.getElementById('generic-view');if(!zone)return;
     const lignes=(data&&data.lignes)||[], credits=lignes.filter(x=>x.table==='Credits');
     zone.innerHTML=`
-      <div class="section-toolbar"><p class="section-intro">Suivi des crédits : capital restant dû, mensualité, échéances restantes et date de fin.</p><button class="secondary-button" id="apply-casden-amendment">Appliquer l’avenant CASDEN 2026</button></div>
+      <div class="section-toolbar"><p class="section-intro">Suivi des crédits : capital restant dû, mensualité, TAEG, échéances restantes et date de fin.</p><div class="toolbar-buttons"><button class="secondary-button" id="add-cofidis-credit">Ajouter Cofidis</button><button class="secondary-button" id="apply-casden-amendment">Appliquer l’avenant CASDEN 2026</button></div></div>
       <div class="cards">
         <article class="card metric-card"><span>Capital restant dû</span><strong>${euro_(data?.capitalRestant||0)}</strong><small>Crédits et dettes suivis</small></article>
         <article class="card metric-card"><span>Mensualités</span><strong>${euro_(data?.mensualites||0)}</strong><small>Montant mensuel de référence</small></article>
+        <article class="card metric-card"><span>TAEG moyen pondéré</span><strong>${taux_(data?.tauxPondere||0)}</strong><small>Pondéré par le capital restant</small></article>
         <article class="card metric-card"><span>Échéances restantes</span><strong>${Number(data?.echeancesRestantes||0)}</strong><small>Crédits renseignés</small></article>
       </div>
       <article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Financements</span><h2>Crédits en cours</h2></div><button type="button" class="secondary-button" id="refresh-credits">Actualiser</button></div>
@@ -19,6 +21,8 @@
           <div class="account-row">
             <div class="account-main"><div class="account-icon">💼</div><div><strong>${esc_(c.nom||'Crédit')}</strong><small>${c.numero_pret?'N° '+esc_(c.numero_pret):''}</small></div></div>
             <div class="account-type"><strong>${euro_(c.capital_restant)}</strong><small>Capital restant</small></div>
+            <div class="account-type"><strong>${euro_(c.mensualite)}</strong><small>Mensualité</small></div>
+            <div class="account-type"><strong>${taux_(c.taux)}</strong><small>TAEG</small></div>
             <div class="account-type"><strong>${Number(c.echeances_restantes||0)||'—'}</strong><small>Échéances restantes</small></div>
             <div class="account-type"><strong>${date_(c.prochaine_echeance)}</strong><small>Prochaine échéance</small></div>
             <div class="account-type"><strong>${date_(c.date_fin)}</strong><small>Fin du crédit</small></div>
@@ -27,10 +31,15 @@
         `).join(''):'<div class="empty-state">Aucun crédit enregistré.</div>'}</div>
       </article>`;
     document.getElementById('refresh-credits')?.addEventListener('click',chargerCreditsUI_);
+    document.getElementById('add-cofidis-credit')?.addEventListener('click',()=>{
+      if(!confirm('Ajouter ou mettre à jour le crédit Cofidis avec les informations communiquées ?'))return;
+      const b=document.getElementById('add-cofidis-credit');b.disabled=true;
+      google.script.run.withSuccessHandler(()=>{b.disabled=false;if(typeof afficherToast==='function')afficherToast('Crédit Cofidis ajouté.');else alert('Crédit Cofidis ajouté.');chargerCreditsUI_();}).withFailureHandler(err=>{b.disabled=false;if(typeof afficherErreur==='function')afficherErreur(err.message||String(err));}).ajouterCreditCofidis2026();
+    });
     document.getElementById('apply-casden-amendment')?.addEventListener('click',()=>{
       if(!confirm('Appliquer le report CASDEN des échéances du 04/09/2026 et du 04/10/2026 et mettre à jour les données du crédit ?'))return;
       const b=document.getElementById('apply-casden-amendment');b.disabled=true;
-      google.script.run.withSuccessHandler(res=>{b.disabled=false;if(typeof afficherToast==='function')afficherToast('Avenant CASDEN appliqué.');else alert('Avenant CASDEN appliqué.');chargerCreditsUI_();if(typeof chargerDashboardTroisCadres==='function')setTimeout(chargerDashboardTroisCadres,200);}).withFailureHandler(err=>{b.disabled=false;if(typeof afficherErreur==='function')afficherErreur(err.message||String(err));}).appliquerAvenantCasden2026();
+      google.script.run.withSuccessHandler(()=>{b.disabled=false;if(typeof afficherToast==='function')afficherToast('Avenant CASDEN appliqué.');else alert('Avenant CASDEN appliqué.');chargerCreditsUI_();if(typeof chargerDashboardTroisCadres==='function')setTimeout(chargerDashboardTroisCadres,200);}).withFailureHandler(err=>{b.disabled=false;if(typeof afficherErreur==='function')afficherErreur(err.message||String(err));}).appliquerAvenantCasden2026();
     });
   }
 
@@ -39,13 +48,8 @@
     google.script.run.withSuccessHandler(rendreCredits_).withFailureHandler(err=>{if(typeof afficherErreur==='function')afficherErreur(err.message||String(err));}).chargerCreditsEtDettes();
   }
   window.chargerCreditsUI=chargerCreditsUI_;
-
-  // PlanningUI intercepte la navigation en phase de capture et appelait encore
-  // son ancien écran Credits. On remplace explicitement ce module par le nouveau.
   window.budgetsoftModules=window.budgetsoftModules||{};
   window.budgetsoftModules.credits=chargerCreditsUI_;
-
-  // Compatibilité pour les appels programmatiques à ouvrirVue('credits').
   const base=window.ouvrirVue;
   if(typeof base==='function')window.ouvrirVue=function(view){const r=base.apply(this,arguments);if(view==='credits')chargerCreditsUI_();return r;};
 })();
