@@ -1,0 +1,203 @@
+const CONTROLES_RELEVES_SHEET = 'Controles_releves';
+const CONTROLES_RELEVES_HEADERS = [
+  'id','controle_le','source','compte',
+  'date_ouverture','solde_ouverture','total_debits','total_credits',
+  'date_cloture','solde_cloture','solde_calcule','ecart_arithmetique',
+  'date_cloture_precedente','solde_cloture_precedent','ecart_continuite',
+  'totaux_operations_ok','arithmetique_ok','continuite_ok','ok','message'
+];
+
+function arrondirControleReleve_(valeur) {
+  return Math.round(Number(valeur || 0) * 100) / 100;
+}
+
+function nombreControleReleve_(valeur) {
+  if (valeur === null || valeur === undefined || valeur === '') return null;
+  const n = Number(String(valeur).replace(/\s/g, '').replace(',', '.'));
+  return Number.isFinite(n) ? n : null;
+}
+
+function dateControleReleve_(valeur) {
+  if (!valeur) return null;
+  const d = valeur instanceof Date ? new Date(valeur.getTime()) : new Date(valeur);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function isoControleReleve_(valeur) {
+  const d = dateControleReleve_(valeur);
+  return d ? d.toISOString() : null;
+}
+
+function precedentControleReleve_(compte, dateOuverture) {
+  if (!compte || !dateOuverture) return null;
+  const ouverture = dateControleReleve_(dateOuverture);
+  if (!ouverture) return null;
+
+  // L'historique existant reste la source de vérité de continuité. Il est
+  // alimenté uniquement après les imports PDF réussis dans CycleEngine.gs.
+  const historique = typeof lireHistoriqueReleves_ === 'function'
+    ? lireHistoriqueReleves_(compte)
+    : [];
+
+  return (historique || [])
+    .filter(function(r) {
+      const d = dateControleReleve_(r && r.dateCloture);
+      return d && d.getTime() <= ouverture.getTime() && nombreControleReleve_(r.soldeCloture) !== null;
+    })
+    .sort(function(a, b) {
+      return dateControleReleve_(b.dateCloture) - dateControleReleve_(a.dateCloture);
+    })[0] || null;
+}
+
+/**
+ * Barrière de sécurité d'un relevé Hello bank! avant toute écriture.
+ *
+ * Vérifie :
+ * - présence des métadonnées bancaires nécessaires ;
+ * - concordance des totaux des opérations extraites avec ceux du PDF ;
+ * - identité ouverture - débits + crédits = clôture au centime ;
+ * - continuité avec le dernier relevé déjà importé lorsque celui-ci existe.
+ */
+function controlerReleveAvantImport(meta, compte) {
+  const m = meta || {};
+  const ouverture = nombreControleReleve_(m.soldeOuverture);
+  const cloture = nombreControleReleve_(m.soldeCloture);
+  const debits = nombreControleReleve_(m.totalDebits);
+  const credits = nombreControleReleve_(m.totalCredits);
+  const dateOuverture = isoControleReleve_(m.dateOuverture);
+  const dateCloture = isoControleReleve_(m.dateCloture);
+  const controleTotaux = m.controle || {};
+  const manquants = [];
+
+  if (!compte) manquants.push('compte');
+  if (!dateOuverture) manquants.push('date d’ouverture');
+  if (ouverture === null) manquants.push('solde d’ouverture');
+  if (debits === null) manquants.push('total des débits');
+  if (credits === null) manquants.push('total des crédits');
+  if (!dateCloture) manquants.push('date de clôture');
+  if (cloture === null) manquants.push('solde de clôture');
+
+  if (manquants.length) {
+    return {
+      ok:false,
+      bloquant:true,
+      compte:String(compte || ''),
+      message:'Import bloqué : contrôle du relevé impossible (' + manquants.join(', ') + ' manquant(s)).'
+    };
+  }
+
+  const soldeCalcule = arrondirControleReleve_(ouverture - debits + credits);
+  const ecartArithmetique = arrondirControleReleve_(soldeCalcule - cloture);
+  const arithmetiqueOk = Math.abs(ecartArithmetique) < 0.01;
+
+  // Le navigateur calcule ces valeurs à partir des opérations réellement
+  // extraites. On exige la certification si le contrôle est disponible.
+  const totauxOperationsOk = controleTotaux.verifiable === true
+    ? controleTotaux.conforme === true
+    : false;
+
+  const precedent = precedentControleReleve_(compte, dateOuverture);
+  const soldePrecedent = precedent ? nombreControleReleve_(precedent.soldeCloture) : null;
+  const datePrecedente = precedent ? isoControleReleve_(precedent.dateCloture) : null;
+  const ecartContinuite = soldePrecedent === null
+    ? null
+    : arrondirControleReleve_(ouverture - soldePrecedent);
+  const continuiteOk = ecartContinuite === null ? null : Math.abs(ecartContinuite) < 0.01;
+
+  const ok = totauxOperationsOk && arithmetiqueOk && continuiteOk !== false;
+  const motifs = [];
+  if (!totauxOperationsOk) motifs.push('les totaux des opérations extraites ne sont pas certifiés conformes au PDF');
+  if (!arithmetiqueOk) motifs.push('ouverture − débits + crédits ne retombe pas sur le solde de clôture');
+  if (continuiteOk === false) motifs.push('le solde d’ouverture ne correspond pas au solde de clôture du relevé précédent');
+
+  return {
+    id:Utilities.getUuid(),
+    controle_le:new Date().toISOString(),
+    source:'HELLOBANK_PDF',
+    compte:String(compte),
+    date_ouverture:dateOuverture,
+    solde_ouverture:arrondirControleReleve_(ouverture),
+    total_debits:arrondirControleReleve_(debits),
+    total_credits:arrondirControleReleve_(credits),
+    date_cloture:dateCloture,
+    solde_cloture:arrondirControleReleve_(cloture),
+    solde_calcule:soldeCalcule,
+    ecart_arithmetique:ecartArithmetique,
+    date_cloture_precedente:datePrecedente,
+    solde_cloture_precedent:soldePrecedent === null ? null : arrondirControleReleve_(soldePrecedent),
+    ecart_continuite:ecartContinuite,
+    totaux_operations_ok:totauxOperationsOk,
+    arithmetique_ok:arithmetiqueOk,
+    continuite_ok:continuiteOk,
+    ok:ok,
+    bloquant:!ok,
+    message:ok
+      ? 'Relevé contrôlé : totaux, arithmétique et continuité conformes.'
+      : 'Import bloqué : ' + motifs.join(' ; ') + '.'
+  };
+}
+
+function normaliserEnteteControleReleve_(texte) {
+  return String(texte || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+function initialiserControlesReleves_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let feuille = ss.getSheetByName(CONTROLES_RELEVES_SHEET);
+  if (!feuille) feuille = ss.insertSheet(CONTROLES_RELEVES_SHEET);
+  if (feuille.getLastRow() === 0) {
+    feuille.getRange(1, 1, 1, CONTROLES_RELEVES_HEADERS.length).setValues([CONTROLES_RELEVES_HEADERS]);
+    feuille.setFrozenRows(1);
+    feuille.getRange(1, 1, 1, CONTROLES_RELEVES_HEADERS.length)
+      .setFontWeight('bold').setBackground('#147d64').setFontColor('#ffffff');
+  }
+  return feuille;
+}
+
+/**
+ * Journalise un contrôle uniquement lorsqu'il est explicitement conforme.
+ * Accepte un libellé source simple ou un objet de contexte d'import.
+ */
+function enregistrerControleReleve(controle, source) {
+  if (!controle || controle.ok !== true) {
+    throw new Error('Un contrôle de relevé non conforme ne peut pas être enregistré comme réussi.');
+  }
+
+  const feuille = initialiserControlesReleves_();
+  const derniereColonne = Math.max(1, feuille.getLastColumn());
+  const entetesBrutes = feuille.getRange(1, 1, 1, derniereColonne).getValues()[0];
+  const entetes = entetesBrutes.map(normaliserEnteteControleReleve_);
+  const contexte = source && typeof source === 'object' ? source : {};
+  const sourceTexte = typeof source === 'string'
+    ? source
+    : String(contexte.source || contexte.type || controle.source || 'HELLOBANK_PDF');
+
+  const donnees = Object.assign({}, controle, {
+    source:sourceTexte,
+    controle_le:controle.controle_le || new Date().toISOString()
+  });
+
+  const alias = {
+    dateouverture:'date_ouverture', soldeouverture:'solde_ouverture',
+    totaldebits:'total_debits', totalcredits:'total_credits',
+    datecloture:'date_cloture', soldecloture:'solde_cloture',
+    soldecalcule:'solde_calcule', ecartarithmetique:'ecart_arithmetique',
+    ecartcontinuite:'ecart_continuite', continuiteok:'continuite_ok',
+    arithmetiqueok:'arithmetique_ok', totauxoperationsok:'totaux_operations_ok',
+    controlele:'controle_le'
+  };
+
+  const ligne = entetes.map(function(entete) {
+    const cleCompacte = entete.replace(/_/g, '');
+    const cle = Object.prototype.hasOwnProperty.call(donnees, entete)
+      ? entete
+      : (alias[cleCompacte] || entete);
+    const valeur = donnees[cle];
+    return valeur === null || valeur === undefined ? '' : valeur;
+  });
+
+  feuille.getRange(feuille.getLastRow() + 1, 1, 1, ligne.length).setValues([ligne]);
+  return donnees;
+}
