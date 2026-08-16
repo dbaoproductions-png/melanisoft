@@ -16,7 +16,7 @@ const TABLES = {
   Budget: ['id', 'mois', 'type', 'poste', 'prevu', 'reel'],
   Actifs: ['id', 'nom', 'type', 'valeur', 'date_valeur'],
   Dettes: ['id', 'nom', 'capital_restant', 'mensualite', 'taux', 'date_fin'],
-  Credits: ['id', 'nom', 'capital_restant', 'mensualite', 'taux', 'date_debut', 'date_fin'],
+  Credits: ['id', 'nom', 'capital_restant', 'mensualite', 'taux', 'date_debut', 'date_fin', 'numero_pret', 'prochaine_echeance', 'echeances_restantes', 'commentaire'],
   Objectifs: ['id', 'nom', 'montant_cible', 'montant_actuel', 'date_cible', 'statut'],
   Categories: ['id', 'nom', 'type', 'couleur', 'actif']
 };
@@ -78,16 +78,13 @@ function ajouterDonneesInitiales_(){
   if(categories.getLastRow()>1){
     const valeurs=categories.getRange(2,1,categories.getLastRow()-1,TABLES.Categories.length).getValues();
     let banqueExiste=valeurs.some(r=>String(r[1]||'').trim().toLowerCase()==='banque');
-    for(let i=valeurs.length-1;i>=0;i--){if(String(valeurs[i][1]||'').trim().toLowerCase()==='frais bancaires'){if(!banqueExiste){categories.getRange(i+2,2).setValue('Banque');banqueExiste=true;}else categories.deleteRow(i+2);}}
+    for(let i=valeurs.length-1;i>=0;i--){if(String(valeurs[i][1]||'').trim().toLowerCase()==='banque'){if(banqueExiste){categories.deleteRow(i+2);banqueExiste=false;}}}
   }
-  const operations=ss.getSheetByName('Operations');
-  if(operations&&operations.getLastRow()>1){const colCategorie=TABLES.Operations.indexOf('categorie')+1,plage=operations.getRange(2,colCategorie,operations.getLastRow()-1,1),vals=plage.getValues();let change=false;vals.forEach(r=>{if(String(r[0]||'').trim().toLowerCase()==='frais bancaires'){r[0]='Banque';change=true;}});if(change)plage.setValues(vals);}
 }
-
-function mettreAJourVersion_(){const f=SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Parametres');if(!f)return;const valeurs=f.getLastRow()>1?f.getRange(2,1,f.getLastRow()-1,2).getValues():[],index=valeurs.findIndex(r=>String(r[0])==='version');if(index>=0)f.getRange(index+2,2).setValue(BUDGETSOFT_VERSION);else f.appendRow(['version',BUDGETSOFT_VERSION]);}
-function verifierInitialisation_(){const ss=SpreadsheetApp.getActiveSpreadsheet(),manquantes=Object.keys(TABLES).filter(n=>!ss.getSheetByName(n));if(manquantes.length)throw new Error('BudgetSoft n’est pas initialisé. Onglets manquants : '+manquantes.join(', '));}
+function mettreAJourVersion_(){const ss=SpreadsheetApp.getActiveSpreadsheet();let f=ss.getSheetByName('Parametres');if(!f)return;const lignes=lireTable_('Parametres');const existant=lignes.find(x=>String(x.cle)==='version');if(existant)enregistrerLigne('Parametres',{cle:'version',valeur:BUDGETSOFT_VERSION});else f.appendRow(['version',BUDGETSOFT_VERSION]);}
+function convertirNombre_(v){if(typeof v==='number')return Number.isFinite(v)?v:0;const n=Number(String(v??'').replace(/\s/g,'').replace(',','.'));return Number.isFinite(n)?n:0;}
+function convertirBooleen_(v){return v!==false&&String(v).toLowerCase()!=='false'&&String(v)!=='0'&&String(v).toLowerCase()!=='non';}
+function serialiserValeur_(v){if(v instanceof Date)return v.toISOString();return v;}
+function normaliserValeur_(v){return v instanceof Date?v:v==null?'':v;}
 function verifierNomTable_(nom){if(!TABLES[nom])throw new Error('Table inconnue : '+nom);}
-function convertirNombre_(valeur){if(typeof valeur==='number')return valeur;const n=Number(String(valeur==null?'':valeur).replace(/\s/g,'').replace(',','.'));return isNaN(n)?0:n;}
-function convertirBooleen_(valeur){if(typeof valeur==='boolean')return valeur;return ['true','1','oui','yes','actif'].includes(String(valeur||'').trim().toLowerCase());}
-function normaliserValeur_(valeur){if(valeur instanceof Date)return valeur;if(typeof valeur==='boolean'||typeof valeur==='number')return valeur;if(valeur==null)return'';return String(valeur);}
-function serialiserValeur_(valeur){if(valeur instanceof Date)return Utilities.formatDate(valeur,Session.getScriptTimeZone(),"yyyy-MM-dd'T'HH:mm:ss");return valeur;}
+function verifierInitialisation_(){const ss=SpreadsheetApp.getActiveSpreadsheet();if(!ss.getSheetByName('Parametres'))throw new Error('BudgetSoft n’est pas initialisé.');}
