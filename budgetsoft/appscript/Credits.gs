@@ -1,4 +1,4 @@
-const CREDITS_VERSION = '1.4';
+const CREDITS_VERSION = '1.5';
 
 function assurerColonnesCredits_(){
   const f=SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Credits');
@@ -99,8 +99,29 @@ function appliquerAvenantCasden2026(){
     prochaine_echeance:'2026-11-04',
     date_fin:'2032-11-04',
     echeances_restantes:73,
-    commentaire:'Avenant du 22/07/2026 : échéances du 04/09/2026 et du 04/10/2026 suspendues ; reprise le 04/11/2026. Dernière échéance 311,20 € le 04/11/2032.'
+    commentaire:'TAEG de référence : 0,94 %. Avenant du 22/07/2026 : échéances du 04/09/2026 et du 04/10/2026 suspendues ; reprise le 04/11/2026. Dernière échéance 311,20 € le 04/11/2032.'
   });
   enregistrerLigne('Credits',credit);
   return {ok:true,chargeFixeId:charge.id,credit:enrichirCredit_(credit),ajustements:['2026-09-04','2026-10-04']};
+}
+
+function ajouterCreditCofidis2026(){
+  verifierInitialisation_();
+  assurerColonnesCredits_();
+  const credits=lireTable_('Credits');
+  let credit=credits.find(c=>/cofidis/i.test(String(c.nom||''))||String(c.numero_pret||'').includes('289.2'));
+  credit=Object.assign({},credit||{}, {
+    nom:(credit&&credit.nom)||'Cofidis',
+    numero_pret:'289.2XX.XXX.715.00',
+    capital_restant:8948.04,
+    mensualite:207.89,
+    taux:4.70,
+    date_debut:'2026-01-06',
+    prochaine_echeance:'2026-09-01',
+    date_fin:'2031-01-01',
+    echeances_restantes:53,
+    commentaire:'TAEG fixe 4,70 %. Montant emprunté 10 000 €. Durée restante annoncée : 53 mois au 16/08/2026. Date de fin estimée au 01/01/2031 à partir de la prochaine échéance du 01/09/2026 ; à remplacer par la date contractuelle exacte si un échéancier détaillé est fourni.'
+  });
+  enregistrerLigne('Credits',credit);
+  return {ok:true,credit:enrichirCredit_(credit)};
 }
