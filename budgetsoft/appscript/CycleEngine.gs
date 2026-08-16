@@ -130,15 +130,19 @@ function importerOperationsHelloBankCycle(operations, compte, meta) {
   const resultat = importerOperationsHelloBank(transformees, compte);
   resultat.controleReleve = controleReleve;
 
-  // importerOperationsHelloBank peut signaler des erreurs ligne par ligne sans
-  // lever d'exception. Dans ce cas les éventuelles lignes écrites restent à
-  // traiter, mais le relevé n'est surtout pas certifié ni mémorisé comme point
-  // de solde fiable.
+  // Le moteur d'import peut signaler des erreurs ligne par ligne après avoir
+  // écrit les lignes valides. Ce cas ne doit jamais être présenté comme un
+  // succès : le solde et le contrôle du relevé restent volontairement non
+  // certifiés tant que toutes les lignes ne passent pas.
   const erreursImport = Array.isArray(resultat.erreurs) ? resultat.erreurs : [];
   if (erreursImport.length) {
-    resultat.controleReleveEnregistre = false;
-    resultat.controleReleveMessage = 'Contrôle non enregistré : import partiel (' + erreursImport.length + ' erreur(s)).';
-    return resultat;
+    const apercu = erreursImport.slice(0, 8).join(' | ');
+    const suite = erreursImport.length > 8 ? ' | … +' + (erreursImport.length - 8) + ' autre(s)' : '';
+    throw new Error(
+      'Import PDF partiel : ' + erreursImport.length + ' ligne(s) rejetée(s). ' +
+      'Les lignes valides ont pu être écrites, mais le relevé n’a pas été certifié et son solde n’a pas été mémorisé. ' +
+      'Détail : ' + apercu + suite
+    );
   }
 
   if (meta) {
