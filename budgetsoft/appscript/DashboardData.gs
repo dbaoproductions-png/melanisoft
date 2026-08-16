@@ -1,53 +1,29 @@
-// DashboardData v1.2 — solde bancaire sur date_comptable + CB différées sérialisables
+// DashboardData v1.3 — solde bancaire réel = compte courant uniquement, sur date_comptable
 function chargerDashboardReel() {
   verifierInitialisation_();
-  const operations=lireOperationsBancaires_().map(enrichirDepuisCommentaireBanque_),comptes=lireTable_('Comptes').filter(c=>convertirBooleen_(c.actif)),parametres=Object.fromEntries(lireTable_('Parametres').map(p=>[String(p.cle),p.valeur])),maintenant=new Date();
+  const operations=lireOperationsBancaires_().map(enrichirDepuisCommentaireBanque_),tousComptes=lireTable_('Comptes').filter(c=>convertirBooleen_(c.actif)),parametres=Object.fromEntries(lireTable_('Parametres').map(p=>[String(p.cle),p.valeur])),maintenant=new Date();
+  const estCompteCourant=c=>{const s=String((c.nom||'')+' '+(c.type||'')+' '+(c.nature||'')).toLowerCase();return /compte\s*(joint|courant)|compte\s*cheques?|courant/.test(s)&&!/livret|epargne|épargne/.test(s);};
+  const comptes=tousComptes.filter(estCompteCourant);
+  const comptesSolde=comptes.length?comptes:tousComptes.filter(c=>!/livret|epargne|épargne/i.test(String((c.nom||'')+' '+(c.type||''))));
   const estAuto=o=>/\[RECURRENCE:[^\]]+\]/.test(String(o&&o.commentaire||''));
   const opsReelles=operations.filter(o=>!estAuto(o));
-
-  // Deux horloges distinctes et volontaires :
-  // - dateAnalyse = date d'achat / date BudgetSoft pour l'analyse des dépenses ;
-  // - dateComptable = date de débit/crédit réelle pour le solde bancaire.
-  const valides=opsReelles.map(o=>{
-    const dateAnalyse=new Date(o.date_achat||o.date);
-    const dateComptable=new Date(o.date_comptable||o.date);
-    return{brut:o,date:dateAnalyse,dateAnalyse,dateComptable,libelle:String(o.libelle||''),compte:String(o.compte||''),type:String(o.type||'').toLowerCase(),montant:Math.abs(Number(o.montant||0))};
-  }).filter(o=>!isNaN(o.dateAnalyse)&&!isNaN(o.dateComptable)&&Number.isFinite(o.montant)&&o.montant>0&&o.dateComptable<=maintenant);
-
+  const valides=opsReelles.map(o=>{const dateAnalyse=new Date(o.date_achat||o.date),dateComptable=new Date(o.date_comptable||o.date);return{brut:o,date:dateAnalyse,dateAnalyse,dateComptable,libelle:String(o.libelle||''),compte:String(o.compte||''),type:String(o.type||'').toLowerCase(),montant:Math.abs(Number(o.montant||0))};}).filter(o=>!isNaN(o.dateAnalyse)&&!isNaN(o.dateComptable)&&Number.isFinite(o.montant)&&o.montant>0&&o.dateComptable<=maintenant);
   const datesReleves=Object.keys(parametres).filter(k=>k.indexOf('date_solde_releve_')===0).map(k=>new Date(parametres[k])).filter(d=>!isNaN(d));
   const dernierReleve=datesReleves.length?datesReleves.sort((a,b)=>b-a)[0]:null,derniereOp=valides.length?valides.slice().sort((a,b)=>b.dateComptable-a.dateComptable)[0].dateComptable:null;
   let reference=dateJourCycle_(dernierReleve&&derniereOp?(dernierReleve>derniereOp?dernierReleve:derniereOp):(dernierReleve||derniereOp||maintenant));
   let salaire=null;try{salaire=detecterSalairePrincipal_(opsReelles,12);}catch(e){}
   const jourRepli=Number(salaire&&salaire.jourMoyen)||Number(parametres.jour_debut_mois)||28;
   function periodePour(d){try{return calculerCycleDepuisSalaire_(d,opsReelles,jourRepli,salaire);}catch(e){const j=Math.max(1,Math.min(28,jourRepli)),x=new Date(d),deb=x.getDate()>=j?new Date(x.getFullYear(),x.getMonth(),j):new Date(x.getFullYear(),x.getMonth()-1,j),fin=new Date(new Date(deb.getFullYear(),deb.getMonth()+1,j).getTime()-1);return construirePeriodeCycle_(deb,fin,false);}}
-
-  // Les statistiques budgétaires restent fondées sur la date d'achat/analyse.
   function stats(p,lim){const deb=new Date(p.debut),fin=new Date(p.fin),borne=lim&&new Date(lim)<fin?new Date(lim):fin,ops=valides.filter(o=>o.dateAnalyse>=deb&&o.dateAnalyse<=borne),rev=ops.filter(o=>o.type==='revenu').reduce((s,o)=>s+o.montant,0),dep=ops.filter(o=>o.type==='depense').reduce((s,o)=>s+o.montant,0);return{revenus:arrondirCycle_(rev),depenses:arrondirCycle_(dep),epargne:arrondirCycle_(rev-dep),operations:ops.length};}
-
-  // Le solde bancaire est exclusivement reconstruit avec la date comptable.
   function soldeCompte(c,dateRef){const id=String(c.id),nom=String(c.nom||''),sp=parametres['solde_releve_'+id],dp=parametres['date_solde_releve_'+id]?new Date(parametres['date_solde_releve_'+id]):null,cor=o=>String(o.compte)===id||String(o.compte)===nom;if(sp!==undefined&&sp!==''&&dp&&!isNaN(dp)){const base=Number(String(sp).replace(',','.'));if(Number.isFinite(base)){const mv=valides.filter(o=>cor(o)&&o.dateComptable>dp&&o.dateComptable<=dateRef).reduce((s,o)=>s+(o.type==='depense'?-o.montant:o.montant),0);return{solde:arrondirCycle_(base+mv),date:dateRef>dp?dateRef:dp,fiable:true};}}const mv=valides.filter(o=>cor(o)&&o.dateComptable<=dateRef).reduce((s,o)=>s+(o.type==='depense'?-o.montant:o.montant),0);return{solde:arrondirCycle_(Number(c.solde_initial||0)+mv),date:dateRef,fiable:false};}
-  function soldeGlobal(dateRef){let total=0,fiable=false,dateMax=null;comptes.forEach(c=>{const r=soldeCompte(c,dateRef);total+=r.solde;fiable=fiable||r.fiable;if(r.date&&(!dateMax||r.date>dateMax))dateMax=r.date;});return{solde:arrondirCycle_(total),fiable,date:dateMax};}
+  function soldeGlobal(dateRef){let total=0,fiable=comptesSolde.length>0,dateMax=null;comptesSolde.forEach(c=>{const r=soldeCompte(c,dateRef);total+=r.solde;fiable=fiable&&r.fiable;if(r.date&&(!dateMax||r.date>dateMax))dateMax=r.date;});return{solde:arrondirCycle_(total),fiable,date:dateMax,comptes:comptesSolde.map(c=>String(c.nom||c.id))};}
   function v(c,noms,def){for(const n of noms){if(c[n]!==undefined&&c[n]!==null&&String(c[n]).trim()!=='')return c[n];}return def;}
   function fixes(apres,jusqua){const charges=lireTable_('Charges_fixes').filter(c=>convertirBooleen_(v(c,['actif','active','est_actif'],true))),deb=dateJourCycle_(apres),fin=dateJourCycle_(jusqua),items=[];charges.forEach(c=>{const freq=normaliserTexteCycle_(v(c,['frequence','periodicite','rythme'],'Mensuelle'));if(freq&&freq.indexOf('MENSUEL')<0)return;const j=Number(v(c,['jour_execution','jour','jour_echeance','jour_prelevement','jour_du_mois'],0)),m=Math.abs(Number(String(v(c,['montant','montant_attendu','montant_prevu','valeur'],0)).replace(',','.')));if(!j||!Number.isFinite(m)||m<=0)return;let d=new Date(deb.getFullYear(),deb.getMonth(),Math.min(31,j),12);if(d<=deb)d=new Date(deb.getFullYear(),deb.getMonth()+1,Math.min(31,j),12);if(d<=fin)items.push({id:String(c.id||''),libelle:String(v(c,['libelle','nom','intitule'],'Charge fixe')),montant:arrondirCycle_(m),date:d.toISOString()});});return items.sort((a,b)=>new Date(a.date)-new Date(b.date));}
-
-  // Les objets renvoyés au navigateur doivent être sérialisables : pas de Date ni d'opération brute.
-  function cbDifferees(debut,fin){
-    const a=dateJourCycle_(debut),b=dateJourCycle_(fin);
-    return operations.map(o=>{
-      const dateAchat=new Date(o.date_achat||o.date),dateDebit=new Date(o.date_comptable||o.date),montant=Math.abs(Number(o.montant||0));
-      const estCarte=!!String(o.carte_fin||'').trim()||/\b(?:paiement\s+)?cb\b/i.test(String(o.libelle_bancaire||o.libelle||''));
-      if(!estCarte||isNaN(dateDebit)||dateDebit<a||dateDebit>b||dateDebit<=reference||!Number.isFinite(montant)||montant<=0)return null;
-      return{id:String(o.id||''),dateAchat:isNaN(dateAchat)?null:dateAchat.toISOString(),dateDebit:dateDebit.toISOString(),montant:arrondirCycle_(montant),libelle:String(o.libelle_bancaire||o.libelle||'Carte différée'),carteFin:String(o.carte_fin||'')};
-    }).filter(Boolean);
-  }
-
+  function cbDifferees(debut,fin){const a=dateJourCycle_(debut),b=dateJourCycle_(fin);return operations.map(o=>{const dateAchat=new Date(o.date_achat||o.date),dateDebit=new Date(o.date_comptable||o.date),montant=Math.abs(Number(o.montant||0));const estCarte=!!String(o.carte_fin||'').trim()||/\b(?:paiement\s+)?cb\b/i.test(String(o.libelle_bancaire||o.libelle||''));if(!estCarte||isNaN(dateDebit)||dateDebit<a||dateDebit>b||dateDebit<=reference||!Number.isFinite(montant)||montant<=0)return null;return{id:String(o.id||''),dateAchat:isNaN(dateAchat)?null:dateAchat.toISOString(),dateDebit:dateDebit.toISOString(),montant:arrondirCycle_(montant),libelle:String(o.libelle_bancaire||o.libelle||'Carte différée'),carteFin:String(o.carte_fin||'')};}).filter(Boolean);}
   const courant=periodePour(reference),deb=dateJourCycle_(new Date(courant.debut)),fin=dateJourCycle_(new Date(courant.fin)),st=stats(courant,reference),duree=Math.max(1,ecartJoursCycle_(deb,fin)+1),jour=Math.max(1,Math.min(duree,ecartJoursCycle_(deb,reference)+1)),joursRestants=Math.max(0,ecartJoursCycle_(reference,fin));
   const solde=soldeGlobal(reference),fixesCourantes=fixes(reference,fin),totalFixes=arrondirCycle_(fixesCourantes.reduce((s,x)=>s+x.montant,0)),cbCourantes=cbDifferees(reference,fin),totalCb=arrondirCycle_(cbCourantes.reduce((s,x)=>s+x.montant,0)),disponible=solde.fiable?arrondirCycle_(solde.solde-totalFixes-totalCb):null,budgetJour=disponible!=null&&joursRestants>0?arrondirCycle_(disponible/joursRestants):disponible;
   const prochainDeb=new Date(fin);prochainDeb.setDate(prochainDeb.getDate()+1);const prochain=periodePour(prochainDeb),prochainFin=dateJourCycle_(new Date(prochain.fin)),fixesSuivantes=fixes(new Date(prochainDeb.getTime()-86400000),prochainFin),totalFixesSuiv=arrondirCycle_(fixesSuivantes.reduce((s,x)=>s+x.montant,0)),cbSuiv=cbDifferees(prochainDeb,prochainFin),totalCbSuiv=arrondirCycle_(cbSuiv.reduce((s,x)=>s+x.montant,0));
   const salairesHist=valides.filter(o=>o.type==='revenu'&&/MAIRIE DE TOULOUSE/i.test(o.libelle)).sort((a,b)=>a.dateAnalyse-b.dateAnalyse).slice(-6),salaireAttendu=salairesHist.length?arrondirCycle_(salairesHist.reduce((s,o)=>s+o.montant,0)/salairesHist.length):null,margeSuiv=salaireAttendu!=null?arrondirCycle_(salaireAttendu-totalFixesSuiv-totalCbSuiv):null;
   const finPrec=new Date(deb);finPrec.setDate(finPrec.getDate()-1);const prec=periodePour(finPrec);prec.fin=new Date(finPrec.getFullYear(),finPrec.getMonth(),finPrec.getDate(),23,59,59,999).toISOString();const stPrec=stats(prec,new Date(prec.fin));const lib=p=>p.libelle||new Date(p.debut).toLocaleDateString('fr-FR',{month:'long',year:'numeric'}).replace(/^./,c=>c.toUpperCase());
-  return{referenceImport:reference.toISOString(),salaire,
-    courtTerme:{libelle:lib(courant),debut:courant.debut,fin:courant.fin,jour,duree,joursRestants,dateReference:reference.toISOString(),soldeBancaire:solde.solde,dateSolde:solde.date?solde.date.toISOString():null,chargesFixes:totalFixes,nombreCharges:fixesCourantes.length,cbDifferees:totalCb,nombreCb:cbCourantes.length,disponible,budgetJour,epargne:st.epargne},
-    cycleSuivant:{libelle:lib(prochain),debut:prochain.debut,fin:prochain.fin,salaireAttendu,chargesFixes:totalFixesSuiv,nombreCharges:fixesSuivantes.length,cbDifferees:totalCbSuiv,nombreCb:cbSuiv.length,marge:margeSuiv,detailCb:cbSuiv.slice(0,8)},
-    cyclePrecedent:{libelle:lib(prec),debut:prec.debut,fin:prec.fin,revenus:stPrec.revenus,depenses:stPrec.depenses,epargne:stPrec.epargne,operations:stPrec.operations}}
+  return{referenceImport:reference.toISOString(),salaire,courtTerme:{libelle:lib(courant),debut:courant.debut,fin:courant.fin,jour,duree,joursRestants,dateReference:reference.toISOString(),soldeBancaire:solde.solde,dateSolde:solde.date?solde.date.toISOString():null,soldeFiable:solde.fiable,comptesSolde:solde.comptes,chargesFixes:totalFixes,nombreCharges:fixesCourantes.length,cbDifferees:totalCb,nombreCb:cbCourantes.length,disponible,budgetJour,epargne:st.epargne},cycleSuivant:{libelle:lib(prochain),debut:prochain.debut,fin:prochain.fin,salaireAttendu,chargesFixes:totalFixesSuiv,nombreCharges:fixesSuivantes.length,cbDifferees:totalCbSuiv,nombreCb:cbSuiv.length,marge:margeSuiv,detailCb:cbSuiv.slice(0,8)},cyclePrecedent:{libelle:lib(prec),debut:prec.debut,fin:prec.fin,revenus:stPrec.revenus,depenses:stPrec.depenses,epargne:stPrec.epargne,operations:stPrec.operations}};
 }
