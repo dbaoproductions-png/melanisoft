@@ -9,10 +9,11 @@
     const zone=document.getElementById('generic-view');if(!zone)return;
     const lignes=(data&&data.lignes)||[], credits=lignes.filter(x=>x.table==='Credits');
     zone.innerHTML=`
-      <div class="section-toolbar"><p class="section-intro">Suivi des crédits : capital restant dû, mensualité, TAEG, échéances restantes et date de fin.</p><div class="toolbar-buttons"><button class="secondary-button" id="add-cofidis-credit">Ajouter Cofidis</button><button class="secondary-button" id="apply-casden-amendment">Appliquer l’avenant CASDEN 2026</button></div></div>
+      <div class="section-toolbar"><p class="section-intro">Suivi des crédits : capital restant dû, mensualité, TAEG, coût restant, échéances restantes et date de fin.</p><div class="toolbar-buttons"><button class="secondary-button" id="add-creatis-credit">Ajouter Creatis</button><button class="secondary-button" id="add-cofidis-credit">Ajouter Cofidis</button><button class="secondary-button" id="apply-casden-amendment">Appliquer l’avenant CASDEN 2026</button></div></div>
       <div class="cards">
         <article class="card metric-card"><span>Capital restant dû</span><strong>${euro_(data?.capitalRestant||0)}</strong><small>Crédits et dettes suivis</small></article>
         <article class="card metric-card"><span>Mensualités</span><strong>${euro_(data?.mensualites||0)}</strong><small>Montant mensuel de référence</small></article>
+        <article class="card metric-card"><span>Coût restant estimé</span><strong>${euro_(data?.coutRestant||0)}</strong><small>Intérêts et coûts restant à payer selon les dernières données connues</small></article>
         <article class="card metric-card"><span>TAEG moyen pondéré</span><strong>${taux_(data?.tauxPondere||0)}</strong><small>Pondéré par le capital restant</small></article>
         <article class="card metric-card"><span>Échéances restantes</span><strong>${Number(data?.echeancesRestantes||0)}</strong><small>Crédits renseignés</small></article>
       </div>
@@ -22,15 +23,22 @@
             <div class="account-main"><div class="account-icon">💼</div><div><strong>${esc_(c.nom||'Crédit')}</strong><small>${c.numero_pret?'N° '+esc_(c.numero_pret):''}</small></div></div>
             <div class="account-type"><strong>${euro_(c.capital_restant)}</strong><small>Capital restant</small></div>
             <div class="account-type"><strong>${euro_(c.mensualite)}</strong><small>Mensualité</small></div>
+            <div class="account-type"><strong>${euro_(c.cout_restant)}</strong><small>Coût restant estimé</small></div>
             <div class="account-type"><strong>${taux_(c.taux)}</strong><small>TAEG</small></div>
             <div class="account-type"><strong>${Number(c.echeances_restantes||0)||'—'}</strong><small>Échéances restantes</small></div>
             <div class="account-type"><strong>${date_(c.prochaine_echeance)}</strong><small>Prochaine échéance</small></div>
             <div class="account-type"><strong>${date_(c.date_fin)}</strong><small>Fin du crédit</small></div>
           </div>
+          ${c.cout_restant_precision?`<p class="helper-text" style="margin:0 0 4px 58px"><strong>Coût restant :</strong> ${esc_(c.cout_restant_precision)}</p>`:''}
           ${c.commentaire?`<p class="helper-text" style="margin:0 0 14px 58px">${esc_(c.commentaire)}</p>`:''}
         `).join(''):'<div class="empty-state">Aucun crédit enregistré.</div>'}</div>
       </article>`;
     document.getElementById('refresh-credits')?.addEventListener('click',chargerCreditsUI_);
+    document.getElementById('add-creatis-credit')?.addEventListener('click',()=>{
+      if(!confirm('Ajouter ou mettre à jour le crédit Creatis avec l’échéancier du 30/05/2025 et le report connu de l’échéance d’août 2026 ?'))return;
+      const b=document.getElementById('add-creatis-credit');b.disabled=true;
+      google.script.run.withSuccessHandler(()=>{b.disabled=false;if(typeof afficherToast==='function')afficherToast('Crédit Creatis ajouté.');else alert('Crédit Creatis ajouté.');chargerCreditsUI_();}).withFailureHandler(err=>{b.disabled=false;if(typeof afficherErreur==='function')afficherErreur(err.message||String(err));}).ajouterCreditCreatis2026();
+    });
     document.getElementById('add-cofidis-credit')?.addEventListener('click',()=>{
       if(!confirm('Ajouter ou mettre à jour le crédit Cofidis avec les informations communiquées ?'))return;
       const b=document.getElementById('add-cofidis-credit');b.disabled=true;
