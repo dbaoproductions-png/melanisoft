@@ -1,5 +1,6 @@
 <script>
 (function(){
+  let operationEditee_=null;
   function actif_(v){return typeof estActif==='function'?estActif(v):v!==false&&String(v).toLowerCase()!=='false'&&String(v)!=='0';}
   function valeurDate_(v){return typeof dateInput==='function'?dateInput(v):'';}
   function n_(v){return typeof nombre==='function'?nombre(v):(Number(v)||0);}
@@ -18,17 +19,42 @@
       if(!xs.length)return;
       html+=`<optgroup label="${groupes[t]}">`+xs.map(c=>`<option value="${typeof echapperAttribut==='function'?echapperAttribut(c.nom):c.nom}">${typeof echapper==='function'?echapper(c.nom):c.nom}</option>`).join('')+'</optgroup>';
     });
-    s.innerHTML=html;
-    s.value=operation?.categorie||'';
+    s.innerHTML=html;s.value=operation?.categorie||'';
   }
   function typeAffiche_(operation,cats){
     const cat=(cats||[]).find(c=>String(c.nom||'')===String(operation?.categorie||''));
     if(cat&&String(cat.type||'').toLowerCase()==='tresorerie')return n_(operation?.montant)<0?'tresorerie_sortie':'tresorerie_entree';
     return String(operation?.type||'').toLowerCase()==='revenu'?'revenu':'depense';
   }
+  function jourOperation_(o){
+    const d=new Date(o?.date_comptable||o?.date||o?.date_operation||'');
+    return isNaN(d)?1:d.getDate();
+  }
+  function installerBoutonChargeFixe_(operation){
+    const form=document.getElementById('operation-form');if(!form)return;
+    let btn=document.getElementById('operation-to-fixed-charge');
+    if(!btn){
+      btn=document.createElement('button');btn.type='button';btn.id='operation-to-fixed-charge';btn.className='secondary-button';btn.textContent='En faire une charge fixe';
+      const save=document.getElementById('save-operation');
+      if(save?.parentElement)save.parentElement.insertBefore(btn,save);else form.appendChild(btn);
+      btn.addEventListener('click',()=>{
+        const o=operationEditee_;if(!o)return;
+        if(typeof ouvrirChargeFixe!=='function'){if(typeof afficherErreur==='function')afficherErreur('Le formulaire Charges fixes est indisponible.');return;}
+        const libelle=String(document.getElementById('operation-label')?.value||o.libelle_bancaire||o.libelle||'').trim();
+        const montant=Math.abs(n_(document.getElementById('operation-amount')?.value||o.montant));
+        const compte=String(document.getElementById('operation-account')?.value||o.compte||'');
+        const categorie=String(document.getElementById('operation-category')?.value||o.categorie||'');
+        const charge={id:'',libelle:libelle,montant:montant,frequence:'Mensuelle',jour_execution:jourOperation_(o),compte:compte,categorie:categorie,actif:true,libelle_bancaire:String(o.libelle_bancaire||o.libelle||libelle)};
+        if(typeof fermerOperation==='function')fermerOperation();else document.getElementById('operation-modal')?.classList.add('hidden');
+        ouvrirChargeFixe(charge);
+      });
+    }
+    const estDepense=String(operation?.type||'').toLowerCase()==='depense'||n_(operation?.montant)<0;
+    btn.style.display=operation&&estDepense?'':'none';
+  }
   function afficher_(operation,cats){
     const form=document.getElementById('operation-form');if(!form)return;
-    form.reset();
+    operationEditee_=operation||null;form.reset();
     remplirComptes_(operation);remplirCategories_(cats,operation);
     document.getElementById('operation-id').value=operation?.id||'';
     document.getElementById('operation-date').value=valeurDate_(operation?.date);
@@ -39,6 +65,7 @@
     document.getElementById('operation-category').value=operation?.categorie||'';
     document.getElementById('operation-comment').value=String(operation?.commentaire||'').replace(/\s*\[RECURRENCE:[^\]]+\]/g,'');
     document.getElementById('operation-modal-title').textContent=operation?'Modifier l’opération':'Ajouter une opération';
+    installerBoutonChargeFixe_(operation);
     document.getElementById('operation-modal').classList.remove('hidden');
     setTimeout(()=>document.getElementById('operation-label')?.focus(),50);
   }
