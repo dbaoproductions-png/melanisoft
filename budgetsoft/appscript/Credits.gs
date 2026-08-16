@@ -1,4 +1,4 @@
-const CREDITS_VERSION = '1.7';
+const CREDITS_VERSION = '1.8';
 
 function assurerColonnesCredits_(){
   const f=SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Credits');
@@ -151,6 +151,20 @@ function ajouterRevolvingCarrefourPass2026(){
     cout_restant:3969.58,
     cout_restant_precision:'Estimation instantanée : 59 mensualités au niveau actuel de 168 € moins 5 942,42 € d’encours utilisé. Crédit renouvelable : coût et date de fin varieront avec les nouvelles utilisations, le TAEG, la mensualité et l’assurance.',
     commentaire:'Relevé du 21/06/2026 au 20/07/2026. Encours utilisé au 20/07/2026 : 5 942,42 € sur 6 000 €. TAEG révisable de la tranche 3 000,01 € à 6 000 € : 15,66 %. Échéance du 05/08/2026 : 168 €, dont 57,68 € de capital, 71,83 € d’intérêts et 38,49 € d’assurance. Estimation Carrefour : 59 mensualités restantes. Fin estimée au 05/06/2031 sans nouvelle utilisation.'
+  });
+  enregistrerLigne('Credits',credit); return {ok:true,credit:enrichirCredit_(credit)};
+}
+
+function ajouterRevolvingFloa2026(){
+  verifierInitialisation_(); assurerColonnesCredits_();
+  const credits=lireTable_('Credits'); let credit=credits.find(c=>/floa|cdiscount/i.test(String(c.nom||''))||String(c.numero_pret||'')==='4219 277 327 1100');
+  credit=Object.assign({},credit||{}, {
+    nom:'FLOA / Cdiscount — renouvelable', numero_pret:'4219 277 327 1100', type_credit:'revolving',
+    capital_restant:3035.46, mensualite:114.00, taux:15.66, prochaine_echeance:'2026-08-05',
+    echeances_restantes:36, date_fin:'2029-07-05', plafond_credit:3000, disponible_credit:0, assurance_mensuelle:0,
+    cout_restant:1068.54,
+    cout_restant_precision:'Estimation instantanée : 36 mensualités au niveau contractuel actuel de 114 € moins 3 035,46 € d’encours restant dû. Le prochain prélèvement annoncé est de 115,25 € car il inclut vraisemblablement la cotisation carte de 1,25 €. Crédit renouvelable : coût et date de fin varieront en cas de nouvelle utilisation ou de changement du TAEG ou de la mensualité.',
+    commentaire:'Relevé de situation juillet 2026, arrêté au 22/07/2026. Encours restant dû : 3 035,46 € pour un maximum consenti de 3 000 € et 0 € disponible. Mensualité de crédit : 114 € ; prochain prélèvement le 05/08/2026 : 115,25 €. TAEG révisable applicable à la tranche 3 000,01 € à 6 000 € : 15,66 %. 36 mensualités restantes annoncées. Sur la période, 34,21 € d’intérêts et 0 € d’assurance ; cotisation carte 1,25 €. Fin estimée au 05/07/2029 sans nouvelle utilisation.'
   });
   enregistrerLigne('Credits',credit); return {ok:true,credit:enrichirCredit_(credit)};
 }
