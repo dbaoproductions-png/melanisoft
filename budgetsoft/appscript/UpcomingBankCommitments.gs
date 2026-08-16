@@ -39,9 +39,6 @@ function chargerEngagementsBancairesFuturs() {
     else if(motifCharge&&texteOp.includes(motifCharge))scoreLibelle=22;
     else if(texteCharge&&texteOp&&(texteOp.includes(texteCharge)||texteCharge.includes(texteOp)))scoreLibelle=20;
     else scoreLibelle=similariteMotsChargeFixe_(texteCharge,texteOp)*20;
-
-    // Pour une charge fixe déjà connue, montant + compte + échéance constituent la preuve principale.
-    // Les libellés du flux Hello bank! peuvent être fortement tronqués (ex. « impo », « audiens sante p »).
     const scoreMontant=ecart<=Math.max(0.01,Number(charge.tolerance||0.5))?50:35;
     const scoreDate=ecartJours<=3?25:ecartJours<=7?15:ecartJours<=12?5:0;
     return Math.round(Math.min(100,scoreLibelle+scoreMontant+scoreDate));
@@ -73,16 +70,20 @@ function chargerEngagementsBancairesFuturs() {
     }
   });
 
-  const chargesRestantes = charges.filter(charge => {
-    if (chargesCouvertes.has(String(charge.id))) return false;
-    const jour = Number(charge.jour_execution || charge.jour || charge.jour_echeance || 1);
-    let echeance = new Date(reference.getFullYear(), reference.getMonth(), Math.min(31, Math.max(1, jour)), 12);
-    if (echeance <= reference) echeance = new Date(reference.getFullYear(), reference.getMonth() + 1, Math.min(31, Math.max(1, jour)), 12);
-    return echeance <= fin;
+  const echeancesRestantes=[];
+  charges.forEach(charge=>{
+    if(chargesCouvertes.has(String(charge.id)))return;
+    const debutCharge=charge.date_debut?dateLocaleBudgetSoft_(charge.date_debut):reference;
+    const finCharge=charge.date_fin?dateLocaleBudgetSoft_(charge.date_fin):null;
+    const debutRecherche=new Date(Math.max(reference.getTime()+1,debutCharge.getTime()));
+    const echeances=typeof calculerEcheancesChargeFixeAjustees_==='function'
+      ? calculerEcheancesChargeFixeAjustees_(charge,debutRecherche,finCharge,fin)
+      : calculerEcheancesJusqua_(charge,debutRecherche,finCharge,fin).map(d=>({date:d,montant:Math.abs(Number(charge.montant||0)),ajustement:''}));
+    echeances.forEach(e=>echeancesRestantes.push({charge:charge,date:e.date,montant:e.montant,ajustement:e.ajustement||''}));
   });
 
   const somme = xs => arrondirCycle_(xs.reduce((s,o) => s + Math.abs(Number(o.montant || 0)), 0));
-  const sommeCharges = arrondirCycle_(chargesRestantes.reduce((s,x) => s + Math.abs(Number(x.montant || 0)), 0));
+  const sommeCharges = arrondirCycle_(echeancesRestantes.reduce((s,e) => s + Math.abs(Number(e.montant || 0)), 0));
 
   return {
     prelevements: somme(prelevements),
@@ -90,9 +91,10 @@ function chargerEngagementsBancairesFuturs() {
     cbDifferees: somme(cartes),
     nombreCb: cartes.length,
     chargesFixesRestantes: sommeCharges,
-    nombreChargesFixesRestantes: chargesRestantes.length,
+    nombreChargesFixesRestantes: echeancesRestantes.length,
     chargesFixesCouvertes: chargesCouvertes.size,
     rapprochements:rapprochements,
+    detailChargesFixes:echeancesRestantes.sort((a,b)=>a.date-b.date).map(e=>({chargeId:String(e.charge.id||''),date:e.date.toISOString(),libelle:String(e.charge.libelle||''),montant:e.montant,ajustement:e.ajustement})),
     detailPrelevements: prelevements.slice().sort((a,b)=>dateComptable_(a)-dateComptable_(b)).map(o => ({
       id:String(o.id || ''),
       date:dateComptable_(o).toISOString(),
