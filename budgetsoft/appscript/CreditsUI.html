@@ -40,6 +40,12 @@
   }
   window.chargerCreditsUI=chargerCreditsUI_;
 
+  // PlanningUI intercepte la navigation en phase de capture et appelait encore
+  // son ancien écran Credits. On remplace explicitement ce module par le nouveau.
+  window.budgetsoftModules=window.budgetsoftModules||{};
+  window.budgetsoftModules.credits=chargerCreditsUI_;
+
+  // Compatibilité pour les appels programmatiques à ouvrirVue('credits').
   const base=window.ouvrirVue;
   if(typeof base==='function')window.ouvrirVue=function(view){const r=base.apply(this,arguments);if(view==='credits')chargerCreditsUI_();return r;};
 })();
