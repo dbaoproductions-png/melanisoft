@@ -4,61 +4,52 @@
   function date_(v){if(!v)return'—';const d=new Date(v);return isNaN(d)?'—':d.toLocaleDateString('fr-FR');}
   function esc_(s){return typeof echapper==='function'?echapper(String(s??'')):String(s??'');}
   function taux_(v){const n=Number(v||0);return n?`${n.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})} %`:'—';}
+  function ligneCredit_(c,renouvelable){return `
+    <div class="account-row">
+      <div class="account-main"><div class="account-icon">${renouvelable?'🔄':'💼'}</div><div><strong>${esc_(c.nom||'Crédit')}</strong><small>${c.numero_pret?'N° '+esc_(c.numero_pret):''}</small></div></div>
+      <div class="account-type"><strong>${euro_(c.capital_restant)}</strong><small>${renouvelable?'Encours utilisé':'Capital restant'}</small></div>
+      <div class="account-type"><strong>${euro_(c.mensualite)}</strong><small>Mensualité actuelle</small></div>
+      <div class="account-type"><strong>${euro_(c.cout_restant)}</strong><small>Coût restant estimé</small></div>
+      <div class="account-type"><strong>${taux_(c.taux)}</strong><small>${renouvelable?'TAEG révisable':'TAEG'}</small></div>
+      <div class="account-type"><strong>${Number(c.echeances_restantes||0)||'—'}</strong><small>Mensualités estimées</small></div>
+      <div class="account-type"><strong>${date_(c.prochaine_echeance)}</strong><small>Prochaine échéance</small></div>
+      <div class="account-type"><strong>${date_(c.date_fin)}</strong><small>${renouvelable?'Fin estimée':'Fin du crédit'}</small></div>
+    </div>
+    ${renouvelable?`<p class="helper-text" style="margin:0 0 4px 58px"><strong>Réserve :</strong> plafond ${euro_(c.plafond_credit)} · disponible ${euro_(c.disponible_credit)}${Number(c.assurance_mensuelle||0)?` · assurance actuelle ${euro_(c.assurance_mensuelle)}`:''}</p>`:''}
+    ${c.cout_restant_precision?`<p class="helper-text" style="margin:0 0 4px 58px"><strong>Coût restant :</strong> ${esc_(c.cout_restant_precision)}</p>`:''}
+    ${c.commentaire?`<p class="helper-text" style="margin:0 0 14px 58px">${esc_(c.commentaire)}</p>`:''}`;}
 
   function rendreCredits_(data){
     const zone=document.getElementById('generic-view');if(!zone)return;
     const lignes=(data&&data.lignes)||[], credits=lignes.filter(x=>x.table==='Credits');
+    const classiques=credits.filter(c=>String(c.type_credit||'amortissable')!=='revolving');
+    const renouvelables=credits.filter(c=>String(c.type_credit||'')==='revolving');
     zone.innerHTML=`
-      <div class="section-toolbar"><p class="section-intro">Suivi des crédits : capital restant dû, mensualité, TAEG, coût restant, échéances restantes et date de fin.</p><div class="toolbar-buttons"><button class="secondary-button" id="add-creatis-credit">Ajouter Creatis</button><button class="secondary-button" id="add-cofidis-credit">Ajouter Cofidis</button><button class="secondary-button" id="apply-casden-amendment">Appliquer l’avenant CASDEN 2026</button></div></div>
+      <div class="section-toolbar"><p class="section-intro">Suivi des crédits amortissables et des crédits renouvelables. Pour les renouvelables, coût et date de fin sont des estimations à l’instant du dernier relevé connu.</p><div class="toolbar-buttons"><button class="secondary-button" id="add-carrefour-revolving">Ajouter Carrefour PASS</button><button class="secondary-button" id="add-oney-revolving">Ajouter Oney b+</button><button class="secondary-button" id="add-creatis-credit">Ajouter Creatis</button><button class="secondary-button" id="add-cofidis-credit">Ajouter Cofidis</button><button class="secondary-button" id="apply-casden-amendment">Appliquer l’avenant CASDEN 2026</button></div></div>
       <div class="cards">
-        <article class="card metric-card"><span>Capital restant dû</span><strong>${euro_(data?.capitalRestant||0)}</strong><small>Crédits et dettes suivis</small></article>
-        <article class="card metric-card"><span>Mensualités</span><strong>${euro_(data?.mensualites||0)}</strong><small>Montant mensuel de référence</small></article>
-        <article class="card metric-card"><span>Coût restant estimé</span><strong>${euro_(data?.coutRestant||0)}</strong><small>Intérêts et coûts restant à payer selon les dernières données connues</small></article>
-        <article class="card metric-card"><span>TAEG moyen pondéré</span><strong>${taux_(data?.tauxPondere||0)}</strong><small>Pondéré par le capital restant</small></article>
-        <article class="card metric-card"><span>Échéances restantes</span><strong>${Number(data?.echeancesRestantes||0)}</strong><small>Crédits renseignés</small></article>
+        <article class="card metric-card"><span>Capital / encours restant</span><strong>${euro_(data?.capitalRestant||0)}</strong><small>Tous crédits suivis</small></article>
+        <article class="card metric-card"><span>Mensualités actuelles</span><strong>${euro_(data?.mensualites||0)}</strong><small>Montants de référence</small></article>
+        <article class="card metric-card"><span>Coût restant estimé</span><strong>${euro_(data?.coutRestant||0)}</strong><small>Selon les dernières données connues</small></article>
+        <article class="card metric-card"><span>TAEG moyen pondéré</span><strong>${taux_(data?.tauxPondere||0)}</strong><small>Pondéré par le capital ou l’encours restant</small></article>
       </div>
-      <article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Financements</span><h2>Crédits en cours</h2></div><button type="button" class="secondary-button" id="refresh-credits">Actualiser</button></div>
-        <div id="credits-list">${credits.length?credits.map(c=>`
-          <div class="account-row">
-            <div class="account-main"><div class="account-icon">💼</div><div><strong>${esc_(c.nom||'Crédit')}</strong><small>${c.numero_pret?'N° '+esc_(c.numero_pret):''}</small></div></div>
-            <div class="account-type"><strong>${euro_(c.capital_restant)}</strong><small>Capital restant</small></div>
-            <div class="account-type"><strong>${euro_(c.mensualite)}</strong><small>Mensualité</small></div>
-            <div class="account-type"><strong>${euro_(c.cout_restant)}</strong><small>Coût restant estimé</small></div>
-            <div class="account-type"><strong>${taux_(c.taux)}</strong><small>TAEG</small></div>
-            <div class="account-type"><strong>${Number(c.echeances_restantes||0)||'—'}</strong><small>Échéances restantes</small></div>
-            <div class="account-type"><strong>${date_(c.prochaine_echeance)}</strong><small>Prochaine échéance</small></div>
-            <div class="account-type"><strong>${date_(c.date_fin)}</strong><small>Fin du crédit</small></div>
-          </div>
-          ${c.cout_restant_precision?`<p class="helper-text" style="margin:0 0 4px 58px"><strong>Coût restant :</strong> ${esc_(c.cout_restant_precision)}</p>`:''}
-          ${c.commentaire?`<p class="helper-text" style="margin:0 0 14px 58px">${esc_(c.commentaire)}</p>`:''}
-        `).join(''):'<div class="empty-state">Aucun crédit enregistré.</div>'}</div>
+      <article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Financements</span><h2>Crédits amortissables</h2></div><button type="button" class="secondary-button" id="refresh-credits">Actualiser</button></div><div id="credits-list">${classiques.length?classiques.map(c=>ligneCredit_(c,false)).join(''):'<div class="empty-state">Aucun crédit amortissable enregistré.</div>'}</div></article>
+      <article class="card panel" style="margin-top:18px"><div class="panel-heading"><div><span class="panel-kicker">Réserves de crédit</span><h2>Crédits renouvelables</h2></div></div>
+        <p class="helper-text">Ils sont volontairement séparés : le TAEG est révisable, la mensualité peut évoluer et toute nouvelle utilisation modifie le coût et la date de fin.</p>
+        <div class="cards"><article class="card metric-card"><span>Encours renouvelable</span><strong>${euro_(data?.capitalRenouvelable||0)}</strong></article><article class="card metric-card"><span>Coût restant estimé</span><strong>${euro_(data?.coutRenouvelable||0)}</strong></article><article class="card metric-card"><span>TAEG moyen renouvelable</span><strong>${taux_(data?.tauxRenouvelablePondere||0)}</strong></article></div>
+        <div style="margin-top:16px">${renouvelables.length?renouvelables.map(c=>ligneCredit_(c,true)).join(''):'<div class="empty-state">Aucun crédit renouvelable enregistré.</div>'}</div>
       </article>`;
     document.getElementById('refresh-credits')?.addEventListener('click',chargerCreditsUI_);
-    document.getElementById('add-creatis-credit')?.addEventListener('click',()=>{
-      if(!confirm('Ajouter ou mettre à jour le crédit Creatis avec l’échéancier du 30/05/2025 et le report connu de l’échéance d’août 2026 ?'))return;
-      const b=document.getElementById('add-creatis-credit');b.disabled=true;
-      google.script.run.withSuccessHandler(()=>{b.disabled=false;if(typeof afficherToast==='function')afficherToast('Crédit Creatis ajouté.');else alert('Crédit Creatis ajouté.');chargerCreditsUI_();}).withFailureHandler(err=>{b.disabled=false;if(typeof afficherErreur==='function')afficherErreur(err.message||String(err));}).ajouterCreditCreatis2026();
-    });
-    document.getElementById('add-cofidis-credit')?.addEventListener('click',()=>{
-      if(!confirm('Ajouter ou mettre à jour le crédit Cofidis avec les informations communiquées ?'))return;
-      const b=document.getElementById('add-cofidis-credit');b.disabled=true;
-      google.script.run.withSuccessHandler(()=>{b.disabled=false;if(typeof afficherToast==='function')afficherToast('Crédit Cofidis ajouté.');else alert('Crédit Cofidis ajouté.');chargerCreditsUI_();}).withFailureHandler(err=>{b.disabled=false;if(typeof afficherErreur==='function')afficherErreur(err.message||String(err));}).ajouterCreditCofidis2026();
-    });
-    document.getElementById('apply-casden-amendment')?.addEventListener('click',()=>{
-      if(!confirm('Appliquer le report CASDEN des échéances du 04/09/2026 et du 04/10/2026 et mettre à jour les données du crédit ?'))return;
-      const b=document.getElementById('apply-casden-amendment');b.disabled=true;
-      google.script.run.withSuccessHandler(()=>{b.disabled=false;if(typeof afficherToast==='function')afficherToast('Avenant CASDEN appliqué.');else alert('Avenant CASDEN appliqué.');chargerCreditsUI_();if(typeof chargerDashboardTroisCadres==='function')setTimeout(chargerDashboardTroisCadres,200);}).withFailureHandler(err=>{b.disabled=false;if(typeof afficherErreur==='function')afficherErreur(err.message||String(err));}).appliquerAvenantCasden2026();
-    });
+    const installer=(id,texte,methode,message)=>document.getElementById(id)?.addEventListener('click',()=>{if(!confirm(texte))return;const b=document.getElementById(id);b.disabled=true;google.script.run.withSuccessHandler(()=>{b.disabled=false;if(typeof afficherToast==='function')afficherToast(message);else alert(message);chargerCreditsUI_();}).withFailureHandler(err=>{b.disabled=false;if(typeof afficherErreur==='function')afficherErreur(err.message||String(err));})[methode]();});
+    installer('add-oney-revolving','Ajouter ou mettre à jour le crédit renouvelable Oney b+ à partir du relevé du 25/07/2026 ?','ajouterRevolvingOney2026','Crédit renouvelable Oney ajouté.');
+    installer('add-carrefour-revolving','Ajouter ou mettre à jour le crédit renouvelable Carrefour PASS à partir du relevé du 20/07/2026 ?','ajouterRevolvingCarrefourPass2026','Crédit renouvelable Carrefour PASS ajouté.');
+    installer('add-creatis-credit','Ajouter ou mettre à jour le crédit Creatis avec l’échéancier du 30/05/2025 et le report connu de l’échéance d’août 2026 ?','ajouterCreditCreatis2026','Crédit Creatis ajouté.');
+    installer('add-cofidis-credit','Ajouter ou mettre à jour le crédit Cofidis avec les informations communiquées ?','ajouterCreditCofidis2026','Crédit Cofidis ajouté.');
+    document.getElementById('apply-casden-amendment')?.addEventListener('click',()=>{if(!confirm('Appliquer le report CASDEN des échéances du 04/09/2026 et du 04/10/2026 et mettre à jour les données du crédit ?'))return;const b=document.getElementById('apply-casden-amendment');b.disabled=true;google.script.run.withSuccessHandler(()=>{b.disabled=false;if(typeof afficherToast==='function')afficherToast('Avenant CASDEN appliqué.');else alert('Avenant CASDEN appliqué.');chargerCreditsUI_();if(typeof chargerDashboardTroisCadres==='function')setTimeout(chargerDashboardTroisCadres,200);}).withFailureHandler(err=>{b.disabled=false;if(typeof afficherErreur==='function')afficherErreur(err.message||String(err));}).appliquerAvenantCasden2026();});
   }
 
-  function chargerCreditsUI_(){
-    const zone=document.getElementById('generic-view');if(zone)zone.innerHTML='<section class="loading">Chargement des crédits…</section>';
-    google.script.run.withSuccessHandler(rendreCredits_).withFailureHandler(err=>{if(typeof afficherErreur==='function')afficherErreur(err.message||String(err));}).chargerCreditsEtDettes();
-  }
+  function chargerCreditsUI_(){const zone=document.getElementById('generic-view');if(zone)zone.innerHTML='<section class="loading">Chargement des crédits…</section>';google.script.run.withSuccessHandler(rendreCredits_).withFailureHandler(err=>{if(typeof afficherErreur==='function')afficherErreur(err.message||String(err));}).chargerCreditsEtDettes();}
   window.chargerCreditsUI=chargerCreditsUI_;
-  window.budgetsoftModules=window.budgetsoftModules||{};
-  window.budgetsoftModules.credits=chargerCreditsUI_;
-  const base=window.ouvrirVue;
-  if(typeof base==='function')window.ouvrirVue=function(view){const r=base.apply(this,arguments);if(view==='credits')chargerCreditsUI_();return r;};
+  window.budgetsoftModules=window.budgetsoftModules||{};window.budgetsoftModules.credits=chargerCreditsUI_;
+  const base=window.ouvrirVue;if(typeof base==='function')window.ouvrirVue=function(view){const r=base.apply(this,arguments);if(view==='credits')chargerCreditsUI_();return r;};
 })();
 </script>
