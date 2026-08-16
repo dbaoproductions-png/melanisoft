@@ -2,6 +2,8 @@ function enregistrerOperationAvecChargeFixe(operation, charge) {
   verifierInitialisation_();
   const op = enregistrerLigne('Operations', operation);
   const cf = enregistrerLigne('Charges_fixes', charge);
+  if(typeof lierOperationChargeFixe_==='function')lierOperationChargeFixe_(op.id,cf.id);
+  op.charge_fixe_id=cf.id;
   const retro = rattacherChargeFixeRetrospectif_(cf, op);
   return { operation: op, charge: cf, retrospectif: retro };
 }
