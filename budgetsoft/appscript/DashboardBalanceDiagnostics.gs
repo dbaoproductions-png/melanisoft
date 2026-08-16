@@ -1,4 +1,4 @@
-const DASHBOARD_BALANCE_DIAG_VERSION='1.0';
+const DASHBOARD_BALANCE_DIAG_VERSION='1.1';
 
 function diagnosticSoldeBancaireReel(){
   verifierInitialisation_();
@@ -24,7 +24,10 @@ function diagnosticSoldeBancaireReel(){
     detail.push({id,nom,base:Math.round(base*100)/100,dateBase:baseDate?baseDate.toISOString():null,baseFiable,nombreMouvements:liste.length,mouvements:Math.round(mouvements*100)/100,solde,dateDernierMouvement:derniere?derniere.toISOString():null});
   });
   const dash=chargerDashboardReel();
-  return{version:DASHBOARD_BALANCE_DIAG_VERSION,soldeCalcule:Math.round(total*100)/100,soldeDashboard:dash?.courtTerme?.soldeBancaire??null,dateDashboard:dash?.courtTerme?.dateSolde??null,dateDernierMouvement:dateMax?dateMax.toISOString():null,comptes:detail,lectureSeule:true};
+  const resultat={version:DASHBOARD_BALANCE_DIAG_VERSION,soldeCalcule:Math.round(total*100)/100,soldeDashboard:dash?.courtTerme?.soldeBancaire??null,dateDashboard:dash?.courtTerme?.dateSolde??null,dateDernierMouvement:dateMax?dateMax.toISOString():null,comptes:detail,lectureSeule:true};
+  console.log(JSON.stringify(resultat,null,2));
+  Logger.log(JSON.stringify(resultat,null,2));
+  return resultat;
 }
 
 function enregistrerSoldeHelloBankObserve(compteId,solde,dateObservation){
