@@ -66,15 +66,22 @@ function trouverChargeFixePourOperation_(operation){
   if(id){const liee=charges.find(c=>String(c.id)===id);if(liee)return liee;}
   const motif=motifChargeFixeDepuisOperation_(operation),compte=String(operation&&operation.compte||''),montant=Math.abs(Number(operation&&operation.montant||0));
   if(!motif)return null;
-  const candidates=charges.filter(c=>{
+  const motifCandidates=charges.filter(c=>{
     if(!convertirBooleen_(c.actif))return false;
     if(compte&&c.compte&&String(c.compte)!==compte)return false;
     const mc=typeof extraireMotifStableBanque_==='function'?extraireMotifStableBanque_(c.libelle_bancaire||c.libelle):motifChargeFixeDepuisOperation_({libelle:c.libelle_bancaire||c.libelle});
-    if(!mc||mc!==motif)return false;
+    return !!mc&&mc===motif;
+  });
+  // Un motif bancaire + compte unique est suffisamment stable, y compris pour les
+  // échéances variables (mutuelle, crédit revolving, énergie...).
+  if(motifCandidates.length===1)return motifCandidates[0];
+  // En présence de plusieurs contrats au même créancier, le montant sert seulement
+  // à désambiguïser ; s'il reste plusieurs candidats on ne modifie rien automatiquement.
+  const montantCandidates=motifCandidates.filter(c=>{
     const attendu=Math.abs(Number(c.montant||0)),tol=Math.max(Number(c.tolerance||0.5),Math.max(1,attendu*0.15));
     return !attendu||!montant||Math.abs(attendu-montant)<=tol;
   });
-  return candidates.length===1?candidates[0]:null;
+  return montantCandidates.length===1?montantCandidates[0]:null;
 }
 
 function lierOperationChargeFixe_(operationId,chargeId){
