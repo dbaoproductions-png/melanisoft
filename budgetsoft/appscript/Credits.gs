@@ -1,9 +1,9 @@
-const CREDITS_VERSION = '1.5';
+const CREDITS_VERSION = '1.6';
 
 function assurerColonnesCredits_(){
   const f=SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Credits');
   if(!f)return;
-  const attendues=TABLES.Credits, largeur=Math.max(1,f.getLastColumn());
+  const attendues=[...new Set([...(TABLES.Credits||[]),'cout_restant','cout_restant_precision'])], largeur=Math.max(1,f.getLastColumn());
   const presentes=f.getRange(1,1,1,largeur).getValues()[0].map(v=>String(v||'').trim());
   const manquantes=attendues.filter(h=>!presentes.includes(h));
   if(manquantes.length)f.getRange(1,largeur+1,1,manquantes.length).setValues([manquantes]);
@@ -16,6 +16,11 @@ function enrichirCredit_(c){
   x.taux=Math.max(0,Number(x.taux||0));
   x.echeances_restantes=Math.max(0,parseInt(x.echeances_restantes,10)||0);
   if(!x.echeances_restantes&&x.mensualite>0&&x.capital_restant>0)x.echeances_restantes=Math.ceil(x.capital_restant/x.mensualite);
+  const coutSaisi=Number(x.cout_restant);
+  if(Number.isFinite(coutSaisi)&&coutSaisi>=0)x.cout_restant=Math.round(coutSaisi*100)/100;
+  else if(x.echeances_restantes&&x.mensualite)x.cout_restant=Math.max(0,Math.round((x.echeances_restantes*x.mensualite-x.capital_restant)*100)/100);
+  else x.cout_restant=0;
+  x.cout_restant_precision=String(x.cout_restant_precision||'Estimation à partir des échéances restantes et du capital restant dû.');
   return x;
 }
 
@@ -35,8 +40,9 @@ function chargerCreditsEtDettes() {
     ? tous.reduce((s, ligne) => s + Math.abs(Number(ligne.capital_restant || 0)) * Math.abs(Number(ligne.taux || 0)), 0) / capitalRestant
     : 0;
   const echeancesRestantes=credits.reduce((s,c)=>s+Math.max(0,Number(c.echeances_restantes||0)),0);
+  const coutRestant=credits.reduce((s,c)=>s+Math.max(0,Number(c.cout_restant||0)),0);
 
-  return { version: CREDITS_VERSION, lignes: tous, capitalRestant, mensualites, tauxPondere, echeancesRestantes };
+  return { version: CREDITS_VERSION, lignes: tous, capitalRestant, mensualites, tauxPondere, echeancesRestantes, coutRestant };
 }
 
 function enregistrerCreditOuDette(donnees) {
@@ -60,6 +66,8 @@ function enregistrerCreditOuDette(donnees) {
     ligne.numero_pret=String(donnees.numero_pret||'').trim();
     ligne.prochaine_echeance=donnees.prochaine_echeance?new Date(donnees.prochaine_echeance):'';
     ligne.echeances_restantes=Math.max(0,parseInt(donnees.echeances_restantes,10)||0);
+    ligne.cout_restant=Math.max(0,convertirNombre_(donnees.cout_restant||0));
+    ligne.cout_restant_precision=String(donnees.cout_restant_precision||'').trim();
     ligne.commentaire=String(donnees.commentaire||'').trim();
   }
   enregistrerLigne(table, ligne);
@@ -99,6 +107,8 @@ function appliquerAvenantCasden2026(){
     prochaine_echeance:'2026-11-04',
     date_fin:'2032-11-04',
     echeances_restantes:73,
+    cout_restant:1244.66,
+    cout_restant_precision:'Coût restant calculé sur 72 échéances de 576,33 € et une dernière de 311,20 €, moins le capital restant dû de 40 562,30 €.',
     commentaire:'TAEG de référence : 0,94 %. Avenant du 22/07/2026 : échéances du 04/09/2026 et du 04/10/2026 suspendues ; reprise le 04/11/2026. Dernière échéance 311,20 € le 04/11/2032.'
   });
   enregistrerLigne('Credits',credit);
@@ -120,7 +130,32 @@ function ajouterCreditCofidis2026(){
     prochaine_echeance:'2026-09-01',
     date_fin:'2031-01-01',
     echeances_restantes:53,
+    cout_restant:2070.13,
+    cout_restant_precision:'Estimation : 53 mensualités de 207,89 € moins le capital restant dû de 8 948,04 €. À affiner avec l’échéancier détaillé, notamment si la dernière échéance diffère.',
     commentaire:'TAEG fixe 4,70 %. Montant emprunté 10 000 €. Durée restante annoncée : 53 mois au 16/08/2026. Date de fin estimée au 01/01/2031 à partir de la prochaine échéance du 01/09/2026 ; à remplacer par la date contractuelle exacte si un échéancier détaillé est fourni.'
+  });
+  enregistrerLigne('Credits',credit);
+  return {ok:true,credit:enrichirCredit_(credit)};
+}
+
+function ajouterCreditCreatis2026(){
+  verifierInitialisation_();
+  assurerColonnesCredits_();
+  const credits=lireTable_('Credits');
+  let credit=credits.find(c=>/creatis/i.test(String(c.nom||''))||String(c.numero_pret||'')==='28904001986964');
+  credit=Object.assign({},credit||{}, {
+    nom:(credit&&credit.nom)||'Creatis',
+    numero_pret:'28904001986964',
+    capital_restant:58860.53,
+    mensualite:865.11,
+    taux:8.29,
+    date_debut:'2025-05-31',
+    prochaine_echeance:'2026-09-30',
+    date_fin:'2033-06-30',
+    echeances_restantes:82,
+    cout_restant:12078.85,
+    cout_restant_precision:'Base connue avant le report d’août 2026 : échéancier du 30/05/2025, après l’échéance du 31/07/2026. Le coût réel restant sera à réactualiser avec l’avenant de report, qui peut ajouter intérêts ou frais.',
+    commentaire:'TAEG 8,29 % ; TNA 5,89 %. Montant initial 66 100 €. Capital restant dû après l’échéance du 31/07/2026 : 58 860,53 €. L’échéance du 31/08/2026 a été reportée ; prochaine échéance et fin de crédit sont donc provisoirement estimées au 30/09/2026 et 30/06/2033, sous réserve du nouvel échéancier Creatis.'
   });
   enregistrerLigne('Credits',credit);
   return {ok:true,credit:enrichirCredit_(credit)};
