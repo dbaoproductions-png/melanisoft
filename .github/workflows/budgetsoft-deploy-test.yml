@@ -109,69 +109,8 @@ jobs:
             -d '{"description":"BudgetSoft TEST from budgetsoft-import-lab"}' \
             "https://script.googleapis.com/v1/projects/$SCRIPT_ID/versions" \
             > /tmp/version-response.json
-          VERSION_NUMBER=$(python3 -c 'import json; print(json.load(open("/tmp/version-response.json"))["versionNumber"])')
-          echo "VERSION_NUMBER=$VERSION_NUMBER" >> "$GITHUB_ENV"
-          echo "Apps Script version created: $VERSION_NUMBER"
-
-      - name: Select TEST Web App deployment
-        run: |
-          set -euo pipefail
-          curl --fail-with-body -sS \
-            -H "Authorization: Bearer $ACCESS_TOKEN" \
-            "https://script.googleapis.com/v1/projects/$SCRIPT_ID/deployments?pageSize=200" \
-            > /tmp/deployments.json
           python3 - <<'PY'
-          import json, os
-          d=json.load(open('/tmp/deployments.json'))
-          deps=d.get('deployments', [])
-          web=[]
-          for dep in deps:
-              eps=dep.get('entryPoints') or []
-              if any(ep.get('entryPointType') == 'WEB_APP' for ep in eps):
-                  web.append(dep)
-          preferred=[dep for dep in web if 'test' in str((dep.get('deploymentConfig') or {}).get('description','')).lower()]
-          candidates=preferred if len(preferred)==1 else web
-          if len(candidates) != 1:
-              print('Unable to select one TEST Web App deployment safely.')
-              for dep in web:
-                  cfg=dep.get('deploymentConfig') or {}
-                  print(' -', dep.get('deploymentId'), 'version', cfg.get('versionNumber'), 'description=', cfg.get('description',''))
-              raise SystemExit(1)
-          dep=candidates[0]
-          cfg=dep.get('deploymentConfig') or {}
-          deployment_id=dep['deploymentId']
-          manifest=cfg.get('manifestFileName') or 'appsscript'
-          description=cfg.get('description') or 'BudgetSoft TEST'
-          with open(os.environ['GITHUB_ENV'],'a') as f:
-              f.write('WEBAPP_DEPLOYMENT_ID='+deployment_id+'\n')
-              f.write('WEBAPP_MANIFEST='+manifest+'\n')
-              f.write('WEBAPP_DESCRIPTION='+description.replace('\n',' ')+'\n')
-          print('Selected Web App deployment:', deployment_id, 'currently on version', cfg.get('versionNumber'))
+          import json
+          d=json.load(open('/tmp/version-response.json'))
+          print('Apps Script version created:', d.get('versionNumber','unknown'))
           PY
-
-      - name: Update TEST Web App deployment
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import json, os
-          payload={
-            'deploymentConfig':{
-              'scriptId':os.environ['SCRIPT_ID'],
-              'versionNumber':int(os.environ['VERSION_NUMBER']),
-              'manifestFileName':os.environ['WEBAPP_MANIFEST'],
-              'description':os.environ['WEBAPP_DESCRIPTION']
-            }
-          }
-          json.dump(payload, open('/tmp/deployment-update.json','w'))
-          PY
-          HTTP_CODE=$(curl -sS -o /tmp/deployment-update-response.json -w '%{http_code}' -X PUT \
-            -H "Authorization: Bearer $ACCESS_TOKEN" \
-            -H "Content-Type: application/json" \
-            --data-binary @/tmp/deployment-update.json \
-            "https://script.googleapis.com/v1/projects/$SCRIPT_ID/deployments/$WEBAPP_DEPLOYMENT_ID")
-          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
-            echo "Apps Script deployment update failed with HTTP $HTTP_CODE"
-            python3 -m json.tool /tmp/deployment-update-response.json || cat /tmp/deployment-update-response.json
-            exit 1
-          fi
-          echo "Web App deployment updated to Apps Script version $VERSION_NUMBER"
