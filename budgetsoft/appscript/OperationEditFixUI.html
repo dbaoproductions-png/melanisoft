@@ -44,7 +44,7 @@
         const montant=Math.abs(n_(document.getElementById('operation-amount')?.value||o.montant));
         const compte=String(document.getElementById('operation-account')?.value||o.compte||'');
         const categorie=String(document.getElementById('operation-category')?.value||o.categorie||'');
-        const charge={id:'',libelle:libelle,montant:montant,frequence:'Mensuelle',jour_execution:jourOperation_(o),compte:compte,categorie:categorie,actif:true,libelle_bancaire:String(o.libelle_bancaire||o.libelle||libelle)};
+        const charge={id:'',libelle:libelle,montant:montant,frequence:'Mensuelle',jour_execution:jourOperation_(o),compte:compte,categorie:categorie,actif:true,libelle_bancaire:String(o.libelle_bancaire||o.libelle||libelle),_source_operation_id:String(o.id||'')};
         if(typeof fermerOperation==='function')fermerOperation();else document.getElementById('operation-modal')?.classList.add('hidden');
         ouvrirChargeFixe(charge);
       });
