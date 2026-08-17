@@ -5,14 +5,18 @@ function chargerEngagementsBancairesFuturs() {
   verifierInitialisation_();
   const dash = chargerDashboardReel();
   const c = dash && dash.courtTerme ? dash.courtTerme : {};
-  const reference = c.dateReference ? new Date(c.dateReference) : new Date();
-  const fin = c.fin ? new Date(c.fin) : reference;
+  const reference = c.dateReference ? dateJourCycle_(new Date(c.dateReference)) : dateJourCycle_(new Date());
+  const fin = c.fin ? dateJourCycle_(new Date(c.fin)) : reference;
   const operations = lireOperationsBancaires_().map(enrichirDepuisCommentaireBanque_);
 
   function estCarte_(o) {
     return !!String(o.carte_fin || '').trim() || /\b(?:paiement\s+)?cb\b/i.test(String(o.libelle_bancaire || o.libelle || ''));
   }
   function dateComptable_(o) { return new Date(o.date_comptable || o.date); }
+  function jourComptable_(o) {
+    const d=dateComptable_(o);
+    return isNaN(d) ? d : dateJourCycle_(d);
+  }
   function montant_(o) { return Math.abs(Number(o && o.montant || 0)); }
   function compteCompatible_(charge, op) {
     const a=String(charge && charge.compte || '').trim(), b=String(op && op.compte || '').trim();
@@ -44,8 +48,11 @@ function chargerEngagementsBancairesFuturs() {
     return Math.round(Math.min(100,scoreLibelle+scoreMontant+scoreDate));
   }
 
+  // Une opération datée d'aujourd'hui est réelle pour le pilotage du jour,
+  // même si Sheets lui a attribué artificiellement 12:00. Seuls les jours
+  // strictement postérieurs à la date de référence restent des engagements.
   const futurs = operations.filter(o => {
-    const d = dateComptable_(o);
+    const d = jourComptable_(o);
     return !isNaN(d) && d > reference && d <= fin && String(o.type || '').toLowerCase() === 'depense';
   });
   const cartes = futurs.filter(estCarte_);
