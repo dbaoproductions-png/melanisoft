@@ -15,9 +15,6 @@ function auditTypesOperationsBudgetSoft2026(){
   ops.forEach(o=>{
     const montant=Number(o.montant||0),type=String(o.type||'').trim().toLowerCase(),categorie=String(o.categorie||'').trim();
     const attendu=montant>0?'revenu':montant<0?'depense':type;
-
-    // Le type de l'opération reste bancaire et directionnel : depense ou revenu.
-    // La notion de tresorerie/epargne est portée par le type de la catégorie économique.
     if(type&&type!=='depense'&&type!=='revenu'){
       typesBancairesNonDirectionnels++;
       if(problemes.length<200)problemes.push({id:o.id,date:o.date,libelle:o.libelle,montant,type,categorie,probleme:'type_bancaire_non_directionnel',attendu});
@@ -25,13 +22,10 @@ function auditTypesOperationsBudgetSoft2026(){
       incoherencesSigneType++;
       if(problemes.length<200)problemes.push({id:o.id,date:o.date,libelle:o.libelle,montant,type,categorie,probleme:'signe_type',attendu});
     }
-
     if(categorie){
       const typeCat=typesCategories.get(categorie);
-      if(!typeCat){
-        categoriesInconnues++;
-        if(problemes.length<200)problemes.push({id:o.id,date:o.date,libelle:o.libelle,montant,type,categorie,probleme:'categorie_inconnue'});
-      }else if(typeCat==='tresorerie'){
+      if(!typeCat){categoriesInconnues++;if(problemes.length<200)problemes.push({id:o.id,date:o.date,libelle:o.libelle,montant,type,categorie,probleme:'categorie_inconnue'});}
+      else if(typeCat==='tresorerie'){
         mouvementsTresorerie++;
         if(montant>0){tresorerieEntrante++;montantTresorerieEntrante+=montant;}
         else if(montant<0){tresorerieSortante++;montantTresorerieSortante+=Math.abs(montant);}
@@ -45,51 +39,30 @@ function auditTypesOperationsBudgetSoft2026(){
       }
     }
   });
-
-  const resultat={
-    total:ops.length,
-    incoherencesSigneType,
-    incoherencesCategorieType,
-    categoriesInconnues,
-    typesBancairesNonDirectionnels,
-    tresorerie:{
-      operations:mouvementsTresorerie,
-      entrantes:tresorerieEntrante,
-      sortantes:tresorerieSortante,
-      montantEntrant:Math.round(montantTresorerieEntrante*100)/100,
-      montantSortant:Math.round(montantTresorerieSortante*100)/100,
-      soldeNet:Math.round((montantTresorerieEntrante-montantTresorerieSortante)*100)/100
-    },
-    epargne:{
-      operations:mouvementsEpargne,
-      entrantes:epargneEntrante,
-      sortantes:epargneSortante,
-      montantEntrant:Math.round(montantEpargneEntrante*100)/100,
-      montantSortant:Math.round(montantEpargneSortante*100)/100,
-      soldeNet:Math.round((montantEpargneEntrante-montantEpargneSortante)*100)/100
-    },
-    problemes
-  };
-  console.log(JSON.stringify(resultat));
-  return resultat;
+  const resultat={total:ops.length,incoherencesSigneType,incoherencesCategorieType,categoriesInconnues,typesBancairesNonDirectionnels,
+    tresorerie:{operations:mouvementsTresorerie,entrantes:tresorerieEntrante,sortantes:tresorerieSortante,montantEntrant:Math.round(montantTresorerieEntrante*100)/100,montantSortant:Math.round(montantTresorerieSortante*100)/100,soldeNet:Math.round((montantTresorerieEntrante-montantTresorerieSortante)*100)/100},
+    epargne:{operations:mouvementsEpargne,entrantes:epargneEntrante,sortantes:epargneSortante,montantEntrant:Math.round(montantEpargneEntrante*100)/100,montantSortant:Math.round(montantEpargneSortante*100)/100,soldeNet:Math.round((montantEpargneEntrante-montantEpargneSortante)*100)/100},problemes};
+  console.log(JSON.stringify(resultat));return resultat;
 }
 
 function reparerDeuxiemeVagueCategorisation2026(){
   verifierInitialisation_();
   const ops=lireTable_('Operations');
   let modifiees=0;
-  const detail={voyages:0,voitures:0,remboursements:0,cours:0,aides:0,concerts:0,telecom:0,achats:0,maison:0,sante:0,loisirs:0,courses:0,fraisPro:0,correctionsCiblees:0};
+  const detail={voyages:0,voitures:0,remboursements:0,cours:0,aides:0,concerts:0,telecom:0,achats:0,maison:0,sante:0,loisirs:0,courses:0,fraisPro:0,correctionsCiblees:0,floaRevolving:0,virementsInternes55296:0,aubagneRetroactif:0};
   ops.forEach(o=>{
     const texte=texteAuditAnalytique2026_(o),type=String(o.type||'').toLowerCase(),actuelle=String(o.categorie||'').trim();
-    const montant=Number(o.montant||0);
-    const date=String(o.date||'').slice(0,10);
-    let cible='';
+    const montant=Number(o.montant||0),date=String(o.date||'').slice(0,10);let cible='';
 
-    // Arbitrages ciblés validés après audit.
     if(date==='2025-07-15'&&type==='depense'&&Math.abs(Math.abs(montant)-45)<0.001&&/CHEQUE/.test(texte)){cible='Loisirs';detail.correctionsCiblees++;}
     else if(type==='revenu'&&/HPY KILMA JONAK/.test(texte)){cible='Remboursements';detail.correctionsCiblees++;}
+    // FLOA : les débits sont des remboursements du revolving, les crédits restent des tirages de trésorerie.
+    else if(type==='depense'&&/FLOA/.test(texte)&&actuelle!=='Crédits revolving'){cible='Crédits revolving';detail.floaRevolving++;}
+    // Compte finissant par 55296 confirmé comme compte propre : les mouvements dans les deux sens sont internes.
+    else if(/55296/.test(texte)&&actuelle!=='Virements internes'){cible='Virements internes';detail.virementsInternes55296++;}
+    // Toutes les dépenses à Aubagne sont professionnelles, y compris celles déjà catégorisées auparavant.
+    else if(type==='depense'&&/AUBAGNE/.test(texte)&&actuelle!=='Frais professionnels'){cible='Frais professionnels';detail.aubagneRetroactif++;}
 
-    // Deuxième vague de catégorisation validée.
     else if(!actuelle&&type==='depense'&&/(FLIXBUS|TRAINLINE|SANDAYA)/.test(texte)){cible='Voyages / vacances';detail.voyages++;}
     else if(!actuelle&&type==='depense'&&/(HOTEL DE VILLE SETE|FORF P STAT WEB RENNES|FEU VERT|HYPROMAT LAVAGE|CERTAS ESSO|REL TOTAL|STATION TOTAL)/.test(texte)){cible='Voitures';detail.voitures++;}
     else if(type==='revenu'&&/(TOTALENERGIES|MAIF)/.test(texte)&&!actuelle){cible='Remboursements';detail.remboursements++;}
@@ -102,11 +75,10 @@ function reparerDeuxiemeVagueCategorisation2026(){
     else if(type==='depense'&&/(DR IRLES|DR VO VAN FLORE)/.test(texte)&&!actuelle){cible='Santé';detail.sante++;}
     else if(type==='depense'&&/(ESTHETIC CENTER|ESCALE BEAUTE)/.test(texte)&&!actuelle){cible='Loisirs';detail.loisirs++;}
     else if(type==='depense'&&/(CARREFOUR CITY|PETIT CASINO|\bSPAR\b|BRESSOLS PRIMEUR)/.test(texte)&&!actuelle){cible='Courses';detail.courses++;}
-    else if(type==='depense'&&!actuelle&&/(AUBAGNE|MARSEILLE)/.test(texte)){cible='Frais professionnels';detail.fraisPro++;}
+    else if(type==='depense'&&!actuelle&&/MARSEILLE/.test(texte)){cible='Frais professionnels';detail.fraisPro++;}
 
     if(!cible||cible===actuelle)return;
-    enregistrerLigne('Operations',Object.assign({},o,{categorie:cible,montant:Math.abs(Number(o.montant||0))}));
-    modifiees++;
+    enregistrerLigne('Operations',Object.assign({},o,{categorie:cible,montant:Math.abs(Number(o.montant||0))}));modifiees++;
   });
   return{modifiees,detail,auditTypes:auditTypesOperationsBudgetSoft2026()};
 }
