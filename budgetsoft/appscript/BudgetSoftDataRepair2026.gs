@@ -15,7 +15,7 @@ function desactiverReglesPollueesAout2026_(){
   let n=0;
   valeurs.forEach((r,i)=>{
     const motif=normaliserTexteBanque_(r[motifCol]||''),categorie=String(r[catCol]||'').trim();
-    const manifestementFausse = /^(NIKE|DR COURRIERE|DR MOLLARD)$/.test(motif) || (motif==='GOOGLE'&&/Abonnements/i.test(categorie));
+    const manifestementFausse = /\bNIKE\b/.test(motif) || /DR COURRIERE|DR MOLLARD/.test(motif) || (motif==='GOOGLE'&&/Abonnements/i.test(categorie));
     if(!cible.has(String(r[idCol]||''))&&!manifestementFausse)return;
     if(String(r[actifCol]).toLowerCase()==='false')return;
     f.getRange(i+2,actifCol+1).setValue(false);
