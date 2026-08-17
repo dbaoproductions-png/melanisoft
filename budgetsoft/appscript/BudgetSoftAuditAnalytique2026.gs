@@ -34,7 +34,6 @@ function reparerDeuxiemeVagueCategorisation2026(){
     else if(type==='revenu'&&/HPY KILMA JONAK/.test(texte)){cible='Remboursements';detail.correctionsCiblees++;}
     else if(type==='depense'&&/FLOA/.test(texte)&&actuelle!=='Crédits revolving'){cible='Crédits revolving';detail.floaRevolving++;}
     else if(/55296/.test(texte)&&actuelle!=='Virements internes'){cible='Virements internes';detail.virementsInternes55296++;}
-    // Virements reçus explicitement du titulaire : transferts entre comptes propres validés.
     else if(type==='revenu'&&/(PATRICK HERNEBRING|HERNEBRING PATRICK)/.test(texte)&&actuelle!=='Virements internes'){cible='Virements internes';detail.virementsInternesPatrick++;}
     else if(type==='depense'&&/AUBAGNE/.test(texte)&&actuelle!=='Frais professionnels'){cible='Frais professionnels';detail.aubagneRetroactif++;}
     else if(!actuelle&&type==='depense'&&/(FLIXBUS|TRAINLINE|SANDAYA)/.test(texte)){cible='Voyages / vacances';detail.voyages++;}
@@ -49,7 +48,7 @@ function reparerDeuxiemeVagueCategorisation2026(){
     else if(type==='depense'&&/(DR IRLES|DR VO VAN FLORE)/.test(texte)&&!actuelle){cible='Santé';detail.sante++;}
     else if(type==='depense'&&/(ESTHETIC CENTER|ESCALE BEAUTE)/.test(texte)&&!actuelle){cible='Loisirs';detail.loisirs++;}
     else if(type==='depense'&&/(CARREFOUR CITY|PETIT CASINO|\bSPAR\b|BRESSOLS PRIMEUR|ZETTLE MAISON|SUMUP BRUNO G)/.test(texte)&&!actuelle){cible='Courses';detail.courses++;}
-    else if(type==='depense'&&/(PIQUESTELLE|JARDI D.?EDEN)/.test(texte)&&!actuelle){cible='Restaurants / sorties';detail.restaurants++;}
+    else if(type==='depense'&&/(PIQUESTELLE|JARDI D.?EDEN|CHEZ TETA|LE SAINT SAUVAGE|RESTO SAS POK|PIZZA DEL ALMA)/.test(texte)&&!actuelle){cible='Restaurants / sorties';detail.restaurants++;}
     else if(type==='depense'&&/(AREAS TOULOUSE|UT2J TOULOUSE|UT J TOULOUSE|HELLOASSO)/.test(texte)&&!actuelle){cible='Dépenses diverses';detail.depensesDiverses++;}
     else if(type==='depense'&&!actuelle&&/MARSEILLE/.test(texte)){cible='Frais professionnels';detail.fraisPro++;}
     if(!cible||cible===actuelle)return;enregistrerLigne('Operations',Object.assign({},o,{categorie:cible,montant:Math.abs(Number(o.montant||0))}));modifiees++;
