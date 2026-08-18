@@ -75,7 +75,7 @@ jobs:
           fi
           deployment_id="${ids[0]}"
           for attempt in 1 2 3 4 5; do
-            if npx --yes @google/clasp@3 create-deployment --deploymentId "$deployment_id" --description "BudgetSoft TEST ${{ github.sha }}"; then
+            if npx --yes @google/clasp@3 update-deployment "$deployment_id" --description "BudgetSoft TEST ${{ github.sha }}"; then
               exit 0
             fi
             [ "$attempt" -eq 5 ] && exit 1
