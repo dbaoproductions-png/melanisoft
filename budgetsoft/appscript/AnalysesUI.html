@@ -1,7 +1,7 @@
 <script>
 window.budgetsoftModules=window.budgetsoftModules||{};
 window.budgetsoftModules.analyses=afficherModuleAnalyses;
-const analysesUI={donnees:null,nombrePeriodes:6};
+const analysesUI={donnees:null,nombrePeriodes:6,vue:'general'};
 
 function afficherModuleAnalyses(){
   const zone=document.getElementById('generic-view');
@@ -9,11 +9,17 @@ function afficherModuleAnalyses(){
     <div class="panel-heading"><div><span class="panel-kicker">Indicateurs</span><h2>Analyse budgétaire</h2></div>
       <label>Périodes <select id="analyses-period-count"><option value="3">3</option><option value="6" selected>6</option><option value="12">12</option></select></label>
     </div>
+    <div class="analysis-tabs">
+      <button data-analysis-view="general" class="active">Vue générale</button>
+      <button data-analysis-view="recettes">Recettes</button>
+      <button data-analysis-view="depenses">Dépenses</button>
+    </div>
     <div id="analyses-status" class="helper-text">Chargement…</div>
     <div id="analyses-content"></div>
   </article>`;
   document.getElementById('analyses-period-count').value=String(analysesUI.nombrePeriodes);
   document.getElementById('analyses-period-count').addEventListener('change',e=>{analysesUI.nombrePeriodes=Number(e.target.value)||6;chargerAnalysesUI();});
+  zone.querySelectorAll('[data-analysis-view]').forEach(b=>b.addEventListener('click',()=>{analysesUI.vue=b.dataset.analysisView;zone.querySelectorAll('[data-analysis-view]').forEach(x=>x.classList.toggle('active',x===b));rendreAnalyses();}));
   installerStylesAnalyses();
   chargerAnalysesUI();
 }
@@ -27,7 +33,14 @@ function chargerAnalysesUI(){
 
 function rendreAnalyses(){
   const d=analysesUI.donnees,zone=document.getElementById('analyses-content'),status=document.getElementById('analyses-status');
-  if(!d||!zone)return;if(status)status.textContent=`Période courante : ${dateAnalyse(d.courante.debut)} → ${dateAnalyse(d.courante.fin)}`;
+  if(!d||!zone)return;
+  if(status)status.textContent=`Période courante : ${dateAnalyse(d.courante.debut)} → ${dateAnalyse(d.courante.fin)} · moteur ${echapper(d.version||'')}`;
+  if(analysesUI.vue==='recettes')return rendreAnalyseRecettes(d,zone);
+  if(analysesUI.vue==='depenses')return rendreAnalyseDepenses(d,zone);
+  rendreAnalyseGenerale(d,zone);
+}
+
+function rendreAnalyseGenerale(d,zone){
   const maxFlux=Math.max(1,...d.periodes.flatMap(p=>[p.revenus,p.depenses]));
   const maxCategorie=Math.max(1,...d.categories.map(c=>c.montant));
   zone.innerHTML=`
@@ -37,26 +50,73 @@ function rendreAnalyses(){
       <article class="card metric-card"><span>Épargne moyenne</span><strong>${money.format(d.indicateurs.epargneMoyenne)}</strong><small>Taux moyen ${Number(d.indicateurs.tauxEpargneMoyen||0).toLocaleString('fr-FR')} %</small></article>
     </div>
     <div class="analysis-grid">
-      <section class="analysis-block"><h3>Revenus et dépenses</h3><div class="flow-chart">${d.periodes.map(p=>`<div class="flow-column"><div class="flow-bars"><span class="flow-bar income" style="height:${Math.max(3,p.revenus/maxFlux*150)}px" title="Revenus ${money.format(p.revenus)}"></span><span class="flow-bar expense" style="height:${Math.max(3,p.depenses/maxFlux*150)}px" title="Dépenses ${money.format(p.depenses)}"></span></div><small>${echapper(courtLibelleAnalyse(p.libelle))}</small><strong class="${p.solde>=0?'amount-positive':'amount-negative'}">${money.format(p.solde)}</strong></div>`).join('')}</div><div class="analysis-legend"><span>■ Revenus</span><span>■ Dépenses</span></div></section>
+      <section class="analysis-block"><h3>Revenus et dépenses</h3><div class="flow-chart">${d.periodes.map(p=>`<div class="flow-column"><div class="flow-bars"><span class="flow-bar income" style="height:${Math.max(3,p.revenus/maxFlux*150)}px"></span><span class="flow-bar expense" style="height:${Math.max(3,p.depenses/maxFlux*150)}px"></span></div><small>${echapper(courtLibelleAnalyse(p.libelle))}</small><strong class="${p.solde>=0?'amount-positive':'amount-negative'}">${money.format(p.solde)}</strong></div>`).join('')}</div><div class="analysis-legend"><span>■ Revenus</span><span>■ Dépenses</span></div></section>
       <section class="analysis-block"><h3>Dépenses par catégorie</h3>${d.categories.length?`<div class="category-analysis">${d.categories.slice(0,8).map(c=>`<div class="category-analysis-row"><div><strong>${echapper(c.nom)}</strong><small>${Number(c.part).toLocaleString('fr-FR')} %</small></div><div class="analysis-track"><span style="width:${Math.max(2,c.montant/maxCategorie*100)}%"></span></div><strong>${money.format(c.montant)}</strong></div>`).join('')}</div>`:'<div class="empty-state">Aucune dépense sur la période.</div>'}</section>
     </div>
     <section class="analysis-block analysis-alerts"><h3>Écarts au budget</h3>${d.alertes.length?d.alertes.map(a=>`<div class="account-row"><div><strong>${echapper(a.poste)}</strong><small>${a.taux} % de l’enveloppe consommée</small></div><span>Prévu ${money.format(a.prevu)}</span><strong class="amount-negative">Dépassement ${money.format(Math.abs(a.ecart))}</strong></div>`).join(''):'<div class="empty-state">Aucune enveloppe budgétaire dépassée.</div>'}</section>`;
 }
 
+function rendreAnalyseRecettes(d,zone){
+  const r=d.recettes;if(!r){zone.innerHTML='<div class="empty-state">Bloc Recettes non disponible.</div>';return;}
+  const f=r.fenetres[String(analysesUI.nombrePeriodes)]||r.fenetres[analysesUI.nombrePeriodes]||r.fenetres[6];
+  const prod=f.producteurs||{};
+  zone.innerHTML=`
+    <div class="cards analyses-metrics analyses-metrics-4">
+      <article class="card metric-card"><span>Revenus économiques</span><strong>${money.format(f.revenusEconomiques)}</strong><small>${money.format(f.moyenneMensuelle)}/mois</small></article>
+      <article class="card metric-card"><span>Revenus structurels</span><strong>${money.format(f.revenusStructurels)}</strong><small>France Travail inclus dans l’activité intermittente</small></article>
+      <article class="card metric-card"><span>Part variable</span><strong>${Number(f.partVariable||0).toLocaleString('fr-FR',{maximumFractionDigits:1})} %</strong><small>Revenus structurels variables compris</small></article>
+      <article class="card metric-card warning-card"><span>Dépendance au crédit</span><strong>${money.format(f.creditsTresorerie)}</strong><small>${f.moisAvecSauvetage} mois concernés · ${Number(f.dependanceCredit||0).toLocaleString('fr-FR',{maximumFractionDigits:1})} % des revenus</small></article>
+    </div>
+    <div class="analysis-grid">
+      <section class="analysis-block"><h3>Producteurs de revenus</h3>${barresSimplesAnalyse([['Patrick',prod.Patrick||0],['Madame',prod.Madame||0],['Foyer',prod.Foyer||0]])}</section>
+      <section class="analysis-block"><h3>Sources</h3>${barresSimplesAnalyse((f.sources||[]).slice(0,10).map(x=>[x.nom,x.montant]))}</section>
+    </div>
+    <section class="analysis-block analysis-alerts"><h3>Références actuelles</h3>
+      <div class="account-row"><div><strong>Salaire Patrick</strong><small>Dernière référence nette de remboursement professionnel identifié</small></div><strong>${money.format(r.references.salairePatrick||0)}</strong></div>
+      <div class="account-row"><div><strong>Foncier</strong><small>Appartement + garage</small></div><strong>${money.format((r.references.loyerAppartement||0)+(r.references.garage||0))}/mois</strong></div>
+      <div class="account-row"><div><strong>Pluxee</strong><small>Avantage affecté · mois de carence : mai</small></div><strong>${money.format(r.references.pluxeeMensuel||0)}/mois</strong></div>
+    </section>`;
+}
+
+function rendreAnalyseDepenses(d,zone){
+  const x=d.depensesDetail;if(!x){zone.innerHTML='<div class="empty-state">Bloc Dépenses non disponible.</div>';return;}
+  const f=x.fenetres[String(analysesUI.nombrePeriodes)]||x.fenetres[analysesUI.nombrePeriodes]||x.fenetres[6];
+  const a=f.alimentation,s=f.sante;
+  zone.innerHTML=`
+    <div class="cards analyses-metrics analyses-metrics-4">
+      <article class="card metric-card"><span>Courses réelles</span><strong>${money.format(a.coursesReelles)}</strong><small>Banque + Pluxee</small></article>
+      <article class="card metric-card"><span>Restaurants réels</span><strong>${money.format(a.restaurantsReels)}</strong><small>Banque + Pluxee</small></article>
+      <article class="card metric-card"><span>Santé nette</span><strong>${money.format(s.coutNet)}</strong><small>Soins + couverture − remboursements</small></article>
+      <article class="card metric-card"><span>Charges fixes</span><strong>${money.format(x.fixes.montantMensuelReference||0)}/mois</strong><small>${x.fixes.nombre} charge(s) active(s)</small></article>
+    </div>
+    <div class="analysis-grid">
+      <section class="analysis-block"><h3>Alimentation</h3>
+        <div class="account-row"><div><strong>Courses banque</strong></div><strong>${money.format(a.coursesBanque)}</strong></div>
+        <div class="account-row"><div><strong>Restaurants banque</strong></div><strong>${money.format(a.restaurantsBanque)}</strong></div>
+        <div class="account-row"><div><strong>Pluxee</strong><small>${echapper(a.pluxeeMode)} sur cet horizon</small></div><strong>${money.format(a.pluxeeTotal)}</strong></div>
+        <div class="account-row total-row"><div><strong>Total alimentation réelle</strong></div><strong>${money.format(a.totalReel)}</strong></div>
+      </section>
+      <section class="analysis-block"><h3>Santé</h3>
+        <div class="account-row"><div><strong>Soins bruts</strong></div><strong>${money.format(s.soinsBruts)}</strong></div>
+        <div class="account-row"><div><strong>Couverture MNT + Audiens</strong></div><strong>${money.format(s.couvertureMntAudiens)}</strong></div>
+        <div class="account-row"><div><strong>Remboursements</strong></div><strong class="amount-positive">− ${money.format(s.remboursements)}</strong></div>
+        <div class="account-row total-row"><div><strong>Coût net santé</strong></div><strong>${money.format(s.coutNet)}</strong></div>
+      </section>
+    </div>
+    <section class="analysis-block analysis-alerts"><h3>Regroupements thématiques</h3>${barresSimplesAnalyse((f.themes||[]).map(x=>[x.nom,x.montant]))}</section>`;
+}
+
+function barresSimplesAnalyse(lignes){
+  const max=Math.max(1,...lignes.map(x=>Number(x[1]||0)));
+  return `<div class="category-analysis">${lignes.map(x=>`<div class="category-analysis-row"><div><strong>${echapper(x[0])}</strong></div><div class="analysis-track"><span style="width:${Math.max(2,Number(x[1]||0)/max*100)}%"></span></div><strong>${money.format(Number(x[1]||0))}</strong></div>`).join('')}</div>`;
+}
+
 function installerStylesAnalyses(){
   if(document.getElementById('analyses-ui-styles'))return;
   const style=document.createElement('style');style.id='analyses-ui-styles';style.textContent=`
-    .analysis-grid{display:grid;grid-template-columns:1.15fr 1fr;gap:18px;margin-top:18px}
-    .analysis-block{border:1px solid rgba(20,125,100,.16);border-radius:16px;padding:18px;background:#fff}
-    .analysis-block h3{margin:0 0 16px}.flow-chart{display:flex;align-items:flex-end;gap:12px;min-height:210px;overflow-x:auto;padding:12px 4px 0}
-    .flow-column{display:grid;justify-items:center;gap:6px;min-width:66px;flex:1}.flow-bars{height:155px;display:flex;align-items:flex-end;gap:5px}
-    .flow-bar{display:block;width:15px;border-radius:6px 6px 2px 2px}.flow-bar.income{background:#147d64}.flow-bar.expense{background:#d77b53}
-    .flow-column small{white-space:nowrap}.flow-column strong{font-size:.82rem}.analysis-legend{display:flex;gap:16px;justify-content:center;margin-top:12px;font-size:.85rem}
-    .analysis-legend span:first-child{color:#147d64}.analysis-legend span:last-child{color:#b75b37}
-    .category-analysis{display:grid;gap:13px}.category-analysis-row{display:grid;grid-template-columns:minmax(100px,1fr) 2fr auto;gap:10px;align-items:center}
-    .category-analysis-row small{display:block}.analysis-track{height:9px;background:rgba(20,125,100,.1);border-radius:999px;overflow:hidden}.analysis-track span{display:block;height:100%;background:#147d64;border-radius:999px}
-    .analysis-alerts{margin-top:18px}.analysis-alerts .account-row{grid-template-columns:1fr auto auto}
-    @media(max-width:850px){.analysis-grid{grid-template-columns:1fr}.category-analysis-row{grid-template-columns:1fr auto}.analysis-track{grid-column:1/-1;grid-row:2}}
+    .analysis-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 16px}.analysis-tabs button{border:1px solid rgba(20,125,100,.2);background:#fff;border-radius:999px;padding:8px 13px;cursor:pointer}.analysis-tabs button.active{background:#147d64;color:#fff;border-color:#147d64}
+    .analysis-grid{display:grid;grid-template-columns:1.15fr 1fr;gap:18px;margin-top:18px}.analysis-block{border:1px solid rgba(20,125,100,.16);border-radius:16px;padding:18px;background:#fff}.analysis-block h3{margin:0 0 16px}.flow-chart{display:flex;align-items:flex-end;gap:12px;min-height:210px;overflow-x:auto;padding:12px 4px 0}.flow-column{display:grid;justify-items:center;gap:6px;min-width:66px;flex:1}.flow-bars{height:155px;display:flex;align-items:flex-end;gap:5px}.flow-bar{display:block;width:15px;border-radius:6px 6px 2px 2px}.flow-bar.income{background:#147d64}.flow-bar.expense{background:#d77b53}.flow-column small{white-space:nowrap}.flow-column strong{font-size:.82rem}.analysis-legend{display:flex;gap:16px;justify-content:center;margin-top:12px;font-size:.85rem}.analysis-legend span:first-child{color:#147d64}.analysis-legend span:last-child{color:#b75b37}.category-analysis{display:grid;gap:13px}.category-analysis-row{display:grid;grid-template-columns:minmax(120px,1fr) 2fr auto;gap:10px;align-items:center}.category-analysis-row small{display:block}.analysis-track{height:9px;background:rgba(20,125,100,.1);border-radius:999px;overflow:hidden}.analysis-track span{display:block;height:100%;background:#147d64;border-radius:999px}.analysis-alerts{margin-top:18px}.analysis-alerts .account-row{grid-template-columns:1fr auto}.analyses-metrics-4{grid-template-columns:repeat(4,minmax(0,1fr))}.warning-card{border-color:rgba(215,123,83,.35)!important}.total-row{border-top:1px solid rgba(20,125,100,.16);padding-top:10px;margin-top:6px}
+    @media(max-width:1000px){.analyses-metrics-4{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:850px){.analysis-grid{grid-template-columns:1fr}.category-analysis-row{grid-template-columns:1fr auto}.analysis-track{grid-column:1/-1;grid-row:2}}@media(max-width:600px){.analyses-metrics-4{grid-template-columns:1fr}}
   `;document.head.appendChild(style);
 }
 function dateAnalyse(v){const d=new Date(v);return isNaN(d)?'—':d.toLocaleDateString('fr-FR');}
