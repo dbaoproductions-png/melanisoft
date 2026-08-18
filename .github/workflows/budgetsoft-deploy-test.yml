@@ -62,5 +62,22 @@ jobs:
       - name: Push exact GitHub commit to Apps Script TEST
         run: npx --yes @google/clasp@3 push --force
 
-      - name: Create Apps Script version
-        run: npx --yes @google/clasp@3 create-version --description "BudgetSoft TEST ${{ github.sha }}"
+      - name: Update existing TEST web app deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          deployments="$(npx --yes @google/clasp@3 list-deployments)"
+          printf '%s\n' "$deployments"
+          mapfile -t ids < <(printf '%s\n' "$deployments" | grep -v '@HEAD' | grep -Eo 'AKfy[A-Za-z0-9_-]+' | sort -u)
+          if [ "${#ids[@]}" -ne 1 ]; then
+            echo "Expected exactly one non-HEAD TEST deployment; found ${#ids[@]}." >&2
+            exit 1
+          fi
+          deployment_id="${ids[0]}"
+          for attempt in 1 2 3 4 5; do
+            if npx --yes @google/clasp@3 create-deployment --deploymentId "$deployment_id" --description "BudgetSoft TEST ${{ github.sha }}"; then
+              exit 0
+            fi
+            [ "$attempt" -eq 5 ] && exit 1
+            sleep $((10 * attempt))
+          done
