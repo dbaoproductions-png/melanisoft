@@ -65,3 +65,21 @@ function chargerCreditsEtDettesV2() {
     tauxRenouvelablePondere
   };
 }
+
+function diagnostiquerCreditsV2() {
+  const d = chargerCreditsEtDettesV2();
+  const resume = {
+    version: d.version,
+    capitalRenouvelable: d.capitalRenouvelable,
+    coutRenouvelable: d.coutRenouvelable,
+    renouvelables: (d.renouvelables || []).map(c => ({
+      nom: c.nom,
+      type_credit: c.type_credit,
+      capital_restant: c.capital_restant,
+      cout_restant: c.cout_restant
+    })),
+    amortissables: (d.amortissables || []).map(c => c.nom)
+  };
+  console.log(JSON.stringify(resume, null, 2));
+  return resume;
+}
