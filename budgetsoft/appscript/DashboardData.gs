@@ -1,10 +1,7 @@
-// DashboardData v1.6 — mêmes opérations réelles que l'onglet Opérations, cycles calculés sur date comptable
+// DashboardData v1.7 — mêmes opérations réelles que l'onglet Opérations, cycles calculés sur date comptable
 function chargerDashboardReel() {
   verifierInitialisation_();
 
-  // Source unique : toutes les opérations réellement enregistrées dans BudgetSoft.
-  // Ne pas utiliser lireOperationsBancaires_ ici : cela excluait certaines lignes
-  // valides (opérations saisies/manuelles ou anciennes lignes sans métadonnées bancaires).
   const operations = lireTable_('Operations').map(o => {
     try { return typeof enrichirDepuisCommentaireBanque_ === 'function' ? enrichirDepuisCommentaireBanque_(o) : o; }
     catch (e) { return o; }
@@ -25,8 +22,6 @@ function chargerDashboardReel() {
   const estAuto = o => /\[RECURRENCE:[^\]]+\]/.test(String(o && o.commentaire || ''));
   const opsReelles = operations.filter(o => !estAuto(o));
 
-  // Une opération bancaire réelle appartient au cycle de sa date comptable.
-  // date_achat n'est conservée que comme information pour les CB différées.
   const valides = opsReelles.map(o => {
     const dateComptable = new Date(o.date_comptable || o.date);
     const dateAchat = new Date(o.date_achat || o.date || o.date_comptable);
@@ -69,9 +64,21 @@ function chargerDashboardReel() {
     }
   }
 
+  // IMPORTANT : les bornes de cycle sont des jours calendaires. Certaines anciennes
+  // opérations sont enregistrées à 00:00 et d'autres à 12:00 ; on normalise donc
+  // systématiquement le début à 00:00 et la fin à 23:59:59.999 pour ne perdre
+  // aucune opération du premier/dernier jour.
   function stats(p, lim) {
-    const deb = new Date(p.debut), fin = new Date(p.fin);
-    const borne = lim && new Date(lim) < fin ? new Date(lim) : fin;
+    const deb = dateJourCycle_(new Date(p.debut));
+    deb.setHours(0, 0, 0, 0);
+    const fin = dateJourCycle_(new Date(p.fin));
+    fin.setHours(23, 59, 59, 999);
+    let borne = fin;
+    if (lim) {
+      const l = dateJourCycle_(new Date(lim));
+      l.setHours(23, 59, 59, 999);
+      if (l < borne) borne = l;
+    }
     const ops = valides.filter(o => o.dateComptable >= deb && o.dateComptable <= borne);
     const rev = ops.filter(o => o.type === 'revenu').reduce((s, o) => s + o.montant, 0);
     const dep = ops.filter(o => o.type === 'depense').reduce((s, o) => s + o.montant, 0);
@@ -84,7 +91,7 @@ function chargerDashboardReel() {
     const dp = parametres['date_solde_releve_' + id] ? new Date(parametres['date_solde_releve_' + id]) : null;
     const cor = o => String(o.compte) === id || String(o.compte) === nom;
     if (sp !== undefined && sp !== '' && dp && !isNaN(dp)) {
-      const base = Number(String(sp).replace(',', '.'));
+      const base = Number(String(sp).replace(',','.'));
       if (Number.isFinite(base)) {
         const mv = valides.filter(o => cor(o) && o.dateComptable > dp && dateJourCycle_(o.dateComptable) <= dateJourCycle_(dateRef))
           .reduce((s, o) => s + (o.type === 'depense' ? -o.montant : o.montant), 0);
@@ -181,14 +188,12 @@ function chargerDashboardReel() {
   const cbSuiv = cbDifferees(prochainDeb, prochainFin);
   const totalCbSuiv = arrondirCycle_(cbSuiv.reduce((s, x) => s + x.montant, 0));
 
-  // Salaire attendu : se baser d'abord sur la catégorie Salaires désormais fiabilisée.
-  // L'éventuel remboursement professionnel de juillet est neutralisé avant moyenne.
   const ajustementJuillet = Number(parametres.salaire_remboursement_pro_2026_07 || 153.49);
   const salairesHist = valides.filter(o => o.type === 'revenu' && (o.categorie === 'Salaires' || /MAIRIE DE TOULOUSE/i.test(o.libelle)))
     .sort((a, b) => a.dateComptable - b.dateComptable)
     .slice(-6)
     .map(o => ({
-      montant: (cleMoisMetier2026_ && typeof cleMoisMetier2026_ === 'function' && cleMoisMetier2026_(o.dateComptable) === '2026-07')
+      montant: (typeof cleMoisMetier2026_ === 'function' && cleMoisMetier2026_(o.dateComptable) === '2026-07')
         ? Math.max(0, o.montant - (Number.isFinite(ajustementJuillet) ? ajustementJuillet : 0))
         : o.montant
     }));
