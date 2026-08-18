@@ -1,4 +1,4 @@
-const ANALYSES_VERSION = '1.6';
+const ANALYSES_VERSION = '1.7';
 
 function chargerAnalysesBudgetaires(nombrePeriodes) {
   verifierInitialisation_();
@@ -6,6 +6,7 @@ function chargerAnalysesBudgetaires(nombrePeriodes) {
   const budgets = lireTable_('Budget');
   const parametres = lireTable_('Parametres');
   const categoriesRef = lireTable_('Categories');
+  const chargesFixes = lireTable_('Charges_fixes');
   const typesCategories = Object.fromEntries(categoriesRef.map(c => [String(c.nom || '').trim(), String(c.type || '').toLowerCase()]));
   const estTresorerie = o => String(o.type || '').toLowerCase() === 'tresorerie' || typesCategories[String(o.categorie || '').trim()] === 'tresorerie';
   const dictionnaire = Object.fromEntries(parametres.map(p => [String(p.cle), p.valeur]));
@@ -81,12 +82,21 @@ function chargerAnalysesBudgetaires(nombrePeriodes) {
     ? Math.round(((courante.depenses - precedente.depenses) / precedente.depenses) * 1000) / 10
     : 0;
 
+  const recettes = typeof construireAnalyseRecettes2026_ === 'function'
+    ? construireAnalyseRecettes2026_(operations, categoriesRef)
+    : null;
+  const depensesDetail = typeof construireAnalyseDepenses2026_ === 'function'
+    ? construireAnalyseDepenses2026_(operations, categoriesRef, chargesFixes)
+    : null;
+
   return {
     version: ANALYSES_VERSION,
     periodes,
     courante,
     categories,
     alertes,
+    recettes,
+    depensesDetail,
     indicateurs: {
       revenusMoyens: moyenne('revenus'),
       depensesMoyennes: moyenne('depenses'),
