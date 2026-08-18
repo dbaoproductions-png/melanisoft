@@ -1,4 +1,4 @@
-const BUDGET_PLAN_VERSION = '1.2';
+const BUDGET_PLAN_VERSION = '1.3';
 
 function chargerBudgetPeriode(clePeriode) {
   verifierInitialisation_();
@@ -12,8 +12,10 @@ function chargerBudgetPeriode(clePeriode) {
   const categories = lireTable_('Categories').filter(c => convertirBooleen_(c.actif));
   const debut = new Date(periode.debut);
   const fin = new Date(periode.fin);
+  // Même convention que le tableau de bord et Analyse : un flux réalisé appartient
+  // à la période de sa date comptable ; date historique seulement en repli.
   const mouvements = operations.filter(o => {
-    const d = new Date(o.date);
+    const d = new Date(o.date_comptable || o.date);
     return !isNaN(d) && d >= debut && d <= fin;
   });
 
