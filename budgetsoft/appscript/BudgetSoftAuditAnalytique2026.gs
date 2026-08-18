@@ -23,7 +23,7 @@ else if(type==='depense'&&/CASTORAMA/.test(texte)&&!actuelle){cible='Maison / en
 else if(type==='depense'&&!actuelle&&/(DR IRLES|DR VO VAN FLORE|MARINE LESAGE)/.test(texte)){cible='Santé';detail.sante++;}
 else if(type==='depense'&&/(ESTHETIC CENTER|ESCALE BEAUTE)/.test(texte)&&!actuelle){cible='Loisirs';detail.loisirs++;}
 else if(type==='depense'&&!actuelle&&/(CARREFOUR CITY|CARREF CITY NFC|PETIT CASINO|\bSPAR\b|BRESSOLS PRIMEUR|ZETTLE MAISON|SUMUP BRUNO G|LA GRANGE DES P|DISTRIB ALIM)/.test(texte)){cible='Courses';detail.courses++;}
-else if(type==='depense'&&!actuelle&&/(PIQUESTELLE|JARDI D.?EDEN|CHEZ TETA|LE SAINT SAUVAGE|RESTO SAS POK|PIZZA DEL ALMA|MCDO|MCDONALD|WEEZEVENT|BILLETWEB|PICA PICA|TANTE JEANNE|COEUR D AMANDE|PANAME BREWING)/.test(texte)){cible='Restaurants / sorties';detail.restaurants++;}
+else if(type==='depense'&&!actuelle&&/(PIQUESTELLE|JARDI D.?EDEN|CHEZ TETA|LE SAINT SAUVAGE|RESTO SAS POK|PIZZA DEL ALMA|MCDO|MCDONALD|WEEZEVENT|BILLETWEB|PICA PICA|TANTE JEANNE|COEUR D AMANDE|PANAME BREWING|CAP LAND)/.test(texte)){cible='Restaurants / sorties';detail.restaurants++;}
 else if(type==='depense'&&/(AREAS TOULOUSE|UT2J TOULOUSE|UT J TOULOUSE|HELLOASSO)/.test(texte)&&!actuelle){cible='Dépenses diverses';detail.depensesDiverses++;}
 else if(type==='depense'&&!actuelle&&/GOOGLE GOOGLE P/.test(texte)&&Math.abs(Math.abs(montant)-54.99)<0.01){cible='Abonnements numériques';detail.abonnementsNumeriques++;}
 else if(type==='depense'&&!actuelle&&/TABAC/.test(texte)&&Math.abs(montant)>=10&&Math.abs(montant)<=16){cible='Dépenses diverses';detail.depensesDiverses++;}
