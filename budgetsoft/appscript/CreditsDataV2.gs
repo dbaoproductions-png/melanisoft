@@ -1,4 +1,4 @@
-const CREDITS_DATA_V2_VERSION = '2.0-2026-08-18';
+const CREDITS_DATA_V2_VERSION = '2.1-2026-08-18';
 
 function lireCreditsEtendusV2_() {
   assurerColonnesCredits_();
@@ -17,18 +17,33 @@ function lireCreditsEtendusV2_() {
 function typeCreditV2_(c) {
   const explicite = String(c.type_credit || '').toLowerCase();
   if (explicite === 'revolving' || explicite === 'amortissable') return explicite;
-  const texte = normaliserTexteBanque_([c.nom || '', c.numero_pret || ''].join(' '));
-  if (/CARREFOUR.*PASS|ACCESSIO|FLOA|CDISCOUNT|ONEY.*B\+|CARTE B\+/.test(texte)) return 'revolving';
+
+  // Ne pas dépendre du signe + : la normalisation bancaire peut le supprimer.
+  const brut = [c.nom || '', c.numero_pret || ''].join(' ').toUpperCase();
+  const normalise = normaliserTexteBanque_(brut);
+  const texte = brut + ' ' + normalise;
+  if (/CARREFOUR.*PASS|ACCESSIO|FLOA|CDISCOUNT|ONEY|CARTE\s+B/.test(texte)) return 'revolving';
   return 'amortissable';
+}
+
+function enrichirCreditV2_(c) {
+  const x = enrichirCredit_(c);
+  x.type_credit = typeCreditV2_(c);
+
+  // Dans l'ancien schéma, une cellule vide de cout_restant était convertie en 0
+  // avant que le calcul de secours puisse s'appliquer. On recalcule uniquement
+  // si aucun coût positif n'est réellement stocké.
+  const coutBrut = c.cout_restant;
+  const coutSaisi = coutBrut !== '' && coutBrut !== null && coutBrut !== undefined && Number(coutBrut) > 0;
+  if (!coutSaisi && x.echeances_restantes > 0 && x.mensualite > 0 && x.capital_restant > 0) {
+    x.cout_restant = Math.max(0, Math.round((x.echeances_restantes * x.mensualite - x.capital_restant) * 100) / 100);
+  }
+  return x;
 }
 
 function chargerCreditsEtDettesV2() {
   verifierInitialisation_();
-  const credits = lireCreditsEtendusV2_().map(c => {
-    const x = enrichirCredit_(c);
-    x.type_credit = typeCreditV2_(c);
-    return x;
-  });
+  const credits = lireCreditsEtendusV2_().map(enrichirCreditV2_);
   const dettes = lireTable_('Dettes');
   const tous = [
     ...credits.map(c => Object.assign({ table: 'Credits', nature: c.type_credit === 'revolving' ? 'Crédit renouvelable' : 'Crédit' }, c)),
