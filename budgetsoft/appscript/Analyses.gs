@@ -1,35 +1,52 @@
-const ANALYSES_VERSION = '1.7';
+const ANALYSES_VERSION = '1.8';
 
 function chargerAnalysesBudgetaires(nombrePeriodes) {
   verifierInitialisation_();
-  const operations = lireTable_('Operations');
+
+  // Toutes les tables sont chargées une seule fois. Les analyses se font ensuite
+  // entièrement en mémoire : pas d'écriture et pas de génération de charges fictives.
+  const operationsBrutes = lireTable_('Operations');
   const budgets = lireTable_('Budget');
   const parametres = lireTable_('Parametres');
   const categoriesRef = lireTable_('Categories');
   const chargesFixes = lireTable_('Charges_fixes');
+
+  const operations = operationsBrutes.map(o => {
+    const copie = Object.assign({}, o);
+    // Pour l'analyse des flux réellement passés en banque, la date comptable fait foi.
+    // Les anciennes opérations sans date_comptable conservent leur date historique.
+    copie.date_analyse = copie.date_comptable || copie.date;
+    return copie;
+  });
+
   const typesCategories = Object.fromEntries(categoriesRef.map(c => [String(c.nom || '').trim(), String(c.type || '').toLowerCase()]));
-  const estTresorerie = o => String(o.type || '').toLowerCase() === 'tresorerie' || typesCategories[String(o.categorie || '').trim()] === 'tresorerie';
+  const estTresorerie = o => {
+    const cat = String(o.categorie || '').trim();
+    return String(o.type || '').toLowerCase() === 'tresorerie' || typesCategories[cat] === 'tresorerie' || cat === 'Crédits de trésorerie' || cat === 'Virements internes';
+  };
   const dictionnaire = Object.fromEntries(parametres.map(p => [String(p.cle), p.valeur]));
   const jour = bornerJourBudgetaire_(dictionnaire.jour_debut_mois || 28);
   const nb = Math.max(3, Math.min(12, parseInt(nombrePeriodes, 10) || 6));
-  const maintenant = new Date();
+
+  // La période de référence est la dernière date comptable connue, sans aller au-delà d'aujourd'hui.
+  const aujourdHui = new Date();
+  const datesValides = operations.map(o => new Date(o.date_analyse)).filter(d => !isNaN(d) && d <= aujourdHui).sort((a, b) => b - a);
+  const maintenant = datesValides.length ? datesValides[0] : aujourdHui;
   const periodes = [];
 
   for (let recul = nb - 1; recul >= 0; recul--) {
     const reference = new Date(maintenant.getFullYear(), maintenant.getMonth() - recul, 15);
-    const periode = calculerPeriodeBudgetaireAvecSalaire_(reference, jour, operations);
+    const periode = calculerPeriodeBudgetaireAvecSalaire_(reference, jour, operationsBrutes);
     const debut = new Date(periode.debut);
     const fin = new Date(periode.fin);
     const mouvements = operations.filter(o => {
-      const date = new Date(o.date);
+      const date = new Date(o.date_analyse);
       return !isNaN(date) && date >= debut && date <= fin;
     });
     const mouvementsBudgetaires = mouvements.filter(o => !estTresorerie(o));
     const tresorerie = mouvements.filter(estTresorerie).reduce((s, o) => s + Number(o.montant || 0), 0);
-    const revenus = mouvementsBudgetaires.filter(o => Number(o.montant || 0) > 0)
-      .reduce((s, o) => s + Number(o.montant || 0), 0);
-    const depenses = mouvementsBudgetaires.filter(o => Number(o.montant || 0) < 0)
-      .reduce((s, o) => s + Math.abs(Number(o.montant || 0)), 0);
+    const revenus = mouvementsBudgetaires.filter(o => Number(o.montant || 0) > 0).reduce((s, o) => s + Number(o.montant || 0), 0);
+    const depenses = mouvementsBudgetaires.filter(o => Number(o.montant || 0) < 0).reduce((s, o) => s + Math.abs(Number(o.montant || 0)), 0);
     periodes.push({
       cle: periode.cle,
       libelle: periode.libelle,
@@ -39,7 +56,8 @@ function chargerAnalysesBudgetaires(nombrePeriodes) {
       depenses,
       solde: revenus - depenses,
       tauxEpargne: revenus > 0 ? Math.round(((revenus - depenses) / revenus) * 1000) / 10 : 0,
-      tresorerie
+      tresorerie,
+      operations: mouvementsBudgetaires.length
     });
   }
 
@@ -47,7 +65,7 @@ function chargerAnalysesBudgetaires(nombrePeriodes) {
   const debutCourant = new Date(courante.debut);
   const finCourant = new Date(courante.fin);
   const mouvementsCourants = operations.filter(o => {
-    const date = new Date(o.date);
+    const date = new Date(o.date_analyse);
     return !isNaN(date) && date >= debutCourant && date <= finCourant;
   });
 
@@ -82,11 +100,14 @@ function chargerAnalysesBudgetaires(nombrePeriodes) {
     ? Math.round(((courante.depenses - precedente.depenses) / precedente.depenses) * 1000) / 10
     : 0;
 
+  // Les deux blocs métier reçoivent les mêmes opérations, avec date analytique
+  // basée sur la date comptable afin d'éviter des divergences avec le tableau de bord.
+  const operationsMetier = operations.map(o => Object.assign({}, o, { date: o.date_analyse }));
   const recettes = typeof construireAnalyseRecettes2026_ === 'function'
-    ? construireAnalyseRecettes2026_(operations, categoriesRef)
+    ? construireAnalyseRecettes2026_(operationsMetier, categoriesRef)
     : null;
   const depensesDetail = typeof construireAnalyseDepenses2026_ === 'function'
-    ? construireAnalyseDepenses2026_(operations, categoriesRef, chargesFixes)
+    ? construireAnalyseDepenses2026_(operationsMetier, categoriesRef, chargesFixes)
     : null;
 
   return {
@@ -104,6 +125,12 @@ function chargerAnalysesBudgetaires(nombrePeriodes) {
       tauxEpargneMoyen: moyenne('revenus') > 0 ? Math.round((moyenne('solde') / moyenne('revenus')) * 1000) / 10 : 0,
       evolutionDepenses,
       mouvementTresorerieMoyen: moyenne('tresorerie')
+    },
+    diagnostic: {
+      sourceOperations: 'Operations',
+      dateFlux: 'date_comptable puis date',
+      nombreOperationsSource: operations.length,
+      chargesFixesSource: chargesFixes.length
     }
   };
 }
