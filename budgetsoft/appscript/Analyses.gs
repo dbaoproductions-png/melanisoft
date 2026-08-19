@@ -1,4 +1,4 @@
-const ANALYSES_VERSION = '1.9';
+const ANALYSES_VERSION = '2.0';
 
 function chargerAnalysesBudgetaires(nombrePeriodes) {
   verifierInitialisation_();
@@ -106,9 +106,12 @@ function chargerAnalysesBudgetaires(nombrePeriodes) {
   const recettes = typeof construireAnalyseRecettes2026_ === 'function'
     ? construireAnalyseRecettes2026_(operationsMetier, categoriesRef)
     : null;
-  const depensesDetail = typeof construireAnalyseDepenses2026_ === 'function'
+  let depensesDetail = typeof construireAnalyseDepenses2026_ === 'function'
     ? construireAnalyseDepenses2026_(operationsMetier, categoriesRef, chargesFixes)
     : null;
+  if (depensesDetail && typeof enrichirAnalyseFinancement2026_ === 'function') {
+    depensesDetail = enrichirAnalyseFinancement2026_(depensesDetail, operationsMetier);
+  }
 
   const resultat = {
     version: ANALYSES_VERSION,
