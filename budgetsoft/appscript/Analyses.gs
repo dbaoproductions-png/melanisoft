@@ -1,4 +1,4 @@
-const ANALYSES_VERSION = '2.0';
+const ANALYSES_VERSION = '2.1';
 
 function chargerAnalysesBudgetaires(nombrePeriodes) {
   verifierInitialisation_();
@@ -110,7 +110,7 @@ function chargerAnalysesBudgetaires(nombrePeriodes) {
     ? construireAnalyseDepenses2026_(operationsMetier, categoriesRef, chargesFixes)
     : null;
   if (depensesDetail && typeof enrichirAnalyseFinancement2026_ === 'function') {
-    depensesDetail = enrichirAnalyseFinancement2026_(depensesDetail, operationsMetier);
+    depensesDetail = enrichirAnalyseFinancement2026_(depensesDetail, operationsMetier, periodes);
   }
 
   const resultat = {
