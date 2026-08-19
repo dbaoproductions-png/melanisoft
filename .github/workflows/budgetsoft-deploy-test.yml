@@ -16,12 +16,21 @@ jobs:
     timeout-minutes: 10
     env:
       SCRIPT_ID: 1tvGARYmwH11M0XfsoRKmtLoETCL6_8fmXD16iU39oGWgHHULGiYbDT-n
+      TEST_DEPLOYMENT_ID: AKfycbw1PXP2k36srEig1qwlpK9hiYwGYPhBR1tOVPZha_GpIwpm9A3Ds4lNqlNZnt_zvbbGKA
 
     steps:
       - name: Checkout BudgetSoft import lab
         uses: actions/checkout@v7
         with:
           ref: budgetsoft-import-lab
+
+      - name: Show deployed BudgetSoft revision
+        run: |
+          set -euo pipefail
+          echo "Checked out branch: $(git branch --show-current)"
+          echo "Commit: $(git rev-parse HEAD)"
+          grep -n "CREDITS_DATA_V2_VERSION" budgetsoft/appscript/CreditsDataV2.gs || true
+          grep -n "chargerCreditsEtDettesV2" budgetsoft/appscript/CreditsUI.html || true
 
       - name: Validate browser-only OAuth secrets
         env:
@@ -100,31 +109,56 @@ jobs:
           print('Apps Script source updated:', d.get('scriptId','OK'))
           PY
 
-      - name: Create Apps Script version (best effort)
+      - name: Create Apps Script version
         run: |
           set -euo pipefail
           HTTP_CODE=$(curl -sS -o /tmp/version-response.json -w '%{http_code}' -X POST \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Content-Type: application/json" \
-            -d '{"description":"BudgetSoft TEST from budgetsoft-import-lab"}' \
+            -d "{\"description\":\"BudgetSoft TEST $(git rev-parse --short HEAD)\"}" \
             "https://script.googleapis.com/v1/projects/$SCRIPT_ID/versions")
 
-          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
-            python3 - <<'PY'
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "Apps Script versions.create failed with HTTP $HTTP_CODE"
+            python3 -m json.tool /tmp/version-response.json || cat /tmp/version-response.json
+            exit 1
+          fi
+
+          VERSION_NUMBER=$(python3 -c 'import json; print(json.load(open("/tmp/version-response.json")).get("versionNumber", ""))')
+          test -n "$VERSION_NUMBER" || { echo 'No Apps Script version number returned'; exit 1; }
+          echo "VERSION_NUMBER=$VERSION_NUMBER" >> "$GITHUB_ENV"
+          echo "Apps Script version created: $VERSION_NUMBER"
+
+      - name: Update TEST web app deployment to new version
+        run: |
+          set -euo pipefail
+          cat > /tmp/deployment-update.json <<JSON
+          {
+            "deploymentConfig": {
+              "versionNumber": $VERSION_NUMBER,
+              "manifestFileName": "appsscript",
+              "description": "BudgetSoft TEST $(git rev-parse --short HEAD)"
+            }
+          }
+          JSON
+
+          HTTP_CODE=$(curl -sS -o /tmp/deployment-response.json -w '%{http_code}' -X PUT \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/deployment-update.json \
+            "https://script.googleapis.com/v1/projects/$SCRIPT_ID/deployments/$TEST_DEPLOYMENT_ID")
+
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "Apps Script deployments.update failed with HTTP $HTTP_CODE"
+            python3 -m json.tool /tmp/deployment-response.json || cat /tmp/deployment-response.json
+            exit 1
+          fi
+
+          python3 - <<'PY'
           import json
-          d=json.load(open('/tmp/version-response.json'))
-          print('Apps Script version created:', d.get('versionNumber','unknown'))
+          d=json.load(open('/tmp/deployment-response.json'))
+          cfg=d.get('deploymentConfig',{})
+          print('Deployment updated:', d.get('deploymentId','unknown'))
+          print('Version now served:', cfg.get('versionNumber','unknown'))
+          print('Description:', cfg.get('description',''))
           PY
-            exit 0
-          fi
-
-          echo "Apps Script versions.create returned HTTP $HTTP_CODE"
-          python3 -m json.tool /tmp/version-response.json || cat /tmp/version-response.json
-
-          if [ "$HTTP_CODE" = "429" ]; then
-            echo "WARNING: source push succeeded; Google refused creation of another immutable version because of quota/rate limiting."
-            echo "TEST source is already up to date, so this does not fail the deployment workflow."
-            exit 0
-          fi
-
-          exit 1
