@@ -1,4 +1,4 @@
-const MODELE_RECETTES_DEPENSES_VERSION = '2026-08-18.1';
+const MODELE_RECETTES_DEPENSES_VERSION = '2026-08-19.1';
 
 function texteMetier2026_(o) {
   return normaliserTexteBanque_([o.marchand_normalise || '', o.libelle_bancaire || '', o.libelle || ''].join(' '));
@@ -69,7 +69,6 @@ function cibleCorrectionMetier2026_(o) {
   const type = String(o.type || '').toLowerCase();
   const actuelle = String(o.categorie || '').trim();
   const montant = Math.abs(Number(o.montant || 0));
-  const mois = cleMoisMetier2026_(o.date);
 
   if (type === 'revenu') {
     if (/(MAIRIE DE TOULOUSE|TOULOUSE.*PAYE|PAYE.*TOULOUSE)/.test(texte)) return 'Salaires';
@@ -114,7 +113,9 @@ function appliquerCorrectifsRecettesDepenses18082026() {
   enregistrerParamMetier2026_('loyer_reference_depuis', '2026-08-13');
   enregistrerParamMetier2026_('garage_reference_mensuel', 30);
   enregistrerParamMetier2026_('salaire_mois_primes', '6,11,12');
-  enregistrerParamMetier2026_('salaire_remboursement_pro_2026_07', 153.49);
+  // Depuis le 19/08/2026, le salaire Patrick est le virement net réellement crédité après PAS.
+  // Aucun retraitement de remboursement professionnel n'est soustrait du virement salarial.
+  enregistrerParamMetier2026_('salaire_regle', 'net_bancaire_apres_pas');
   enregistrerParamMetier2026_('pluxee_montant_mensuel', 154);
   enregistrerParamMetier2026_('pluxee_mois_carence', 5);
   enregistrerParamMetier2026_('pluxee_depenses_observees_5m', 655.43);
@@ -192,12 +193,11 @@ function estRevenuVariable2026_(cat) {
 function construireAnalyseRecettes2026_(operations, categoriesRef) {
   const p = lireParametresMetier2026_();
   const types = Object.fromEntries(categoriesRef.map(c => [String(c.nom || '').trim(), String(c.type || '').toLowerCase()]));
-  const ajustementJuillet = nombreParamMetier2026_(p, 'salaire_remboursement_pro_2026_07', 153.49);
   const fenetres = {};
 
   [3,6,12].forEach(nb => {
     const f = opsFenetreMetier2026_(operations, nb);
-    let economiques = 0, structurels = 0, variables = 0, rembPro = 0, sauvetages = 0;
+    let economiques = 0, structurels = 0, variables = 0, sauvetages = 0;
     const producteurs = { Patrick: 0, Madame: 0, Foyer: 0 };
     const sources = {};
     const moisSauvetage = new Set();
@@ -211,11 +211,8 @@ function construireAnalyseRecettes2026_(operations, categoriesRef) {
         return;
       }
       if (montant <= 0 || !estCategorieRevenuEconomique2026_(cat, types[cat])) return;
-      let net = montant;
-      if (cat === 'Salaires' && cleMoisMetier2026_(o.date) === '2026-07' && /MAIRIE|TOULOUSE|PAYE/.test(texteMetier2026_(o))) {
-        const a = Math.min(net, ajustementJuillet);
-        net -= a; rembPro += a;
-      }
+      // Règle Patrick : le montant bancaire crédité est déjà le net disponible après PAS.
+      const net = montant;
       economiques += net;
       if (estRevenuStructurel2026_(cat)) structurels += net;
       if (estRevenuVariable2026_(cat)) variables += net;
@@ -233,7 +230,7 @@ function construireAnalyseRecettes2026_(operations, categoriesRef) {
       partVariable: economiques > 0 ? variables / economiques * 100 : 0,
       producteurs: producteurs,
       sources: Object.entries(sources).map(([nom,montant]) => ({nom:nom,montant:montant})).sort((a,b)=>b.montant-a.montant),
-      remboursementsProfessionnelsNeutralises: rembPro,
+      remboursementsProfessionnelsNeutralises: 0,
       creditsTresorerie: sauvetages,
       moisAvecSauvetage: moisSauvetage.size,
       dependanceCredit: economiques > 0 ? sauvetages / economiques * 100 : 0
@@ -241,8 +238,7 @@ function construireAnalyseRecettes2026_(operations, categoriesRef) {
   });
 
   const salaires = operations.filter(o => Number(o.montant || 0) > 0 && String(o.categorie || '') === 'Salaires').sort((a,b)=>dateMetier2026_(b.date)-dateMetier2026_(a.date));
-  let salaireReference = salaires.length ? Number(salaires[0].montant || 0) : 0;
-  if (salaires.length && cleMoisMetier2026_(salaires[0].date) === '2026-07') salaireReference = Math.max(0, salaireReference - ajustementJuillet);
+  const salaireReference = salaires.length ? Number(salaires[0].montant || 0) : 0;
 
   return {
     version: MODELE_RECETTES_DEPENSES_VERSION,
