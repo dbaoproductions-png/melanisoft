@@ -1,4 +1,4 @@
-const AUDIT_COHERENCE_FINAL_19082026_VERSION = '2026-08-19.1';
+const AUDIT_COHERENCE_FINAL_19082026_VERSION = '2026-08-19.2';
 
 /**
  * Contrôle transversal non destructif des chiffres critiques de BudgetSoft.
@@ -15,6 +15,10 @@ function auditerCoherenceFinale19082026() {
   const suivant = dashboard && dashboard.cycleSuivant ? dashboard.cycleSuivant : {};
 
   const arr = n => Math.round(Number(n || 0) * 100) / 100;
+  const jourLocal = v => {
+    const d = new Date(v);
+    return isNaN(d) ? null : d.getDate();
+  };
   const ecartCycleCourant = arr(Number(courantA.solde || 0) - Number(courantD.epargne || 0));
   const margeRecalculee = suivant.salaireAttendu == null ? null : arr(Number(suivant.salaireAttendu || 0) - Number(suivant.chargesFixes || 0) - Number(suivant.cbDifferees || 0));
   const ecartMarge = margeRecalculee == null ? null : arr(Number(suivant.marge || 0) - margeRecalculee);
@@ -29,8 +33,8 @@ function auditerCoherenceFinale19082026() {
   }));
 
   const controles = {
-    cycle28_27_dashboard: String(courantD.debut || '').slice(8,10) === '28' && String(courantD.fin || '').slice(8,10) === '27',
-    cycle28_27_analyse: String(courantA.debut || '').slice(8,10) === '28' && String(courantA.fin || '').slice(8,10) === '27',
+    cycle28_27_dashboard: jourLocal(courantD.debut) === 28 && jourLocal(courantD.fin) === 27,
+    cycle28_27_analyse: jourLocal(courantA.debut) === 28 && jourLocal(courantA.fin) === 27,
     dashboard_analyse_courant_identiques: Math.abs(ecartCycleCourant) < 0.01,
     marge_suivante_retombe: ecartMarge == null || Math.abs(ecartMarge) < 0.01,
     credits_7: (credits.amortissables || []).length + (credits.renouvelables || []).length === 7,
