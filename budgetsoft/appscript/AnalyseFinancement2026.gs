@@ -1,4 +1,4 @@
-const ANALYSE_FINANCEMENT_VERSION = '2026-08-19.1';
+const ANALYSE_FINANCEMENT_VERSION = '2026-08-19.2';
 
 // Calibration validée le 19/08/2026 sur la fenêtre 6 périodes :
 // sorties de financement = 12 574,50 € ; capital remboursé estimé ≈ 8 410 €.
@@ -9,16 +9,29 @@ const ANALYSE_FINANCEMENT_SORTIES_REFERENCE = 12574.50;
 const ANALYSE_FINANCEMENT_CAPITAL_REFERENCE = 8410.00;
 const ANALYSE_FINANCEMENT_RATIO_CAPITAL = ANALYSE_FINANCEMENT_CAPITAL_REFERENCE / ANALYSE_FINANCEMENT_SORTIES_REFERENCE;
 
-function enrichirAnalyseFinancement2026_(depensesDetail, operations) {
+function enrichirAnalyseFinancement2026_(depensesDetail, operations, periodesBudgetaires) {
   if (!depensesDetail || !depensesDetail.fenetres) return depensesDetail;
   const ops = Array.isArray(operations) ? operations : [];
+  const periodes = Array.isArray(periodesBudgetaires) ? periodesBudgetaires : [];
 
   [3, 6, 12].forEach(nb => {
     const f = depensesDetail.fenetres[String(nb)] || depensesDetail.fenetres[nb];
     if (!f) return;
 
-    const debut = dateMetier2026_(f.debut);
-    const fin = dateMetier2026_(f.fin);
+    // Quand l'utilisateur demande précisément 3, 6 ou 12 périodes, la fenêtre
+    // financement doit être STRICTEMENT la même que celle de la vue générale :
+    // du début de la première période budgétaire à la fin de la dernière.
+    // On évite ainsi l'ancien décalage "mois civil" (ex. 01/03) / cycle (ex. 27/02).
+    let debut = null;
+    let fin = null;
+    if (periodes.length === nb && periodes.length) {
+      debut = dateMetier2026_(periodes[0].debut);
+      fin = dateMetier2026_(periodes[periodes.length - 1].fin);
+    }
+    if (!debut || !fin) {
+      debut = dateMetier2026_(f.debut);
+      fin = dateMetier2026_(f.fin);
+    }
     if (!debut || !fin) return;
 
     const dansFenetre = ops.filter(o => {
@@ -40,6 +53,8 @@ function enrichirAnalyseFinancement2026_(depensesDetail, operations) {
 
     f.financement = {
       version: ANALYSE_FINANCEMENT_VERSION,
+      debut: debut,
+      fin: fin,
       sortiesFinancement: sortiesFinancement,
       capitalRembourseEstime: capitalRembourseEstime,
       coutFinancementEstime: coutFinancementEstime,
@@ -47,11 +62,9 @@ function enrichirAnalyseFinancement2026_(depensesDetail, operations) {
       desendettementNetEstime: desendettementNetEstime,
       ratioCapitalEstime: ANALYSE_FINANCEMENT_RATIO_CAPITAL,
       estimation: true,
-      methode: 'Part de capital calibrée sur l’audit validé du 19/08/2026 ; réinjections = crédits de trésorerie réellement crédités.'
+      methode: 'Fenêtre alignée sur les cycles budgétaires affichés ; part de capital calibrée sur l’audit validé du 19/08/2026 ; réinjections = crédits de trésorerie réellement crédités.'
     };
 
-    // Les quatre chiffres remontent dans l'interface existante sans refonte UI,
-    // immédiatement après le poste Crédits / financement.
     const themes = Array.isArray(f.themes) ? f.themes : [];
     const nomsAjoutes = new Set([
       'Capital remboursé estimé',
@@ -59,14 +72,21 @@ function enrichirAnalyseFinancement2026_(depensesDetail, operations) {
       'Désendettement net estimé'
     ]);
     f.themes = themes.filter(x => !nomsAjoutes.has(String(x.nom || '')));
-    const idx = f.themes.findIndex(x => String(x.nom || '') === 'Crédits / financement');
+
+    // Le thème principal doit lui aussi reprendre la fenêtre budgétaire exacte.
+    let idx = f.themes.findIndex(x => String(x.nom || '') === 'Crédits / financement');
+    if (idx >= 0) f.themes[idx].montant = sortiesFinancement;
+    else {
+      f.themes.unshift({ nom: 'Crédits / financement', montant: sortiesFinancement });
+      idx = 0;
+    }
+
     const ajouts = [
       { nom: 'Capital remboursé estimé', montant: capitalRembourseEstime },
       { nom: 'Réinjections de crédit', montant: reinjectionsTresorerie },
       { nom: 'Désendettement net estimé', montant: desendettementNetEstime }
     ];
-    if (idx >= 0) f.themes.splice(idx + 1, 0, ...ajouts);
-    else f.themes.push(...ajouts);
+    f.themes.splice(idx + 1, 0, ...ajouts);
   });
 
   depensesDetail.financement = {
