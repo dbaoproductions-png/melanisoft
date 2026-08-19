@@ -19,6 +19,18 @@ jobs:
       - name: Checkout exact commit
         uses: actions/checkout@v4
 
+      - name: Show exact GitHub revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          echo "HEAD=$(git rev-parse HEAD)"
+          echo "BRANCH=${GITHUB_REF_NAME}"
+          echo "CreditsDataV2 marker:"
+          grep -n "CREDITS_DATA_V2_VERSION" budgetsoft/appscript/CreditsDataV2.gs || true
+          echo "CreditsUI V2 call:"
+          grep -n "chargerCreditsEtDettesV2" budgetsoft/appscript/CreditsUI.html || true
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -61,15 +73,39 @@ jobs:
       - name: Push exact GitHub commit to Apps Script TEST
         run: npx --yes @google/clasp@3 push --force
 
+      - name: Verify pushed Apps Script source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/budgetsoft-clasp-verify
+          mkdir -p /tmp/budgetsoft-clasp-verify
+          cp "$HOME/.clasprc.json" /tmp/budgetsoft-clasp-verify/.clasprc.json
+          cat > /tmp/budgetsoft-clasp-verify/.clasp.json <<'JSON'
+          {
+            "scriptId": "1tvGARYmwH11M0XfsoRKmtLoETCL6_8fmXD16iU39oGWgHHULGiYbDT-n"
+          }
+          JSON
+          cd /tmp/budgetsoft-clasp-verify
+          npx --yes @google/clasp@3 pull
+          echo "Pulled CreditsDataV2 marker:"
+          grep -R -n "2.1-2026-08-18" . || { echo 'ERROR: Apps Script does not contain CreditsDataV2 2.1'; exit 1; }
+          echo "Pulled CreditsUI V2 call:"
+          grep -R -n "chargerCreditsEtDettesV2" . || { echo 'ERROR: Apps Script does not contain CreditsUI V2 call'; exit 1; }
+
       - name: Update validated TEST web app deployment
         shell: bash
         env:
           TEST_DEPLOYMENT_ID: AKfycbw1PXP2k36srEig1qwlpK9hiYwGYPhBR1tOVPZha_GpIwpm9A3Ds4lNqlNZnt_zvbbGKA
         run: |
           set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
           echo "Updating TEST deployment: $TEST_DEPLOYMENT_ID"
+          echo "Expected commit: $GITHUB_SHA"
           for attempt in 1 2 3 4 5; do
-            if npx --yes @google/clasp@3 update-deployment "$TEST_DEPLOYMENT_ID" --description "BudgetSoft TEST ${{ github.sha }}"; then
+            if npx --yes @google/clasp@3 update-deployment "$TEST_DEPLOYMENT_ID" --description "BudgetSoft TEST $GITHUB_SHA"; then
+              echo "Deployment update succeeded for $TEST_DEPLOYMENT_ID at $GITHUB_SHA"
+              echo "Current deployments:"
+              npx --yes @google/clasp@3 list-deployments || true
               exit 0
             fi
             [ "$attempt" -eq 5 ] && exit 1
