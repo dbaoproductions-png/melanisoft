@@ -28,13 +28,14 @@ function chargerAnalysesUI(){
   const status=document.getElementById('analyses-status');if(status)status.textContent='Chargement…';
   google.script.run.withSuccessHandler(d=>{analysesUI.donnees=d;rendreAnalyses();})
     .withFailureHandler(e=>{if(status)status.textContent='Erreur : '+(e.message||e);})
-    .chargerAnalysesBudgetaires(analysesUI.nombrePeriodes);
+    .chargerAnalysesBudgetairesV23(analysesUI.nombrePeriodes);
 }
 
 function rendreAnalyses(){
   const d=analysesUI.donnees,zone=document.getElementById('analyses-content'),status=document.getElementById('analyses-status');
   if(!d||!zone)return;
-  if(status)status.textContent=`Période courante : ${dateAnalyse(d.courante.debut)} → ${dateAnalyse(d.courante.fin)} · moteur ${echapper(d.version||'')}`;
+  const ref=d.dateReference?` · constaté au ${dateAnalyse(d.dateReference)}`:'';
+  if(status)status.textContent=`Période courante : ${dateAnalyse(d.courante.debut)} → ${dateAnalyse(d.courante.fin)}${ref} · moteur ${echapper(d.version||'')}`;
   if(analysesUI.vue==='recettes')return rendreAnalyseRecettes(d,zone);
   if(analysesUI.vue==='depenses')return rendreAnalyseDepenses(d,zone);
   rendreAnalyseGenerale(d,zone);
@@ -72,7 +73,7 @@ function rendreAnalyseRecettes(d,zone){
       <section class="analysis-block"><h3>Sources</h3>${barresSimplesAnalyse((f.sources||[]).slice(0,10).map(x=>[x.nom,x.montant]))}</section>
     </div>
     <section class="analysis-block analysis-alerts"><h3>Références actuelles</h3>
-      <div class="account-row"><div><strong>Salaire Patrick</strong><small>Dernière référence nette de remboursement professionnel identifié</small></div><strong>${money.format(r.references.salairePatrick||0)}</strong></div>
+      <div class="account-row"><div><strong>Salaire Patrick</strong><small>Dernier salaire net versé sur le compte</small></div><strong>${money.format(r.references.salairePatrick||0)}</strong></div>
       <div class="account-row"><div><strong>Foncier</strong><small>Appartement + garage</small></div><strong>${money.format((r.references.loyerAppartement||0)+(r.references.garage||0))}/mois</strong></div>
       <div class="account-row"><div><strong>Pluxee</strong><small>Avantage affecté · mois de carence : mai</small></div><strong>${money.format(r.references.pluxeeMensuel||0)}/mois</strong></div>
     </section>`;
@@ -87,7 +88,7 @@ function rendreAnalyseDepenses(d,zone){
       <article class="card metric-card"><span>Courses réelles</span><strong>${money.format(a.coursesReelles)}</strong><small>Banque + Pluxee</small></article>
       <article class="card metric-card"><span>Restaurants réels</span><strong>${money.format(a.restaurantsReels)}</strong><small>Banque + Pluxee</small></article>
       <article class="card metric-card"><span>Santé nette</span><strong>${money.format(s.coutNet)}</strong><small>Soins + couverture − remboursements</small></article>
-      <article class="card metric-card"><span>Charges fixes</span><strong>${money.format(x.fixes.montantMensuelReference||0)}/mois</strong><small>${x.fixes.nombre} charge(s) active(s)</small></article>
+      <article class="card metric-card"><span>Charges fixes</span><strong>${money.format(x.fixes.montantMensuelReference||0)}/mois</strong><small>${x.fixes.nombre} charge(s) active(s) · référence mensuelle</small></article>
     </div>
     <div class="analysis-grid">
       <section class="analysis-block"><h3>Alimentation</h3>
