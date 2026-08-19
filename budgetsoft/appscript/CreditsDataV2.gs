@@ -1,4 +1,4 @@
-const CREDITS_DATA_V2_VERSION = '2.1-2026-08-18';
+const CREDITS_DATA_V2_VERSION = '2.2-2026-08-19';
 
 function lireCreditsEtendusV2_() {
   assurerColonnesCredits_();
@@ -18,7 +18,6 @@ function typeCreditV2_(c) {
   const explicite = String(c.type_credit || '').toLowerCase();
   if (explicite === 'revolving' || explicite === 'amortissable') return explicite;
 
-  // Ne pas dépendre du signe + : la normalisation bancaire peut le supprimer.
   const brut = [c.nom || '', c.numero_pret || ''].join(' ').toUpperCase();
   const normalise = normaliserTexteBanque_(brut);
   const texte = brut + ' ' + normalise;
@@ -30,9 +29,6 @@ function enrichirCreditV2_(c) {
   const x = enrichirCredit_(c);
   x.type_credit = typeCreditV2_(c);
 
-  // Dans l'ancien schéma, une cellule vide de cout_restant était convertie en 0
-  // avant que le calcul de secours puisse s'appliquer. On recalcule uniquement
-  // si aucun coût positif n'est réellement stocké.
   const coutBrut = c.cout_restant;
   const coutSaisi = coutBrut !== '' && coutBrut !== null && coutBrut !== undefined && Number(coutBrut) > 0;
   if (!coutSaisi && x.echeances_restantes > 0 && x.mensualite > 0 && x.capital_restant > 0) {
@@ -43,6 +39,11 @@ function enrichirCreditV2_(c) {
 
 function chargerCreditsEtDettesV2() {
   verifierInitialisation_();
+  assurerColonnesCredits_();
+  // Migration idempotente : restaure les champs que l'ancien schéma générique
+  // pouvait perdre lors d'un enregistrement d'un crédit.
+  if (typeof reparerCreditsEtendusConnus19082026_ === 'function') reparerCreditsEtendusConnus19082026_();
+
   const credits = lireCreditsEtendusV2_().map(enrichirCreditV2_);
   const dettes = lireTable_('Dettes');
   const tous = [
@@ -91,9 +92,12 @@ function diagnostiquerCreditsV2() {
       nom: c.nom,
       type_credit: c.type_credit,
       capital_restant: c.capital_restant,
-      cout_restant: c.cout_restant
+      cout_restant: c.cout_restant,
+      plafond_credit: c.plafond_credit,
+      disponible_credit: c.disponible_credit,
+      assurance_mensuelle: c.assurance_mensuelle
     })),
-    amortissables: (d.amortissables || []).map(c => c.nom)
+    amortissables: (d.amortissables || []).map(c => ({nom:c.nom,cout_restant:c.cout_restant,prochaine_echeance:c.prochaine_echeance}))
   };
   console.log(JSON.stringify(resume, null, 2));
   return resume;
