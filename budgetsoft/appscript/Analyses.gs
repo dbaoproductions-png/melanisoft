@@ -1,4 +1,4 @@
-const ANALYSES_VERSION = '1.8';
+const ANALYSES_VERSION = '1.9';
 
 function chargerAnalysesBudgetaires(nombrePeriodes) {
   verifierInitialisation_();
@@ -110,7 +110,7 @@ function chargerAnalysesBudgetaires(nombrePeriodes) {
     ? construireAnalyseDepenses2026_(operationsMetier, categoriesRef, chargesFixes)
     : null;
 
-  return {
+  const resultat = {
     version: ANALYSES_VERSION,
     periodes,
     courante,
@@ -133,4 +133,8 @@ function chargerAnalysesBudgetaires(nombrePeriodes) {
       chargesFixesSource: chargesFixes.length
     }
   };
+
+  // google.script.run exige un résultat composé uniquement de types sérialisables.
+  // La conversion JSON remplace notamment les objets Date imbriqués par des chaînes ISO.
+  return JSON.parse(JSON.stringify(resultat));
 }
