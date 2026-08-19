@@ -1,23 +1,19 @@
 <script>
 (function(){
-  // DashboardDataUI v2.0 — compatible avec chargerDashboardReel() bancaire.
+  // DashboardDataUI v2.1 — projection 28→27 fiabilisée via chargerDashboardReelV2().
   // Cette couche ne doit jamais empêcher les autres panneaux du dashboard de s'afficher.
   function fmt(v){return v==null?'—':(typeof money!=='undefined'?money.format(Number(v||0)):Number(v||0).toLocaleString('fr-FR',{style:'currency',currency:'EUR'}));}
-  function ech(v){return typeof echapper==='function'?echapper(v):String(v||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  function ech(v){return typeof echapper==='function'?echapper(v):String(v||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));}
   function chargerDashboardReelUI(){
     google.script.run.withSuccessHandler(rendreDashboardReelUI).withFailureHandler(e=>{
       const a=document.getElementById('alerts');if(a)a.innerHTML='<div class="error">Erreur dashboard : '+ech(e&&e.message?e.message:e)+'</div>';
-    }).chargerDashboardReel();
+    }).chargerDashboardReelV2();
   }
   function rendreDashboardReelUI(d){
     if(!d||typeof d!=='object')return;
     window.budgetsoftDashboardData=d;
     document.dispatchEvent(new CustomEvent('budgetsoft:dashboard-data',{detail:d}));
 
-    // Les anciens widgets (évolution, santé, récents, alertes) appartenaient à un ancien
-    // schéma de chargerDashboardReel(). On ne tente de les alimenter que si les données
-    // correspondantes existent réellement. Ainsi aucun accès à d.sante.score, etc., ne
-    // peut interrompre le rendu du cycle bancaire.
     try{
       const zone=document.getElementById('monthly-bars');
       if(zone&&Array.isArray(d.evolution)){
