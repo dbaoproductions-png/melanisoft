@@ -1,4 +1,4 @@
-const ANALYSES_VERSION = '2.1';
+const ANALYSES_VERSION = '2.2';
 
 function chargerAnalysesBudgetaires(nombrePeriodes) {
   verifierInitialisation_();
@@ -100,15 +100,25 @@ function chargerAnalysesBudgetaires(nombrePeriodes) {
     ? Math.round(((courante.depenses - precedente.depenses) / precedente.depenses) * 1000) / 10
     : 0;
 
-  // Les deux blocs métier reçoivent les mêmes opérations, avec date analytique
+  // Tous les blocs métier reçoivent les mêmes opérations, avec date analytique
   // basée sur la date comptable afin d'éviter des divergences avec le tableau de bord.
   const operationsMetier = operations.map(o => Object.assign({}, o, { date: o.date_analyse }));
-  const recettes = typeof construireAnalyseRecettes2026_ === 'function'
+  let recettes = typeof construireAnalyseRecettes2026_ === 'function'
     ? construireAnalyseRecettes2026_(operationsMetier, categoriesRef)
     : null;
   let depensesDetail = typeof construireAnalyseDepenses2026_ === 'function'
     ? construireAnalyseDepenses2026_(operationsMetier, categoriesRef, chargesFixes)
     : null;
+
+  // Règle unique de période : l'utilisateur peut parler de « mois », mais toutes les
+  // recettes et dépenses utilisent exactement les cycles budgétaires affichés (28 → 28,
+  // techniquement du 28 inclus au 27 inclus pour éviter tout chevauchement).
+  if (typeof alignerAnalysesSurPeriodes2026_ === 'function') {
+    const alignees = alignerAnalysesSurPeriodes2026_(recettes, depensesDetail, operationsMetier, categoriesRef, periodes);
+    recettes = alignees.recettes;
+    depensesDetail = alignees.depensesDetail;
+  }
+
   if (depensesDetail && typeof enrichirAnalyseFinancement2026_ === 'function') {
     depensesDetail = enrichirAnalyseFinancement2026_(depensesDetail, operationsMetier, periodes);
   }
@@ -132,6 +142,7 @@ function chargerAnalysesBudgetaires(nombrePeriodes) {
     diagnostic: {
       sourceOperations: 'Operations',
       dateFlux: 'date_comptable puis date',
+      periodeAnalyse: 'cycle budgétaire 28 → 28',
       nombreOperationsSource: operations.length,
       chargesFixesSource: chargesFixes.length
     }
