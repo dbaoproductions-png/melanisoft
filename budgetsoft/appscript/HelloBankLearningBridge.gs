@@ -55,6 +55,7 @@ function reconnaitreOperationsHelloBankCollees() {
 
 function appliquerCorrectionsAuditVoituresHelloBankCollees_() {
   if (typeof propositionAuditVoitures20082026_ !== 'function') return { examinees:0, modifiees:0, actif:false };
+  const marqueurMigration = '[AUDIT_VOITURES_20082026]';
   const operations = lireTable_('Operations');
   let examinees = 0, modifiees = 0;
   operations.forEach(o => {
@@ -62,10 +63,12 @@ function appliquerCorrectionsAuditVoituresHelloBankCollees_() {
     examinees++;
     const p = propositionAuditVoitures20082026_(o);
     if (!p || String(o.categorie || '') === p.categorie) return;
+    const type = String(o.type || '').toLowerCase();
+    const m = Math.abs(Number(o.montant || 0));
     enregistrerLigne('Operations', Object.assign({}, o, {
       categorie:p.categorie,
-      commentaire:ajouterMarqueurCommentaireVoiture_(o.commentaire, AUDIT_VOITURES_MARQUEUR_MIGRATION),
-      montant:Math.abs(Number(o.montant || 0))
+      commentaire:ajouterMarqueurCommentaireVoiture_(o.commentaire, marqueurMigration),
+      montant:type === 'depense' ? -m : m
     }));
     modifiees++;
   });
