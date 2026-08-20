@@ -19,7 +19,9 @@ const CATEGORIES_BUDGETSOFT_CIBLES_ = [
   {nom:'Frais bancaires',type:'depense'},
   {nom:'Voitures',type:'depense'},
   {nom:'Achats personnels',type:'depense',definition:"Biens discrétionnaires ou achats plaisir personnels ne relevant pas directement d’une activité de loisir : vêtements courants, parfum, électronique personnelle, cosmétique, accessoires, etc."},
-  {nom:'Énergies',type:'depense'},
+  {nom:'Énergies',type:'depense',famille_analytique:'Énergies'},
+  {nom:'Électricité',type:'depense',definition:"Dépenses d’électricité du foyer.",famille_analytique:'Énergies'},
+  {nom:'Gaz',type:'depense',definition:"Dépenses de gaz du foyer.",famille_analytique:'Énergies'},
   {nom:'Dépenses diverses',type:'depense',definition:"Dépenses utilitaires ou nécessaires et ponctuelles ne relevant d’aucune catégorie fonctionnelle plus précise ; catégorie résiduelle à ne pas utiliser lorsqu’une catégorie métier existe."},
 
   // Revenus
@@ -45,40 +47,7 @@ const CATEGORIES_BUDGETSOFT_CIBLES_ = [
 ];
 
 const RENOMMAGES_CATEGORIES_BUDGETSOFT_ = {
-  'logement':'Logements',
-  'transport':'Transports',
-  'revenus':'Autres revenus',
-  'banque':'Frais bancaires',
-  'frais bancaires':'Frais bancaires',
-  'salaire':'Salaires',
-  'divers':'Revenus divers',
-  'dépense diverse':'Dépenses diverses',
-  'depense diverse':'Dépenses diverses',
-  'dépenses diverses':'Dépenses diverses',
-  'depenses diverses':'Dépenses diverses',
-  'bricolage':'Maison / entretien',
-  'voiture':'Voitures',
-  'énergie':'Énergies',
-  'energie':'Énergies',
-  'abonnement':'Abonnements numériques',
-  'abonnements':'Abonnements numériques',
-  'abonnement numérique':'Abonnements numériques',
-  'abonnement numerique':'Abonnements numériques',
-  'abonnements numériques':'Abonnements numériques',
-  'abonnements numeriques':'Abonnements numériques',
-  'télécommunications':'Télécom / Internet / TV',
-  'telecommunications':'Télécom / Internet / TV',
-  'télécom':'Télécom / Internet / TV',
-  'telecom':'Télécom / Internet / TV',
-  'internet / tv':'Télécom / Internet / TV',
-  'crédit revolving':'Crédits revolving',
-  'credit revolving':'Crédits revolving',
-  'crédits revolving':'Crédits revolving',
-  'credits revolving':'Crédits revolving',
-  'crédit de trésorerie':'Crédits de trésorerie',
-  'credit de tresorerie':'Crédits de trésorerie',
-  'transfert de trésorerie':'Virements internes',
-  'transfert de tresorerie':'Virements internes'
+  'logement':'Logements','transport':'Transports','revenus':'Autres revenus','banque':'Frais bancaires','frais bancaires':'Frais bancaires','salaire':'Salaires','divers':'Revenus divers','dépense diverse':'Dépenses diverses','depense diverse':'Dépenses diverses','dépenses diverses':'Dépenses diverses','depenses diverses':'Dépenses diverses','bricolage':'Maison / entretien','voiture':'Voitures','énergie':'Énergies','energie':'Énergies','abonnement':'Abonnements numériques','abonnements':'Abonnements numériques','abonnement numérique':'Abonnements numériques','abonnement numerique':'Abonnements numériques','abonnements numériques':'Abonnements numériques','abonnements numeriques':'Abonnements numériques','télécommunications':'Télécom / Internet / TV','telecommunications':'Télécom / Internet / TV','télécom':'Télécom / Internet / TV','telecom':'Télécom / Internet / TV','internet / tv':'Télécom / Internet / TV','crédit revolving':'Crédits revolving','credit revolving':'Crédits revolving','crédits revolving':'Crédits revolving','credits revolving':'Crédits revolving','crédit de trésorerie':'Crédits de trésorerie','credit de tresorerie':'Crédits de trésorerie','transfert de trésorerie':'Virements internes','transfert de tresorerie':'Virements internes'
 };
 
 function cleCategorieBudgetSoft_(valeur){return String(valeur||'').trim().toLowerCase();}
@@ -90,23 +59,24 @@ function installerArchitectureCategoriesBudgetSoft(){
   const ss=SpreadsheetApp.getActiveSpreadsheet();
   const feuille=ss.getSheetByName('Categories');
   if(!feuille)throw new Error('Onglet Categories introuvable.');
+  const entetesAttendues=TABLES.Categories;
   let largeur=Math.max(feuille.getLastColumn(),1);
   let entetesActuelles=feuille.getRange(1,1,1,largeur).getValues()[0].map(v=>String(v||'').trim());
-  let idxDefinition=entetesActuelles.indexOf('definition');
-  if(idxDefinition<0){idxDefinition=largeur;feuille.getRange(1,idxDefinition+1).setValue('definition');largeur++;entetesActuelles=feuille.getRange(1,1,1,largeur).getValues()[0].map(v=>String(v||'').trim());}
-  const idxId=entetesActuelles.indexOf('id'),idxNom=entetesActuelles.indexOf('nom'),idxType=entetesActuelles.indexOf('type'),idxCouleur=entetesActuelles.indexOf('couleur'),idxActif=entetesActuelles.indexOf('actif');
+  entetesAttendues.filter(e=>!entetesActuelles.includes(e)).forEach(e=>{largeur++;feuille.getRange(1,largeur).setValue(e);});
+  entetesActuelles=feuille.getRange(1,1,1,Math.max(feuille.getLastColumn(),largeur)).getValues()[0].map(v=>String(v||'').trim());largeur=entetesActuelles.length;
+  const idxId=entetesActuelles.indexOf('id'),idxNom=entetesActuelles.indexOf('nom'),idxType=entetesActuelles.indexOf('type'),idxCouleur=entetesActuelles.indexOf('couleur'),idxActif=entetesActuelles.indexOf('actif'),idxDefinition=entetesActuelles.indexOf('definition'),idxFamille=entetesActuelles.indexOf('famille_analytique');
   const lignes=feuille.getLastRow()>1?feuille.getRange(2,1,feuille.getLastRow()-1,largeur).getValues():[];
   const renommages={};Object.entries(RENOMMAGES_CATEGORIES_BUDGETSOFT_).forEach(([ancien,nouveau])=>renommages[ancien]=nouveau);
   const referencesModifiees=migrerReferencesCategoriesBudgetSoft_(renommages);
   const parNom=new Map();const renommees=[];
-  lignes.forEach(r=>{const ancienNom=String(r[idxNom]||'').trim();if(!ancienNom)return;const nouveauNom=categorieCibleBudgetSoft_(ancienNom);if(nouveauNom!==ancienNom)renommees.push({de:ancienNom,vers:nouveauNom});const type=typeCategorieCibleBudgetSoft_(nouveauNom,r[idxType]);const cle=cleCategorieBudgetSoft_(nouveauNom);const existante=parNom.get(cle);const objet={id:r[idxId]||Utilities.getUuid(),nom:nouveauNom,type:type,couleur:r[idxCouleur]||'',actif:r[idxActif]!==false&&String(r[idxActif]).toLowerCase()!=='false',definition:String(r[idxDefinition]||'')};if(!existante){parNom.set(cle,objet);return;}if(!existante.couleur&&objet.couleur)existante.couleur=objet.couleur;existante.actif=existante.actif||objet.actif;if(!existante.type&&objet.type)existante.type=objet.type;if(!existante.definition&&objet.definition)existante.definition=objet.definition;});
+  lignes.forEach(r=>{const ancienNom=String(r[idxNom]||'').trim();if(!ancienNom)return;const nouveauNom=categorieCibleBudgetSoft_(ancienNom);if(nouveauNom!==ancienNom)renommees.push({de:ancienNom,vers:nouveauNom});const type=typeCategorieCibleBudgetSoft_(nouveauNom,r[idxType]);const cle=cleCategorieBudgetSoft_(nouveauNom);const existante=parNom.get(cle);const objet={id:r[idxId]||Utilities.getUuid(),nom:nouveauNom,type:type,couleur:r[idxCouleur]||'',actif:r[idxActif]!==false&&String(r[idxActif]).toLowerCase()!=='false',definition:String(r[idxDefinition]||''),famille_analytique:String(r[idxFamille]||'')};if(!existante){parNom.set(cle,objet);return;}if(!existante.couleur&&objet.couleur)existante.couleur=objet.couleur;existante.actif=existante.actif||objet.actif;if(!existante.type&&objet.type)existante.type=objet.type;if(!existante.definition&&objet.definition)existante.definition=objet.definition;if(!existante.famille_analytique&&objet.famille_analytique)existante.famille_analytique=objet.famille_analytique;});
   const ajoutees=[];
-  CATEGORIES_BUDGETSOFT_CIBLES_.forEach(c=>{const cle=cleCategorieBudgetSoft_(c.nom);if(parNom.has(cle)){const existante=parNom.get(cle);existante.type=c.type;if(c.definition)existante.definition=c.definition;return;}parNom.set(cle,{id:Utilities.getUuid(),nom:c.nom,type:c.type,couleur:'',actif:true,definition:c.definition||''});ajoutees.push(c.nom);});
+  CATEGORIES_BUDGETSOFT_CIBLES_.forEach(c=>{const cle=cleCategorieBudgetSoft_(c.nom);if(parNom.has(cle)){const existante=parNom.get(cle);existante.type=c.type;if(c.definition)existante.definition=c.definition;if(c.famille_analytique)existante.famille_analytique=c.famille_analytique;return;}parNom.set(cle,{id:Utilities.getUuid(),nom:c.nom,type:c.type,couleur:'',actif:true,definition:c.definition||'',famille_analytique:c.famille_analytique||''});ajoutees.push(c.nom);});
   const ordre=new Map(CATEGORIES_BUDGETSOFT_CIBLES_.map((c,i)=>[cleCategorieBudgetSoft_(c.nom),i]));
   const finales=[...parNom.values()].sort((a,b)=>{const ia=ordre.has(cleCategorieBudgetSoft_(a.nom))?ordre.get(cleCategorieBudgetSoft_(a.nom)):999;const ib=ordre.has(cleCategorieBudgetSoft_(b.nom))?ordre.get(cleCategorieBudgetSoft_(b.nom)):999;return ia-ib||a.nom.localeCompare(b.nom,'fr');});
   if(feuille.getLastRow()>1)feuille.getRange(2,1,feuille.getLastRow()-1,largeur).clearContent();
-  if(finales.length){const sortie=finales.map(c=>{const r=new Array(largeur).fill('');r[idxId]=c.id;r[idxNom]=c.nom;r[idxType]=c.type;r[idxCouleur]=c.couleur;r[idxActif]=c.actif;r[idxDefinition]=c.definition||'';return r;});feuille.getRange(2,1,sortie.length,largeur).setValues(sortie);}
+  if(finales.length){const sortie=finales.map(c=>{const r=new Array(largeur).fill('');r[idxId]=c.id;r[idxNom]=c.nom;r[idxType]=c.type;r[idxCouleur]=c.couleur;r[idxActif]=c.actif;r[idxDefinition]=c.definition||'';r[idxFamille]=c.famille_analytique||'';return r;});feuille.getRange(2,1,sortie.length,largeur).setValues(sortie);}
   feuille.setFrozenRows(1);feuille.autoResizeColumns(1,largeur);
-  return{ok:true,categories:finales.length,ajoutees,renommees,referencesModifiees,tresorerie:CATEGORIES_BUDGETSOFT_CIBLES_.filter(c=>c.type==='tresorerie').map(c=>c.nom),definitions:CATEGORIES_BUDGETSOFT_CIBLES_.filter(c=>c.definition).map(c=>c.nom)};
+  return{ok:true,categories:finales.length,ajoutees,renommees,referencesModifiees,tresorerie:CATEGORIES_BUDGETSOFT_CIBLES_.filter(c=>c.type==='tresorerie').map(c=>c.nom),definitions:CATEGORIES_BUDGETSOFT_CIBLES_.filter(c=>c.definition).map(c=>c.nom),familles:CATEGORIES_BUDGETSOFT_CIBLES_.filter(c=>c.famille_analytique).map(c=>({nom:c.nom,famille:c.famille_analytique}))};
 }
 function installerCategoriesRevenusBudgetSoft(){return installerArchitectureCategoriesBudgetSoft();}
