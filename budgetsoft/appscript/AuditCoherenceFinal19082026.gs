@@ -1,4 +1,4 @@
-const AUDIT_COHERENCE_FINAL_19082026_VERSION = '2026-08-20.3';
+const AUDIT_COHERENCE_FINAL_19082026_VERSION = '2026-08-20.4';
 
 /**
  * Contrôle transversal non destructif des chiffres critiques de BudgetSoft.
@@ -31,9 +31,17 @@ function auditerCoherenceFinale19082026() {
     disponible: arr(c.disponible_credit),
     assurance: arr(c.assurance_mensuelle)
   }));
+  const dettesActives = (credits.dettesActives || []).map(d => ({
+    nom: d.nom,
+    creancier: d.creancier,
+    categorie: d.categorie_dette,
+    restant: arr(d.capital_restant),
+    statut: d.statut,
+    sourceCle: d.source_cle
+  }));
+  const totalDettesAudit = arr(dettesActives.reduce((s, d) => s + Number(d.restant || 0), 0));
+  const totalEndettementRecalcule = arr(Number(credits.capitalCredits || 0) + totalDettesAudit);
 
-  // Diagnostic lecture seule des opérations expliquant un éventuel écart Dashboard / Analyses.
-  // Il reproduit les critères structurants des deux moteurs sans modifier aucune donnée.
   const categoriesRef = lireTable_('Categories');
   const typesCategories = Object.fromEntries(categoriesRef.map(c => [String(c.nom || '').trim(), String(c.type || '').toLowerCase()]));
   const estTresorerie = o => {
@@ -101,6 +109,7 @@ function auditerCoherenceFinale19082026() {
   }).filter(Boolean).sort((a, b) => new Date(a.date) - new Date(b.date));
 
   const sommeDiagnostic = arr(operationsDifferentielles.reduce((s, o) => s + Number(o.deltaAnalyseMoinsDashboard || 0), 0));
+  const clesDettes = new Set(dettesActives.map(d => d.sourceCle));
 
   const controles = {
     cycle28_27_dashboard: jourLocal(courantD.debut) === 28 && jourLocal(courantD.fin) === 27,
@@ -110,7 +119,10 @@ function auditerCoherenceFinale19082026() {
     credits_7: (credits.amortissables || []).length + (credits.renouvelables || []).length === 7,
     renouvelables_4: (credits.renouvelables || []).length === 4,
     champs_reserves_renseignes: renouvelables.every(c => Number(c.plafond || 0) > 0),
-    capital_total_positif: Number(credits.capitalRestant || 0) > 0
+    dettes_structurelles_3: clesDettes.has('conservatoire-studio-42-20') && clesDettes.has('conservatoire-scolarite-400') && clesDettes.has('dentiste-protheses-800'),
+    dettes_hors_credit_1242_20: Math.abs(totalDettesAudit - 1242.20) < 0.01,
+    endettement_total_retombe: Math.abs(totalEndettementRecalcule - Number(credits.endettementTotal || 0)) < 0.01,
+    capital_total_positif: Number(credits.endettementTotal || credits.capitalRestant || 0) > 0
   };
 
   const resultat = {
@@ -121,7 +133,8 @@ function auditerCoherenceFinale19082026() {
       resultatCycleAnalyseMoinsDashboard: ecartCycleCourant,
       margeAfficheeMoinsMargeRecalculee: ecartMarge,
       sommeOperationsDifferentielles: sommeDiagnostic,
-      diagnosticRetombe: Math.abs(sommeDiagnostic - ecartCycleCourant) < 0.01
+      diagnosticRetombe: Math.abs(sommeDiagnostic - ecartCycleCourant) < 0.01,
+      endettementAfficheMoinsRecalcule: arr(Number(credits.endettementTotal || 0) - totalEndettementRecalcule)
     },
     diagnosticDashboardAnalyses: {
       dateReferenceDashboard: isNaN(refDashboard) ? null : refDashboard.toISOString(),
@@ -143,10 +156,13 @@ function auditerCoherenceFinale19082026() {
     },
     credits: {
       version: credits.version,
-      capitalTotal: arr(credits.capitalRestant),
+      capitalCredits: arr(credits.capitalCredits),
+      dettesHorsCredit: arr(credits.dettesHorsCredit),
+      endettementTotal: arr(credits.endettementTotal),
       coutRestantTotal: arr(credits.coutRestant),
       encoursRenouvelable: arr(credits.capitalRenouvelable),
       coutRenouvelable: arr(credits.coutRenouvelable),
+      dettes: dettesActives,
       renouvelables: renouvelables
     }
   };
