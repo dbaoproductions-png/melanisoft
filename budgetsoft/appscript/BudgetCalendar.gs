@@ -1,8 +1,37 @@
-const BUDGETSOFT_SPRINT_VERSION = '0.9.3';
+const BUDGETSOFT_SPRINT_VERSION = '0.9.4';
 const BUDGETSOFT_JOUR_DEBUT_CYCLE = 28;
 
 function jourDebutCycleBudgetSoft_() {
   return BUDGETSOFT_JOUR_DEBUT_CYCLE;
+}
+
+/**
+ * Les dates bancaires de BudgetSoft sont des dates métier, pas des horodatages.
+ * Une heure technique (00:00, 10:00, 12:00...) ne doit jamais rendre une opération
+ * du jour artificiellement « future ».
+ */
+function debutJourBancaireBudgetSoft_(valeur) {
+  const d = valeur instanceof Date ? new Date(valeur) : new Date(valeur);
+  if (isNaN(d)) return null;
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function finJourBancaireBudgetSoft_(valeur) {
+  const d = valeur instanceof Date ? new Date(valeur) : new Date(valeur);
+  if (isNaN(d)) return null;
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
+function dateBancaireConnueAuJour_(valeur, reference) {
+  const d = debutJourBancaireBudgetSoft_(valeur);
+  const ref = debutJourBancaireBudgetSoft_(reference || new Date());
+  return !!d && !!ref && d <= ref;
+}
+
+function bornerDateBancaireFinJour_(valeur) {
+  return finJourBancaireBudgetSoft_(valeur);
 }
 
 function chargerConfigurationBudgetaire() {
