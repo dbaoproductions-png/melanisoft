@@ -1,4 +1,4 @@
-const DASHBOARD_BALANCE_DIAG_VERSION='1.1';
+const DASHBOARD_BALANCE_DIAG_VERSION='1.2';
 
 function diagnosticSoldeBancaireReel(){
   verifierInitialisation_();
@@ -16,7 +16,7 @@ function diagnosticSoldeBancaireReel(){
     const baseNum=baseRaw!==undefined&&baseRaw!==''?Number(String(baseRaw).replace(',','.')):NaN;
     const baseFiable=Number.isFinite(baseNum)&&!!baseDate;
     const base=baseFiable?baseNum:Number(c.solde_initial||0);
-    const liste=ops.filter(cor).map(o=>({o,d:asDate(o.date_comptable||o.date)})).filter(x=>x.d&&x.d<=now&&(!baseFiable||x.d>baseDate));
+    const liste=ops.filter(cor).map(o=>({o,d:asDate(o.date_comptable||o.date)})).filter(x=>x.d&&dateBancaireConnueAuJour_(x.d,now)&&(!baseFiable||x.d>baseDate));
     const mouvements=liste.reduce((s,x)=>s+signed(x.o),0),solde=Math.round((base+mouvements)*100)/100;
     const derniere=liste.length?liste.map(x=>x.d).sort((a,b)=>b-a)[0]:baseDate;
     if(derniere&&(!dateMax||derniere>dateMax))dateMax=derniere;
@@ -24,7 +24,7 @@ function diagnosticSoldeBancaireReel(){
     detail.push({id,nom,base:Math.round(base*100)/100,dateBase:baseDate?baseDate.toISOString():null,baseFiable,nombreMouvements:liste.length,mouvements:Math.round(mouvements*100)/100,solde,dateDernierMouvement:derniere?derniere.toISOString():null});
   });
   const dash=chargerDashboardReel();
-  const resultat={version:DASHBOARD_BALANCE_DIAG_VERSION,soldeCalcule:Math.round(total*100)/100,soldeDashboard:dash?.courtTerme?.soldeBancaire??null,dateDashboard:dash?.courtTerme?.dateSolde??null,dateDernierMouvement:dateMax?dateMax.toISOString():null,comptes:detail,lectureSeule:true};
+  const resultat={version:DASHBOARD_BALANCE_DIAG_VERSION,soldeCalcule:Math.round(total*100)/100,soldeDashboard:dash?.courtTerme?.soldeBancaire??null,dateDashboard:dash?.courtTerme?.dateSolde??null,dateDernierMouvement:dateMax?dateMax.toISOString():null,datesBancairesCompareesAuJourCivil:true,comptes:detail,lectureSeule:true};
   console.log(JSON.stringify(resultat,null,2));
   Logger.log(JSON.stringify(resultat,null,2));
   return resultat;
