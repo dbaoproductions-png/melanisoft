@@ -18,7 +18,7 @@ const TABLES = {
   Dettes: ['id', 'nom', 'capital_restant', 'mensualite', 'taux', 'date_fin'],
   Credits: ['id', 'nom', 'capital_restant', 'mensualite', 'taux', 'date_debut', 'date_fin', 'numero_pret', 'prochaine_echeance', 'echeances_restantes', 'commentaire'],
   Objectifs: ['id', 'nom', 'montant_cible', 'montant_actuel', 'date_cible', 'statut'],
-  Categories: ['id', 'nom', 'type', 'couleur', 'actif']
+  Categories: ['id', 'nom', 'type', 'couleur', 'actif', 'definition', 'famille_analytique']
 };
 
 function onOpen() {
