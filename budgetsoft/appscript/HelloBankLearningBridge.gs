@@ -75,9 +75,28 @@ function appliquerCorrectionsAuditVoituresHelloBankCollees_() {
   return { examinees, modifiees, actif:true };
 }
 
+function appliquerCorrectionsAuditCoursesRestaurantsHelloBankCollees_() {
+  if (typeof propositionAuditCoursesRestaurants20082026_ !== 'function') return { examinees:0, modifiees:0, actif:false };
+  const operations = lireTable_('Operations');
+  let examinees = 0, modifiees = 0;
+  operations.forEach(o => {
+    if (!String(o.commentaire || '').includes('[HELLOBANK_COLLER]')) return;
+    examinees++;
+    const p = propositionAuditCoursesRestaurants20082026_(o);
+    if (!p || String(o.categorie || '') === p.categorie) return;
+    enregistrerLigne('Operations', Object.assign({}, o, {
+      categorie:p.categorie,
+      commentaire:ajouterMarqueurAuditCoursesRestaurants20082026_(o.commentaire)
+    }));
+    modifiees++;
+  });
+  return { examinees:examinees, modifiees:modifiees, actif:true };
+}
+
 function importerCollerHelloBankAvecApprentissage(lignes) {
   const resultat = importerCollerHelloBank(lignes);
   const apprentissage = reconnaitreOperationsHelloBankCollees();
   const auditVoitures = appliquerCorrectionsAuditVoituresHelloBankCollees_();
-  return Object.assign({}, resultat, { apprentissage, auditVoitures });
+  const auditCoursesRestaurants = appliquerCorrectionsAuditCoursesRestaurantsHelloBankCollees_();
+  return Object.assign({}, resultat, { apprentissage, auditVoitures, auditCoursesRestaurants });
 }
