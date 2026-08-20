@@ -17,7 +17,7 @@ function ajouterMarqueurCommentaireVoiture_(commentaire, marqueur) {
 
 function migrerAuditVoitures20082026() {
   verifierInitialisation_();
-  const version = '1.1';
+  const version = '1.2';
   const marqueurMigration = '[AUDIT_VOITURES_20082026]';
   const marqueurExceptionnel = '[EXCEPTIONNEL_PREVISION]';
   const ops = lireTable_('Operations');
@@ -43,12 +43,14 @@ function migrerAuditVoitures20082026() {
     if (change) enregistrerLigne('Operations', x);
   });
   SpreadsheetApp.flush();
-  return {version:version, reclassees:reclassees, exceptionnelles:exceptionnelles};
+  const resultat = {version:version, reclassees:reclassees, exceptionnelles:exceptionnelles};
+  console.log(JSON.stringify(resultat));
+  return resultat;
 }
 
 function auditerVoitures20082026() {
   verifierInitialisation_();
-  const version = '1.1';
+  const version = '1.2';
   const marqueurExceptionnel = '[EXCEPTIONNEL_PREVISION]';
   const ops = lireTable_('Operations');
   const anomalies = [];
@@ -61,5 +63,7 @@ function auditerVoitures20082026() {
     const d = new Date(o.date_comptable || o.date);
     if (l.includes('autoroutes') && Math.abs(m - 147) < 0.005 && !isNaN(d) && d.getFullYear() === 2025 && d.getMonth() === 8 && d.getDate() === 19) asf147 = String(o.commentaire || '').includes(marqueurExceptionnel);
   });
-  return {version:version, ok:anomalies.length === 0 && asf147, controles:{reclassements_valides:anomalies.length === 0, asf_147_exceptionnel:asf147}, anomalies:anomalies};
+  const resultat = {version:version, ok:anomalies.length === 0 && asf147, controles:{reclassements_valides:anomalies.length === 0, asf_147_exceptionnel:asf147}, anomalies:anomalies};
+  console.log(JSON.stringify(resultat));
+  return resultat;
 }
