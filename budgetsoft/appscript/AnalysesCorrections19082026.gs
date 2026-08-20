@@ -1,10 +1,11 @@
-const ANALYSES_CORRECTIONS_19082026_VERSION = '2.3';
+const ANALYSES_CORRECTIONS_19082026_VERSION = '2.4';
 
 /**
  * Version consolidée de l'analyse :
  * - les mois restent les cycles BudgetSoft 28 inclus -> 27 inclus ;
  * - la période courante est arrêtée à la dernière date bancaire réellement connue ;
- * - aucune opération future n'entre dans un résultat « constaté » ;
+ * - les dates bancaires sont comparées au jour civil, jamais à l'heure technique ;
+ * - aucune opération d'un jour futur n'entre dans un résultat « constaté » ;
  * - les crédits de trésorerie restent exclus du résultat économique mais sont suivis séparément.
  */
 function chargerAnalysesBudgetairesV23(nombrePeriodes) {
@@ -20,15 +21,19 @@ function chargerAnalysesBudgetairesV23(nombrePeriodes) {
   };
 
   const maintenantReel = new Date();
+  const finAujourdHui = bornerDateBancaireFinJour_(maintenantReel) || maintenantReel;
   const operations = operationsBrutes.map(o => {
     const x = Object.assign({}, o);
     x.date_analyse = x.date_comptable || x.date;
     return x;
   });
-  const datesConnues = operations.map(o => new Date(o.date_analyse)).filter(d => !isNaN(d) && d <= maintenantReel).sort((a, b) => b - a);
-  const reference = datesConnues.length ? datesConnues[0] : maintenantReel;
-  const finReference = new Date(reference);
-  finReference.setHours(23, 59, 59, 999);
+  const datesConnues = operations
+    .map(o => new Date(o.date_analyse))
+    .filter(d => !isNaN(d) && dateBancaireConnueAuJour_(d, maintenantReel))
+    .sort((a, b) => b - a);
+  const referenceBrute = datesConnues.length ? datesConnues[0] : maintenantReel;
+  const reference = debutJourBancaireBudgetSoft_(referenceBrute) || referenceBrute;
+  const finReference = bornerDateBancaireFinJour_(reference) || finAujourdHui;
 
   const courante = resultat.periodes[resultat.periodes.length - 1];
   const debutCourant = new Date(courante.debut);
@@ -54,7 +59,6 @@ function chargerAnalysesBudgetairesV23(nombrePeriodes) {
   courante.periodeComplete = borneCourante >= finCourant;
   resultat.courante = courante;
 
-  // Catégories de la période courante : elles représentent elles aussi uniquement le constaté.
   const categoriesMap = {};
   budgetairesCourants.filter(o => Number(o.montant || 0) < 0).forEach(o => {
     const cat = String(o.categorie || 'Sans catégorie').trim() || 'Sans catégorie';
@@ -67,7 +71,6 @@ function chargerAnalysesBudgetairesV23(nombrePeriodes) {
     part: totalDepenses > 0 ? Math.round((montant / totalDepenses) * 1000) / 10 : 0
   })).sort((a, b) => b.montant - a.montant);
 
-  // Recalcule les indicateurs généraux après correction de la période courante.
   const moyenne = cle => resultat.periodes.length ? resultat.periodes.reduce((s, p) => s + Number(p[cle] || 0), 0) / resultat.periodes.length : 0;
   const precedente = resultat.periodes.length > 1 ? resultat.periodes[resultat.periodes.length - 2] : null;
   resultat.indicateurs = Object.assign({}, resultat.indicateurs || {}, {
@@ -79,7 +82,6 @@ function chargerAnalysesBudgetairesV23(nombrePeriodes) {
     mouvementTresorerieMoyen: moyenne('tresorerie')
   });
 
-  // Les blocs Recettes/Dépenses utilisent les mêmes opérations, mais aucune date future.
   const operationsMetierConstat = operations
     .filter(o => {
       const d = new Date(o.date_analyse);
@@ -101,6 +103,7 @@ function chargerAnalysesBudgetairesV23(nombrePeriodes) {
   resultat.diagnostic = Object.assign({}, resultat.diagnostic || {}, {
     periodeAnalyse: 'cycle budgétaire 28 inclus -> 27 inclus',
     periodeCourante: 'constatée jusqu’à la dernière date bancaire connue',
+    datesBancairesCompareesAuJourCivil: true,
     operationsFuturesExclues: true
   });
   return JSON.parse(JSON.stringify(resultat));
