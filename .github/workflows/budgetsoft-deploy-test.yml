@@ -30,8 +30,10 @@ jobs:
           grep -n "CREDITS_DATA_V2_VERSION" budgetsoft/appscript/CreditsDataV2.gs || true
           echo "CreditsUI V2 call:"
           grep -n "chargerCreditsEtDettesV2" budgetsoft/appscript/CreditsUI.html || true
-          echo "Analyses V2.3 marker:"
-          grep -n "ANALYSES_CORRECTIONS_19082026_VERSION = '2.3'" budgetsoft/appscript/AnalysesCorrections19082026.gs || true
+          echo "Analyses V2.4 marker:"
+          grep -n "ANALYSES_CORRECTIONS_19082026_VERSION = '2.4'" budgetsoft/appscript/AnalysesCorrections19082026.gs || true
+          echo "Civil-day banking helper:"
+          grep -n "dateBancaireConnueAuJour_" budgetsoft/appscript/BudgetCalendar.gs || true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -69,14 +71,26 @@ jobs:
           test -f budgetsoft/appscript/appsscript.json
           find budgetsoft/appscript -maxdepth 1 -type f \( -name '*.gs' -o -name '*.html' -o -name 'appsscript.json' \) -printf '%f\n' | sort
 
-          echo "Validate Analyses V2.3 source"
-          grep -n "ANALYSES_CORRECTIONS_19082026_VERSION = '2.3'" budgetsoft/appscript/AnalysesCorrections19082026.gs
+          echo "Validate Analyses V2.4 source"
+          grep -n "ANALYSES_CORRECTIONS_19082026_VERSION = '2.4'" budgetsoft/appscript/AnalysesCorrections19082026.gs
+          grep -n "dateBancaireConnueAuJour_" budgetsoft/appscript/BudgetCalendar.gs
+          grep -n "datesBancairesCompareesAuJourCivil" budgetsoft/appscript/AnalysesCorrections19082026.gs
           if grep -n -w "depensesCourants" budgetsoft/appscript/AnalysesCorrections19082026.gs; then
             echo 'ERROR: invalid variable depensesCourants found in AnalysesCorrections19082026.gs'
             exit 1
           fi
+          if grep -n "__date <= new Date()" budgetsoft/appscript/DashboardCorrections19082026.gs; then
+            echo 'ERROR: raw intraday comparison still present in DashboardCorrections19082026.gs'
+            exit 1
+          fi
           cp budgetsoft/appscript/AnalysesCorrections19082026.gs /tmp/AnalysesCorrections19082026.js
+          cp budgetsoft/appscript/BudgetCalendar.gs /tmp/BudgetCalendar.js
+          cp budgetsoft/appscript/DashboardCorrections19082026.gs /tmp/DashboardCorrections19082026.js
+          cp budgetsoft/appscript/DashboardBalanceDiagnostics.gs /tmp/DashboardBalanceDiagnostics.js
           node --check /tmp/AnalysesCorrections19082026.js
+          node --check /tmp/BudgetCalendar.js
+          node --check /tmp/DashboardCorrections19082026.js
+          node --check /tmp/DashboardBalanceDiagnostics.js
 
       - name: Show clasp status
         run: npx --yes @google/clasp@3 show-file-status
@@ -102,8 +116,10 @@ jobs:
           grep -R -n "2.1-2026-08-18" . || { echo 'ERROR: Apps Script does not contain CreditsDataV2 2.1'; exit 1; }
           echo "Pulled CreditsUI V2 call:"
           grep -R -n "chargerCreditsEtDettesV2" . || { echo 'ERROR: Apps Script does not contain CreditsUI V2 call'; exit 1; }
-          echo "Pulled Analyses V2.3 marker:"
-          grep -R -n "ANALYSES_CORRECTIONS_19082026_VERSION = '2.3'" . || { echo 'ERROR: Apps Script does not contain Analyses V2.3'; exit 1; }
+          echo "Pulled Analyses V2.4 marker:"
+          grep -R -n "ANALYSES_CORRECTIONS_19082026_VERSION = '2.4'" . || { echo 'ERROR: Apps Script does not contain Analyses V2.4'; exit 1; }
+          echo "Pulled civil-day banking helper:"
+          grep -R -n "dateBancaireConnueAuJour_" . || { echo 'ERROR: Apps Script does not contain civil-day banking helper'; exit 1; }
           if grep -R -n -w "depensesCourants" .; then
             echo 'ERROR: pushed Apps Script still contains invalid variable depensesCourants'
             exit 1
