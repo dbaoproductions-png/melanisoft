@@ -1,4 +1,4 @@
-const CLOTURE_DONNEES_STRUCTURE_20082026_VERSION='1.2';
+const CLOTURE_DONNEES_STRUCTURE_20082026_VERSION='1.3';
 
 const DECISIONS_CLOTURE_DONNEES_20082026_={
   'c2ec8b75-1ec4-4f6c-9571-226f75626f08':{categorie:'Revenus divers',raison:'BPCE Financement 42,28 €'},
@@ -30,7 +30,8 @@ function assurerReglesClotureDonnees20082026_(){
   if(typeof assurerRegleMetier2026_!=='function')return{traitees:0,mode:'fonction_regles_absente'};
   const regles=[
     ['BEN MME LOU HERNEBRING','Argent de poche','depense'],['LOU HERNEBRING','Argent de poche','depense'],
-    ['DAANSUREN','Concerts','revenu'],['COSAT','Avantages employeur','revenu'],['TOTALENERGIES','Remboursements','revenu'],
+    ['DAANSUREN','Concerts','revenu'],['COSAT','Avantages employeur','revenu'],
+    ['VIR SEPA RECU /DE TOTALENERGIES','Remboursements','revenu'],
     ['CPAM','Remboursements santé','revenu'],['C.P.A.M','Remboursements santé','revenu'],['ASSURANCE MALADIE','Remboursements santé','revenu'],['MUTUELLE NATIONALE TERRITORIALE','Remboursements santé','revenu']
   ];
   regles.forEach(r=>assurerRegleMetier2026_(r[0],r[1],r[2]));
