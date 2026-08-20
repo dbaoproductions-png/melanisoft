@@ -46,8 +46,8 @@ function chargerAnalysesBudgetairesV23(nombrePeriodes) {
 
   courante.revenus = revenusCourants;
   courante.depenses = depensesCourantes;
-  courante.solde = revenusCourants - depensesCourants;
-  courante.tauxEpargne = revenusCourants > 0 ? Math.round(((revenusCourants - depensesCourants) / revenusCourants) * 1000) / 10 : 0;
+  courante.solde = revenusCourants - depensesCourantes;
+  courante.tauxEpargne = revenusCourants > 0 ? Math.round(((revenusCourants - depensesCourantes) / revenusCourants) * 1000) / 10 : 0;
   courante.tresorerie = tresorerieCourante;
   courante.operations = budgetairesCourants.length;
   courante.constateJusquAu = reference.toISOString();
