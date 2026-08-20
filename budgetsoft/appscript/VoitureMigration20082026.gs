@@ -1,7 +1,3 @@
-const AUDIT_VOITURES_20082026_VERSION = '1.0';
-const AUDIT_VOITURES_MARQUEUR_MIGRATION = '[AUDIT_VOITURES_20082026]';
-const AUDIT_VOITURES_MARQUEUR_EXCEPTIONNEL = '[EXCEPTIONNEL_PREVISION]';
-
 function propositionAuditVoitures20082026_(o) {
   const l = String(o && o.libelle || '').toLowerCase();
   const m = Math.abs(Number(o && o.montant || 0));
@@ -21,6 +17,9 @@ function ajouterMarqueurCommentaireVoiture_(commentaire, marqueur) {
 
 function migrerAuditVoitures20082026() {
   verifierInitialisation_();
+  const version = '1.1';
+  const marqueurMigration = '[AUDIT_VOITURES_20082026]';
+  const marqueurExceptionnel = '[EXCEPTIONNEL_PREVISION]';
   const ops = lireTable_('Operations');
   let reclassees = 0, exceptionnelles = 0;
   ops.forEach(o => {
@@ -29,25 +28,28 @@ function migrerAuditVoitures20082026() {
     let change = false;
     if (p && String(o.categorie || '') !== p.categorie) {
       x.categorie = p.categorie;
-      x.commentaire = ajouterMarqueurCommentaireVoiture_(x.commentaire, AUDIT_VOITURES_MARQUEUR_MIGRATION);
+      x.commentaire = ajouterMarqueurCommentaireVoiture_(x.commentaire, marqueurMigration);
       reclassees++; change = true;
     }
     const l = String(o.libelle || '').toLowerCase();
     const m = Math.abs(Number(o.montant || 0));
     const d = new Date(o.date_comptable || o.date);
     const asf147 = l.includes('autoroutes') && Math.abs(m - 147) < 0.005 && !isNaN(d) && d.getFullYear() === 2025 && d.getMonth() === 8 && d.getDate() === 19;
-    if (asf147 && !String(x.commentaire || '').includes(AUDIT_VOITURES_MARQUEUR_EXCEPTIONNEL)) {
-      x.commentaire = ajouterMarqueurCommentaireVoiture_(x.commentaire, AUDIT_VOITURES_MARQUEUR_EXCEPTIONNEL);
+    if (asf147 && !String(x.commentaire || '').includes(marqueurExceptionnel)) {
+      x.commentaire = ajouterMarqueurCommentaireVoiture_(x.commentaire, marqueurExceptionnel);
+      x.commentaire = ajouterMarqueurCommentaireVoiture_(x.commentaire, marqueurMigration);
       exceptionnelles++; change = true;
     }
     if (change) enregistrerLigne('Operations', x);
   });
   SpreadsheetApp.flush();
-  return {version:AUDIT_VOITURES_20082026_VERSION, reclassees, exceptionnelles};
+  return {version:version, reclassees:reclassees, exceptionnelles:exceptionnelles};
 }
 
 function auditerVoitures20082026() {
   verifierInitialisation_();
+  const version = '1.1';
+  const marqueurExceptionnel = '[EXCEPTIONNEL_PREVISION]';
   const ops = lireTable_('Operations');
   const anomalies = [];
   let asf147 = false;
@@ -57,7 +59,7 @@ function auditerVoitures20082026() {
     const l = String(o.libelle || '').toLowerCase();
     const m = Math.abs(Number(o.montant || 0));
     const d = new Date(o.date_comptable || o.date);
-    if (l.includes('autoroutes') && Math.abs(m - 147) < 0.005 && !isNaN(d) && d.getFullYear() === 2025 && d.getMonth() === 8 && d.getDate() === 19) asf147 = String(o.commentaire || '').includes(AUDIT_VOITURES_MARQUEUR_EXCEPTIONNEL);
+    if (l.includes('autoroutes') && Math.abs(m - 147) < 0.005 && !isNaN(d) && d.getFullYear() === 2025 && d.getMonth() === 8 && d.getDate() === 19) asf147 = String(o.commentaire || '').includes(marqueurExceptionnel);
   });
-  return {version:AUDIT_VOITURES_20082026_VERSION, ok:anomalies.length === 0 && asf147, controles:{reclassements_valides:anomalies.length === 0, asf_147_exceptionnel:asf147}, anomalies};
+  return {version:version, ok:anomalies.length === 0 && asf147, controles:{reclassements_valides:anomalies.length === 0, asf_147_exceptionnel:asf147}, anomalies:anomalies};
 }
