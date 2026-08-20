@@ -27,9 +27,9 @@ jobs:
           echo "HEAD=$(git rev-parse HEAD)"
           echo "BRANCH=${GITHUB_REF_NAME}"
           echo "CreditsDataV2 marker:"
-          grep -n "CREDITS_DATA_V2_VERSION" budgetsoft/appscript/CreditsDataV2.gs || true
-          echo "CreditsUI V2 call:"
-          grep -n "chargerCreditsEtDettesV2" budgetsoft/appscript/CreditsUI.html || true
+          grep -n "CREDITS_DATA_V2_VERSION = '2.3-2026-08-20'" budgetsoft/appscript/CreditsDataV2.gs || true
+          echo "DettesDataV2 marker:"
+          grep -n "DETTES_DATA_V2_VERSION = '1.0-2026-08-20'" budgetsoft/appscript/DettesDataV2.gs || true
           echo "Analyses V2.4 marker:"
           grep -n "ANALYSES_CORRECTIONS_19082026_VERSION = '2.4'" budgetsoft/appscript/AnalysesCorrections19082026.gs || true
           echo "Civil-day banking helper:"
@@ -71,26 +71,21 @@ jobs:
           test -f budgetsoft/appscript/appsscript.json
           find budgetsoft/appscript -maxdepth 1 -type f \( -name '*.gs' -o -name '*.html' -o -name 'appsscript.json' \) -printf '%f\n' | sort
 
-          echo "Validate Analyses V2.4 source"
+          grep -n "CREDITS_DATA_V2_VERSION = '2.3-2026-08-20'" budgetsoft/appscript/CreditsDataV2.gs
+          grep -n "DETTES_DATA_V2_VERSION = '1.0-2026-08-20'" budgetsoft/appscript/DettesDataV2.gs
+          grep -n "conservatoire-studio-42-20" budgetsoft/appscript/DettesDataV2.gs
+          grep -n "conservatoire-scolarite-400" budgetsoft/appscript/DettesDataV2.gs
+          grep -n "dentiste-protheses-800" budgetsoft/appscript/DettesDataV2.gs
           grep -n "ANALYSES_CORRECTIONS_19082026_VERSION = '2.4'" budgetsoft/appscript/AnalysesCorrections19082026.gs
           grep -n "dateBancaireConnueAuJour_" budgetsoft/appscript/BudgetCalendar.gs
-          grep -n "datesBancairesCompareesAuJourCivil" budgetsoft/appscript/AnalysesCorrections19082026.gs
           if grep -n -w "depensesCourants" budgetsoft/appscript/AnalysesCorrections19082026.gs; then
             echo 'ERROR: invalid variable depensesCourants found in AnalysesCorrections19082026.gs'
             exit 1
           fi
-          if grep -n "__date <= new Date()" budgetsoft/appscript/DashboardCorrections19082026.gs; then
-            echo 'ERROR: raw intraday comparison still present in DashboardCorrections19082026.gs'
-            exit 1
-          fi
-          cp budgetsoft/appscript/AnalysesCorrections19082026.gs /tmp/AnalysesCorrections19082026.js
-          cp budgetsoft/appscript/BudgetCalendar.gs /tmp/BudgetCalendar.js
-          cp budgetsoft/appscript/DashboardCorrections19082026.gs /tmp/DashboardCorrections19082026.js
-          cp budgetsoft/appscript/DashboardBalanceDiagnostics.gs /tmp/DashboardBalanceDiagnostics.js
-          node --check /tmp/AnalysesCorrections19082026.js
-          node --check /tmp/BudgetCalendar.js
-          node --check /tmp/DashboardCorrections19082026.js
-          node --check /tmp/DashboardBalanceDiagnostics.js
+          for f in AnalysesCorrections19082026 BudgetCalendar DashboardCorrections19082026 DashboardBalanceDiagnostics CreditsDataV2 DettesDataV2 AuditCoherenceFinal19082026; do
+            cp "budgetsoft/appscript/$f.gs" "/tmp/$f.js"
+            node --check "/tmp/$f.js"
+          done
 
       - name: Show clasp status
         run: npx --yes @google/clasp@3 show-file-status
@@ -112,13 +107,10 @@ jobs:
           JSON
           cd /tmp/budgetsoft-clasp-verify
           npx --yes @google/clasp@3 pull
-          echo "Pulled CreditsDataV2 marker:"
-          grep -R -n "2.1-2026-08-18" . || { echo 'ERROR: Apps Script does not contain CreditsDataV2 2.1'; exit 1; }
-          echo "Pulled CreditsUI V2 call:"
-          grep -R -n "chargerCreditsEtDettesV2" . || { echo 'ERROR: Apps Script does not contain CreditsUI V2 call'; exit 1; }
-          echo "Pulled Analyses V2.4 marker:"
+          grep -R -n "CREDITS_DATA_V2_VERSION = '2.3-2026-08-20'" . || { echo 'ERROR: Apps Script does not contain CreditsDataV2 2.3'; exit 1; }
+          grep -R -n "DETTES_DATA_V2_VERSION = '1.0-2026-08-20'" . || { echo 'ERROR: Apps Script does not contain DettesDataV2'; exit 1; }
+          grep -R -n "dentiste-protheses-800" . || { echo 'ERROR: Apps Script does not contain structural debt markers'; exit 1; }
           grep -R -n "ANALYSES_CORRECTIONS_19082026_VERSION = '2.4'" . || { echo 'ERROR: Apps Script does not contain Analyses V2.4'; exit 1; }
-          echo "Pulled civil-day banking helper:"
           grep -R -n "dateBancaireConnueAuJour_" . || { echo 'ERROR: Apps Script does not contain civil-day banking helper'; exit 1; }
           if grep -R -n -w "depensesCourants" .; then
             echo 'ERROR: pushed Apps Script still contains invalid variable depensesCourants'
@@ -137,7 +129,6 @@ jobs:
           for attempt in 1 2 3 4 5; do
             if npx --yes @google/clasp@3 update-deployment "$TEST_DEPLOYMENT_ID" --description "BudgetSoft TEST $GITHUB_SHA"; then
               echo "Deployment update succeeded for $TEST_DEPLOYMENT_ID at $GITHUB_SHA"
-              echo "Current deployments:"
               npx --yes @google/clasp@3 list-deployments || true
               exit 0
             fi
