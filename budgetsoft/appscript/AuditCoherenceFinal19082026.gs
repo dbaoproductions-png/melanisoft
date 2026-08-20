@@ -1,4 +1,4 @@
-const AUDIT_COHERENCE_FINAL_19082026_VERSION = '2026-08-19.2';
+const AUDIT_COHERENCE_FINAL_19082026_VERSION = '2026-08-20.3';
 
 /**
  * Contrôle transversal non destructif des chiffres critiques de BudgetSoft.
@@ -32,6 +32,76 @@ function auditerCoherenceFinale19082026() {
     assurance: arr(c.assurance_mensuelle)
   }));
 
+  // Diagnostic lecture seule des opérations expliquant un éventuel écart Dashboard / Analyses.
+  // Il reproduit les critères structurants des deux moteurs sans modifier aucune donnée.
+  const categoriesRef = lireTable_('Categories');
+  const typesCategories = Object.fromEntries(categoriesRef.map(c => [String(c.nom || '').trim(), String(c.type || '').toLowerCase()]));
+  const estTresorerie = o => {
+    const cat = String(o.categorie || '').trim();
+    return String(o.type || '').toLowerCase() === 'tresorerie' ||
+      typesCategories[cat] === 'tresorerie' ||
+      cat === 'Crédits de trésorerie' ||
+      cat === 'Virements internes';
+  };
+  const estAuto = o => /\[RECURRENCE:[^\]]+\]/.test(String(o && o.commentaire || ''));
+  const debutCycle = new Date(courantD.debut || courantA.debut);
+  const finCycle = new Date(courantD.fin || courantA.fin);
+  const refDashboard = new Date(courantD.dateReference || dashboard.referenceImport || finCycle);
+  const refAnalyse = new Date(analyses.dateReference || courantA.constateJusquAu || finCycle);
+  if (!isNaN(debutCycle)) debutCycle.setHours(0, 0, 0, 0);
+  if (!isNaN(finCycle)) finCycle.setHours(23, 59, 59, 999);
+  if (!isNaN(refDashboard)) refDashboard.setHours(23, 59, 59, 999);
+  if (!isNaN(refAnalyse)) refAnalyse.setHours(23, 59, 59, 999);
+
+  const operationsDifferentielles = lireTable_('Operations').map(o => {
+    let enrichie = o;
+    try { enrichie = typeof enrichirDepuisCommentaireBanque_ === 'function' ? enrichirDepuisCommentaireBanque_(o) : o; }
+    catch (e) {}
+    const d = new Date(enrichie.date_comptable || enrichie.date);
+    const type = String(enrichie.type || '').toLowerCase();
+    const montantSigne = Number(enrichie.montant || 0);
+    const montantAbs = Math.abs(montantSigne);
+    const dansCycle = !isNaN(d) && d >= debutCycle && d <= finCycle;
+    const dashboardIncluse = dansCycle && !estAuto(enrichie) && d <= refDashboard && montantAbs > 0 && (type === 'revenu' || type === 'depense');
+    const analyseIncluse = dansCycle && d <= refAnalyse && !estTresorerie(enrichie) && Number.isFinite(montantSigne) && montantSigne !== 0;
+    const contributionDashboard = dashboardIncluse ? (type === 'depense' ? -montantAbs : montantAbs) : 0;
+    const contributionAnalyse = analyseIncluse ? montantSigne : 0;
+    const deltaAnalyseMoinsDashboard = arr(contributionAnalyse - contributionDashboard);
+    if (Math.abs(deltaAnalyseMoinsDashboard) < 0.005) return null;
+
+    const raisons = [];
+    if (dashboardIncluse && !analyseIncluse) {
+      if (d > refAnalyse) raisons.push('postérieure à la date de référence Analyses');
+      if (estTresorerie(enrichie)) raisons.push('exclue des Analyses comme trésorerie');
+    }
+    if (!dashboardIncluse && analyseIncluse) {
+      if (estAuto(enrichie)) raisons.push('récurrence automatique exclue du Dashboard');
+      if (type !== 'revenu' && type !== 'depense') raisons.push('type non revenu/dépense pour le Dashboard');
+      if (d > refDashboard) raisons.push('postérieure à la date de référence Dashboard');
+    }
+    if (dashboardIncluse && analyseIncluse && Math.abs(contributionDashboard - contributionAnalyse) >= 0.005) {
+      raisons.push('signe/type interprété différemment par les deux moteurs');
+    }
+
+    return {
+      id: String(enrichie.id || ''),
+      date: isNaN(d) ? null : d.toISOString(),
+      libelle: String(enrichie.libelle_bancaire || enrichie.libelle || ''),
+      montant: montantSigne,
+      type: String(enrichie.type || ''),
+      categorie: String(enrichie.categorie || ''),
+      compte: String(enrichie.compte || ''),
+      dashboardIncluse: dashboardIncluse,
+      analyseIncluse: analyseIncluse,
+      contributionDashboard: arr(contributionDashboard),
+      contributionAnalyse: arr(contributionAnalyse),
+      deltaAnalyseMoinsDashboard: deltaAnalyseMoinsDashboard,
+      raisons: raisons
+    };
+  }).filter(Boolean).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  const sommeDiagnostic = arr(operationsDifferentielles.reduce((s, o) => s + Number(o.deltaAnalyseMoinsDashboard || 0), 0));
+
   const controles = {
     cycle28_27_dashboard: jourLocal(courantD.debut) === 28 && jourLocal(courantD.fin) === 27,
     cycle28_27_analyse: jourLocal(courantA.debut) === 28 && jourLocal(courantA.fin) === 27,
@@ -49,7 +119,15 @@ function auditerCoherenceFinale19082026() {
     controles: controles,
     ecarts: {
       resultatCycleAnalyseMoinsDashboard: ecartCycleCourant,
-      margeAfficheeMoinsMargeRecalculee: ecartMarge
+      margeAfficheeMoinsMargeRecalculee: ecartMarge,
+      sommeOperationsDifferentielles: sommeDiagnostic,
+      diagnosticRetombe: Math.abs(sommeDiagnostic - ecartCycleCourant) < 0.01
+    },
+    diagnosticDashboardAnalyses: {
+      dateReferenceDashboard: isNaN(refDashboard) ? null : refDashboard.toISOString(),
+      dateReferenceAnalyses: isNaN(refAnalyse) ? null : refAnalyse.toISOString(),
+      nombreOperationsDifferentielles: operationsDifferentielles.length,
+      operations: operationsDifferentielles
     },
     dashboard: {
       cycleCourant: { debut: courantD.debut, fin: courantD.fin, dateReference: courantD.dateReference, resultat: courantD.epargne },
