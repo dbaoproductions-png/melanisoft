@@ -1,4 +1,4 @@
-const DASHBOARD_CORRECTIONS_19082026_VERSION = '2.1';
+const DASHBOARD_CORRECTIONS_19082026_VERSION = '2.2';
 
 function normaliserTexteCreditDashboard2026_(v) {
   try { return normaliserTexteBanque_(String(v || '')); }
@@ -39,8 +39,6 @@ function projectionChargesFixesCycle2026_(debutCycle, finCycle) {
     const credit = creditPourChargeDashboard2026_(c, credits);
     const prochaine = credit && credit.prochaine_echeance ? dateLocaleBudgetSoft_(credit.prochaine_echeance) : null;
 
-    // Si le créancier nous a donné une prochaine échéance postérieure au début du cycle,
-    // cette information contractuelle prime sur la simple récurrence mensuelle.
     if (prochaine && !isNaN(prochaine) && prochaine >= deb) {
       if (prochaine <= fin) {
         items.push({
@@ -83,10 +81,11 @@ function projectionChargesFixesCycle2026_(debutCycle, finCycle) {
 }
 
 function salaireMoyenNetBancaire2026_() {
+  const aujourdHui = new Date();
   const ops = lireTable_('Operations').map(o => {
     const d = new Date(o.date_comptable || o.date);
     return Object.assign({}, o, { __date: d });
-  }).filter(o => !isNaN(o.__date) && o.__date <= new Date());
+  }).filter(o => !isNaN(o.__date) && dateBancaireConnueAuJour_(o.__date, aujourdHui));
 
   const salaires = ops.filter(o => {
     if (Number(o.montant || 0) <= 0) return false;
@@ -99,12 +98,6 @@ function salaireMoyenNetBancaire2026_() {
   return Math.round((salaires.reduce((s, o) => s + Number(o.montant || 0), 0) / salaires.length) * 100) / 100;
 }
 
-/**
- * Surcouche de fiabilisation du dashboard sans toucher aux opérations ni au référentiel :
- * - salaire attendu = moyenne des 6 derniers virements nets réellement crédités ;
- * - charges du cycle suivant = échéances réellement dues dans la fenêtre 28 -> 27,
- *   après reports/ignores et en tenant compte des prochaines échéances connues des crédits.
- */
 function chargerDashboardReelV2() {
   const d = chargerDashboardReel();
   if (!d || !d.cycleSuivant) return d;
