@@ -1,0 +1,31 @@
+const AUDIT_DEPENSES_FINAL_20082026_VERSION='1.0';
+function normADF_(v){return String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');}
+function mtADF_(o){return Math.abs(Number(o&&o.montant||0));}
+function eqADF_(o,m,t){return Math.abs(mtADF_(o)-m)<=(t==null?0.02:t);}
+function markADF_(c){const m='[AUDIT_DEPENSES_FINAL_20082026]';c=String(c||'').trim();return c.includes(m)?c:(c?c+' ':'')+m;}
+function propADF_(o){const l=normADF_(o.libelle);
+ if(['stradivarius','asos','undiz','oh polly','pull & bear','pull and bear','nuvaskin'].some(x=>l.includes(x)))return{categorie:'Achats personnels',raison:'maison_achat'};
+ if(l.includes('conservatoire')&&l.includes('toulouse'))return{categorie:'Loisirs',raison:'musique'};
+ if((l.includes('intersp')||l.includes('intersport'))&&eqADF_(o,118.99,.05))return{categorie:'Loisirs',raison:'sport'};
+ if(l.includes('feeli'))return{categorie:'Santé',raison:'sante'};
+ if(l.includes('opodo')&&l.includes('prime'))return{categorie:'Frais professionnels',raison:'pro'};
+ if(l.includes('wifirst'))return{categorie:'Voyages / vacances',raison:'vacances'};
+ if(l.includes('oney banque accord ech'))return{categorie:'Crédits revolving',raison:'revolving'};
+ if(l.includes('3x 4x oney')&&l.includes('croix'))return{categorie:'Achats personnels',raison:'achat_fractionne'};
+ if(l.includes('cofidis amazon')&&l.includes('villeneuve'))return{categorie:'Achats personnels',raison:'achat_fractionne'};
+ if(l.includes('cofidis villeneuve d'))return{categorie:'Achats personnels',raison:'achat_fractionne'};
+ if(l==='toulouse toulouse'&&eqADF_(o,23))return{categorie:'Loisirs',raison:'musique'};
+ return null;}
+function telADF_(o){const t=normADF_(o.libelle)+' '+normADF_(o.commentaire);
+ if(t.includes('ref0018674091'))return'Mobile - Lou';
+ if(t.includes('ref0018919719'))return'Mobile - Ninon';
+ if(t.includes('gp202411070268477294'))return'Mobile - Nan';
+ if((t.includes('red')||t.includes('sfr'))&&eqADF_(o,9.99))return'Mobile - Patrick';
+ if(t.includes('bouygues')&&eqADF_(o,14.99))return'Mobile - Lou';
+ if(t.includes('nrj mobile')&&eqADF_(o,14.99))return'Mobile - Lou';
+ if(t.includes('free telecom')||t.includes('free mobile'))return'Box - Free';
+ return null;}
+function ajouterCatsEnergieADF_(){const f=SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Categories');if(!f)throw new Error('Categories introuvable');const h=f.getRange(1,1,1,f.getLastColumn()).getValues()[0].map(v=>String(v||'').trim()),inm=h.indexOf('nom'),it=h.indexOf('type'),ia=h.indexOf('actif'),ii=h.indexOf('id'),idef=h.indexOf('definition');const noms=new Set(f.getLastRow()>1?f.getRange(2,inm+1,f.getLastRow()-1,1).getValues().flat().map(String):[]),aj=[];['Électricité','Gaz'].forEach(n=>{if(noms.has(n))return;const r=Array(h.length).fill('');if(ii>=0)r[ii]=Utilities.getUuid();r[inm]=n;if(it>=0)r[it]='depense';if(ia>=0)r[ia]=true;if(idef>=0)r[idef]=(n==='Gaz'?'Dépenses de gaz':'Dépenses d’électricité')+' du foyer ; famille analytique Énergies.';f.appendRow(r);aj.push(n);});return aj;}
+function energieADF_(o){const l=normADF_(o.libelle),m=mtADF_(o);if(!l.includes('totalenergies')&&!l.includes('total energies'))return null;if(Math.abs(m-61)<=5)return'Électricité';if(Math.abs(m-220)<=15)return'Gaz';return null;}
+function migrerAuditDepensesFinal20082026(){verifierInitialisation_();const aj=ajouterCatsEnergieADF_(),ops=lireTable_('Operations');let cat=0,tel=0,en=0;const compteurs={};ops.forEach(o=>{const x=Object.assign({},o);let ch=false,p=propADF_(x);if(p&&String(x.categorie||'')!==p.categorie){x.categorie=p.categorie;x.commentaire=markADF_(x.commentaire);cat++;compteurs[p.raison]=(compteurs[p.raison]||0)+1;ch=true;}const nt=telADF_(x);if(nt&&String(x.categorie||'')==='Télécom / Internet / TV'&&String(x.libelle||'')!==nt){x.libelle=nt;x.commentaire=markADF_(x.commentaire);tel++;ch=true;}if(String(x.categorie||'')==='Énergies'){const e=energieADF_(x);if(e){x.categorie=e;x.commentaire=markADF_(x.commentaire);en++;ch=true;}}if(ch)enregistrerLigne('Operations',x);});SpreadsheetApp.flush();const r={version:AUDIT_DEPENSES_FINAL_20082026_VERSION,categoriesAjoutees:aj,categoriesModifiees:cat,libellesTelecomModifies:tel,energiesDetaillees:en,compteurs:compteurs};console.log(JSON.stringify(r));return r;}
+function auditerAuditDepensesFinal20082026(){verifierInitialisation_();const ops=lireTable_('Operations'),a=[];let pc=0,tn=0,ed=0;ops.forEach(o=>{const p=propADF_(o);if(p&&String(o.categorie||'')!==p.categorie){pc++;a.push({type:'categorie',id:o.id,libelle:o.libelle,montant:o.montant,attendue:p.categorie});}const t=telADF_(o);if(t&&String(o.categorie||'')==='Télécom / Internet / TV'&&String(o.libelle||'')!==t){tn++;a.push({type:'telecom',id:o.id,libelle:o.libelle,attendu:t});}if(String(o.categorie||'')==='Énergies'&&energieADF_(o)){ed++;a.push({type:'energie',id:o.id,libelle:o.libelle,montant:o.montant});}});const noms=new Set(lireTable_('Categories').map(c=>String(c.nom||'').trim())),ce=noms.has('Électricité')&&noms.has('Gaz')&&noms.has('Énergies');const x=ops.filter(o=>normADF_(o.libelle)==='toulouse toulouse'&&eqADF_(o,23)),m23=x.length===1&&String(x[0].categorie||'')==='Loisirs';const controles={aucun_reclassement_restant:pc===0,telecom_normalises:tn===0,energies_detaillees:ed===0,categories_energie_presentes:ce,musique_23_loisirs:m23},ok=Object.values(controles).every(Boolean),r={version:AUDIT_DEPENSES_FINAL_20082026_VERSION,ok:ok,controles:controles,compteurs:{propositionsCategorieRestantes:pc,telecomNonNormalises:tn,energiesNonDetaillees:ed,anomalies:a.length},anomalies:a};console.log(JSON.stringify(r));return r;}
