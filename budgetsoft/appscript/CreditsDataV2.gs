@@ -1,4 +1,4 @@
-const CREDITS_DATA_V2_VERSION = '2.2-2026-08-19';
+const CREDITS_DATA_V2_VERSION = '2.3-2026-08-20';
 
 function lireCreditsEtendusV2_() {
   assurerColonnesCredits_();
@@ -40,21 +40,25 @@ function enrichirCreditV2_(c) {
 function chargerCreditsEtDettesV2() {
   verifierInitialisation_();
   assurerColonnesCredits_();
-  // Migration idempotente : restaure les champs que l'ancien schéma générique
-  // pouvait perdre lors d'un enregistrement d'un crédit.
   if (typeof reparerCreditsEtendusConnus19082026_ === 'function') reparerCreditsEtendusConnus19082026_();
+  if (typeof migrerDettesStructurelles20082026_ === 'function') migrerDettesStructurelles20082026_();
 
   const credits = lireCreditsEtendusV2_().map(enrichirCreditV2_);
-  const dettes = lireTable_('Dettes');
+  const dettes = typeof lireDettesV2_ === 'function' ? lireDettesV2_() : lireTable_('Dettes');
+  const dettesActives = dettes.filter(d => String(d.actif).toLowerCase() !== 'false' && Number(d.capital_restant || 0) > 0);
   const tous = [
     ...credits.map(c => Object.assign({ table: 'Credits', nature: c.type_credit === 'revolving' ? 'Crédit renouvelable' : 'Crédit' }, c)),
-    ...dettes.map(d => Object.assign({ table: 'Dettes', nature: 'Dette' }, d))
+    ...dettes.map(d => Object.assign({ table: 'Dettes', nature: 'Dette hors crédit' }, d))
   ].sort((a, b) => String(a.nom || '').localeCompare(String(b.nom || ''), 'fr'));
 
-  const capitalRestant = tous.reduce((s, l) => s + Math.abs(Number(l.capital_restant || 0)), 0);
-  const mensualites = tous.reduce((s, l) => s + Math.abs(Number(l.mensualite || 0)), 0);
-  const tauxPondere = capitalRestant
-    ? tous.reduce((s, l) => s + Math.abs(Number(l.capital_restant || 0)) * Math.abs(Number(l.taux || 0)), 0) / capitalRestant
+  const capitalCredits = credits.reduce((s, c) => s + Math.abs(Number(c.capital_restant || 0)), 0);
+  const dettesHorsCredit = dettesActives.reduce((s, d) => s + Math.abs(Number(d.capital_restant || 0)), 0);
+  const capitalRestant = capitalCredits + dettesHorsCredit;
+  const mensualitesCredits = credits.reduce((s, c) => s + Math.abs(Number(c.mensualite || 0)), 0);
+  const mensualitesDettes = dettesActives.reduce((s, d) => s + Math.abs(Number(d.mensualite || 0)), 0);
+  const mensualites = mensualitesCredits + mensualitesDettes;
+  const tauxPondere = capitalCredits
+    ? credits.reduce((s, c) => s + Math.abs(Number(c.capital_restant || 0)) * Math.abs(Number(c.taux || 0)), 0) / capitalCredits
     : 0;
   const echeancesRestantes = credits.reduce((s, c) => s + Math.max(0, Number(c.echeances_restantes || 0)), 0);
   const coutRestant = credits.reduce((s, c) => s + Math.max(0, Number(c.cout_restant || 0)), 0);
@@ -70,12 +74,19 @@ function chargerCreditsEtDettesV2() {
     version: CREDITS_DATA_V2_VERSION,
     lignes: tous,
     capitalRestant,
+    capitalCredits,
+    dettesHorsCredit,
+    endettementTotal: capitalRestant,
     mensualites,
+    mensualitesCredits,
+    mensualitesDettes,
     tauxPondere,
     echeancesRestantes,
     coutRestant,
     amortissables,
     renouvelables,
+    dettes,
+    dettesActives,
     capitalRenouvelable,
     coutRenouvelable,
     tauxRenouvelablePondere
@@ -86,8 +97,12 @@ function diagnostiquerCreditsV2() {
   const d = chargerCreditsEtDettesV2();
   const resume = {
     version: d.version,
+    capitalCredits: d.capitalCredits,
+    dettesHorsCredit: d.dettesHorsCredit,
+    endettementTotal: d.endettementTotal,
     capitalRenouvelable: d.capitalRenouvelable,
     coutRenouvelable: d.coutRenouvelable,
+    dettes: (d.dettesActives || []).map(x => ({ nom:x.nom, creancier:x.creancier, capital_restant:x.capital_restant, statut:x.statut })),
     renouvelables: (d.renouvelables || []).map(c => ({
       nom: c.nom,
       type_credit: c.type_credit,
