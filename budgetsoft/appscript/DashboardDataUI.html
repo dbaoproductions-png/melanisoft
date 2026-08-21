@@ -1,42 +1,55 @@
 <script>
 (function(){
-  function fmt(v){return typeof money!=='undefined'?money.format(Number(v||0)):Number(v||0).toLocaleString('fr-FR',{style:'currency',currency:'EUR'});}
+  // DashboardDataUI v2.0 — compatible avec chargerDashboardReel() bancaire.
+  // Cette couche ne doit jamais empêcher les autres panneaux du dashboard de s'afficher.
+  function fmt(v){return v==null?'—':(typeof money!=='undefined'?money.format(Number(v||0)):Number(v||0).toLocaleString('fr-FR',{style:'currency',currency:'EUR'}));}
   function ech(v){return typeof echapper==='function'?echapper(v):String(v||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
   function chargerDashboardReelUI(){
     google.script.run.withSuccessHandler(rendreDashboardReelUI).withFailureHandler(e=>{
-      const a=document.getElementById('alerts');if(a)a.innerHTML='<div class="error">Erreur dashboard : '+ech(e.message||e)+'</div>';
+      const a=document.getElementById('alerts');if(a)a.innerHTML='<div class="error">Erreur dashboard : '+ech(e&&e.message?e.message:e)+'</div>';
     }).chargerDashboardReel();
   }
   function rendreDashboardReelUI(d){
+    if(!d||typeof d!=='object')return;
     window.budgetsoftDashboardData=d;
     document.dispatchEvent(new CustomEvent('budgetsoft:dashboard-data',{detail:d}));
 
-    const zone=document.getElementById('monthly-bars');
-    if(zone){
-      const parent=zone.closest('.panel');const h=parent&&parent.querySelector('h2');if(h)h.textContent='Évolution des 6 derniers mois importés';
-      zone.style.height='240px';zone.style.display='block';zone.style.padding='16px 18px';
-      if(!d.evolution||!d.evolution.length) zone.innerHTML='<span>Aucune opération importée.</span>';
-      else {
-        const max=Math.max(...d.evolution.map(m=>Math.max(m.revenus,m.depenses)),1);
-        const groupes=d.evolution.map(m=>{
-          const hr=Math.max(4,Math.round(m.revenus/max*150));
-          const hd=Math.max(4,Math.round(m.depenses/max*150));
-          return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end;min-width:58px;height:198px"><div style="display:flex;align-items:flex-end;gap:6px;height:160px"><div title="Revenus ${fmt(m.revenus)}" style="width:18px;height:${hr}px;background:#147d64;border-radius:6px 6px 2px 2px"></div><div title="Dépenses ${fmt(m.depenses)}" style="width:18px;height:${hd}px;background:#c97a64;border-radius:6px 6px 2px 2px"></div></div><strong style="font-size:12px;margin-top:8px">${ech(m.libelle)}</strong><small style="color:${m.solde>=0?'#147d64':'#b53c3c'};margin-top:3px">${fmt(m.solde)}</small></div>`;
-        }).join('');
-        zone.innerHTML=`<div style="display:flex;justify-content:flex-end;gap:14px;font-size:12px;margin-bottom:2px"><span><i style="display:inline-block;width:9px;height:9px;background:#147d64;border-radius:2px;margin-right:5px"></i>Revenus</span><span><i style="display:inline-block;width:9px;height:9px;background:#c97a64;border-radius:2px;margin-right:5px"></i>Dépenses</span></div><div style="display:flex;justify-content:space-around;align-items:flex-end;gap:10px;height:200px">${groupes}</div>`;
+    // Les anciens widgets (évolution, santé, récents, alertes) appartenaient à un ancien
+    // schéma de chargerDashboardReel(). On ne tente de les alimenter que si les données
+    // correspondantes existent réellement. Ainsi aucun accès à d.sante.score, etc., ne
+    // peut interrompre le rendu du cycle bancaire.
+    try{
+      const zone=document.getElementById('monthly-bars');
+      if(zone&&Array.isArray(d.evolution)){
+        const parent=zone.closest('.panel'),h=parent&&parent.querySelector('h2');if(h)h.textContent='Évolution des 6 derniers mois importés';
+        zone.style.height='240px';zone.style.display='block';zone.style.padding='16px 18px';
+        if(!d.evolution.length)zone.innerHTML='<span>Aucune opération importée.</span>';
+        else{
+          const max=Math.max(...d.evolution.map(m=>Math.max(Number(m.revenus||0),Number(m.depenses||0))),1);
+          const groupes=d.evolution.map(m=>{const hr=Math.max(4,Math.round(Number(m.revenus||0)/max*150)),hd=Math.max(4,Math.round(Number(m.depenses||0)/max*150));return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end;min-width:58px;height:198px"><div style="display:flex;align-items:flex-end;gap:6px;height:160px"><div title="Revenus ${fmt(m.revenus)}" style="width:18px;height:${hr}px;background:#147d64;border-radius:6px 6px 2px 2px"></div><div title="Dépenses ${fmt(m.depenses)}" style="width:18px;height:${hd}px;background:#c97a64;border-radius:6px 6px 2px 2px"></div></div><strong style="font-size:12px;margin-top:8px">${ech(m.libelle)}</strong><small style="color:${Number(m.solde||0)>=0?'#147d64':'#b53c3c'};margin-top:3px">${fmt(m.solde)}</small></div>`;}).join('');
+          zone.innerHTML=`<div style="display:flex;justify-content:flex-end;gap:14px;font-size:12px;margin-bottom:2px"><span><i style="display:inline-block;width:9px;height:9px;background:#147d64;border-radius:2px;margin-right:5px"></i>Revenus</span><span><i style="display:inline-block;width:9px;height:9px;background:#c97a64;border-radius:2px;margin-right:5px"></i>Dépenses</span></div><div style="display:flex;justify-content:space-around;align-items:flex-end;gap:10px;height:200px">${groupes}</div>`;
+        }
       }
-    }
+    }catch(e){console.warn('Widget évolution ignoré',e);}
 
-    const score=document.getElementById('health-score'),label=document.getElementById('health-label'),liste=document.getElementById('health-list');
-    if(score)score.textContent=d.sante.score+'/100';
-    if(label)label.textContent=d.sante.label;
-    if(liste)liste.innerHTML=`<div class="account-row"><div><strong>Épargne moyenne</strong><small>3 derniers mois importés</small></div><span>${fmt(d.sante.epargneMoyenne)}</span></div><div class="account-row"><div><strong>Catégorisation</strong><small>Opérations sans catégorie</small></div><span>${d.sante.ratioCategorie}%</span></div><div class="account-row"><div><strong>Historique</strong><small>Données réellement importées</small></div><span>${d.compteurs.operations} op.</span></div>`;
+    try{
+      if(d.sante&&typeof d.sante==='object'){
+        const score=document.getElementById('health-score'),label=document.getElementById('health-label'),liste=document.getElementById('health-list');
+        if(score)score.textContent=(d.sante.score==null?'—':d.sante.score+'/100');
+        if(label)label.textContent=d.sante.label||'';
+        if(liste)liste.innerHTML=`<div class="account-row"><div><strong>Épargne moyenne</strong><small>3 derniers mois importés</small></div><span>${fmt(d.sante.epargneMoyenne)}</span></div><div class="account-row"><div><strong>Catégorisation</strong><small>Opérations sans catégorie</small></div><span>${d.sante.ratioCategorie==null?'—':d.sante.ratioCategorie+'%'}</span></div><div class="account-row"><div><strong>Historique</strong><small>Données réellement importées</small></div><span>${d.compteurs&&d.compteurs.operations!=null?d.compteurs.operations:'—'} op.</span></div>`;
+      }
+    }catch(e){console.warn('Widget santé ignoré',e);}
 
-    const rec=document.getElementById('recent-operations');
-    if(rec){rec.classList.remove('empty-state');rec.innerHTML=d.recents&&d.recents.length?d.recents.map(o=>`<div class="operation-row"><div><strong>${ech(o.libelle)}</strong><small>${new Date(o.date).toLocaleDateString('fr-FR')}${o.categorie?' · '+ech(o.categorie):''}</small></div><span class="${o.type==='depense'?'amount-negative':'amount-positive'}">${o.type==='depense'?'-':'+'}${fmt(o.montant)}</span></div>`).join(''):'<div class="empty-state">Aucune opération importée.</div>';}
+    try{
+      const rec=document.getElementById('recent-operations');
+      if(rec&&Array.isArray(d.recents)){rec.classList.remove('empty-state');rec.innerHTML=d.recents.length?d.recents.map(o=>`<div class="operation-row"><div><strong>${ech(o.libelle)}</strong><small>${o.date?new Date(o.date).toLocaleDateString('fr-FR'):'—'}${o.categorie?' · '+ech(o.categorie):''}</small></div><span class="${o.type==='depense'?'amount-negative':'amount-positive'}">${o.type==='depense'?'-':'+'}${fmt(o.montant)}</span></div>`).join(''):'<div class="empty-state">Aucune opération importée.</div>';}
+    }catch(e){console.warn('Widget opérations récentes ignoré',e);}
 
-    const alerts=document.getElementById('alerts');
-    if(alerts){alerts.classList.remove('empty-state');alerts.innerHTML=(d.alertes||[]).map(a=>`<div class="${a.niveau==='ok'?'success-box':'error'}" style="margin-bottom:8px">${ech(a.message)}</div>`).join('');}
+    try{
+      const alerts=document.getElementById('alerts');
+      if(alerts&&Array.isArray(d.alertes)){alerts.classList.remove('empty-state');alerts.innerHTML=d.alertes.map(a=>`<div class="${a.niveau==='ok'?'success-box':'error'}" style="margin-bottom:8px">${ech(a.message)}</div>`).join('');}
+    }catch(e){console.warn('Widget alertes ignoré',e);}
   }
   window.chargerDashboardReelUI=chargerDashboardReelUI;
   document.addEventListener('DOMContentLoaded',()=>setTimeout(chargerDashboardReelUI,250));
