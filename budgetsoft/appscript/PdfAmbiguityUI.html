@@ -1,0 +1,83 @@
+<script>
+(function(){
+  const PA={rows:null,compte:'',meta:null,analyse:null};
+  function q(id){return document.getElementById(id)}
+  function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+  function money(n){return new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0))}
+  function dateFr(v){if(!v)return'—';const s=String(v);const m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);return m?m[3]+'/'+m[2]+'/'+m[1]:s}
+  function cleanDetails(s){return String(s||'').split(/\b(?:TOTAL DES OPERATIONS|SOLDE (?:CREDITEUR|DEBITEUR)|Montant de votre autorisation|Hello bank! est une marque|Votre satisfaction est notre priorité)\b/i)[0].replace(/\s+/g,' ').trim()}
+  function rowsPdf(){
+    const compte=q('pdf-account')?.value||'';
+    return ((window.sprint0809&&sprint0809.pdfOperations)||[]).map(o=>{
+      const sourceLibelle=o.libelle_bancaire||o.details||o.libelle||'';
+      const raw=cleanDetails(sourceLibelle);
+      const m=raw.match(/(?:FACTURE\(S\)\s+CARTE[^]*?\s+DU|^DU)\s+(\d{2})(\d{2})(\d{2})\b/i);
+      const dateAchat=o.date_achat||(m?new Date(2000+Number(m[3]),Number(m[2])-1,Number(m[1]),12).toISOString():'');
+      const cm=raw.match(/CARTE\s+\d*[Xx]+(\d{4})/i);
+      return {date:o.date_achat||o.date_comptable||o.date,date_comptable:o.date_comptable||o.date,date_achat:dateAchat,libelle:o.libelle||raw,libelle_bancaire:raw,montant:o.montant,type:o.montant<0?'depense':'revenu',carte_fin:o.carte_fin||(cm?cm[1]:''),marchand_normalise:o.marchand_normalise||'',_ligneBrute:o._ligneBrute||'',compte};
+    });
+  }
+  function creerModal(){
+    if(q('pdf-ambiguity-modal'))return;
+    const m=document.createElement('div');m.id='pdf-ambiguity-modal';m.className='modal hidden';
+    m.innerHTML=`<div class="modal-card wide-modal" style="max-width:980px;max-height:94vh;overflow:auto"><div class="modal-heading"><div><p class="panel-kicker">Rapprochement PDF</p><h2>Cas ambigus à décider</h2></div><button class="modal-close" id="pdf-ambiguity-close">×</button></div><div class="warning-box"><strong>Sécurité :</strong> aucune écriture n’est effectuée tant que chaque cas ambigu n’a pas reçu une décision explicite.</div><div id="pdf-ambiguity-summary" class="helper-text" style="margin-top:10px"></div><div id="pdf-ambiguity-list" style="display:grid;gap:14px;margin-top:14px"></div><div id="pdf-ambiguity-error" class="error hidden" style="margin-top:12px"></div><div class="form-actions"><button type="button" class="secondary-button" id="pdf-ambiguity-cancel">Annuler</button><button type="button" class="primary-button" id="pdf-ambiguity-submit" disabled>Valider les rapprochements et importer</button></div></div>`;
+    document.body.appendChild(m);
+    q('pdf-ambiguity-close').onclick=fermer;
+    q('pdf-ambiguity-cancel').onclick=fermer;
+    q('pdf-ambiguity-submit').onclick=soumettre;
+    m.addEventListener('change',actualiserBouton);
+  }
+  function fermer(){const m=q('pdf-ambiguity-modal');if(m)m.classList.add('hidden')}
+  function afficher(analyse){
+    creerModal();PA.analyse=analyse;
+    q('pdf-ambiguity-summary').innerHTML=`<strong>${analyse.ambigues}</strong> cas ambigu(s) sur ${analyse.recues} opérations · ${analyse.rapprochementsAutomatiques} rapprochement(s) automatique(s) · ${analyse.nouvelles} nouvelle(s) opération(s) prévues.`;
+    q('pdf-ambiguity-list').innerHTML=(analyse.details||[]).map((d,i)=>{
+      const p=d.operationPdf||{};
+      const candidats=(d.candidats||[]).map((c,j)=>`<label style="display:block;border:1px solid #d8e4df;border-radius:10px;padding:10px;margin-top:8px;cursor:pointer"><input type="radio" name="pdf-amb-${d.index}" value="match:${esc(c.id)}"> <strong>Rapprocher avec cette opération</strong><br><span class="helper-text">${dateFr(c.date_achat||c.date)} · ${esc(c.libelle||c.libelle_bancaire)} · ${money(c.montant)} · catégorie <strong>${esc(c.categorie||'Sans catégorie')}</strong> · score ${Number(c.score||0)}${c.source?' · '+esc(c.source):''}${c.statut?' / '+esc(c.statut):''}</span></label>`).join('');
+      return `<section style="border:1px solid #cbded6;border-radius:12px;padding:14px"><div style="font-weight:700;margin-bottom:6px">Cas ${i+1}</div><div class="warning-box" style="margin:0"><strong>Opération du relevé PDF</strong><br>${dateFr(p.date_comptable)}${p.date_achat&&p.date_achat!==p.date_comptable?' · achat '+dateFr(p.date_achat):''} · <strong>${money(p.montant)}</strong><br>${esc(p.libelle_bancaire||p.libelle)}${p.carte_fin?' · carte …'+esc(p.carte_fin):''}</div><div style="margin-top:10px"><strong>Choisir la correspondance :</strong>${candidats}<label style="display:block;border:1px solid #d8e4df;border-radius:10px;padding:10px;margin-top:8px;cursor:pointer"><input type="radio" name="pdf-amb-${d.index}" value="create"> <strong>Aucune correspondance — créer une nouvelle opération</strong></label></div></section>`;
+    }).join('');
+    q('pdf-ambiguity-error').classList.add('hidden');q('pdf-ambiguity-error').textContent='';
+    q('pdf-ambiguity-submit').disabled=true;
+    q('pdf-ambiguity-modal').classList.remove('hidden');
+  }
+  function actualiserBouton(){
+    const details=(PA.analyse&&PA.analyse.details)||[];
+    const complet=details.every(d=>document.querySelector(`input[name="pdf-amb-${d.index}"]:checked`));
+    q('pdf-ambiguity-submit').disabled=!complet;
+  }
+  function decisions(){return (PA.analyse.details||[]).map(d=>{const v=document.querySelector(`input[name="pdf-amb-${d.index}"]:checked`)?.value||'';if(v==='create')return{index:d.index,action:'create'};return{index:d.index,action:'match',operationId:v.replace(/^match:/,'')};});}
+  function soumettre(){
+    const b=q('pdf-ambiguity-submit'),err=q('pdf-ambiguity-error'),status=q('pdf-status');
+    b.disabled=true;b.textContent='Import transactionnel…';err.classList.add('hidden');
+    google.script.run.withSuccessHandler(r=>{
+      b.textContent='Valider les rapprochements et importer';
+      if(r.bloque){
+        err.textContent=r.message||'Des ambiguïtés restent à résoudre.';err.classList.remove('hidden');
+        google.script.run.withSuccessHandler(a=>{afficher(a)}).withFailureHandler(e=>{err.textContent='Erreur de réanalyse : '+(e.message||e);err.classList.remove('hidden')}).analyserAmbiguitesPdfBancaire(PA.rows,PA.compte);
+        return;
+      }
+      fermer();
+      if(status)status.textContent=`✅ PDF certifié : ${r.recues} opérations · ${r.remplacees} existantes rapprochées · ${r.creees} nouvelles · ${r.decisionsManuelles||0} décision(s) manuelle(s) · totaux et continuité conformes.`;
+      if(typeof charger==='function')charger();
+    }).withFailureHandler(e=>{b.disabled=false;b.textContent='Valider les rapprochements et importer';err.textContent='❌ '+(e.message||e);err.classList.remove('hidden')}).importerPdfBancaireCertifieAvecDecisions(PA.rows,PA.compte,PA.meta,decisions());
+  }
+  function lancerImport(){
+    const compte=q('pdf-account')?.value,status=q('pdf-status'),bouton=q('confirm-pdf-import');
+    if(!compte){if(status)status.textContent='Choisissez le compte.';return}
+    const meta=(window.sprint0809&&sprint0809.pdfMeta)||{},ctl=meta.controle||controlerTotauxPdf((window.sprint0809&&sprint0809.pdfOperations)||[],meta);
+    if(ctl.verifiable&&!ctl.conforme){if(status)status.textContent='Import refusé : les totaux du PDF ne sont pas conformes.';return}
+    const rows=rowsPdf();if(!rows.length){if(status)status.textContent='Aucune opération à importer.';return}
+    const invalides=rows.filter(r=>!String(r.libelle_bancaire||'').trim());if(invalides.length){const i=invalides[0];if(status)status.textContent=`Import refusé : ${invalides.length} opération(s) sans libellé. Date=${i.date_comptable||''} ; montant=${i.montant}`;return}
+    PA.rows=rows;PA.compte=compte;PA.meta=meta;
+    bouton.disabled=true;bouton.textContent='Rapprochement certifié…';if(status)status.textContent='Contrôle serveur des totaux, soldes et rapprochements…';
+    google.script.run.withSuccessHandler(r=>{
+      bouton.disabled=false;bouton.textContent='Importer les opérations';
+      if(!r.bloque){if(status)status.textContent=`✅ PDF certifié : ${r.controle.nombre} opérations · ${r.remplacees} existantes rapprochées · ${r.creees} nouvelles · totaux et continuité conformes.`;if(typeof charger==='function')charger();return}
+      if(status)status.textContent=`⚠️ ${r.ambigues} rapprochement(s) ambigu(s) détecté(s). Aucune écriture effectuée. Choisissez les correspondances ci-dessous.`;
+      google.script.run.withSuccessHandler(a=>afficher(a)).withFailureHandler(e=>{if(status)status.textContent='❌ Impossible de préparer les rapprochements manuels : '+(e.message||e)}).analyserAmbiguitesPdfBancaire(rows,compte);
+    }).withFailureHandler(e=>{bouton.disabled=false;bouton.textContent='Importer les opérations';if(status)status.textContent='❌ '+(e.message||e)}).importerPdfBancaireCertifie(rows,compte,meta);
+  }
+  function install(){creerModal();window.confirmerImportPdf=lancerImport;}
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(install,1000));
+})();
+</script>
