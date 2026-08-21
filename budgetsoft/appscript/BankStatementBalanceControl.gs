@@ -11,16 +11,54 @@ function arrondirControleReleve_(valeur) { return Math.round(Number(valeur || 0)
 function nombreControleReleve_(valeur) { if (valeur === null || valeur === undefined || valeur === '') return null; const n = Number(String(valeur).replace(/\s/g, '').replace(',', '.')); return Number.isFinite(n) ? n : null; }
 function dateControleReleve_(valeur) { if (!valeur) return null; const d = valeur instanceof Date ? new Date(valeur.getTime()) : new Date(valeur); return isNaN(d.getTime()) ? null : d; }
 function isoControleReleve_(valeur) { const d = dateControleReleve_(valeur); return d ? d.toISOString() : null; }
+function jourControleReleve_(valeur) { const d=dateControleReleve_(valeur); return d ? Utilities.formatDate(d,Session.getScriptTimeZone(),'yyyy-MM-dd') : ''; }
+
+function referencesPrecedentesControleReleve_(compte,dateOuverture){
+  const ouverture=dateControleReleve_(dateOuverture); if(!compte||!ouverture)return[];
+  const refs=[];
+  const historique=typeof lireHistoriqueReleves_==='function'?lireHistoriqueReleves_(compte):[];
+  (historique||[]).forEach(function(r){
+    const d=dateControleReleve_(r&&r.dateCloture),s=nombreControleReleve_(r&&r.soldeCloture);
+    if(d&&d.getTime()<=ouverture.getTime()&&s!==null)refs.push({dateCloture:d,soldeCloture:s,source:'historique_applicatif',brut:r});
+  });
+  if(typeof RELEVES_CERTIFIES_BUDGETSOFT_!=='undefined'&&Array.isArray(RELEVES_CERTIFIES_BUDGETSOFT_)){
+    RELEVES_CERTIFIES_BUDGETSOFT_.forEach(function(r){
+      const d=dateControleReleve_(r&&r.fin),s=nombreControleReleve_(r&&r.cloture);
+      if(d&&d.getTime()<=ouverture.getTime()&&s!==null)refs.push({dateCloture:d,soldeCloture:s,source:'chaine_certifiee',brut:r});
+    });
+  }
+  return refs.sort(function(a,b){
+    const da=dateControleReleve_(a.dateCloture),db=dateControleReleve_(b.dateCloture);
+    if(db-da)return db-da;
+    if(a.source===b.source)return 0;
+    return a.source==='chaine_certifiee'?-1:1;
+  });
+}
 
 function precedentControleReleve_(compte, dateOuverture) {
   if (!compte || !dateOuverture) return null;
   const ouverture = dateControleReleve_(dateOuverture);
   if (!ouverture) return null;
-  const historique = typeof lireHistoriqueReleves_ === 'function' ? lireHistoriqueReleves_(compte) : [];
-  return (historique || []).filter(function(r) {
-    const d = dateControleReleve_(r && r.dateCloture);
-    return d && d.getTime() <= ouverture.getTime() && nombreControleReleve_(r.soldeCloture) !== null;
-  }).sort(function(a, b) { return dateControleReleve_(b.dateCloture) - dateControleReleve_(a.dateCloture); })[0] || null;
+  const jourOuverture=jourControleReleve_(ouverture),refs=referencesPrecedentesControleReleve_(compte,ouverture);
+  const certifieExact=refs.find(function(r){return r.source==='chaine_certifiee'&&jourControleReleve_(r.dateCloture)===jourOuverture;});
+  const choisi=certifieExact||refs[0]||null;
+  return choisi?{dateCloture:choisi.dateCloture,soldeCloture:choisi.soldeCloture,sourceReference:choisi.source,brut:choisi.brut}:null;
+}
+
+function diagnostiquerContinuiteReleve(compte,dateOuverture,soldeOuverture){
+  verifierInitialisation_();
+  const ouverture=dateControleReleve_(dateOuverture),solde=nombreControleReleve_(soldeOuverture);
+  if(!compte)throw new Error('Choisissez un compte.');
+  if(!ouverture)throw new Error('Date d’ouverture invalide.');
+  if(solde===null)throw new Error('Solde d’ouverture invalide.');
+  const refs=referencesPrecedentesControleReleve_(compte,ouverture).map(function(r){return{source:r.source,dateCloture:isoControleReleve_(r.dateCloture),soldeCloture:arrondirControleReleve_(r.soldeCloture),ecart:arrondirControleReleve_(solde-r.soldeCloture)};});
+  const p=precedentControleReleve_(compte,ouverture),attendu=p?nombreControleReleve_(p.soldeCloture):null;
+  const r={version:'2026-08-21.2',compte:String(compte),dateOuverture:isoControleReleve_(ouverture),soldeOuverture:arrondirControleReleve_(solde),referenceRetenue:p?{source:p.sourceReference||'',dateCloture:isoControleReleve_(p.dateCloture),soldeCloture:arrondirControleReleve_(attendu)}:null,ecartRetenu:attendu===null?null:arrondirControleReleve_(solde-attendu),continuiteOk:attendu===null?null:Math.abs(solde-attendu)<0.01,referencesCandidates:refs};
+  console.log(JSON.stringify(r));return r;
+}
+
+function diagnostiquerContinuiteHelloBankJuilletAout2026(){
+  return diagnostiquerContinuiteReleve('Compte joint','2026-07-15',121.82);
 }
 
 function controlerReleveAvantImport(meta, compte) {
@@ -35,7 +73,7 @@ function controlerReleveAvantImport(meta, compte) {
   const ecartContinuite = soldePrecedent === null ? null : arrondirControleReleve_(ouverture - soldePrecedent), continuiteOk = ecartContinuite === null ? null : Math.abs(ecartContinuite) < 0.01;
   const ok = totauxOperationsOk && arithmetiqueOk && continuiteOk !== false, motifs = [];
   if (!totauxOperationsOk) motifs.push('les totaux des opérations extraites ne sont pas certifiés conformes au PDF'); if (!arithmetiqueOk) motifs.push('ouverture − débits + crédits ne retombe pas sur le solde de clôture'); if (continuiteOk === false) motifs.push('le solde d’ouverture ne correspond pas au solde de clôture du relevé précédent');
-  return {id:Utilities.getUuid(),controle_le:new Date().toISOString(),source:'HELLOBANK_PDF',compte:String(compte),date_ouverture:dateOuverture,solde_ouverture:arrondirControleReleve_(ouverture),total_debits:arrondirControleReleve_(debits),total_credits:arrondirControleReleve_(credits),date_cloture:dateCloture,solde_cloture:arrondirControleReleve_(cloture),solde_calcule:soldeCalcule,ecart_arithmetique:ecartArithmetique,date_cloture_precedente:datePrecedente,solde_cloture_precedent:soldePrecedent === null ? null : arrondirControleReleve_(soldePrecedent),ecart_continuite:ecartContinuite,totaux_operations_ok:totauxOperationsOk,arithmetique_ok:arithmetiqueOk,continuite_ok:continuiteOk,ok:ok,bloquant:!ok,message:ok?'Relevé contrôlé : totaux, arithmétique et continuité conformes.':'Import bloqué : ' + motifs.join(' ; ') + '.'};
+  return {id:Utilities.getUuid(),controle_le:new Date().toISOString(),source:'HELLOBANK_PDF',compte:String(compte),date_ouverture:dateOuverture,solde_ouverture:arrondirControleReleve_(ouverture),total_debits:arrondirControleReleve_(debits),total_credits:arrondirControleReleve_(credits),date_cloture:dateCloture,solde_cloture:arrondirControleReleve_(cloture),solde_calcule:soldeCalcule,ecart_arithmetique:ecartArithmetique,date_cloture_precedente:datePrecedente,solde_cloture_precedent:soldePrecedent === null ? null : arrondirControleReleve_(soldePrecedent),reference_precedente_source:precedent?String(precedent.sourceReference||''):'',ecart_continuite:ecartContinuite,totaux_operations_ok:totauxOperationsOk,arithmetique_ok:arithmetiqueOk,continuite_ok:continuiteOk,ok:ok,bloquant:!ok,message:ok?'Relevé contrôlé : totaux, arithmétique et continuité conformes.':'Import bloqué : ' + motifs.join(' ; ') + '.'};
 }
 
 function normaliserEnteteControleReleve_(texte) { return String(texte || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, ''); }
