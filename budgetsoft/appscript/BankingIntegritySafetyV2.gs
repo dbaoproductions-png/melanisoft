@@ -1,4 +1,4 @@
-const BANKING_SAFETY_V2='2.7';
+const BANKING_SAFETY_V2='2.8';
 
 function restaurerOperationsDepuisSauvegardeV2(nom){
   const ss=SpreadsheetApp.getActiveSpreadsheet(),src=ss.getSheetByName(String(nom||'')),dst=ss.getSheetByName('Operations');
@@ -32,6 +32,10 @@ function propositionCategorieFluxV27_(o,ctx){
   if(estRevenu&&/\bCOFIDIS\b/.test(texte)&&/(DEMANDE.*FINANCEMENT|FINANCEMENT.*REV)/.test(texte)){
     const cle=typeof normaliserTexteBanque_==='function'?normaliserTexteBanque_('Crédits de trésorerie'):'credits de tresorerie';
     if(ctx.index.has(cle))return{categorie:'Crédits de trésorerie',source:'heuristique_financement'};
+  }
+  if(/\bVELO\s+TOULOUSE\b/.test(texte)){
+    const cle=typeof normaliserTexteBanque_==='function'?normaliserTexteBanque_('Transports'):'transports';
+    if(ctx.index.has(cle))return{categorie:'Transports',source:'heuristique_velo_toulouse'};
   }
   const p=propositionCategorieOperation_(o,ctx.corr,ctx.regles,ctx.index,ctx.historique);
   if(!p||p.statut!=='propose'||!p.best||!p.best.categorie)return null;
@@ -76,8 +80,6 @@ function importerFluxBancaireControleV2(lignes,compte){
     const nouveaux=[];let protegeesPdf=0,modifieesExistantes=0,categorisees=0;
     const out=ops.filter(o=>!supprimer.has(String(o.id))).map(o=>{
       const m=matchById.get(String(o.id));if(!m)return o;
-      // Une donnée PDF définitive a priorité absolue sur un copier-coller :
-      // le flux sert seulement à constater qu'elle existe déjà et ne peut modifier aucun champ.
       if(estPdfDefinitifV27_(o)){protegeesPdf++;return o;}
       const n=m.n,comment=[String(o.commentaire||''),String(n.commentaire||'')].filter(Boolean).join(' ');
       const maj=Object.assign({},o,{date:n.date,date_comptable:n.date_comptable,date_achat:n.date_achat,libelle:n.libelle||o.libelle,libelle_bancaire:n.libelle_bancaire,marchand_normalise:n.marchand_normalise,carte_fin:n.carte_fin,source_bancaire:'flux',statut_bancaire:'provisoire',commentaire:comment,modifie_le:new Date()});
