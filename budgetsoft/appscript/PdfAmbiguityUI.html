@@ -35,26 +35,31 @@
 
   function lignesDepuisSocle(){
     if(typeof sprint0809==='undefined'||!Array.isArray(sprint0809.pdfOperations))return [];
-    return sprint0809.pdfOperations.map(o=>{const d=String(o.details||'');const cm=d.match(/CARTE\s+\d*X+(\d{4})/i);return {date_comptable:o.date,date_achat:o.date,libelle:o.libelle||'',libelle_bancaire:d||o.libelle||'',montant:Number(o.montant||0),type:Number(o.montant||0)<0?'depense':'revenu',carte_fin:cm?cm[1]:''}});
+    return sprint0809.pdfOperations.map(o=>{const d=String(o.libelle_bancaire||o.details||'');const cm=d.match(/(?:CARTE|CB)\s+\d*X+(\d{4})/i);return {date_comptable:o.date_comptable||o.date,date_achat:o.date_achat||o.date_comptable||o.date,libelle:o.libelle||'',libelle_bancaire:d||o.libelle||'',montant:Number(o.montant||0),type:Number(o.montant||0)<0?'depense':'revenu',carte_fin:o.carte_fin||(cm?cm[1]:'')};});
   }
-  function intercepterImport(e){
-    const btn=e.target&&e.target.closest?e.target.closest('#confirm-pdf-import'):null;if(!btn)return;
-    e.preventDefault();e.stopImmediatePropagation();
-    const status=q('pdf-status'),compte=q('pdf-account')?.value||'',rows=lignesDepuisSocle(),meta=(typeof sprint0809!=='undefined'?sprint0809.pdfMeta:null);
+  function importCertifie(){
+    const btn=q('confirm-pdf-import'),status=q('pdf-status'),compte=q('pdf-account')?.value||'',rows=lignesDepuisSocle(),meta=(typeof sprint0809!=='undefined'?sprint0809.pdfMeta:null);
     if(!compte){status.textContent='Choisissez le compte concerné.';return}
     if(!rows.length){status.textContent='Aucune opération à importer.';return}
     if(meta?.controle?.verifiable&&!meta.controle.conforme){status.textContent='Import bloqué : les totaux calculés ne correspondent pas aux totaux officiels du relevé.';return}
-    btn.disabled=true;btn.textContent='Contrôle des rapprochements…';status.textContent=`Contrôle de ${rows.length} opération(s), sans écriture…`;
+    btn.disabled=true;btn.textContent='Contrôle des rapprochements…';status.textContent=`Contrôle certifié de ${rows.length} opération(s), sans écriture…`;
     google.script.run.withSuccessHandler(analyse=>{
       btn.disabled=false;btn.textContent='Importer les opérations';
       if(analyse.ambigues>0){PA.rows=rows;PA.compte=compte;PA.meta=meta;status.textContent=`${analyse.ambigues} rapprochement(s) ambigu(s) : décision manuelle requise. Aucune écriture effectuée.`;afficher(analyse);return}
       status.textContent='Aucune ambiguïté. Import certifié en cours…';btn.disabled=true;btn.textContent='Import certifié…';
-      google.script.run.withSuccessHandler(r=>{btn.disabled=false;btn.textContent='Importer les opérations';finImport(r)}).withFailureHandler(err=>{btn.disabled=false;btn.textContent='Importer les opérations';status.textContent='❌ '+(err.message||err)}).importerPdfBancaireCertifieAvecDecisions(rows,compte,meta,[]);
+      google.script.run.withSuccessHandler(r=>{btn.disabled=false;btn.textContent='Importer les opérations';finImport(r)}).withFailureHandler(err=>{btn.disabled=false;btn.textContent='Importer les opérations';status.textContent='❌ '+(err.message||err)}).importerPdfBancaireCertifieWithDecisions(rows,compte,meta,[]);
     }).withFailureHandler(err=>{btn.disabled=false;btn.textContent='Importer les opérations';status.textContent='❌ Contrôle des rapprochements : '+(err.message||err)}).analyserAmbiguitesPdfBancaire(rows,compte);
+  }
+  function installerRoutageCertifie(){
+    const ancien=q('confirm-pdf-import');
+    if(!ancien||ancien.dataset.certifiedOwner==='1')return;
+    const nouveau=ancien.cloneNode(true);
+    nouveau.dataset.certifiedOwner='1';
+    ancien.parentNode.replaceChild(nouveau,ancien);
+    nouveau.addEventListener('click',importCertifie);
   }
 
   window.ouvrirResolutionAmbiguitesPdfBudgetSoft=function(rows,compte,meta,analyse){PA.rows=rows;PA.compte=compte;PA.meta=meta;afficher(analyse)};
-  document.addEventListener('DOMContentLoaded',creerModal);
-  document.addEventListener('click',intercepterImport,true);
+  document.addEventListener('DOMContentLoaded',()=>{creerModal();setTimeout(installerRoutageCertifie,0);setTimeout(installerRoutageCertifie,500);});
 })();
 </script>
