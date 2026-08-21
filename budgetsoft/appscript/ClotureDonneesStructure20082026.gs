@@ -1,4 +1,4 @@
-const CLOTURE_DONNEES_STRUCTURE_20082026_VERSION='1.3';
+const CLOTURE_DONNEES_STRUCTURE_20082026_VERSION='1.4';
 
 const DECISIONS_CLOTURE_DONNEES_20082026_={
   'c2ec8b75-1ec4-4f6c-9571-226f75626f08':{categorie:'Revenus divers',raison:'BPCE Financement 42,28 €'},
@@ -26,16 +26,46 @@ function enregistrerParamClotureDonnees_(cle,valeur){
   const r=new Array(Math.max(f.getLastColumn(),Math.max(ic,iv)+1)).fill('');r[ic]=cle;r[iv]=valeur;f.appendRow(r);return true;
 }
 
+function upsertRegleClotureDonnees_(motif,categorie,type){
+  const f=SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Regles_categories');
+  if(!f)throw new Error('Onglet Regles_categories introuvable.');
+  const largeur=f.getLastColumn();
+  if(largeur<1)throw new Error('Onglet Regles_categories sans en-têtes.');
+  const h=f.getRange(1,1,1,largeur).getValues()[0].map(v=>String(v||'').trim());
+  const idx={id:h.indexOf('id'),motif:h.indexOf('motif'),categorie:h.indexOf('categorie'),type:h.indexOf('type'),actif:h.indexOf('actif'),cree_le:h.indexOf('cree_le'),modifie_le:h.indexOf('modifie_le')};
+  if(idx.motif<0||idx.categorie<0||idx.type<0)throw new Error('Schéma Regles_categories incomplet : motif/categorie/type requis.');
+  const cleMotif=String(motif||'').trim().toLowerCase(),cleType=String(type||'').trim().toLowerCase(),maintenant=new Date();
+  if(f.getLastRow()>1){
+    const plage=f.getRange(2,1,f.getLastRow()-1,largeur),valeurs=plage.getValues();
+    let trouve=-1;
+    for(let i=0;i<valeurs.length;i++){
+      if(String(valeurs[i][idx.motif]||'').trim().toLowerCase()===cleMotif&&String(valeurs[i][idx.type]||'').trim().toLowerCase()===cleType){trouve=i;break;}
+    }
+    if(trouve>=0){
+      const r=valeurs[trouve];let change=false;
+      if(String(r[idx.categorie]||'')!==categorie){r[idx.categorie]=categorie;change=true;}
+      if(idx.actif>=0&&String(r[idx.actif]).toLowerCase()!=='true'){r[idx.actif]=true;change=true;}
+      if(idx.modifie_le>=0){r[idx.modifie_le]=maintenant;change=true;}
+      if(change)f.getRange(trouve+2,1,1,largeur).setValues([r]);
+      return change?'mise_a_jour':'existante';
+    }
+  }
+  const r=new Array(largeur).fill('');
+  if(idx.id>=0)r[idx.id]=Utilities.getUuid();r[idx.motif]=motif;r[idx.categorie]=categorie;r[idx.type]=type;
+  if(idx.actif>=0)r[idx.actif]=true;if(idx.cree_le>=0)r[idx.cree_le]=maintenant;if(idx.modifie_le>=0)r[idx.modifie_le]=maintenant;
+  f.appendRow(r);return'ajoutee';
+}
+
 function assurerReglesClotureDonnees20082026_(){
-  if(typeof assurerRegleMetier2026_!=='function')return{traitees:0,mode:'fonction_regles_absente'};
   const regles=[
     ['BEN MME LOU HERNEBRING','Argent de poche','depense'],['LOU HERNEBRING','Argent de poche','depense'],
     ['DAANSUREN','Concerts','revenu'],['COSAT','Avantages employeur','revenu'],
     ['VIR SEPA RECU /DE TOTALENERGIES','Remboursements','revenu'],
     ['CPAM','Remboursements santé','revenu'],['C.P.A.M','Remboursements santé','revenu'],['ASSURANCE MALADIE','Remboursements santé','revenu'],['MUTUELLE NATIONALE TERRITORIALE','Remboursements santé','revenu']
   ];
-  regles.forEach(r=>assurerRegleMetier2026_(r[0],r[1],r[2]));
-  return{traitees:regles.length,mode:'ok'};
+  const detail={ajoutee:0,mise_a_jour:0,existante:0};
+  regles.forEach(r=>{const statut=upsertRegleClotureDonnees_(r[0],r[1],r[2]);detail[statut]=(detail[statut]||0)+1;});
+  return{traitees:regles.length,mode:'lecture_directe_feuille',detail};
 }
 
 function normaliserTypesReglesClotureDonnees_(){
