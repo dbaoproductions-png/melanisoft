@@ -10,7 +10,10 @@ const RAPPROCHEMENTS_HEADERS = [
  * - une opération importée correspond à un mouvement bancaire réel ;
  * - les données bancaires sont écrites dans leurs colonnes dédiées ;
  * - les charges fixes ne génèrent aucune opération : elles sont uniquement
- *   rapprochées des mouvements réellement observés.
+ *   rapprochées des mouvements réellement observés ;
+ * - la catégorisation réutilise le référentiel, les correspondances, les règles
+ *   et l'historique validé de BudgetSoft. Le fallback ne crée jamais de vieille
+ *   catégorie et préfère laisser vide plutôt que de forcer une catégorie douteuse.
  */
 function importerOperationsHelloBank(operations, compte) {
   verifierInitialisation_();
@@ -23,11 +26,19 @@ function importerOperationsHelloBank(operations, compte) {
   const clesExistantes = new Set(existantes.map(cleOperationImport_));
   const charges = lireTable_('Charges_fixes').filter(c => convertirBooleen_(c.actif));
   const correspondances = lireCorrespondancesBancaires();
+  const reglesCategories = typeof lireReglesCategories === 'function' ? lireReglesCategories() : [];
+  const indexCategories = typeof indexCategoriesIntelligentes_ === 'function' ? indexCategoriesIntelligentes_() : new Map();
+  const historiqueCategories = typeof construireHistoriqueCategories_ === 'function'
+    ? construireHistoriqueCategories_(existantes, indexCategories)
+    : new Map();
   const aAjouter = [];
   const rapprochementsAValider = [];
   const correspondancesAIncrementer = new Map();
   const chargesAActualiser = new Map();
-  const resultats = { importees:0, doublons:0, rapprochees:0, rapprocheesManuelles:0, aValider:0, reconnues:0, erreurs:[] };
+  const resultats = {
+    importees:0, doublons:0, rapprochees:0, rapprocheesManuelles:0, aValider:0,
+    reconnues:0, reconnuesRegles:0, reconnuesHistorique:0, fallback:0, sansCategorie:0, erreurs:[]
+  };
 
   operations.forEach((operation, index) => {
     try {
@@ -46,8 +57,36 @@ function importerOperationsHelloBank(operations, compte) {
         ? rapprocherChargeFixe_(libelleBancaire, Math.abs(montantSigne), compte, charges, dateComptable)
         : null;
 
+      const operationPourCategorie = {
+        date:dateComptable,
+        libelle:libelleBancaire,
+        libelle_bancaire:libelleBancaire,
+        marchand_normalise:normaliserMarchandHelloBank_(libelleBancaire),
+        montant:type === 'depense' ? -Math.abs(montantSigne) : Math.abs(montantSigne),
+        type,
+        compte
+      };
+      const proposition = typeof propositionCategorieOperation_ === 'function'
+        ? propositionCategorieOperation_(operationPourCategorie, [], reglesCategories, indexCategories, historiqueCategories)
+        : null;
+      const categorieIntelligente = proposition && proposition.statut === 'propose' ? proposition.best.categorie : '';
+      const categorieFallback = suggererCategorieHelloBank_(libelleBancaire, type, montantSigne);
+      const categorie = premiereCategorieImportHelloBankValide_([
+        correspondance && correspondance.categorie,
+        rapprochementCharge && rapprochementCharge.charge && rapprochementCharge.charge.categorie,
+        categorieIntelligente,
+        categorieFallback
+      ], operationPourCategorie, indexCategories);
+
+      if (categorieIntelligente && categorie === categorieIntelligente) {
+        if (proposition.best.source === 'historique') resultats.reconnuesHistorique++;
+        else resultats.reconnuesRegles++;
+      } else if (categorieFallback && categorie === categorieCibleImportHelloBank_(categorieFallback)) {
+        resultats.fallback++;
+      }
+      if (!categorie) resultats.sansCategorie++;
+
       const libelleNormalise = correspondance?.libelle_normalise || rapprochementCharge?.charge?.libelle || proposerLibelleNormalise_(libelleBancaire);
-      const categorie = correspondance?.categorie || rapprochementCharge?.charge?.categorie || suggererCategorieHelloBank_(libelleBancaire, type);
       const dateAchat = operation.date_achat ? dateLocaleBudgetSoft_(operation.date_achat) : null;
       const maintenant = new Date().toISOString();
       const candidateManuelle = trouverSaisieManuelleCorrespondante_(
@@ -232,24 +271,85 @@ function rapprocherChargeFixe_(libelle, montant, compte, charges, dateOperation)
   return meilleur;
 }
 
-function suggererCategorieHelloBank_(libelle, type) {
-  if (type === 'revenu') return /SALAIRE|PAYE|FRANCE TRAVAIL|LOYER/i.test(libelle) ? 'Revenus' : '';
-  const regles = [
-    [/CARREFOUR|LECLERC|INTERMARCHE|ALDI|MONOPRIX|BOUCHERIE|BOULAN/i, 'Courses'],
-    [/PHARMAC|QARE|MUTUELLE|SANTE|AUDIENS/i, 'Santé'],
-    [/TISSEO|EFFIA|AUTOROUTE|ALVEA|TOTAL STATION/i, 'Transport'],
-    [/LEROY|BRICASTE|ADEO/i, 'Logement'],
-    [/FREE|SFR|BOUYGUES|MOBILE|TELECOM/i, 'Télécommunications'],
-    [/D\.G\.F\.I\.P|IMPOT/i, 'Impôts'],
-    [/KOZOO|VET /i, 'Animaux'],
-    [/DEEZER|GOOGLE ONE|OPENAI|IONOS|OPODO PRIME|FAMILO/i, 'Abonnements'],
-    [/CASDEN|COFIDIS|CREATIS|FLOA|ONEY|CARREFOUR BANQUE/i, 'Crédits'],
-    [/SURAVENIR|ASSURANCE|MAIF|MACIF|AXA|ALLIANZ/i, 'Assurances'],
-    [/TOTALENERGIES|EDF|ENGIE/i, 'Logement'],
-    [/COMMISSIONS|FRAIS BANCAIRES|HELLO PRIME/i, 'Banque']
-  ];
-  const trouvee = regles.find(r => r[0].test(libelle));
-  return trouvee ? trouvee[1] : '';
+function categorieCibleImportHelloBank_(categorie) {
+  const brut = String(categorie || '').trim();
+  return typeof categorieCibleBudgetSoft_ === 'function' ? categorieCibleBudgetSoft_(brut) : brut;
+}
+
+function categorieImportHelloBankValide_(categorie, operation, indexCategories) {
+  const cible = categorieCibleImportHelloBank_(categorie);
+  if (!cible) return '';
+  if (!indexCategories || typeof indexCategories.has !== 'function' || !indexCategories.size) return cible;
+  if (!indexCategories.has(normaliserTexteBanque_(cible))) return '';
+  if (typeof categorieCompatibleOperation_ === 'function' && !categorieCompatibleOperation_(operation, cible, indexCategories)) return '';
+  return cible;
+}
+
+function premiereCategorieImportHelloBankValide_(candidates, operation, indexCategories) {
+  for (const candidate of candidates || []) {
+    const valide = categorieImportHelloBankValide_(candidate, operation, indexCategories);
+    if (valide) return valide;
+  }
+  return '';
+}
+
+/**
+ * Fallback volontairement prudent. Les décisions apprises (correspondances,
+ * règles et historique) passent avant. Ici, seules les correspondances sûres
+ * et les catégories du référentiel final sont utilisées.
+ */
+function suggererCategorieHelloBank_(libelle, type, montant) {
+  const texte = normaliserTexteBanque_(libelle);
+  const m = Math.abs(Number(montant || 0));
+
+  if (type === 'revenu') {
+    if (/\bFRANCE TRAVAIL\b/.test(texte)) return 'France Travail';
+    if (/\bSALAIRE\b|\bPAYE\b/.test(texte)) return 'Salaires';
+    if (/\bCOSAT\b/.test(texte)) return 'Avantages employeur';
+    if (/\bDAANSUREN\b/.test(texte)) return 'Concerts';
+    if (/\bCPAM\b|\bASSURANCE MALADIE\b|\bMUTUELLE NATIONALE TERRITORIALE\b/.test(texte)) return 'Remboursements santé';
+    if (/\bTOTALENERGIES\b/.test(texte) && /\bVIR\b|\bVIREMENT\b|\bRECU\b|\bREMBOURSEMENT\b/.test(texte)) return 'Remboursements';
+    if (/\bLOYER\b/.test(texte)) return 'Revenus fonciers';
+    if (/\bREMBOURSEMENT\b|\bAVOIR\b/.test(texte)) return 'Remboursements';
+    return '';
+  }
+
+  if (/CARREFOUR|LECLERC|INTERMARCHE|ALDI|MONOPRIX|BOUCHERIE|BOULAN/.test(texte)) return 'Courses';
+  if (/PHARMAC|QARE|SANTE|AUDIENS/.test(texte)) return 'Santé';
+  if (/TISSEO/.test(texte)) return 'Transports';
+  if (/LEROY|BRICASTE|ADEO/.test(texte)) return 'Maison / entretien';
+  if (/FREE|SFR|BOUYGUES|NRJ MOBILE|MOBILE|TELECOM/.test(texte)) return 'Télécom / Internet / TV';
+  if (/D G F I P|IMPOT/.test(texte)) return 'Impôts';
+  if (/KOZOO|VET /.test(texte)) return 'Animaux';
+  if (/DEEZER|GOOGLE ONE|OPENAI|IONOS|OPODO PRIME|FAMILO|MAX/.test(texte)) return 'Abonnements numériques';
+  if (/SURAVENIR|ASSURANCE|MAIF|MACIF|AXA|ALLIANZ/.test(texte)) return 'Assurances';
+  if (/COMMISSIONS|FRAIS BANCAIRES|HELLO PRIME/.test(texte)) return 'Frais bancaires';
+  if (/TOTALENERGIES/.test(texte)) {
+    if ([61,63,70].some(v => Math.abs(m-v) <= 0.05)) return 'Électricité';
+    if ([220,248,286].some(v => Math.abs(m-v) <= 0.05)) return 'Gaz';
+    return '';
+  }
+  if (/\bEDF\b/.test(texte)) return 'Électricité';
+  return '';
+}
+
+function auditerAlignementImportPDFHelloBank() {
+  verifierInitialisation_();
+  const index = indexCategoriesIntelligentes_();
+  const anciennes = ['Revenus','Transport','Logement','Télécommunications','Abonnements','Banque'];
+  const anciennesEncoreActives = anciennes.filter(n => index.has(normaliserTexteBanque_(n)));
+  const attendues = ['Courses','Santé','Transports','Maison / entretien','Télécom / Internet / TV','Impôts','Animaux','Abonnements numériques','Assurances','Frais bancaires','Électricité','Gaz','Salaires','France Travail','Concerts','Avantages employeur','Revenus fonciers','Remboursements','Remboursements santé'];
+  const manquantes = attendues.filter(n => !index.has(normaliserTexteBanque_(n)));
+  const fonctions = {
+    intelligence:typeof propositionCategorieOperation_ === 'function',
+    regles:typeof lireReglesCategories === 'function',
+    correspondances:typeof lireCorrespondancesBancaires === 'function',
+    historique:typeof construireHistoriqueCategories_ === 'function'
+  };
+  const ok = anciennesEncoreActives.length === 0 && manquantes.length === 0 && Object.values(fonctions).every(Boolean);
+  const r = {version:'2026-08-21',ok,fonctions,anciennesEncoreActives,manquantes,categoriesActives:index.size};
+  console.log(JSON.stringify(r));
+  return r;
 }
 
 function nettoyerLibelleHelloBank_(texte) {
