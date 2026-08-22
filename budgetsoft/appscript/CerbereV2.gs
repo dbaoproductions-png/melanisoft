@@ -1,4 +1,4 @@
-const CERBERE_V2_VERSION = '2.0.0';
+const CERBERE_V2_VERSION = '2.0.1';
 const CERBERE_EPARGNE_MENSUELLE = 50;
 
 /** Cerbère V2 : moteur de contrôle court terme. Lecture seule du réel. */
@@ -11,27 +11,31 @@ function chargerCerbereV2() {
   const credits = lireTable_('Credits');
   const canon = chargerBudgetCanoniqueCerbere_();
   const resultats = periodes.map((p, i) => calculerPeriodeCerbere_(p, i, charges, operations, credits, canon));
-  return {
+  const payload = {
     version:CERBERE_V2_VERSION,
     principe:'Cerbère applique la stratégie ; il ne la définit pas et ne modifie jamais le réel.',
     periodes:resultats,
     plan:chargerPlanCerbere()
   };
+  // google.script.run ne transporte pas de Date. Le moteur travaille avec des Date
+  // en interne, puis expose volontairement un DTO JSON pur à l'interface.
+  return serialiserCerberePourClient_(payload);
+}
+
+function serialiserCerberePourClient_(valeur) {
+  return JSON.parse(JSON.stringify(valeur));
 }
 
 function construirePeriodesCerbere_() {
-  // On privilégie le moteur de cycles existant s'il est disponible.
-  try {
-    if (typeof obtenirPeriodesBudget === 'function') {
-      const p = obtenirPeriodesBudget();
-      if (Array.isArray(p) && p.length) return p.slice(0,6).map(x=>({debut:new Date(x.debut),fin:new Date(x.fin),libelle:x.libelle||''}));
-    }
-  } catch(e) {}
-  const now = debutJour_(new Date());
+  // Cerbère doit partager exactement la convention métier BudgetSoft : 28 inclus → 27 inclus.
+  // On ne dépend d'aucune fonction de navigation/UI externe ; on part du moteur canonique.
   const out=[];
+  let reference=new Date();
   for(let i=0;i<6;i++){
-    const d=new Date(now.getFullYear(),now.getMonth()+i,1), f=new Date(now.getFullYear(),now.getMonth()+i+1,0);
-    out.push({debut:d,fin:f,libelle:'P'+(i+1)});
+    const brut=calculerPeriodeBudgetaireCanonique_(reference);
+    const debut=new Date(brut.debut), fin=new Date(brut.fin);
+    out.push({debut,fin,libelle:brut.libelle||('P'+(i+1)),cle:brut.cle||''});
+    reference=new Date(fin.getTime()+1);
   }
   return out;
 }
