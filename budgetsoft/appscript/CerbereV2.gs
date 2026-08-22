@@ -1,4 +1,4 @@
-const CERBERE_VERSION = '2.0.0';
+const CERBERE_V2_VERSION = '2.0.0';
 const CERBERE_EPARGNE_MENSUELLE = 50;
 
 /** Cerbère V2 : moteur de contrôle court terme. Lecture seule du réel. */
@@ -12,7 +12,7 @@ function chargerCerbereV2() {
   const canon = chargerBudgetCanoniqueCerbere_();
   const resultats = periodes.map((p, i) => calculerPeriodeCerbere_(p, i, charges, operations, credits, canon));
   return {
-    version:CERBERE_VERSION,
+    version:CERBERE_V2_VERSION,
     principe:'Cerbère applique la stratégie ; il ne la définit pas et ne modifie jamais le réel.',
     periodes:resultats,
     plan:chargerPlanCerbere()
