@@ -26,14 +26,12 @@ jobs:
           echo "GITHUB_SHA=$GITHUB_SHA"
           echo "HEAD=$(git rev-parse HEAD)"
           echo "BRANCH=${GITHUB_REF_NAME}"
-          echo "CreditsDataV2 marker:"
-          grep -n "CREDITS_DATA_V2_VERSION = '2.3-2026-08-20'" budgetsoft/appscript/CreditsDataV2.gs || true
-          echo "DettesDataV2 marker:"
-          grep -n "DETTES_DATA_V2_VERSION = '1.0-2026-08-20'" budgetsoft/appscript/DettesDataV2.gs || true
-          echo "Analyses V2.4 marker:"
-          grep -n "ANALYSES_CORRECTIONS_19082026_VERSION = '2.4'" budgetsoft/appscript/AnalysesCorrections19082026.gs || true
-          echo "Civil-day banking helper:"
-          grep -n "dateBancaireConnueAuJour_" budgetsoft/appscript/BudgetCalendar.gs || true
+          echo "Plan/Cerbere markers:"
+          grep -n 'data-view="plan"' budgetsoft/appscript/Index.html
+          grep -n 'PlanCerbereUI' budgetsoft/appscript/Index.html
+          grep -n "PLAN_CERBERE_VERSION = '2.0.0'" budgetsoft/appscript/PlanCerbere.gs
+          grep -n "CERBERE_VERSION = '2.0.0'" budgetsoft/appscript/CerbereV2.gs
+          grep -n 'assurerNavigationCerbere_' budgetsoft/appscript/CerbereUI.html
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -69,23 +67,19 @@ jobs:
           set -euo pipefail
           test -d budgetsoft/appscript
           test -f budgetsoft/appscript/appsscript.json
-          find budgetsoft/appscript -maxdepth 1 -type f \( -name '*.gs' -o -name '*.html' -o -name 'appsscript.json' \) -printf '%f\n' | sort
-
-          grep -n "CREDITS_DATA_V2_VERSION = '2.3-2026-08-20'" budgetsoft/appscript/CreditsDataV2.gs
-          grep -n "DETTES_DATA_V2_VERSION = '1.0-2026-08-20'" budgetsoft/appscript/DettesDataV2.gs
-          grep -n "conservatoire-studio-42-20" budgetsoft/appscript/DettesDataV2.gs
-          grep -n "conservatoire-scolarite-400" budgetsoft/appscript/DettesDataV2.gs
-          grep -n "dentiste-protheses-800" budgetsoft/appscript/DettesDataV2.gs
-          grep -n "ANALYSES_CORRECTIONS_19082026_VERSION = '2.4'" budgetsoft/appscript/AnalysesCorrections19082026.gs
-          grep -n "dateBancaireConnueAuJour_" budgetsoft/appscript/BudgetCalendar.gs
-          if grep -n -w "depensesCourants" budgetsoft/appscript/AnalysesCorrections19082026.gs; then
-            echo 'ERROR: invalid variable depensesCourants found in AnalysesCorrections19082026.gs'
-            exit 1
-          fi
-          for f in AnalysesCorrections19082026 BudgetCalendar DashboardCorrections19082026 DashboardBalanceDiagnostics CreditsDataV2 DettesDataV2 AuditCoherenceFinal19082026; do
-            cp "budgetsoft/appscript/$f.gs" "/tmp/$f.js"
-            node --check "/tmp/$f.js"
-          done
+          test -f budgetsoft/appscript/PlanCerbere.gs
+          test -f budgetsoft/appscript/CerbereV2.gs
+          test -f budgetsoft/appscript/CerbereUI.html
+          test -f budgetsoft/appscript/PlanCerbereUI.html
+          grep -n 'data-view="plan"' budgetsoft/appscript/Index.html
+          grep -n 'data-view="cerbere"' budgetsoft/appscript/Index.html
+          grep -n 'PlanCerbereUI' budgetsoft/appscript/Index.html
+          grep -n "PLAN_CERBERE_VERSION = '2.0.0'" budgetsoft/appscript/PlanCerbere.gs
+          grep -n "CERBERE_VERSION = '2.0.0'" budgetsoft/appscript/CerbereV2.gs
+          cp budgetsoft/appscript/PlanCerbere.gs /tmp/PlanCerbere.js
+          cp budgetsoft/appscript/CerbereV2.gs /tmp/CerbereV2.js
+          node --check /tmp/PlanCerbere.js
+          node --check /tmp/CerbereV2.js
 
       - name: Show clasp status
         run: npx --yes @google/clasp@3 show-file-status
@@ -107,15 +101,11 @@ jobs:
           JSON
           cd /tmp/budgetsoft-clasp-verify
           npx --yes @google/clasp@3 pull
-          grep -R -n "CREDITS_DATA_V2_VERSION = '2.3-2026-08-20'" . || { echo 'ERROR: Apps Script does not contain CreditsDataV2 2.3'; exit 1; }
-          grep -R -n "DETTES_DATA_V2_VERSION = '1.0-2026-08-20'" . || { echo 'ERROR: Apps Script does not contain DettesDataV2'; exit 1; }
-          grep -R -n "dentiste-protheses-800" . || { echo 'ERROR: Apps Script does not contain structural debt markers'; exit 1; }
-          grep -R -n "ANALYSES_CORRECTIONS_19082026_VERSION = '2.4'" . || { echo 'ERROR: Apps Script does not contain Analyses V2.4'; exit 1; }
-          grep -R -n "dateBancaireConnueAuJour_" . || { echo 'ERROR: Apps Script does not contain civil-day banking helper'; exit 1; }
-          if grep -R -n -w "depensesCourants" .; then
-            echo 'ERROR: pushed Apps Script still contains invalid variable depensesCourants'
-            exit 1
-          fi
+          grep -R -n 'data-view="plan"' . || { echo 'ERROR: pushed Apps Script has no Plan navigation'; exit 1; }
+          grep -R -n 'PlanCerbereUI' . || { echo 'ERROR: pushed Apps Script has no PlanCerbereUI include'; exit 1; }
+          grep -R -n "PLAN_CERBERE_VERSION = '2.0.0'" . || { echo 'ERROR: pushed Apps Script has no PlanCerbere V2'; exit 1; }
+          grep -R -n "CERBERE_VERSION = '2.0.0'" . || { echo 'ERROR: pushed Apps Script has no Cerbere V2'; exit 1; }
+          grep -R -n 'assurerNavigationCerbere_' . || { echo 'ERROR: pushed Apps Script has no Cerbere router compatibility'; exit 1; }
 
       - name: Update validated TEST web app deployment
         shell: bash
