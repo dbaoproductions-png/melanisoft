@@ -1,4 +1,4 @@
-const CERBERE_V2_VERSION = '2.0.2';
+const CERBERE_V2_VERSION = '2.0.3';
 const CERBERE_EPARGNE_MENSUELLE = 50;
 
 /**
@@ -28,7 +28,7 @@ function chargerCerbereV2() {
     const canon = chargerBudgetCanoniqueCerbere_();
 
     stage = 'construction des périodes';
-    const periodes = construirePeriodesCerbere_();
+    const periodes = construirePeriodesCerbereV2_();
 
     stage = 'calcul P1-P6';
     const resultats = periodes.map((p, i) => calculerPeriodeCerbere_(p, i, charges, operations, canon, planGlobal));
@@ -82,7 +82,8 @@ function serialiserCerberePourClient_(valeur) {
   return JSON.parse(JSON.stringify(valeur));
 }
 
-function construirePeriodesCerbere_() {
+/* Nom V2 volontairement unique : Cerbere.gs V1 possède déjà construirePeriodesCerbere_. */
+function construirePeriodesCerbereV2_() {
   const out = [];
   let reference = new Date();
   for (let i = 0; i < 6; i++) {
