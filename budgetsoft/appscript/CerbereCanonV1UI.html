@@ -1,0 +1,60 @@
+<script>
+(function(){
+'use strict';
+const money=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));
+let canon=null, initialTotal=0;
+function loadCanon(){google.script.run.withSuccessHandler(d=>{canon=d;openEditor();}).withFailureHandler(e=>alert(e.message||e)).chargerCanonCerbereV1();}
+function openEditor(){
+  if(!canon)return;
+  let box=document.getElementById('cerb-canon-editor');
+  if(!box){box=document.createElement('div');box.id='cerb-canon-editor';document.body.appendChild(box);}
+  initialTotal=canon.postes.reduce((s,p)=>s+Number(p.monetaire||0),0);
+  box.innerHTML=`<div class="cc-backdrop"></div><div class="cc-modal"><div class="cc-head"><div><small>BUDGET CANONIQUE V1</small><h2>Répartir l’enveloppe souple</h2></div><button id="cc-close">×</button></div><p>Déplacez les tirettes. Le total monétaire reste constant : augmenter un poste diminue automatiquement <b>Projet</b>. Pluxee est affiché séparément.</p><div class="cc-summary"><span>Monétaire <b id="cc-mon">${money(initialTotal)}</b></span><span>Pluxee <b>${money(canon.totaux.pluxee)}</b></span><span>Épargne protégée <b>${money(canon.epargneProtegee)}</b></span></div><div class="cc-stack" id="cc-stack"></div><div id="cc-rows"></div><div class="cc-foot"><small id="cc-msg">Total conservé.</small><button class="secondary-button" id="cc-cancel">Annuler</button><button class="primary-button" id="cc-save">Enregistrer le canon</button></div></div>`;
+  document.getElementById('cc-close').onclick=closeEditor;document.getElementById('cc-cancel').onclick=closeEditor;document.querySelector('#cerb-canon-editor .cc-backdrop').onclick=closeEditor;
+  document.getElementById('cc-save').onclick=saveCanon; renderRows();
+}
+function renderRows(){
+  const rows=document.getElementById('cc-rows'); if(!rows)return;
+  rows.innerHTML=canon.postes.map((p,i)=>`<div class="cc-row ${p.protege?'protected':''}"><div class="cc-label"><strong>${p.categorie}</strong><span id="cc-val-${i}">${money(p.monetaire)}${p.pluxee?' + '+money(p.pluxee)+' Pluxee':''}</span></div><input type="range" data-i="${i}" min="0" max="${Math.max(300,Math.ceil((p.monetaire+300)/50)*50)}" step="1" value="${p.monetaire}" ${p.protege?'disabled':''}></div>`).join('');
+  rows.querySelectorAll('input[type=range]').forEach(r=>r.oninput=()=>move(Number(r.dataset.i),Number(r.value)));
+  renderStack();
+}
+function move(i,value){
+  const p=canon.postes[i]; if(!p||p.protege)return;
+  const project=canon.postes.find(x=>x.categorie==='Projet');
+  if(p.categorie==='Projet'){
+    const others=canon.postes.reduce((s,x)=>s+(x.categorie==='Projet'?0:Number(x.monetaire||0)),0);
+    p.monetaire=Math.max(0,initialTotal-others);
+  } else {
+    const old=Number(p.monetaire||0), delta=value-old;
+    if(project){
+      const available=Number(project.monetaire||0);
+      if(delta>available){value=old+available;}
+      p.monetaire=Math.max(0,value);
+      project.monetaire=Math.max(0,available-(p.monetaire-old));
+    } else p.monetaire=Math.max(0,value);
+  }
+  renderRows();
+}
+function renderStack(){
+  const z=document.getElementById('cc-stack');if(!z)return;
+  const total=Math.max(1,canon.postes.reduce((s,p)=>s+Number(p.monetaire||0),0));
+  z.innerHTML=canon.postes.filter(p=>p.monetaire>0).map((p,i)=>`<span title="${p.categorie} : ${money(p.monetaire)}" style="width:${100*p.monetaire/total}%" class="cc-seg cc-s${i%8}"></span>`).join('');
+  document.getElementById('cc-mon').textContent=money(total);
+  const diff=Math.round((total-initialTotal)*100)/100;document.getElementById('cc-msg').textContent=Math.abs(diff)<.01?'Total conservé.':`Écart à corriger : ${money(diff)}`;
+}
+function saveCanon(){
+  const total=canon.postes.reduce((s,p)=>s+Number(p.monetaire||0),0);
+  if(Math.abs(total-initialTotal)>.01){alert('Le total monétaire doit rester constant.');return;}
+  google.script.run.withSuccessHandler(d=>{canon=d;closeEditor(); if(window.chargerCerbereV2UI)window.chargerCerbereV2UI();}).withFailureHandler(e=>alert(e.message||e)).enregistrerCanonCerbereV1(canon.postes);
+}
+function closeEditor(){const b=document.getElementById('cerb-canon-editor');if(b)b.remove();}
+function injectButton(){
+  const z=document.getElementById('cerbere-content');if(!z||document.getElementById('cc-open'))return;
+  const tabs=z.querySelector('.cerb-tabs');if(!tabs)return;
+  const b=document.createElement('button');b.id='cc-open';b.className='primary-button';b.textContent='⚖ Ajuster le budget canonique';b.onclick=loadCanon;tabs.appendChild(b);
+}
+const obs=new MutationObserver(injectButton);obs.observe(document.documentElement,{subtree:true,childList:true});
+const style=document.createElement('style');style.textContent=`#cerb-canon-editor{position:fixed;inset:0;z-index:9999}.cc-backdrop{position:absolute;inset:0;background:rgba(0,35,28,.42)}.cc-modal{position:absolute;right:3vw;top:3vh;bottom:3vh;width:min(760px,94vw);overflow:auto;background:#f8fbfa;border-radius:18px;padding:22px;box-shadow:0 24px 70px rgba(0,0,0,.28)}.cc-head{display:flex;justify-content:space-between;align-items:flex-start}.cc-head h2{margin:3px 0 0}.cc-head small{color:#147d64;font-weight:800}.cc-head button{border:0;background:transparent;font-size:30px;cursor:pointer}.cc-summary{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}.cc-summary span{background:#fff;padding:9px 12px;border-radius:10px}.cc-stack{height:30px;display:flex;overflow:hidden;border-radius:9px;background:#e5eeeb;margin:14px 0 20px}.cc-seg{height:100%;min-width:2px}.cc-s0{background:#0f766e}.cc-s1{background:#14b8a6}.cc-s2{background:#84cc16}.cc-s3{background:#eab308}.cc-s4{background:#f97316}.cc-s5{background:#8b5cf6}.cc-s6{background:#06b6d4}.cc-s7{background:#64748b}.cc-row{background:#fff;padding:11px 13px;border-radius:11px;margin:8px 0}.cc-label{display:flex;justify-content:space-between;gap:12px}.cc-row input{width:100%;accent-color:#147d64}.cc-row.protected{background:#edf7f3}.cc-foot{position:sticky;bottom:-22px;background:#f8fbfa;padding:16px 0 4px;display:flex;align-items:center;justify-content:flex-end;gap:10px}.cc-foot small{margin-right:auto}#cc-open{margin-left:auto}`;document.head.appendChild(style);
+})();
+</script>
