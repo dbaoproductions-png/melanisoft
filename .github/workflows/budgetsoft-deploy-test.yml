@@ -30,7 +30,7 @@ jobs:
           grep -n 'data-view="plan"' budgetsoft/appscript/Index.html
           grep -n 'PlanCerbereUI' budgetsoft/appscript/Index.html
           grep -n "PLAN_CERBERE_VERSION = '2.0.0'" budgetsoft/appscript/PlanCerbere.gs
-          grep -n "CERBERE_VERSION = '2.0.0'" budgetsoft/appscript/CerbereV2.gs
+          grep -n "CERBERE_V2_VERSION = '2.0.0'" budgetsoft/appscript/CerbereV2.gs
           grep -n 'assurerNavigationCerbere_' budgetsoft/appscript/CerbereUI.html
 
       - name: Setup Node.js
@@ -75,7 +75,9 @@ jobs:
           grep -n 'data-view="cerbere"' budgetsoft/appscript/Index.html
           grep -n 'PlanCerbereUI' budgetsoft/appscript/Index.html
           grep -n "PLAN_CERBERE_VERSION = '2.0.0'" budgetsoft/appscript/PlanCerbere.gs
-          grep -n "CERBERE_VERSION = '2.0.0'" budgetsoft/appscript/CerbereV2.gs
+          grep -n "CERBERE_V2_VERSION = '2.0.0'" budgetsoft/appscript/CerbereV2.gs
+          test "$(grep -R -h -E '^const CERBERE_VERSION[[:space:]]*=' budgetsoft/appscript/*.gs | wc -l)" -le 1 || { echo 'ERROR: duplicate global CERBERE_VERSION declarations'; exit 1; }
+          test "$(grep -R -h -E '^const CERBERE_V2_VERSION[[:space:]]*=' budgetsoft/appscript/*.gs | wc -l)" -eq 1 || { echo 'ERROR: CERBERE_V2_VERSION must be declared exactly once'; exit 1; }
           cp budgetsoft/appscript/PlanCerbere.gs /tmp/PlanCerbere.js
           cp budgetsoft/appscript/CerbereV2.gs /tmp/CerbereV2.js
           node --check /tmp/PlanCerbere.js
@@ -104,7 +106,9 @@ jobs:
           grep -R -n 'data-view="plan"' . || { echo 'ERROR: pushed Apps Script has no Plan navigation'; exit 1; }
           grep -R -n 'PlanCerbereUI' . || { echo 'ERROR: pushed Apps Script has no PlanCerbereUI include'; exit 1; }
           grep -R -n "PLAN_CERBERE_VERSION = '2.0.0'" . || { echo 'ERROR: pushed Apps Script has no PlanCerbere V2'; exit 1; }
-          grep -R -n "CERBERE_VERSION = '2.0.0'" . || { echo 'ERROR: pushed Apps Script has no Cerbere V2'; exit 1; }
+          grep -R -n "CERBERE_V2_VERSION = '2.0.0'" . || { echo 'ERROR: pushed Apps Script has no Cerbere V2'; exit 1; }
+          test "$(grep -R -h -E '^const CERBERE_VERSION[[:space:]]*=' ./*.gs 2>/dev/null | wc -l)" -le 1 || { echo 'ERROR: pushed Apps Script still has duplicate CERBERE_VERSION declarations'; exit 1; }
+          test "$(grep -R -h -E '^const CERBERE_V2_VERSION[[:space:]]*=' ./*.gs 2>/dev/null | wc -l)" -eq 1 || { echo 'ERROR: pushed Apps Script has invalid CERBERE_V2_VERSION declaration count'; exit 1; }
           grep -R -n 'assurerNavigationCerbere_' . || { echo 'ERROR: pushed Apps Script has no Cerbere router compatibility'; exit 1; }
 
       - name: Update validated TEST web app deployment
