@@ -1,19 +1,19 @@
-const PLAN_CERBERE_VERSION = '2.0.0';
+const PLAN_CERBERE_VERSION = '2.0.1';
 
 /**
  * Couche PLAN de BudgetSoft.
  * Objectifs = stratégie ; Actions = exécution ; Evénements = faits futurs connus.
  * Cette couche n'écrit jamais dans Operations, Charges_fixes ou Credits.
+ * Elle possède volontairement son propre stockage, indépendant de TABLES.
  */
 function chargerPlanCerbere() {
-  verifierInitialisation_();
   assurerTablesPlanCerbere_();
-  return {
+  return serialiserCerberePourClient_({
     version: PLAN_CERBERE_VERSION,
     objectifs: lireTablePlanCerbere_('Plan_Objectifs'),
     actions: lireTablePlanCerbere_('Plan_Actions'),
     evenements: lireTablePlanCerbere_('Plan_Evenements')
-  };
+  });
 }
 
 function enregistrerObjectifPlan(d) {
@@ -28,7 +28,8 @@ function enregistrerObjectifPlan(d) {
   d.montant_cible = Math.max(0, convertirNombre_(d.montant_cible || 0));
   d.statut = String(d.statut || 'Actif');
   d.commentaire = String(d.commentaire || '');
-  return upsertPlanCerbere_('Plan_Objectifs', d);
+  upsertPlanCerbere_('Plan_Objectifs', d);
+  return chargerPlanCerbere();
 }
 
 function enregistrerActionPlan(d) {
@@ -47,7 +48,8 @@ function enregistrerActionPlan(d) {
   d.statut = String(d.statut || 'Prévue');
   d.certitude = String(d.certitude || 'certaine');
   d.commentaire = String(d.commentaire || '');
-  return upsertPlanCerbere_('Plan_Actions', d);
+  upsertPlanCerbere_('Plan_Actions', d);
+  return chargerPlanCerbere();
 }
 
 function enregistrerEvenementPlan(d) {
@@ -65,7 +67,8 @@ function enregistrerEvenementPlan(d) {
   d.statut = String(d.statut || 'Prévu');
   d.operation_reelle_id = String(d.operation_reelle_id || '');
   d.commentaire = String(d.commentaire || '');
-  return upsertPlanCerbere_('Plan_Evenements', d);
+  upsertPlanCerbere_('Plan_Evenements', d);
+  return chargerPlanCerbere();
 }
 
 function supprimerElementPlan(type, id) {
@@ -73,7 +76,7 @@ function supprimerElementPlan(type, id) {
   const map = {objectif:'Plan_Objectifs', action:'Plan_Actions', evenement:'Plan_Evenements'};
   const table = map[String(type || '').toLowerCase()];
   if (!table || !id) throw new Error('Élément du plan introuvable.');
-  supprimerLigne(table, id);
+  supprimerLignePlanCerbere_(table, id);
   return chargerPlanCerbere();
 }
 
@@ -117,20 +120,55 @@ function evenementActifSurPeriode_(e, d0, d1) {
 }
 function normaliserDatePlan_(v) {
   if (!v) return '';
-  const d = new Date(v); if (isNaN(d.getTime())) throw new Error('Date invalide.');
+  const d = dateLocaleBudgetSoft_(v);
+  if (isNaN(d.getTime())) throw new Error('Date invalide.');
   return d;
 }
-function lireTablePlanCerbere_(nom) { try { return lireTable_(nom); } catch(e) { return []; } }
-function upsertPlanCerbere_(table, d) { enregistrerLigne(table, d); return chargerPlanCerbere(); }
+
+function schemasPlanCerbere_() {
+  return {
+    Plan_Objectifs:['id','nom','type','horizon','priorite','date_cible','montant_cible','statut','commentaire','cree_le','modifie_le'],
+    Plan_Actions:['id','objectif_id','libelle','type','date_prevue','date_effet','impact_type','impact_montant','impact_frequence','cible','statut','certitude','commentaire','cree_le','modifie_le'],
+    Plan_Evenements:['id','libelle','type','montant','date_prevue','date_effet','certitude','affectation','statut','operation_reelle_id','commentaire','cree_le','modifie_le'],
+    Cerbere_Budget_Canonique:['categorie','montant','nature','priorite','actif']
+  };
+}
+function lireTablePlanCerbere_(nom) {
+  const schema=schemasPlanCerbere_()[nom];
+  if(!schema) throw new Error('Table Plan inconnue : '+nom);
+  const sh=SpreadsheetApp.getActive().getSheetByName(nom);
+  if(!sh||sh.getLastRow()<2)return[];
+  const headers=sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(x=>String(x||'').trim());
+  const vals=sh.getRange(2,1,sh.getLastRow()-1,headers.length).getValues();
+  return vals.filter(r=>r.some(v=>v!==''&&v!==null)).map(r=>Object.fromEntries(headers.map((h,i)=>[h,serialiserValeur_(r[i])])));
+}
+function upsertPlanCerbere_(nom, d) {
+  const schema=schemasPlanCerbere_()[nom];
+  if(!schema)throw new Error('Table Plan inconnue : '+nom);
+  const sh=SpreadsheetApp.getActive().getSheetByName(nom);
+  const now=new Date().toISOString(); const copie=Object.assign({},d);
+  if(schema.includes('id')&&!copie.id)copie.id=Utilities.getUuid();
+  if(schema.includes('cree_le')&&!copie.cree_le)copie.cree_le=now;
+  if(schema.includes('modifie_le'))copie.modifie_le=now;
+  let row=-1;
+  if(schema.includes('id')&&copie.id&&sh.getLastRow()>1){const ids=sh.getRange(2,1,sh.getLastRow()-1,1).getValues().flat();const pos=ids.findIndex(x=>String(x)===String(copie.id));if(pos>=0)row=pos+2;}
+  const values=schema.map(k=>normaliserValeur_(copie[k]));
+  if(row>0)sh.getRange(row,1,1,schema.length).setValues([values]);else sh.appendRow(values);
+  return copie;
+}
+function supprimerLignePlanCerbere_(nom,id){const sh=SpreadsheetApp.getActive().getSheetByName(nom);if(!sh||sh.getLastRow()<2)return false;const ids=sh.getRange(2,1,sh.getLastRow()-1,1).getValues().flat();const pos=ids.findIndex(x=>String(x)===String(id));if(pos<0)return false;sh.deleteRow(pos+2);return true;}
 
 function assurerTablesPlanCerbere_() {
   const ss = SpreadsheetApp.getActive();
-  assurerFeuillePlan_(ss, 'Plan_Objectifs', ['id','nom','type','horizon','priorite','date_cible','montant_cible','statut','commentaire','cree_le','modifie_le']);
-  assurerFeuillePlan_(ss, 'Plan_Actions', ['id','objectif_id','libelle','type','date_prevue','date_effet','impact_type','impact_montant','impact_frequence','cible','statut','certitude','commentaire','cree_le','modifie_le']);
-  assurerFeuillePlan_(ss, 'Plan_Evenements', ['id','libelle','type','montant','date_prevue','date_effet','certitude','affectation','statut','operation_reelle_id','commentaire','cree_le','modifie_le']);
+  const schemas=schemasPlanCerbere_();
+  ['Plan_Objectifs','Plan_Actions','Plan_Evenements'].forEach(n=>assurerFeuillePlan_(ss,n,schemas[n]));
 }
 function assurerFeuillePlan_(ss, nom, entetes) {
   let sh = ss.getSheetByName(nom);
   if (!sh) { sh = ss.insertSheet(nom); sh.getRange(1,1,1,entetes.length).setValues([entetes]); sh.setFrozenRows(1); return; }
-  if (sh.getLastColumn() === 0) sh.getRange(1,1,1,entetes.length).setValues([entetes]);
+  const current=sh.getLastColumn()?sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(x=>String(x||'').trim()):[];
+  const missing=entetes.filter(x=>!current.includes(x));
+  if(!current.length)sh.getRange(1,1,1,entetes.length).setValues([entetes]);
+  else if(missing.length)sh.getRange(1,current.length+1,1,missing.length).setValues([missing]);
+  sh.setFrozenRows(1);
 }
