@@ -3,42 +3,43 @@
 const q=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));
+const dateFR=d=>{const x=new Date(d);return isNaN(x)?'':x.toLocaleDateString('fr-FR',{day:'2-digit',month:'short'});};
+const moisPeriode=p=>{const x=new Date(p?.periode?.fin||p?.periode?.debut);return isNaN(x)?'P'+(p?.index||''):x.toLocaleDateString('fr-FR',{month:'long'}).replace(/^./,c=>c.toUpperCase());};
 let req=0;
 
 window.chargerCerbereV2UI=function(){
   const z=q('cerbere-content');if(!z)return;
   const id=++req;
   z.innerHTML='<div class="cerb-progress"><strong>Connexion à Cerbère V3…</strong><small>Lecture de P0, du Plan validé et du réel.</small></div>';
-  google.script.run.withSuccessHandler(diag=>{
+  google.script.run.withSuccessHandler(d=>{
     if(id!==req)return;
-    if(!diag||diag.ok===false){z.innerHTML=`<div class="cerb-error"><strong>Diagnostic Cerbère impossible</strong><small>${esc(diag?.erreur||'Réponse serveur vide')}</small></div>`;return;}
-    z.innerHTML=`<div class="cerb-progress"><strong>Moteur ${esc(diag.version||'')}</strong><small>P0 ${diag.categories_p0||0} postes · ${diag.actions_executees||0}/${diag.actions_total||0} actions exécutables · calcul P1–P6…</small></div>`;
-    google.script.run.withSuccessHandler(d=>{
-      if(id!==req)return;
-      if(!d){z.innerHTML='<div class="cerb-error"><strong>Réponse Cerbère vide</strong></div>';return;}
-      if(d.ok===false){z.innerHTML=`<div class="cerb-error"><strong>Erreur pendant ${esc(d.stage||'le calcul')}</strong><small>${esc(d.erreur||'Erreur inconnue')}</small></div>`;return;}
-      if(typeof window.rendreCerbere_==='function')window.rendreCerbere_(d);
-      else rendreV3_(d);
-      injectResumeV3_(d);
-    }).withFailureHandler(e=>{if(id!==req)return;z.innerHTML=`<div class="cerb-error"><strong>Échec du calcul Cerbère V3</strong><small>${esc(e.message||e)}</small></div>`;}).chargerCerbereV3();
-  }).withFailureHandler(e=>{if(id!==req)return;z.innerHTML=`<div class="cerb-error"><strong>Échec du diagnostic Cerbère V3</strong><small>${esc(e.message||e)}</small></div>`;}).diagnostiquerCerbereV3();
+    if(!d){z.innerHTML='<div class="cerb-error"><strong>Réponse Cerbère vide</strong></div>';return;}
+    if(d.ok===false){z.innerHTML=`<div class="cerb-error"><strong>Erreur pendant ${esc(d.stage||'le calcul')}</strong><small>${esc(d.erreur||'Erreur inconnue')}</small></div>`;return;}
+    rendreV3_(d);injectResumeV3_(d);
+  }).withFailureHandler(e=>{if(id!==req)return;z.innerHTML=`<div class="cerb-error"><strong>Échec du calcul Cerbère V3</strong><small>${esc(e.message||e)}</small></div>`;}).chargerCerbereV3();
 };
 
+function barre_(postes){
+  const actifs=(postes||[]).filter(x=>Number(x.monetaire||0)+Number(x.pluxee||0)>0),tot=actifs.reduce((s,x)=>s+Number(x.monetaire||0)+Number(x.pluxee||0),0)||1;
+  return `<div class="cerb-stack">${actifs.map((x,i)=>`<span class="s${i%10}" style="width:${((Number(x.monetaire||0)+Number(x.pluxee||0))*100/tot).toFixed(2)}%" title="${esc(x.categorie)} : ${money(Number(x.monetaire||0)+Number(x.pluxee||0))}"></span>`).join('')}</div>`;
+}
+function lignes_(p){
+  return (p.enveloppes||[]).map(x=>`<div class="cerb-line"><strong>${esc(x.categorie)}</strong><span>Canon ${money(x.prevu)}${Number(x.pluxee||0)?' + '+money(x.pluxee)+' Pluxee':''}</span><span>Réel ${money(x.reel)}</span><span class="${x.reste<0?'neg':''}">Reste ${money(x.reste)}</span></div>`).join('');
+}
+function plan_(p){
+  const a=p.plan?.actions||[],e=p.plan?.evenements||[];if(!a.length&&!e.length)return '<small>Aucune déformation du Plan sur cette période.</small>';
+  return `<div class="cerb-plan-list">${a.map(x=>`<div><b>Action</b> ${esc(x.libelle||x.nom||'')} <strong>${money(x.impact_montant)}</strong></div>`).join('')}${e.map(x=>`<div><b>Événement</b> ${esc(x.libelle||'')} <strong>${x.type==='depense'?'-':'+'}${money(Math.abs(Number(x.montant||0)))}</strong></div>`).join('')}</div>`;
+}
 function rendreV3_(d){
   const z=q('cerbere-content');if(!z)return;
-  z.innerHTML=`<div class="cerb-tabs">${(d.periodes||[]).map((p,i)=>`<button class="secondary-button ${i===0?'active':''}" data-v3p="${i}">P${i+1}</button>`).join('')}</div><div id="cerb-period"></div>`;
-  const render=i=>{const p=d.periodes[i],c=q('cerb-period');if(!p||!c)return;c.innerHTML=`<div class="cards"><article class="card metric-card"><span>Héritage P0</span><strong>${money(p.heritageP0?.totalMonetaire)}</strong><small>${money(p.heritageP0?.totalPluxee)} Pluxee</small></article><article class="card metric-card"><span>Disponible restant</span><strong>${money(p.disponibleRestant)}</strong><small>${p.soldeReporte!=null?'Solde reporté '+money(p.soldeReporte):'Projection structurelle'}</small></article><article class="card metric-card"><span>État</span><strong>${p.etat==='rouge'?'🔴':p.etat==='orange'?'🟠':'🟢'} ${esc(p.etat)}</strong><small>${(p.plan?.actions||[]).length} action(s) appliquée(s)</small></article></div>`;};
+  z.innerHTML=`<div class="cerb-tabs">${(d.periodes||[]).map((p,i)=>`<button class="secondary-button ${i===0?'active':''}" data-v3p="${i}" title="P${i+1}">${esc(moisPeriode(p))}</button>`).join('')}</div><div id="cerb-period"></div>`;
+  const render=i=>{const p=d.periodes[i],c=q('cerb-period');if(!p||!c)return;const nom=moisPeriode(p);c.innerHTML=`<div class="cerb-period-head"><div><small>P${i+1} · ${dateFR(p.periode?.debut)} → ${dateFR(p.periode?.fin)}</small><h3>${esc(nom)}</h3></div><strong>${p.etat==='rouge'?'🔴':p.etat==='orange'?'🟠':'🟢'} ${esc(p.etat)}</strong></div><div class="cards"><article class="card metric-card"><span>Héritage P0</span><strong>${money(p.heritageP0?.totalMonetaire)}</strong><small>${money(p.heritageP0?.totalPluxee)} Pluxee</small></article><article class="card metric-card"><span>Disponible restant</span><strong>${money(p.disponibleRestant)}</strong><small>${p.soldeReporte!=null?'Solde reporté '+money(p.soldeReporte):'Projection structurelle'}</small></article><article class="card metric-card"><span>Plan appliqué</span><strong>${(p.plan?.actions||[]).length} action(s)</strong><small>${(p.plan?.evenements||[]).length} événement(s)</small></article></div><section class="cerb-detail"><h4>Budget de ${esc(nom)}</h4>${barre_(p.heritageP0?.postes)}<div class="cerb-lines">${lignes_(p)}</div></section><section class="cerb-detail"><h4>Déformations par le Plan</h4>${plan_(p)}</section>`;};
   z.querySelectorAll('[data-v3p]').forEach(b=>b.onclick=()=>{z.querySelectorAll('[data-v3p]').forEach(x=>x.classList.remove('active'));b.classList.add('active');render(Number(b.dataset.v3p));});render(0);
 }
-
 function injectResumeV3_(d){
-  const z=q('cerbere-content');if(!z)return;
-  let rule=z.querySelector('.cerb-rule');
-  const r=d.reel||{},p0=d.p0||{},diag=d.diagnostic||{};
-  const html=`<div class="cerb-v3-summary"><div><small>P0 · BUDGET MAÎTRE</small><strong>${money(p0.totaux?.monetaire||0)} monétique + ${money(p0.totaux?.pluxee||0)} Pluxee</strong></div><div><small>SOLDE REPORTÉ P1</small><strong>${r.soldeBancaire==null?'Non disponible':money(r.soldeBancaire)}</strong><span>${r.soldeFiable?'✓ relevé bancaire':'⚠ non certifié'}</span></div><div><small>PLAN EXÉCUTÉ</small><strong>${diag.actions_executees||0} action(s)</strong><span>${diag.actions_total||0} au total</span></div></div>`;
-  if(rule)rule.insertAdjacentHTML('afterend',html);else z.insertAdjacentHTML('afterbegin',html);
+  const z=q('cerbere-content');if(!z)return;const r=d.reel||{},p0=d.p0||{},diag=d.diagnostic||{};
+  z.insertAdjacentHTML('afterbegin',`<div class="cerb-v3-summary"><div><small>P0 · BUDGET MAÎTRE</small><strong>${money(p0.totaux?.monetaire||0)} monétique + ${money(p0.totaux?.pluxee||0)} Pluxee</strong></div><div><small>SOLDE REPORTÉ P1</small><strong>${r.soldeBancaire==null?'Non disponible':money(r.soldeBancaire)}</strong><span>${r.soldeFiable?'✓ relevé bancaire':'⚠ non certifié'}</span></div><div><small>PLAN EXÉCUTÉ</small><strong>${diag.actions_executees||0} action(s)</strong><span>${diag.actions_total||0} au total · ${diag.duree_ms||0} ms</span></div></div>`);
 }
-
-const st=document.createElement('style');st.textContent=`.cerb-v3-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0 18px}.cerb-v3-summary>div{background:#edf7f3;border-radius:12px;padding:12px}.cerb-v3-summary small,.cerb-v3-summary span{display:block}.cerb-v3-summary small{font-weight:800;color:#147d64}.cerb-v3-summary strong{display:block;margin:4px 0;font-size:16px}@media(max-width:760px){.cerb-v3-summary{grid-template-columns:1fr}}`;document.head.appendChild(st);
+const st=document.createElement('style');st.textContent=`.cerb-v3-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0 18px}.cerb-v3-summary>div{background:#edf7f3;border-radius:12px;padding:12px}.cerb-v3-summary small,.cerb-v3-summary span{display:block}.cerb-v3-summary small{font-weight:800;color:#147d64}.cerb-v3-summary strong{display:block;margin:4px 0;font-size:16px}.cerb-period-head{display:flex;justify-content:space-between;align-items:end;margin:14px 0 8px}.cerb-period-head h3{margin:2px 0}.cerb-detail{background:#fff;border:1px solid #dce8e3;border-radius:14px;padding:14px;margin-top:12px}.cerb-detail h4{margin:0 0 10px}.cerb-stack{display:flex;height:22px;border-radius:8px;overflow:hidden;background:#edf2f0;margin:8px 0 12px}.cerb-stack span{min-width:2px}.cerb-stack .s0{background:#147d64}.cerb-stack .s1{background:#25b99a}.cerb-stack .s2{background:#91c93d}.cerb-stack .s3{background:#efbd16}.cerb-stack .s4{background:#f08b2e}.cerb-stack .s5{background:#8f68d8}.cerb-stack .s6{background:#18a8c4}.cerb-stack .s7{background:#6f7e91}.cerb-stack .s8{background:#b55d91}.cerb-stack .s9{background:#3d9a78}.cerb-line{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:8px;padding:7px 4px;border-top:1px solid #edf2f0;font-size:12px}.cerb-line .neg{color:#b42318;font-weight:800}.cerb-plan-list>div{padding:7px 0;border-top:1px solid #edf2f0}.cerb-plan-list b{color:#147d64;margin-right:6px}@media(max-width:760px){.cerb-v3-summary{grid-template-columns:1fr}.cerb-line{grid-template-columns:1fr 1fr}}`;document.head.appendChild(st);
 })();
 </script>
