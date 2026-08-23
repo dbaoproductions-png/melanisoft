@@ -5,60 +5,32 @@ const q=id=>document.getElementById(id);
 const moneyC=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));
 const dateC=v=>v?new Date(v).toLocaleDateString('fr-FR'):'—';
 const escC=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let planData=null;
 let cerbereRequest=0;
 
 function masquerToutesLesVuesCerbere_(){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));}
 function activerNavCerbere_(view){document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view));}
-function titreCerbere_(view){const t=view==='plan'?['Plan','Stratégie et prévision']:['Cerbère','Contrôle d’exécution'];if(q('page-title'))q('page-title').textContent=t[0];if(q('page-eyebrow'))q('page-eyebrow').textContent=t[1];}
+function titreCerbere_(){if(q('page-title'))q('page-title').textContent='Cerbère';if(q('page-eyebrow'))q('page-eyebrow').textContent='Contrôle d’exécution';}
 
 function assurerNavigationCerbere_(){
   const nav=document.querySelector('.nav');if(!nav)return;
-  let plan=document.querySelector('[data-view="plan"]');
   let cerb=document.querySelector('[data-view="cerbere"]');
   const analyses=document.querySelector('[data-view="analyses"]');
-  if(!plan){plan=document.createElement('button');plan.className='nav-item';plan.dataset.view='plan';plan.innerHTML='🧭 <span>Plan</span>';nav.insertBefore(plan,cerb||analyses||null);}
   if(!cerb){cerb=document.createElement('button');cerb.className='nav-item';cerb.dataset.view='cerbere';cerb.innerHTML='🐺 <span>Cerbère</span>';nav.insertBefore(cerb,analyses||null);}
 }
 
-/*
- * Routeur prioritaire : il intercepte Plan/Cerbère en phase capture AVANT l'ancien
- * routeur de Scripts.html. Une seule vue reste active, ce qui évite les panneaux doublés.
- */
+/* CerbereUI owns Cerbère only. Plan/Planification is exclusively owned by PlanPriorityUI. */
 document.addEventListener('click',function(e){
-  const b=e.target.closest&&e.target.closest('.nav-item[data-view]');
+  const b=e.target.closest&&e.target.closest('.nav-item[data-view="cerbere"]');
   if(!b)return;
-  const view=b.dataset.view;
-  if(view!=='plan'&&view!=='cerbere')return;
   e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
-  if(view==='plan')ouvrirPlanCerbereUI();else ouvrirCerbereUI();
+  ouvrirCerbereUI();
 },true);
-
-function ouvrirPlanCerbereUI(){
-  masquerToutesLesVuesCerbere_();activerNavCerbere_('plan');titreCerbere_('plan');
-  const z=q('generic-view');if(!z)return;z.classList.add('active');
-  z.innerHTML=`<article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">STRATÉGIE ET PRÉVISION</span><h2>🧭 Plan</h2></div></div><p class="helper-text">Les Objectifs définissent la stratégie. Les Actions la mettent en œuvre. Les Événements décrivent ce qui modifiera ponctuellement les périodes. Cerbère lit ce plan mais ne le modifie pas.</p><div class="cerb-plan-tabs"><button class="secondary-button active" data-plan-tab="objectifs">Objectifs</button><button class="secondary-button" data-plan-tab="actions">Actions</button><button class="secondary-button" data-plan-tab="evenements">Événements</button></div><div id="plan-cerbere-content" class="loading">Chargement du Plan…</div></article>`;
-  z.querySelectorAll('[data-plan-tab]').forEach(b=>b.onclick=()=>{z.querySelectorAll('[data-plan-tab]').forEach(x=>x.classList.remove('active'));b.classList.add('active');rendrePlanCerbere_(b.dataset.planTab);});
-  google.script.run.withSuccessHandler(d=>{planData=d;rendrePlanCerbere_('objectifs');}).withFailureHandler(e=>{const c=q('plan-cerbere-content');if(c)c.innerHTML='<div class="cerb-error"><strong>Erreur Plan</strong><small>'+escC(e.message||e)+'</small></div>';}).chargerPlanCerbere();
-  styleCerbere_();
-}
-
-function rendrePlanCerbere_(type){
-  const z=q('plan-cerbere-content');if(!z||!planData)return;
-  if(type==='objectifs')z.innerHTML=`<div class="section-toolbar"><p class="section-intro">Orientations stratégiques à court, moyen et long terme.</p><button class="primary-button" onclick="cerbAjouterObjectif()">＋ Objectif</button></div>${(planData.objectifs||[]).map(o=>`<div class="cerb-plan-row"><div><strong>${escC(o.nom)}</strong><small>${escC(o.horizon||'')} · priorité ${escC(o.priorite||'')} · cible ${dateC(o.date_cible)}</small></div><span>${o.montant_cible?moneyC(o.montant_cible):escC(o.statut||'Actif')}</span></div>`).join('')||'<div class="empty-state">Aucun objectif stratégique.</div>'}`;
-  if(type==='actions')z.innerHTML=`<div class="section-toolbar"><p class="section-intro">Mesures concrètes qui pondèrent le prévisionnel à leur date d’effet.</p><button class="primary-button" onclick="cerbAjouterAction()">＋ Action</button></div>${(planData.actions||[]).map(a=>`<div class="cerb-plan-row"><div><strong>${escC(a.libelle)}</strong><small>Effet ${dateC(a.date_effet)} · ${escC(a.impact_type)} · ${escC(a.impact_frequence)}</small></div><span>${moneyC(a.impact_montant)} · ${escC(a.statut)}</span></div>`).join('')||'<div class="empty-state">Aucune action.</div>'}`;
-  if(type==='evenements')z.innerHTML=`<div class="section-toolbar"><p class="section-intro">Éléments ponctuels connus qui modifient une période.</p><button class="primary-button" onclick="cerbAjouterEvenement()">＋ Événement</button></div>${(planData.evenements||[]).map(e=>`<div class="cerb-plan-row"><div><strong>${escC(e.libelle)}</strong><small>${escC(e.type)} · effet ${dateC(e.date_effet)} · ${escC(e.certitude)}</small></div><span>${moneyC(e.montant)} · ${escC(e.statut)}</span></div>`).join('')||'<div class="empty-state">Aucun événement prévu.</div>'}`;
-}
-
-window.cerbAjouterObjectif=function(){const nom=prompt('Objectif stratégique');if(!nom)return;const horizon=prompt('Horizon : court, moyen ou long','court')||'court';const date=prompt('Date cible (AAAA-MM-JJ)','');const montant=prompt('Montant cible éventuel','0');google.script.run.withSuccessHandler(d=>{planData=d;rendrePlanCerbere_('objectifs');}).withFailureHandler(e=>alert(e.message||e)).enregistrerObjectifPlan({nom,horizon,date_cible:date,montant_cible:montant,priorite:'haute',statut:'Actif'});};
-window.cerbAjouterAction=function(){const libelle=prompt('Action');if(!libelle)return;const date=prompt('Date d’effet (AAAA-MM-JJ)','');const impact=prompt('Impact : baisse_charge, hausse_charge, reservation_objectif','baisse_charge');const montant=prompt('Montant de l’impact','0');const freq=prompt('Fréquence : mensuel ou ponctuel','mensuel');google.script.run.withSuccessHandler(d=>{planData=d;rendrePlanCerbere_('actions');}).withFailureHandler(e=>alert(e.message||e)).enregistrerActionPlan({libelle,date_effet:date,impact_type:impact,impact_montant:montant,impact_frequence:freq,statut:'Prévue',certitude:'certaine'});};
-window.cerbAjouterEvenement=function(){const libelle=prompt('Événement');if(!libelle)return;const type=prompt('Type : recette, depense, charge_supprimee_temporairement, charge_deplacee, argent_reserve','recette');const montant=prompt('Montant','0');const date=prompt('Date d’effet (AAAA-MM-JJ)','');google.script.run.withSuccessHandler(d=>{planData=d;rendrePlanCerbere_('evenements');}).withFailureHandler(e=>alert(e.message||e)).enregistrerEvenementPlan({libelle,type,montant,date_effet:date,certitude:'certaine',statut:'Prévu'});};
 
 function assurerSectionCerbere_(){let s=q('cerbere');if(s)return s;const main=document.querySelector('.main'),generic=q('generic-view');s=document.createElement('section');s.id='cerbere';s.className='view';main.insertBefore(s,generic);return s;}
 function ouvrirCerbereUI(){
-  masquerToutesLesVuesCerbere_();activerNavCerbere_('cerbere');titreCerbere_('cerbere');
+  masquerToutesLesVuesCerbere_();activerNavCerbere_('cerbere');titreCerbere_();
   const s=assurerSectionCerbere_();s.classList.add('active');
-  s.innerHTML=`<article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">POLICE DU BUDGET QUOTIDIEN</span><h2>🐺 Cerbère</h2></div><button class="secondary-button" onclick="chargerCerbereV2UI()">Actualiser</button></div><p class="helper-text">Cerbère applique la stratégie du Plan sur P1–P6. Il lit le réel, mesure les écarts et propose des compensations ; il ne modifie ni le réel ni la stratégie.</p><div id="cerbere-content" class="loading">Connexion au moteur Cerbère…</div></article>`;
+  s.innerHTML=`<article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">POLICE DU BUDGET QUOTIDIEN</span><h2>🐺 Cerbère</h2></div><button class="secondary-button" onclick="chargerCerbereV2UI()">Actualiser</button></div><p class="helper-text">Cerbère applique la stratégie de la Planification sur P1–P6. Il lit le réel, mesure les écarts et propose des compensations ; il ne modifie ni le réel ni la stratégie.</p><div id="cerbere-content" class="loading">Connexion au moteur Cerbère…</div></article>`;
   chargerCerbereV2UI();styleCerbere_();
 }
 
@@ -83,7 +55,7 @@ window.chargerCerbereV2UI=function(){
 function rendreCerbere_(d){
   const z=q('cerbere-content');if(!z)return;
   const diag=d.diagnostic||{};
-  z.innerHTML=`<div class="cerb-rule"><strong>Règle :</strong> stratégie reçue du Plan · épargne 50 € protégée · aucune compensation sans validation.<small>Moteur ${escC(d.version||'')} · ${diag.duree_ms||0} ms · ${diag.operations||0} opérations analysées</small></div><div class="cerb-tabs">${(d.periodes||[]).map((p,i)=>`<button class="secondary-button ${i===0?'active':''}" data-cp="${i}">P${i+1}</button>`).join('')}</div><div id="cerb-period"></div>`;
+  z.innerHTML=`<div class="cerb-rule"><strong>Règle :</strong> stratégie reçue de la Planification · épargne 50 € protégée · aucune compensation sans validation.<small>Moteur ${escC(d.version||'')} · ${diag.duree_ms||0} ms · ${diag.operations||0} opérations analysées</small></div><div class="cerb-tabs">${(d.periodes||[]).map((p,i)=>`<button class="secondary-button ${i===0?'active':''}" data-cp="${i}">P${i+1}</button>`).join('')}</div><div id="cerb-period"></div>`;
   z.querySelectorAll('[data-cp]').forEach(b=>b.onclick=()=>{z.querySelectorAll('[data-cp]').forEach(x=>x.classList.remove('active'));b.classList.add('active');rendrePeriodeCerbere_(d.periodes[Number(b.dataset.cp)]);});
   if(d.periodes&&d.periodes.length)rendrePeriodeCerbere_(d.periodes[0]);
   else q('cerb-period').innerHTML='<div class="cerb-error">Aucune période calculée.</div>';
@@ -97,9 +69,8 @@ function rendrePeriodeCerbere_(p){
   z.innerHTML=`<div class="cards"><article class="card metric-card"><span>Période</span><strong>${dateC(p.periode.debut)} → ${dateC(p.periode.fin)}</strong><small>${badge} ${escC(p.etat)}</small></article><article class="card metric-card"><span>Réel constaté</span><strong>${moneyC(p.depensesReelles)}</strong><small>Lecture seule</small></article><article class="card metric-card"><span>Pilotable</span><strong>${moneyC(p.enveloppePilotable)}</strong><small>Après protections</small></article></div><div class="cerb-flow">${flow.map((x,i)=>`<div class="cerb-box"><span>${escC(x[0])}</span><strong>${moneyC(x[1])}</strong></div>${i<flow.length-1?'<div class="cerb-arrow">↓</div>':''}`).join('')}</div>${p.plan?.evenements?.length?`<div class="cerb-note"><strong>Événements intégrés</strong>${p.plan.evenements.map(e=>`<small>${escC(e.libelle)} · ${moneyC(e.montant)}</small>`).join('')}</div>`:''}${p.plan?.actions?.length?`<div class="cerb-note"><strong>Actions dont l’effet est actif</strong>${p.plan.actions.map(a=>`<small>${escC(a.libelle)} · ${escC(a.impact_type)} ${moneyC(a.impact_montant)}</small>`).join('')}</div>`:''}<div class="cerb-grid-head"><span>Catégorie</span><span>Canonique</span><span>Réel</span><span>Reste</span></div>${(p.enveloppes||[]).map(c=>`<div class="cerb-cat"><strong>${escC(c.categorie)}</strong><span>${moneyC(c.prevu)}</span><span>${moneyC(c.reel)}</span><span>${c.etat==='rouge'?'🔴':c.etat==='orange'?'🟠':'🟢'} ${moneyC(c.reste)}</span></div>`).join('')}<div class="cerb-props">${comps||'<div class="empty-state">Aucune compensation nécessaire.</div>'}</div>`;
 }
 
-function styleCerbere_(){if(q('cerb-style'))return;const s=document.createElement('style');s.id='cerb-style';s.textContent=`.cerb-plan-tabs,.cerb-tabs{display:flex;gap:8px;margin:16px 0}.cerb-plan-row{display:flex;justify-content:space-between;gap:18px;padding:13px 4px;border-bottom:1px solid rgba(20,125,100,.12)}.cerb-plan-row small{display:block;margin-top:4px;opacity:.68}.cerb-plan-row>span{font-weight:700;white-space:nowrap}.cerb-rule,.cerb-note,.cerb-progress{padding:12px 14px;background:rgba(20,125,100,.07);border-radius:12px;margin:12px 0}.cerb-rule small,.cerb-note small,.cerb-progress small,.cerb-prop small,.cerb-prop em,.cerb-error small{display:block;margin-top:5px}.cerb-error{padding:14px;background:#fff0ef;border-left:6px solid #b42318;border-radius:10px}.cerb-flow{max-width:720px;margin:18px auto}.cerb-box{display:flex;justify-content:space-between;padding:11px 14px;background:#fff;border-left:6px solid #147d64;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.06)}.cerb-arrow{text-align:center;font-size:20px}.cerb-grid-head,.cerb-cat{display:grid;grid-template-columns:1.5fr .8fr .8fr .9fr;gap:8px;padding:9px 12px}.cerb-grid-head{font-size:12px;font-weight:700}.cerb-cat{background:#fff;border-bottom:1px solid rgba(20,125,100,.1)}.cerb-props{margin-top:18px}.cerb-prop{border-left:6px solid #d18a00;background:#fff8e8;padding:12px 14px;border-radius:10px;margin:9px 0}.cerb-prop em{font-size:.82rem;opacity:.7}`;document.head.appendChild(s);}
+function styleCerbere_(){if(q('cerb-style'))return;const s=document.createElement('style');s.id='cerb-style';s.textContent=`.cerb-tabs{display:flex;gap:8px;margin:16px 0}.cerb-rule,.cerb-note,.cerb-progress{padding:12px 14px;background:rgba(20,125,100,.07);border-radius:12px;margin:12px 0}.cerb-rule small,.cerb-note small,.cerb-progress small,.cerb-prop small,.cerb-prop em,.cerb-error small{display:block;margin-top:5px}.cerb-error{padding:14px;background:#fff0ef;border-left:6px solid #b42318;border-radius:10px}.cerb-flow{max-width:720px;margin:18px auto}.cerb-box{display:flex;justify-content:space-between;padding:11px 14px;background:#fff;border-left:6px solid #147d64;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.06)}.cerb-arrow{text-align:center;font-size:20px}.cerb-grid-head,.cerb-cat{display:grid;grid-template-columns:1.5fr .8fr .8fr .9fr;gap:8px;padding:9px 12px}.cerb-grid-head{font-size:12px;font-weight:700}.cerb-cat{background:#fff;border-bottom:1px solid rgba(20,125,100,.1)}.cerb-props{margin-top:18px}.cerb-prop{border-left:6px solid #d18a00;background:#fff8e8;padding:12px 14px;border-radius:10px;margin:9px 0}.cerb-prop em{font-size:.82rem;opacity:.7}`;document.head.appendChild(s);}
 
-window.ouvrirPlanCerbereUI=ouvrirPlanCerbereUI;
 window.ouvrirCerbereUI=ouvrirCerbereUI;
 document.addEventListener('DOMContentLoaded',()=>{assurerNavigationCerbere_();styleCerbere_();});
 setTimeout(assurerNavigationCerbere_,500);
