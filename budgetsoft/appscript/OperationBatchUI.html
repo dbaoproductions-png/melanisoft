@@ -1,0 +1,104 @@
+<script>
+(function(){
+  const selectionOperationsLot=new Set();
+
+  function categoriesActivesLot_(){return (state.data?.Categories||[]).filter(c=>typeof estActif==='function'?estActif(c.actif):String(c.actif).toLowerCase()!=='false');}
+  function ensureBarreLot_(){
+    const panel=document.querySelector('#operations .operations-page-panel');
+    const liste=document.getElementById('operations-list');
+    if(!panel||!liste)return;
+    let barre=document.getElementById('operation-batch-bar');
+    if(!barre){
+      barre=document.createElement('div');
+      barre.id='operation-batch-bar';
+      barre.style.cssText='display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:12px 0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff';
+      barre.innerHTML='<strong id="operation-batch-count">0 sélectionnée</strong><select id="operation-batch-category"><option value="">Attribuer une catégorie…</option></select><button type="button" class="primary-button" id="operation-batch-apply" disabled>Appliquer</button><button type="button" class="secondary-button" id="operation-batch-clear" disabled>Effacer la sélection</button><span id="operation-batch-status" class="helper-text"></span>';
+      panel.insertBefore(barre,liste);
+      document.getElementById('operation-batch-apply').onclick=appliquerCategorieLot_;
+      document.getElementById('operation-batch-clear').onclick=()=>{selectionOperationsLot.clear();synchroniserCasesLot_();mettreAJourBarreLot_();};
+    }
+    remplirCategoriesLot_();
+    mettreAJourBarreLot_();
+  }
+
+  function remplirCategoriesLot_(){
+    const s=document.getElementById('operation-batch-category');if(!s)return;
+    const ancienne=s.value;
+    const groupes={depense:'Dépenses',revenu:'Revenus',tresorerie:'Mouvements de trésorerie',epargne:'Épargne'};
+    let html='<option value="">Attribuer une catégorie…</option>';
+    Object.entries(groupes).forEach(([type,label])=>{
+      const xs=categoriesActivesLot_().filter(c=>String(c.type||'').toLowerCase()===type).sort((a,b)=>String(a.nom).localeCompare(String(b.nom),'fr'));
+      if(!xs.length)return;
+      html+=`<optgroup label="${label}">`+xs.map(c=>`<option value="${typeof echapperAttribut==='function'?echapperAttribut(c.nom):c.nom}">${typeof echapper==='function'?echapper(c.nom):c.nom}</option>`).join('')+'</optgroup>';
+    });
+    s.innerHTML=html;
+    if([...s.options].some(o=>o.value===ancienne))s.value=ancienne;
+  }
+
+  function extraireIdLigne_(row){
+    const btn=row.querySelector('button[onclick*="modifierOperation"]');
+    if(!btn)return'';
+    const m=String(btn.getAttribute('onclick')||'').match(/modifierOperation\(['"]([^'"]+)['"]\)/);
+    return m?m[1]:'';
+  }
+
+  function decorerListeLot_(){
+    ensureBarreLot_();
+    const zone=document.getElementById('operations-list');if(!zone||zone.classList.contains('empty-state'))return;
+    const rows=[...zone.querySelectorAll('.operation-table-row')];
+    rows.forEach((row,index)=>{
+      if(row.querySelector('.operation-batch-check-cell'))return;
+      const cell=document.createElement('div');cell.className='operation-batch-check-cell';cell.style.cssText='display:flex;align-items:center;justify-content:center';
+      const cb=document.createElement('input');cb.type='checkbox';cb.className='operation-batch-check';
+      if(index===0||row.classList.contains('header')){
+        cb.title='Tout sélectionner / désélectionner dans la liste affichée';
+        cb.onchange=()=>{
+          [...zone.querySelectorAll('.operation-table-row:not(.header)')].forEach(r=>{const id=extraireIdLigne_(r);if(!id)return;cb.checked?selectionOperationsLot.add(id):selectionOperationsLot.delete(id);});
+          synchroniserCasesLot_();mettreAJourBarreLot_();
+        };
+      }else{
+        const id=extraireIdLigne_(row);if(!id)return;
+        cb.checked=selectionOperationsLot.has(id);
+        cb.onchange=()=>{cb.checked?selectionOperationsLot.add(id):selectionOperationsLot.delete(id);mettreAJourBarreLot_();mettreAJourToutSelectionne_();};
+      }
+      cell.appendChild(cb);row.insertBefore(cell,row.firstChild);
+    });
+    mettreAJourToutSelectionne_();
+  }
+
+  function synchroniserCasesLot_(){
+    const zone=document.getElementById('operations-list');if(!zone)return;
+    [...zone.querySelectorAll('.operation-table-row:not(.header)')].forEach(r=>{const id=extraireIdLigne_(r),cb=r.querySelector('.operation-batch-check');if(cb&&id)cb.checked=selectionOperationsLot.has(id);});
+    mettreAJourToutSelectionne_();
+  }
+  function mettreAJourToutSelectionne_(){
+    const zone=document.getElementById('operations-list');if(!zone)return;
+    const rows=[...zone.querySelectorAll('.operation-table-row:not(.header)')];
+    const ids=rows.map(extraireIdLigne_).filter(Boolean);
+    const cb=zone.querySelector('.operation-table-row.header .operation-batch-check');
+    if(!cb)return;
+    const n=ids.filter(id=>selectionOperationsLot.has(id)).length;
+    cb.checked=ids.length>0&&n===ids.length;cb.indeterminate=n>0&&n<ids.length;
+  }
+  function mettreAJourBarreLot_(){
+    const n=selectionOperationsLot.size;
+    const c=document.getElementById('operation-batch-count'),a=document.getElementById('operation-batch-apply'),e=document.getElementById('operation-batch-clear');
+    if(c)c.textContent=n+' sélectionnée'+(n>1?'s':'');if(a)a.disabled=!n;if(e)e.disabled=!n;
+  }
+
+  function appliquerCategorieLot_(){
+    const ids=[...selectionOperationsLot],cat=document.getElementById('operation-batch-category')?.value||'',status=document.getElementById('operation-batch-status'),btn=document.getElementById('operation-batch-apply');
+    if(!ids.length)return;if(!cat){status.textContent='Choisissez une catégorie.';return;}
+    btn.disabled=true;btn.textContent='Application…';status.textContent='Modification des opérations sélectionnées…';
+    google.script.run.withSuccessHandler(r=>{status.textContent=`${r.modifiees} opération(s) classée(s) en ${r.categorie}${r.dejaCorrectes?` · ${r.dejaCorrectes} déjà correcte(s)`:''}.`;selectionOperationsLot.clear();btn.textContent='Appliquer';if(typeof charger==='function')charger();setTimeout(()=>{mettreAJourBarreLot_();decorerListeLot_();},400);}).withFailureHandler(e=>{btn.disabled=false;btn.textContent='Appliquer';status.textContent='Erreur : '+(e.message||String(e));}).categoriserOperationsParLot(ids,cat);
+  }
+
+  const ancienRendre=window.rendreListeOperations;
+  if(typeof ancienRendre==='function'&&!ancienRendre.__avecActionsLot){
+    const wrapper=function(){const r=ancienRendre.apply(this,arguments);setTimeout(decorerListeLot_,0);return r;};
+    wrapper.__avecActionsLot=true;window.rendreListeOperations=wrapper;
+  }
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>{ensureBarreLot_();decorerListeLot_();},250));
+  setTimeout(()=>{ensureBarreLot_();decorerListeLot_();},500);
+})();
+</script>

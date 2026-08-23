@@ -1,0 +1,11 @@
+<script>
+// Le formulaire reste volontairement simple : date, type, libellé, montant, compte, catégorie, commentaire.
+// Les colonnes bancaires techniques sont remplies côté serveur et ne sont pas exposées à l'utilisateur.
+function enregistrerOperation(e){
+  e.preventDefault();
+  const operation={id:document.getElementById('operation-id').value,date:document.getElementById('operation-date').value,libelle:document.getElementById('operation-label').value.trim(),categorie:document.getElementById('operation-category').value,compte:document.getElementById('operation-account').value,montant:nombre(document.getElementById('operation-amount').value),type:document.getElementById('operation-type').value,commentaire:document.getElementById('operation-comment').value.trim()};
+  if(!operation.libelle||!operation.compte){afficherErreur('Le libellé et le compte sont obligatoires.');return;}
+  document.getElementById('save-operation').disabled=true;
+  google.script.run.withSuccessHandler(()=>{document.getElementById('save-operation').disabled=false;fermerOperation();charger();ouvrirVue('operations');}).withFailureHandler(err=>{document.getElementById('save-operation').disabled=false;afficherErreur(err.message||String(err));}).enregistrerOperationManuelle(operation);
+}
+</script>

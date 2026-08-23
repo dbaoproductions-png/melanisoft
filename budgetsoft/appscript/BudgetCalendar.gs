@@ -1,71 +1,118 @@
-const BUDGETSOFT_SPRINT_VERSION = '0.9.2';
+const BUDGETSOFT_SPRINT_VERSION = '0.9.4';
+const BUDGETSOFT_JOUR_DEBUT_CYCLE = 28;
+
+function jourDebutCycleBudgetSoft_() {
+  return BUDGETSOFT_JOUR_DEBUT_CYCLE;
+}
+
+/**
+ * Les dates bancaires de BudgetSoft sont des dates métier, pas des horodatages.
+ * Une heure technique (00:00, 10:00, 12:00...) ne doit jamais rendre une opération
+ * du jour artificiellement « future ».
+ */
+function debutJourBancaireBudgetSoft_(valeur) {
+  const d = valeur instanceof Date ? new Date(valeur) : new Date(valeur);
+  if (isNaN(d)) return null;
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function finJourBancaireBudgetSoft_(valeur) {
+  const d = valeur instanceof Date ? new Date(valeur) : new Date(valeur);
+  if (isNaN(d)) return null;
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
+function dateBancaireConnueAuJour_(valeur, reference) {
+  const d = debutJourBancaireBudgetSoft_(valeur);
+  const ref = debutJourBancaireBudgetSoft_(reference || new Date());
+  return !!d && !!ref && d <= ref;
+}
+
+function bornerDateBancaireFinJour_(valeur) {
+  return finJourBancaireBudgetSoft_(valeur);
+}
 
 function chargerConfigurationBudgetaire() {
   verifierInitialisation_();
   const parametres = lireTable_('Parametres');
   const dictionnaire = Object.fromEntries(parametres.map(p => [String(p.cle), p.valeur]));
-  const jourDebut = bornerJourBudgetaire_(dictionnaire.jour_debut_mois || 28);
+  const jourDebut = jourDebutCycleBudgetSoft_();
   const operations = lireTable_('Operations');
   return {
     version: BUDGETSOFT_SPRINT_VERSION,
     jourDebutMois: jourDebut,
-    jourSalaire: bornerJourBudgetaire_(dictionnaire.jour_salaire || jourDebut),
+    jourSalaire: jourDebut,
     devise: String(dictionnaire.devise || 'EUR'),
-    periodeCourante: calculerPeriodeBudgetaireAvecSalaire_(new Date(), jourDebut, operations)
+    periodeCourante: calculerPeriodeBudgetaireAvecSalaire_(new Date(), jourDebut, operations),
+    regleCycle: '28 inclus → 27 inclus du mois suivant',
+    etalonnage: 'jour le plus tardif observé pour le salaire principal'
   };
 }
 
 function enregistrerConfigurationBudgetaire(configuration) {
   verifierInitialisation_();
-  const jourDebut = bornerJourBudgetaire_(configuration && configuration.jourDebutMois);
-  const jourSalaire = bornerJourBudgetaire_(configuration && configuration.jourSalaire || jourDebut);
+  // Depuis le 19/08/2026, le cycle BudgetSoft est une convention métier globale :
+  // le 28 ouvre le nouveau mois budgétaire. Les anciens paramètres restent écrits
+  // pour compatibilité mais ne peuvent plus décaler les bornes utilisées par les calculs.
+  const jourDebut = jourDebutCycleBudgetSoft_();
   enregistrerParametreBudgetaire_('jour_debut_mois', jourDebut);
-  enregistrerParametreBudgetaire_('jour_salaire', jourSalaire);
+  enregistrerParametreBudgetaire_('jour_salaire', jourDebut);
+  enregistrerParametreBudgetaire_('regle_cycle_budgetsoft', '28_inclus_27_inclus');
   enregistrerParametreBudgetaire_('version_interface', BUDGETSOFT_SPRINT_VERSION);
   return chargerConfigurationBudgetaire();
 }
 
 function calculerPeriodeBudgetaire(dateIso, jourDebut) {
-  return calculerPeriodeBudgetaire_(dateIso ? new Date(dateIso) : new Date(), jourDebut);
+  return calculerPeriodeBudgetaireCanonique_(dateIso ? new Date(dateIso) : new Date());
 }
 
 function calculerPeriodeBudgetaire_(date, jourDebut) {
-  return calculerPeriodeBudgetaireAvecSalaire_(date, jourDebut, []);
+  return calculerPeriodeBudgetaireCanonique_(date);
 }
 
 function calculerPeriodeBudgetaireAvecSalaire_(date, jourDebut, operations) {
-  const jour = bornerJourBudgetaire_(jourDebut || 28);
+  // Le salaire principal sert à ETALONNER la convention (jour le plus tardif observé = 28),
+  // mais on ne déplace plus le début d'un mois au gré de sa date réelle de versement.
+  // Tous les modules partagent donc exactement les mêmes bornes : 28 inclus → 27 inclus.
+  return calculerPeriodeBudgetaireCanonique_(date);
+}
+
+function calculerPeriodeBudgetaireCanonique_(date) {
+  const jour = jourDebutCycleBudgetSoft_();
   const reference = debutJour_(date instanceof Date && !isNaN(date) ? date : new Date());
-  let debutNominal;
+  let debut;
   let moisLibelle;
 
   if (reference.getDate() >= jour) {
-    debutNominal = creerDateBudgetaire_(reference.getFullYear(), reference.getMonth(), jour);
+    debut = creerDateBudgetaire_(reference.getFullYear(), reference.getMonth(), jour);
     moisLibelle = new Date(reference.getFullYear(), reference.getMonth() + 1, 1);
   } else {
-    debutNominal = creerDateBudgetaire_(reference.getFullYear(), reference.getMonth() - 1, jour);
+    debut = creerDateBudgetaire_(reference.getFullYear(), reference.getMonth() - 1, jour);
     moisLibelle = new Date(reference.getFullYear(), reference.getMonth(), 1);
   }
 
-  const prochainNominal = creerDateBudgetaire_(debutNominal.getFullYear(), debutNominal.getMonth() + 1, jour);
-  const debutReel = trouverSalaireAutourDate_(operations, debutNominal, 7) || debutNominal;
-  const prochainSalaire = trouverSalaireAutourDate_(operations, prochainNominal, 7);
-  const fin = prochainSalaire && prochainSalaire > debutReel
-    ? new Date(prochainSalaire.getTime() - 1)
-    : new Date(prochainNominal.getTime() - 1);
+  debut.setHours(0, 0, 0, 0);
+  const prochainDebut = creerDateBudgetaire_(debut.getFullYear(), debut.getMonth() + 1, jour);
+  prochainDebut.setHours(0, 0, 0, 0);
+  const fin = new Date(prochainDebut.getTime() - 1);
 
   return {
-    debut: debutReel.toISOString(),
+    debut: debut.toISOString(),
     fin: fin.toISOString(),
     cle: Utilities.formatDate(moisLibelle, Session.getScriptTimeZone(), 'yyyy-MM'),
     libelle: moisLibelle.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }),
-    jourDebut: debutReel.getDate(),
+    jourDebut: jour,
     jourReference: jour,
-    debutAjusteSalaire: debutReel.getTime() !== debutNominal.getTime()
+    debutAjusteSalaire: false,
+    conventionCycle: '28 inclus → 27 inclus'
   };
 }
 
 function trouverSalaireAutourDate_(operations, dateReference, margeJours) {
+  // Conservé pour compatibilité avec les anciens diagnostics. Cette fonction ne
+  // pilote plus les bornes du cycle.
   const debutFenetre = new Date(dateReference);
   debutFenetre.setDate(debutFenetre.getDate() - Math.max(0, margeJours || 0));
   const finFenetre = new Date(dateReference);
@@ -92,9 +139,11 @@ function enregistrerParametreBudgetaire_(cle, valeur) {
 }
 
 function bornerJourBudgetaire_(valeur) {
-  return Math.max(1, Math.min(28, parseInt(valeur, 10) || 28));
+  // Compatibilité API : toute demande de jour de cycle converge désormais vers 28.
+  return jourDebutCycleBudgetSoft_();
 }
 
 function creerDateBudgetaire_(annee, mois, jour) {
-  return new Date(annee, mois, Math.min(jour, new Date(annee, mois + 1, 0).getDate()));
+  const j = jourDebutCycleBudgetSoft_();
+  return new Date(annee, mois, Math.min(j, new Date(annee, mois + 1, 0).getDate()));
 }

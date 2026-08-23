@@ -1,0 +1,48 @@
+<script>
+(function(){
+  function typeCategorie_(nom){
+    const cats=(typeof state!=='undefined'&&state.data&&state.data.Categories)||[];
+    const c=cats.find(x=>String(x.nom||'')===String(nom||''));
+    return c?String(c.type||'').toLowerCase():'';
+  }
+  function typeAffichePourOperation_(o){
+    if(!o)return 'depense';
+    if(typeCategorie_(o.categorie)==='tresorerie')return Number(o.montant||0)<0?'tresorerie_sortie':'tresorerie_entree';
+    return String(o.type||'').toLowerCase()==='revenu'?'revenu':'depense';
+  }
+  const ancienOuvrir=window.ouvrirOperation;
+  if(typeof ancienOuvrir==='function'){
+    window.ouvrirOperation=function(operation){
+      const r=ancienOuvrir.apply(this,arguments);
+      setTimeout(()=>{const s=document.getElementById('operation-type');if(s)s.value=typeAffichePourOperation_(operation);},0);
+      return r;
+    };
+  }
+  const ancienEnregistrer=window.enregistrerOperation;
+  window.enregistrerOperation=function(e){
+    if(e&&typeof e.preventDefault==='function')e.preventDefault();
+    const choix=document.getElementById('operation-type')?.value||'depense';
+    if(!['tresorerie_sortie','tresorerie_entree'].includes(choix)){
+      if(typeof ancienEnregistrer==='function')return ancienEnregistrer.call(this,e);
+      return;
+    }
+    const operation={
+      id:document.getElementById('operation-id').value,
+      date:document.getElementById('operation-date').value,
+      libelle:document.getElementById('operation-label').value.trim(),
+      categorie:document.getElementById('operation-category').value,
+      compte:document.getElementById('operation-account').value,
+      montant:Number(String(document.getElementById('operation-amount').value||'0').replace(/\s/g,'').replace(',','.'))||0,
+      type:choix==='tresorerie_sortie'?'depense':'revenu',
+      commentaire:document.getElementById('operation-comment').value.trim()
+    };
+    if(!operation.libelle||!operation.compte){if(typeof afficherErreur==='function')afficherErreur('Le libellé et le compte sont obligatoires.');return;}
+    const catType=typeCategorie_(operation.categorie);
+    if(catType!=='tresorerie'){
+      if(typeof afficherErreur==='function')afficherErreur('Pour un mouvement de trésorerie, choisissez une catégorie de type trésorerie.');return;
+    }
+    document.getElementById('save-operation').disabled=true;
+    google.script.run.withSuccessHandler(()=>{document.getElementById('save-operation').disabled=false;if(typeof fermerOperation==='function')fermerOperation();if(typeof charger==='function')charger();if(typeof ouvrirVue==='function')ouvrirVue('operations');}).withFailureHandler(err=>{document.getElementById('save-operation').disabled=false;if(typeof afficherErreur==='function')afficherErreur(err.message||String(err));}).enregistrerOperationManuelle(operation);
+  };
+})();
+</script>

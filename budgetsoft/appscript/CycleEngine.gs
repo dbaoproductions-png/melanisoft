@@ -69,8 +69,6 @@ function chargerCycleFinancier() {
   const epargneCycle = revenus - depenses;
 
   const dernierReleve = dateSoldeBancaire;
-  // Un cycle n'est complet que si un relevé bancaire couvre sa date de fin.
-  // Être simplement postérieur au début du cycle ne suffit pas.
   const couvertureCycle = !!(dernierReleve && dernierReleve >= fin);
   const alertes = [];
   if (!salaire) alertes.push('Salaire principal non détecté : le jour de référence est utilisé.');
@@ -117,18 +115,94 @@ function appliquerDateDebitDiffere(operation) {
 }
 
 function importerOperationsHelloBankCycle(operations, compte, meta) {
+  const controleReleve = controlerReleveAvantImport(meta, compte);
+  if (!controleReleve || controleReleve.ok !== true) {
+    throw new Error(controleReleve && controleReleve.message
+      ? controleReleve.message
+      : 'Import bloqué : le contrôle du relevé bancaire a échoué.');
+  }
+
   const transformees = (operations || []).map(appliquerDateDebitDiffere);
   const resultat = importerOperationsHelloBank(transformees, compte);
+  resultat.controleReleve = controleReleve;
+
+  const erreursImport = Array.isArray(resultat.erreurs) ? resultat.erreurs : [];
+  if (erreursImport.length) {
+    const apercu = erreursImport.slice(0, 8).join(' | ');
+    const suite = erreursImport.length > 8 ? ' | … +' + (erreursImport.length - 8) + ' autre(s)' : '';
+    throw new Error(
+      'Import PDF partiel : ' + erreursImport.length + ' ligne(s) rejetée(s). ' +
+      'Les lignes valides ont pu être écrites, mais le relevé n’a pas été certifié et son solde n’a pas été mémorisé. ' +
+      'Détail : ' + apercu + suite
+    );
+  }
+
   if (meta) {
     const historique = lireHistoriqueReleves_(compte);
-    const releve = { dateOuverture: meta.dateOuverture || null, soldeOuverture: Number.isFinite(Number(meta.soldeOuverture)) ? Number(meta.soldeOuverture) : null, dateCloture: meta.dateCloture || null, soldeCloture: Number.isFinite(Number(meta.soldeCloture)) ? Number(meta.soldeCloture) : null, importeLe: new Date().toISOString() };
-    if (releve.dateCloture && releve.soldeCloture !== null) { enregistrerParametreBudgetaire_('solde_releve_' + String(compte), releve.soldeCloture); enregistrerParametreBudgetaire_('date_solde_releve_' + String(compte), releve.dateCloture); resultat.soldeCloture = releve.soldeCloture; resultat.dateCloture = releve.dateCloture; }
-    if (releve.dateOuverture && releve.soldeOuverture !== null) { enregistrerParametreBudgetaire_('solde_ouverture_premier_releve_' + String(compte), historique.length ? historique[0].soldeOuverture : releve.soldeOuverture); enregistrerParametreBudgetaire_('date_ouverture_premier_releve_' + String(compte), historique.length ? historique[0].dateOuverture : releve.dateOuverture); resultat.soldeOuverture = releve.soldeOuverture; resultat.dateOuverture = releve.dateOuverture; }
+    const releve = {
+      dateOuverture: meta.dateOuverture || null,
+      soldeOuverture: Number.isFinite(Number(meta.soldeOuverture)) ? Number(meta.soldeOuverture) : null,
+      dateCloture: meta.dateCloture || null,
+      soldeCloture: Number.isFinite(Number(meta.soldeCloture)) ? Number(meta.soldeCloture) : null,
+      importeLe: new Date().toISOString()
+    };
+
+    // Un import historique ne doit jamais faire reculer le point de référence
+    // du tableau de bord. solde_releve/date_solde_releve représentent toujours
+    // le relevé LE PLUS RÉCENT connu pour le compte.
+    if (releve.dateCloture && releve.soldeCloture !== null) {
+      const parametres = Object.fromEntries(lireTable_('Parametres').map(p => [String(p.cle), p.valeur]));
+      const cleSolde = 'solde_releve_' + String(compte);
+      const cleDate = 'date_solde_releve_' + String(compte);
+      const dateActuelle = parametres[cleDate] ? new Date(parametres[cleDate]) : null;
+      const dateNouvelle = new Date(releve.dateCloture);
+      const doitMettreAJour = !dateActuelle || isNaN(dateActuelle) || (!isNaN(dateNouvelle) && dateNouvelle >= dateActuelle);
+      if (doitMettreAJour) {
+        enregistrerParametreBudgetaire_(cleSolde, releve.soldeCloture);
+        enregistrerParametreBudgetaire_(cleDate, releve.dateCloture);
+      }
+      resultat.soldeReferenceMisAJour = doitMettreAJour;
+      resultat.soldeCloture = releve.soldeCloture;
+      resultat.dateCloture = releve.dateCloture;
+    }
+
+    // À l'inverse, la base d'ouverture doit représenter le relevé LE PLUS
+    // ANCIEN connu. L'import d'archives peut donc la faire reculer.
+    const historiqueAvecNouveau = historique.concat([releve]).filter(r => r && (r.dateOuverture || r.dateCloture));
+    historiqueAvecNouveau.sort((a,b)=>new Date(a.dateOuverture || a.dateCloture || 0)-new Date(b.dateOuverture || b.dateCloture || 0));
+    const premier = historiqueAvecNouveau[0] || releve;
+    if (premier.dateOuverture && premier.soldeOuverture !== null && premier.soldeOuverture !== undefined) {
+      enregistrerParametreBudgetaire_('solde_ouverture_premier_releve_' + String(compte), premier.soldeOuverture);
+      enregistrerParametreBudgetaire_('date_ouverture_premier_releve_' + String(compte), premier.dateOuverture);
+    }
+    if (releve.dateOuverture && releve.soldeOuverture !== null) {
+      resultat.soldeOuverture = releve.soldeOuverture;
+      resultat.dateOuverture = releve.dateOuverture;
+    }
+
     let precedent = null;
-    if (releve.dateOuverture) { const dateOuverture = new Date(releve.dateOuverture); precedent = historique.filter(r => r.dateCloture && new Date(r.dateCloture) <= dateOuverture).sort((a,b)=>new Date(b.dateCloture)-new Date(a.dateCloture))[0] || null; }
-    if (precedent && precedent.soldeCloture != null && releve.soldeOuverture != null) { const ecart = arrondirCycle_(Number(releve.soldeOuverture) - Number(precedent.soldeCloture)); resultat.continuite = Math.abs(ecart) < 0.01; resultat.ecartContinuite = ecart; } else resultat.continuite = null;
-    historique.push(releve); historique.sort((a,b)=>new Date(a.dateOuverture || a.dateCloture || 0)-new Date(b.dateOuverture || b.dateCloture || 0)); enregistrerHistoriqueReleves_(compte, historique);
+    if (releve.dateOuverture) {
+      const dateOuverture = new Date(releve.dateOuverture);
+      precedent = historique.filter(r => r.dateCloture && new Date(r.dateCloture) <= dateOuverture).sort((a,b)=>new Date(b.dateCloture)-new Date(a.dateCloture))[0] || null;
+    }
+    if (precedent && precedent.soldeCloture != null && releve.soldeOuverture != null) {
+      const ecart = arrondirCycle_(Number(releve.soldeOuverture) - Number(precedent.soldeCloture));
+      resultat.continuite = Math.abs(ecart) < 0.01;
+      resultat.ecartContinuite = ecart;
+    } else resultat.continuite = null;
+
+    historique.push(releve);
+    historique.sort((a,b)=>new Date(a.dateOuverture || a.dateCloture || 0)-new Date(b.dateOuverture || b.dateCloture || 0));
+    enregistrerHistoriqueReleves_(compte, historique);
   }
+
+  enregistrerControleReleve(controleReleve, {
+    source:'HELLOBANK_PDF',
+    importees:Number(resultat.importees || 0),
+    doublons:Number(resultat.doublons || 0),
+    rapprochees:Number(resultat.rapprochees || 0)
+  });
+  resultat.controleReleveEnregistre = true;
   return resultat;
 }
 

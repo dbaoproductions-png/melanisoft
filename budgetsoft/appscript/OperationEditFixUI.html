@@ -1,0 +1,78 @@
+<script>
+(function(){
+  let operationEditee_=null;
+  function actif_(v){return typeof estActif==='function'?estActif(v):v!==false&&String(v).toLowerCase()!=='false'&&String(v)!=='0';}
+  function valeurDate_(v){return typeof dateInput==='function'?dateInput(v):'';}
+  function n_(v){return typeof nombre==='function'?nombre(v):(Number(v)||0);}
+  function remplirComptes_(operation){
+    const s=document.getElementById('operation-account');if(!s)return;
+    const comptes=((state&&state.data&&state.data.Comptes)||[]).filter(c=>actif_(c.actif));
+    s.innerHTML='<option value="">Choisir un compte</option>'+comptes.map(c=>`<option value="${typeof echapperAttribut==='function'?echapperAttribut(c.id):c.id}">${typeof echapper==='function'?echapper(c.nom):c.nom}</option>`).join('');
+    s.value=operation?.compte||'';
+  }
+  function remplirCategories_(cats,operation){
+    const s=document.getElementById('operation-category');if(!s)return;
+    const groupes={depense:'Dépenses',revenu:'Revenus',tresorerie:'Mouvements de trésorerie',epargne:'Épargne'};
+    let html='<option value="">Sans catégorie</option>';
+    Object.keys(groupes).forEach(t=>{
+      const xs=(cats||[]).filter(c=>actif_(c.actif)&&String(c.type||'').toLowerCase()===t).sort((a,b)=>String(a.nom||'').localeCompare(String(b.nom||''),'fr'));
+      if(!xs.length)return;
+      html+=`<optgroup label="${groupes[t]}">`+xs.map(c=>`<option value="${typeof echapperAttribut==='function'?echapperAttribut(c.nom):c.nom}">${typeof echapper==='function'?echapper(c.nom):c.nom}</option>`).join('')+'</optgroup>';
+    });
+    s.innerHTML=html;s.value=operation?.categorie||'';
+  }
+  function typeAffiche_(operation,cats){
+    const cat=(cats||[]).find(c=>String(c.nom||'')===String(operation?.categorie||''));
+    if(cat&&String(cat.type||'').toLowerCase()==='tresorerie')return n_(operation?.montant)<0?'tresorerie_sortie':'tresorerie_entree';
+    return String(operation?.type||'').toLowerCase()==='revenu'?'revenu':'depense';
+  }
+  function jourOperation_(o){const d=new Date(o?.date_comptable||o?.date||o?.date_operation||'');return isNaN(d)?1:d.getDate();}
+  function installerBoutonChargeFixe_(operation){
+    const form=document.getElementById('operation-form');if(!form)return;
+    let btn=document.getElementById('operation-to-fixed-charge');
+    if(!btn){
+      btn=document.createElement('button');btn.type='button';btn.id='operation-to-fixed-charge';btn.className='secondary-button';btn.textContent='En faire une charge fixe';
+      const save=document.getElementById('save-operation');if(save?.parentElement)save.parentElement.insertBefore(btn,save);else form.appendChild(btn);
+      btn.addEventListener('click',()=>{
+        const o=operationEditee_;if(!o)return;
+        if(typeof ouvrirChargeFixe!=='function'){if(typeof afficherErreur==='function')afficherErreur('Le formulaire Charges fixes est indisponible.');return;}
+        const libelle=String(document.getElementById('operation-label')?.value||o.libelle_bancaire||o.libelle||'').trim();
+        const montant=Math.abs(n_(document.getElementById('operation-amount')?.value||o.montant));
+        const compte=String(document.getElementById('operation-account')?.value||o.compte||'');
+        const categorie=String(document.getElementById('operation-category')?.value||o.categorie||'');
+        const charge={id:'',libelle:libelle,montant:montant,frequence:'Mensuelle',jour_execution:jourOperation_(o),compte:compte,categorie:categorie,actif:true,libelle_bancaire:String(o.libelle_bancaire||o.libelle||libelle),_source_operation_id:String(o.id||'')};
+        if(typeof fermerOperation==='function')fermerOperation();else document.getElementById('operation-modal')?.classList.add('hidden');
+        ouvrirChargeFixe(charge);
+      });
+    }
+    const estDepense=String(operation?.type||'').toLowerCase()==='depense'||n_(operation?.montant)<0;btn.style.display=operation&&estDepense?'':'none';
+  }
+  function afficher_(operation,cats){
+    const form=document.getElementById('operation-form');if(!form)return;operationEditee_=operation||null;form.reset();
+    remplirComptes_(operation);remplirCategories_(cats,operation);
+    document.getElementById('operation-id').value=operation?.id||'';document.getElementById('operation-date').value=valeurDate_(operation?.date);document.getElementById('operation-type').value=typeAffiche_(operation,cats);document.getElementById('operation-label').value=operation?.libelle||'';document.getElementById('operation-amount').value=Math.abs(n_(operation?.montant)).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2});document.getElementById('operation-account').value=operation?.compte||'';document.getElementById('operation-category').value=operation?.categorie||'';document.getElementById('operation-comment').value=String(operation?.commentaire||'').replace(/\s*\[RECURRENCE:[^\]]+\]/g,'');document.getElementById('operation-modal-title').textContent=operation?'Modifier l’opération':'Ajouter une opération';
+    installerBoutonChargeFixe_(operation);document.getElementById('operation-modal').classList.remove('hidden');setTimeout(()=>document.getElementById('operation-label')?.focus(),50);
+  }
+  function ouvrirFiable_(operation){const secours=((state&&state.data&&state.data.Categories)||[]);google.script.run.withSuccessHandler(cats=>{const fraiches=Array.isArray(cats)?cats:secours;if(state?.data)state.data.Categories=fraiches;afficher_(operation,fraiches);}).withFailureHandler(()=>afficher_(operation,secours)).lireTable('Categories');}
+  window.modifierOperation=function(id){const ops=((state&&state.data&&state.data.Operations)||[]),operation=ops.find(o=>String(o.id)===String(id));if(!operation){if(typeof afficherErreur==='function')afficherErreur('Opération introuvable dans les données chargées.');return;}ouvrirFiable_(operation);};
+  window.ouvrirOperation=function(operation){ouvrirFiable_(operation||null);};
+})();
+
+(function(){
+  function lireChargeForm_(){return {id:document.getElementById('fixed-charge-id')?.value||'',libelle:document.getElementById('fixed-charge-label')?.value.trim()||'',libelle_bancaire:document.getElementById('fixed-charge-bank-label')?.value.trim()||'',categorie:document.getElementById('fixed-charge-category')?.value||'',compte:document.getElementById('fixed-charge-account')?.value||'',montant:typeof nombre==='function'?nombre(document.getElementById('fixed-charge-amount')?.value):0,tolerance:typeof nombre==='function'?Math.abs(nombre(document.getElementById('fixed-charge-tolerance')?.value)):0.5,type:'depense',jour_execution:Number(document.getElementById('fixed-charge-day')?.value||1),frequence:document.getElementById('fixed-charge-frequency')?.value||'Mensuelle',nature:document.getElementById('fixed-charge-nature')?.value||'Autre',date_debut:document.getElementById('fixed-charge-start')?.value||'',date_fin:document.getElementById('fixed-charge-end')?.value||'',actif:!!document.getElementById('fixed-charge-active')?.checked,commentaire:document.getElementById('fixed-charge-comment')?.value.trim()||''};}
+  function installerBoutonAjustement_(){const form=document.getElementById('fixed-charge-form');if(!form||document.getElementById('fixed-charge-adjust-forecast'))return;const actions=form.querySelector('.form-actions');if(!actions)return;const btn=document.createElement('button');btn.type='button';btn.id='fixed-charge-adjust-forecast';btn.className='secondary-button';btn.textContent='Ajuster le prévisionnel';btn.style.display='none';actions.insertBefore(btn,actions.firstChild);btn.addEventListener('click',ouvrirAjustement_);}
+  function choisirAction_(){const choix=prompt('Ajustement du prévisionnel :\n1 = Reporter une échéance\n2 = Ignorer une échéance\n3 = Changer le montant d’une échéance\n4 = Exclure des mois chaque année (ex. impôts sur 10 mois)\n\nEntrez 1, 2, 3 ou 4 :');return ({'1':'reporter','2':'ignorer','3':'montant','4':'exclure_mois'})[String(choix||'').trim()]||'';}
+  function dateDemandee_(message){return String(prompt(message+' (AAAA-MM-JJ) :')||'').trim();}
+  function ouvrirAjustement_(){
+    const chargeId=document.getElementById('fixed-charge-id')?.value||'';if(!chargeId){afficherErreur('Enregistrez d’abord la charge fixe.');return;}const action=choisirAction_();if(!action)return;const a={charge_fixe_id:chargeId,action:action,actif:true};
+    if(action==='reporter'){a.date_cible=dateDemandee_('Échéance initiale');if(!a.date_cible)return;a.nouvelle_date=dateDemandee_('Nouvelle date');if(!a.nouvelle_date)return;const m=prompt('Nouveau montant facultatif (laisser vide pour conserver le montant habituel) :');if(String(m||'').trim())a.nouveau_montant=m;}
+    else if(action==='ignorer'){a.date_cible=dateDemandee_('Échéance à ne pas prévoir');if(!a.date_cible)return;}
+    else if(action==='montant'){a.date_cible=dateDemandee_('Échéance concernée');if(!a.date_cible)return;const m=prompt('Montant prévu pour cette échéance :');if(!String(m||'').trim())return;a.nouveau_montant=m;}
+    else if(action==='exclure_mois'){const m=prompt('Mois sans échéance, sous forme de numéros séparés par des virgules.\nExemple : 11,12 pour un impôt prélevé de janvier à octobre.');if(!String(m||'').trim())return;a.mois=m;}
+    a.commentaire=String(prompt('Motif / commentaire facultatif :')||'').trim();google.script.run.withSuccessHandler(()=>{if(typeof afficherToast==='function')afficherToast('Prévision ajustée.');else alert('Prévision ajustée.');if(typeof chargerDashboardTroisCadres==='function')setTimeout(chargerDashboardTroisCadres,200);}).withFailureHandler(err=>afficherErreur(err.message||String(err))).enregistrerAjustementChargeFixe(a);
+  }
+  function decorerOuvertureCharge_(charge){const form=document.getElementById('fixed-charge-form');if(form)form.dataset.sourceOperationId=String(charge&&charge._source_operation_id||'');installerBoutonAjustement_();const btn=document.getElementById('fixed-charge-adjust-forecast');if(btn)btn.style.display=charge&&charge.id?'':'none';}
+  const base=window.ouvrirChargeFixe;if(typeof base==='function')window.ouvrirChargeFixe=function(charge){decorerOuvertureCharge_(charge);const r=base.apply(this,arguments);decorerOuvertureCharge_(charge);return r;};
+  document.addEventListener('DOMContentLoaded',()=>{installerBoutonAjustement_();const form=document.getElementById('fixed-charge-form');if(!form||form.dataset.sourceLinkInstalled)return;form.dataset.sourceLinkInstalled='1';form.addEventListener('submit',function(e){const sourceId=String(form.dataset.sourceOperationId||'').trim();if(!sourceId)return;e.preventDefault();e.stopImmediatePropagation();const charge=lireChargeForm_();if(!charge.libelle||!charge.libelle_bancaire||!charge.compte){afficherErreur('Le libellé, le libellé bancaire et le compte sont obligatoires.');return;}const save=document.getElementById('save-fixed-charge');save.disabled=true;google.script.run.withSuccessHandler(()=>{save.disabled=false;form.dataset.sourceOperationId='';if(typeof fermerChargeFixe==='function')fermerChargeFixe();if(typeof charger==='function')charger();if(typeof ouvrirChargesFixes==='function')setTimeout(ouvrirChargesFixes,100);}).withFailureHandler(err=>{save.disabled=false;afficherErreur(err.message||String(err));}).enregistrerChargeFixeLieeOperation(sourceId,charge);},true);});
+})();
+</script>

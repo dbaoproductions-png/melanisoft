@@ -5,32 +5,192 @@
     if (carte) carte.remove();
   }
 
+  function estDateSeulePdf_(texte) {
+    return /^\s*\d{2}[.\/]\d{2}(?:[.\/]\d{2,4})?\s*$/.test(String(texte || ''));
+  }
+
+  function dateIsoLocale_(annee, mois, jour) {
+    return String(annee).padStart(4,'0')+'-'+String(mois).padStart(2,'0')+'-'+String(jour).padStart(2,'0');
+  }
+
+  function dateCourtePdf_(iso) {
+    var m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? m[3]+'/'+m[2]+'/'+m[1] : String(iso || '—');
+  }
+
+  function estBruitPdf_(texte) {
+    return !texte || /RELEVE DE COMPTE|Date Nature|Hello bank|RIB\s*:|P\.\s*\d+\/|TOTAL DES OPERATIONS|SOLDE CREDITEUR|SOLDE DEBITEUR/i.test(texte);
+  }
+
+  function nettoyerPiedPagePdf_(texte) {
+    var s=String(texte||'').replace(/\s+/g,' ').trim();
+    if(!s) return s;
+    var marqueurs=[
+      /\bune marque de BNP PARIBAS\b/i,
+      /\bd['’]un appel local\b/i,
+      /\bsur services et op[eé]rations bancaires\b/i,
+      /\bde votre autorisation de d[eé]bit\b/i,
+      /\bmontant de votre autorisation de d[eé]bit\b/i,
+      /\btaux annuel effectif global\b/i,
+      /\bTAEG\b/i
+    ];
+    var coupe=s.length;
+    marqueurs.forEach(function(re){
+      var m=re.exec(s);
+      if(m && m.index<coupe) coupe=m.index;
+    });
+    return s.slice(0,coupe).replace(/[\s;,:\-–—]+$/,'').trim();
+  }
+
+  function texteEntreBornesPdf_(cellules, xMin, xMax) {
+    return (cellules || []).filter(function(c){
+      return c.x > xMin && c.x < xMax && !estDateSeulePdf_(c.texte);
+    }).map(function(c){ return c.texte; }).join(' ').replace(/\s+/g,' ').trim();
+  }
+
+  function nettoyerSuitePdf_(cellules, largeur) {
+    return texteEntreBornesPdf_(cellules, largeur * 0.075, largeur * 0.69);
+  }
+
+  function montantProbablePdf_(cellules) {
+    var candidats=(cellules||[]).filter(function(c){
+      return c.ratio>0.68 && /^-?\d{1,3}(?:[ .]\d{3})*,\d{2}$/.test(String(c.texte||'').trim());
+    }).sort(function(a,b){return b.x-a.x;});
+    return candidats[0] || null;
+  }
+
+  function regrouperLignesPdf_(items, largeur) {
+    var cellules=(items || []).map(function(item){
+      var texte=String(item.str || '').trim();
+      if(!texte) return null;
+      var y=Number(item.transform && item.transform[5]);
+      var x=Number(item.transform && item.transform[4]);
+      return {texte:texte,x:x,ratio:x/largeur,y:y};
+    }).filter(Boolean).sort(function(a,b){return b.y-a.y || a.x-b.x;});
+    var lignes=[];
+    cellules.forEach(function(c){
+      var ligne=lignes.length ? lignes[lignes.length-1] : null;
+      if(!ligne || Math.abs(ligne.yReference-c.y)>3){
+        ligne={yReference:c.y,y:c.y,cellules:[]};
+        lignes.push(ligne);
+      }
+      ligne.cellules.push(c);
+      ligne.y=ligne.cellules.reduce(function(s,v){return s+v.y;},0)/ligne.cellules.length;
+    });
+    lignes.forEach(function(l){l.cellules.sort(function(a,b){return a.x-b.x;});});
+    return lignes;
+  }
+
+  window.extraireOperationsPageHelloBank = function (items, largeur) {
+    var ord = regrouperLignesPdf_(items, largeur);
+    var annee = extraireAnneeReleve(ord.map(function(l){return l.cellules;}));
+    var ancres=[];
+    ord.forEach(function(ligne,index){
+      var cellules=ligne.cellules;
+      var dates=cellules.filter(function(c){return c.ratio<0.20 && /^\d{2}\.\d{2}$/.test(c.texte);}).sort(function(a,b){return a.x-b.x;});
+      var dateCell=dates[0] || null;
+      var mc=extraireMontantLigne_(cellules) || montantProbablePdf_(cellules);
+      if(dateCell && mc) ancres.push({index:index,y:ligne.y,dateCell:dateCell,montantCell:mc});
+    });
+
+    var resultats=[];
+    ancres.forEach(function(ancre,position){
+      var prochaine=position+1<ancres.length?ancres[position+1].index:ord.length;
+      var cellulesAncre=ord[ancre.index].cellules;
+      var dm=ancre.dateCell.texte.split('.').map(Number),jour=dm[0],mois=dm[1],credit=ancre.montantCell.ratio>0.82;
+      var fragments=[];
+      var marge = Math.max(4, largeur * 0.008);
+      var descriptionAncre=texteEntreBornesPdf_(cellulesAncre, ancre.dateCell.x + marge, ancre.montantCell.x - marge);
+      if(!estBruitPdf_(descriptionAncre)) fragments.push(descriptionAncre);
+      for(var i=ancre.index+1;i<prochaine;i++){
+        var suite=nettoyerSuitePdf_(ord[i].cellules, largeur);
+        if(!estBruitPdf_(suite)) fragments.push(suite);
+      }
+      var libelleBancaire=nettoyerPiedPagePdf_(fragments.join(' ').replace(/\s+/g,' ').trim());
+      var dateComptable=dateIsoLocale_(annee,mois,jour);
+      var brut=ord.slice(ancre.index,prochaine).map(function(l){return l.cellules.map(function(c){return c.texte;}).join(' | ');}).join(' || ');
+      if(!libelleBancaire){
+        libelleBancaire=cellulesAncre.filter(function(c){
+          return c!==ancre.dateCell && c!==ancre.montantCell && c.x>ancre.dateCell.x && c.x<ancre.montantCell.x && !estDateSeulePdf_(c.texte);
+        }).map(function(c){return c.texte;}).join(' ').replace(/\s+/g,' ').trim();
+        libelleBancaire=nettoyerPiedPagePdf_(libelleBancaire);
+      }
+      var operation={
+        date:dateComptable,
+        date_comptable:dateComptable,
+        date_achat:null,
+        libelle:libelleBancaire,
+        libelle_bancaire:libelleBancaire,
+        details:libelleBancaire,
+        montant:(credit?1:-1)*parseMontantPdf(ancre.montantCell.texte),
+        source_bancaire:'HELLOBANK_PDF',
+        _ligneBrute:brut
+      };
+      var achat=libelleBancaire.match(/\bDU\s+(\d{2})(\d{2})(\d{2})\b/i);
+      if(achat) operation.date_achat=dateIsoLocale_(2000+Number(achat[3]),Number(achat[2]),Number(achat[1]));
+      var carte=libelleBancaire.match(/(?:CARTE|CB)\s+\d*X+(\d{4})/i);
+      if(carte) operation.carte_fin=carte[1];
+      if(!libelleBancaire || estDateSeulePdf_(libelleBancaire)) operation._parseError='LIBELLE_BANCAIRE_INCOMPLET';
+      resultats.push(operation);
+    });
+    return resultats.filter(function(o){return !/^SOLDE|^TOTAL DES OPERATIONS/i.test(String(o.libelle_bancaire||'').trim());});
+  };
+
+  function invalidesPdf_(operations) {
+    return (operations||[]).filter(function(o){
+      var details=String(o&&o.libelle_bancaire||o&&o.details||'').trim();
+      return o&&o._parseError || !details || estDateSeulePdf_(details);
+    });
+  }
+
+  function resumeInvalidesPdf_(operations) {
+    var invalides=invalidesPdf_(operations);
+    if (!invalides.length) return '';
+    return invalides.map(function(o,i){
+      return '#'+(i+1)+' '+dateCourtePdf_(o.date_comptable||o.date)+' · '+Number(o.montant||0).toLocaleString('fr-FR',{style:'currency',currency:'EUR'})+' · brut: '+String(o._ligneBrute||'').slice(0,180);
+    }).join(' || ');
+  }
+
+  function verifierLotPdfAvantImport_(operations) {
+    operations=operations||[];
+    var invalides=invalidesPdf_(operations);
+    if (invalides.length) throw new Error('Import PDF refusé : '+invalides.length+' opération(s) ont un libellé bancaire incomplet. '+resumeInvalidesPdf_(operations));
+    var debits=operations.filter(function(o){return Number(o.montant)<0;}).reduce(function(s,o){return s+Math.abs(Number(o.montant)||0);},0);
+    var credits=operations.filter(function(o){return Number(o.montant)>0;}).reduce(function(s,o){return s+Math.abs(Number(o.montant)||0);},0);
+    var estReference=Math.abs(debits-7819.12)<0.01 && Math.abs(credits-6907.46)<0.01;
+    if(estReference){
+      if(operations.length!==192) throw new Error('Test de référence échoué : 192 opérations attendues, '+operations.length+' détectées.');
+      var attendus=[1.80,4.60,32.80,81.98];
+      attendus.forEach(function(m){if(!operations.some(function(o){return Math.abs(Math.abs(Number(o.montant))-m)<0.001;}))throw new Error('Test de référence échoué : opération '+m.toFixed(2)+' € absente.');});
+      if(operations.some(function(o){return String(o.date_comptable||o.date).indexOf('2026-01-31')===0 && /30\.01/.test(String(o._ligneBrute||''));}))throw new Error('Test de référence échoué : une date du 30 janvier a été transformée en 31 janvier.');
+      var vides=operations.filter(function(o){return !String(o.libelle_bancaire||'').trim();});
+      if(vides.length) throw new Error('Test de référence échoué : '+vides.length+' libellé(s) bancaire(s) vide(s).');
+    }
+    return {ok:true,nombre:operations.length,debits:debits,credits:credits};
+  }
+
+  window.verifierLotPdfBudgetSoft=verifierLotPdfAvantImport_;
+
   document.addEventListener('DOMContentLoaded', function () {
-    setTimeout(retirerAncienMoisBudgetaire, 0);
-    setTimeout(retirerAncienMoisBudgetaire, 500);
+    setTimeout(retirerAncienMoisBudgetaire,0);
+    setTimeout(retirerAncienMoisBudgetaire,500);
   });
 
-  document.addEventListener('click', function (event) {
-    retirerAncienMoisBudgetaire();
-    var bouton = event.target && event.target.closest ? event.target.closest('#confirm-pdf-import') : null;
-    if (!bouton) return;
-    if (bouton.disabled) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    var status = document.getElementById('pdf-status');
-    if (status) status.textContent = 'Import du relevé en cours…';
-    bouton.disabled = true;
-    bouton.textContent = 'Import en cours…';
-
-    try {
-      confirmerImportPdf();
-    } catch (e) {
-      bouton.disabled = false;
-      bouton.textContent = 'Importer les opérations';
-      if (status) status.textContent = 'Erreur avant envoi : ' + (e && e.message ? e.message : String(e));
-    }
-  }, true);
+  document.addEventListener('click', function(event){
+    var bouton=event.target&&event.target.closest?event.target.closest('#analyze-pdf'):null;
+    if(!bouton) return;
+    setTimeout(function verifier(){
+      var status=document.getElementById('pdf-status');
+      var ops=[];
+      try{ops=(typeof sprint0809!=='undefined'&&sprint0809.pdfOperations)||[];}catch(e){}
+      if(!status||!ops.length){setTimeout(verifier,250);return;}
+      var invalides=invalidesPdf_(ops);
+      if(invalides.length && status.textContent.indexOf('libellé(s) incomplet(s)')<0){
+        status.textContent += ' ⛔ '+invalides.length+' libellé(s) incomplet(s) : '+resumeInvalidesPdf_(ops);
+        var importer=document.getElementById('confirm-pdf-import');
+        if(importer){importer.disabled=true;importer.textContent='Import bloqué — libellés incomplets';}
+      }
+    },400);
+  },true);
 })();
 </script>

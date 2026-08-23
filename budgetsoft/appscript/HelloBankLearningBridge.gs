@@ -53,8 +53,69 @@ function reconnaitreOperationsHelloBankCollees() {
   return { examinees, reconnues, modifiees };
 }
 
+function appliquerCorrectionsAuditVoituresHelloBankCollees_() {
+  if (typeof propositionAuditVoitures20082026_ !== 'function') return { examinees:0, modifiees:0, actif:false };
+  const marqueurMigration = '[AUDIT_VOITURES_20082026]';
+  const operations = lireTable_('Operations');
+  let examinees = 0, modifiees = 0;
+  operations.forEach(o => {
+    if (!String(o.commentaire || '').includes('[HELLOBANK_COLLER]')) return;
+    examinees++;
+    const p = propositionAuditVoitures20082026_(o);
+    if (!p || String(o.categorie || '') === p.categorie) return;
+    const type = String(o.type || '').toLowerCase();
+    const m = Math.abs(Number(o.montant || 0));
+    enregistrerLigne('Operations', Object.assign({}, o, {
+      categorie:p.categorie,
+      commentaire:ajouterMarqueurCommentaireVoiture_(o.commentaire, marqueurMigration),
+      montant:type === 'depense' ? -m : m
+    }));
+    modifiees++;
+  });
+  return { examinees, modifiees, actif:true };
+}
+
+function appliquerCorrectionsAuditCoursesRestaurantsHelloBankCollees_() {
+  if (typeof propositionAuditCoursesRestaurants20082026_ !== 'function') return { examinees:0, modifiees:0, actif:false };
+  const operations = lireTable_('Operations');
+  let examinees = 0, modifiees = 0;
+  operations.forEach(o => {
+    if (!String(o.commentaire || '').includes('[HELLOBANK_COLLER]')) return;
+    examinees++;
+    const p = propositionAuditCoursesRestaurants20082026_(o);
+    if (!p || String(o.categorie || '') === p.categorie) return;
+    enregistrerLigne('Operations', Object.assign({}, o, {
+      categorie:p.categorie,
+      commentaire:ajouterMarqueurAuditCoursesRestaurants20082026_(o.commentaire)
+    }));
+    modifiees++;
+  });
+  return { examinees:examinees, modifiees:modifiees, actif:true };
+}
+
+function appliquerCorrectionsAuditDepensesFonctionnellesHelloBankCollees_() {
+  if (typeof propositionAuditDepensesFonctionnelles20082026_ !== 'function') return { examinees:0, modifiees:0, actif:false };
+  const operations = lireTable_('Operations');
+  let examinees = 0, modifiees = 0;
+  operations.forEach(o => {
+    if (!String(o.commentaire || '').includes('[HELLOBANK_COLLER]')) return;
+    examinees++;
+    const p = propositionAuditDepensesFonctionnelles20082026_(o);
+    if (!p || String(o.categorie || '') === p.categorie) return;
+    enregistrerLigne('Operations', Object.assign({}, o, {
+      categorie:p.categorie,
+      commentaire:ajouterMarqueurAuditDepensesFonctionnelles20082026_(o.commentaire, '[AUDIT_DEPENSES_FONCTIONNELLES_20082026]')
+    }));
+    modifiees++;
+  });
+  return { examinees:examinees, modifiees:modifiees, actif:true };
+}
+
 function importerCollerHelloBankAvecApprentissage(lignes) {
   const resultat = importerCollerHelloBank(lignes);
   const apprentissage = reconnaitreOperationsHelloBankCollees();
-  return Object.assign({}, resultat, { apprentissage });
+  const auditVoitures = appliquerCorrectionsAuditVoituresHelloBankCollees_();
+  const auditCoursesRestaurants = appliquerCorrectionsAuditCoursesRestaurantsHelloBankCollees_();
+  const auditDepensesFonctionnelles = appliquerCorrectionsAuditDepensesFonctionnellesHelloBankCollees_();
+  return Object.assign({}, resultat, { apprentissage, auditVoitures, auditCoursesRestaurants, auditDepensesFonctionnelles });
 }
