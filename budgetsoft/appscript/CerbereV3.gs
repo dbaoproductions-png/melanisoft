@@ -1,9 +1,11 @@
-const CERBERE_V3_VERSION = '3.1.0';
+const CERBERE_V3_VERSION = '3.2.0';
 
 /**
  * Cerbère V3 — moteur d'exécution du Budget maître.
  *
- * Optimisation 3.1 :
+ * Optimisation 3.2 :
+ * - Cerbère ne lance plus chargerDashboardReel() ;
+ * - le solde réel utile à Cerbère est calculé à partir des données déjà lues ;
  * - une seule ventilation des opérations dans P1–P6 ;
  * - agrégation des dépenses par catégorie en un seul passage ;
  * - une seule sélection des actions exécutables ;
@@ -11,20 +13,25 @@ const CERBERE_V3_VERSION = '3.1.0';
  */
 function chargerCerbereV3() {
   const started = Date.now();
+  const timings = {};
+  let checkpoint = started;
   let stage = 'initialisation';
+  const mark = nom => { const now = Date.now(); timings[nom] = now - checkpoint; checkpoint = now; };
   try {
     verifierInitialisation_();
     assurerTablesPlanCerbere_();
     if (typeof assurerPlanActionsV3_ === 'function') assurerPlanActionsV3_();
+    mark('initialisation_ms');
 
     stage = 'P0 · Budget maître';
     const canon = chargerCanonCerbereV1();
     const heritageP0 = construireHeritageP0CerbereV3_(canon);
+    mark('p0_ms');
 
-    stage = 'lecture structure et réel';
+    stage = 'lecture structure';
     const charges = lireTable_('Charges_fixes');
     const operations = lireTable_('Operations');
-    const reel = typeof chargerDashboardReel === 'function' ? chargerDashboardReel() : null;
+    mark('lecture_structure_ms');
 
     stage = 'lecture du Plan validé';
     const objectifs = lireTablePlanCerbere_('Plan_Objectifs');
@@ -37,13 +44,20 @@ function chargerCerbereV3() {
       actionsExecutables: actionsExecutables,
       evenements: lireTablePlanCerbere_('Plan_Evenements')
     };
+    mark('lecture_plan_ms');
 
     stage = 'indexation P1-P6';
     const periodes = construirePeriodesCerbereV2_();
     const index = indexerDonneesCerbereV3_(periodes, operations, charges);
+    mark('indexation_ms');
+
+    stage = 'lecture du réel léger';
+    const reel = construireReelLegerCerbereV3_(operations, index);
+    mark('reel_leger_ms');
 
     stage = 'construction P1-P6';
     const resultats = periodes.map((p, i) => calculerPeriodeCerbereV3_(p, i, canon, heritageP0, index[i], operations, plan, reel));
+    mark('construction_periodes_ms');
 
     return serialiserCerberePourClient_({
       ok: true,
@@ -67,29 +81,41 @@ function chargerCerbereV3() {
       },
       diagnostic: {
         duree_ms: Date.now() - started,
+        timings: timings,
         operations: operations.length,
         charges_fixes: charges.length,
         actions_total: actionsToutes.length,
         actions_executees: actionsExecutables.length,
         categories_p0: canon.postes.length,
-        source_solde: reel && reel.courtTerme && reel.courtTerme.soldeFiable ? 'reel_fiable' : 'reel_non_certifie',
-        optimisation: 'index_periodes_categories_3.1'
+        source_solde: reel && reel.courtTerme && reel.courtTerme.soldeFiable ? 'releve_bancaire' : 'solde_reconstitue_non_certifie',
+        optimisation: 'sans_dashboard_imbrique_3.2'
       }
     });
   } catch (e) {
-    return {ok:false,version:CERBERE_V3_VERSION,stage:stage,erreur:e&&e.message?e.message:String(e),duree_ms:Date.now()-started};
+    return {ok:false,version:CERBERE_V3_VERSION,stage:stage,erreur:e&&e.message?e.message:String(e),duree_ms:Date.now()-started,timings:timings};
   }
 }
 
+/**
+ * Diagnostic volontairement léger : ne lance aucun autre moteur fonctionnel.
+ */
 function diagnostiquerCerbereV3() {
   try {
     verifierInitialisation_();
-    assurerTablesPlanCerbere_();
-    if (typeof assurerPlanActionsV3_ === 'function') assurerPlanActionsV3_();
     const canon = chargerCanonCerbereV1();
+    const operations = lireTable_('Operations');
+    const charges = lireTable_('Charges_fixes');
     const actions = lireFeuilleDynamiqueCerbereV3_('Plan_Actions');
-    const reel = typeof chargerDashboardReel === 'function' ? chargerDashboardReel() : null;
-    return {ok:true,version:CERBERE_V3_VERSION,operations:lireTable_('Operations').length,charges_fixes:lireTable_('Charges_fixes').length,categories_p0:canon.postes.length,actions_total:actions.length,actions_executees:actions.filter(actionExecutableCerbereV3_).length,solde_reporte:reel&&reel.courtTerme?reel.courtTerme.soldeBancaire:null,solde_fiable:!!(reel&&reel.courtTerme&&reel.courtTerme.soldeFiable)};
+    return {
+      ok:true,
+      version:CERBERE_V3_VERSION,
+      operations:operations.length,
+      charges_fixes:charges.length,
+      categories_p0:canon.postes.length,
+      actions_total:actions.length,
+      actions_executees:actions.filter(actionExecutableCerbereV3_).length,
+      moteur_reel:'leger'
+    };
   } catch (e) {return {ok:false,version:CERBERE_V3_VERSION,erreur:e&&e.message?e.message:String(e)};}
 }
 
@@ -118,6 +144,121 @@ function indexerDonneesCerbereV3_(periodes, operations, charges) {
     for (let i=0;i<periodes.length;i++) if (chargeActiveCerbere_(c,periodes[i])) idx[i].fixesP0 += Math.abs(Number(c.montant||c.montant_indicatif||0));
   });
   return idx;
+}
+
+/**
+ * Résumé bancaire minimal dont Cerbère a réellement besoin.
+ *
+ * On ne calcule volontairement pas ici les échéances de charges fixes, CB différées,
+ * salaire moyen, cycle précédent/suivant, etc. Ces calculs appartiennent au Dashboard.
+ * Cerbère ne doit plus lancer un deuxième moteur complet juste pour obtenir un solde.
+ */
+function construireReelLegerCerbereV3_(operations, index) {
+  let comptes = [], parametres = {};
+  try { comptes = lireTable_('Comptes').filter(c => booleenCerbereV3_(c.actif, true)); } catch (e) {}
+  try { parametres = Object.fromEntries(lireTable_('Parametres').map(p => [String(p.cle || ''), p.valeur])); } catch (e) {}
+
+  const now = new Date();
+  const finAuj = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  const estAuto = o => /\[RECURRENCE:[^\]]+\]/.test(String(o && o.commentaire || ''));
+  const valides = (operations || []).filter(o => {
+    if (estAuto(o)) return false;
+    const d = new Date(dateComptableCerbere_(o));
+    const m = Number(o.montant || 0);
+    return !isNaN(d) && d <= finAuj && Number.isFinite(m) && Math.abs(m) > .0001;
+  });
+
+  let derniereOp = null;
+  valides.forEach(o => {
+    const d = new Date(dateComptableCerbere_(o));
+    if (!derniereOp || d > derniereOp) derniereOp = d;
+  });
+
+  const estCourant = c => {
+    const s = String((c.nom || '') + ' ' + (c.type || '') + ' ' + (c.nature || '')).toLowerCase();
+    return /compte\s*(joint|courant)|compte\s*ch[eè]ques?|courant/.test(s) && !/livret|epargne|épargne/.test(s);
+  };
+  let comptesSolde = comptes.filter(estCourant);
+  if (!comptesSolde.length) comptesSolde = comptes.filter(c => !/livret|epargne|épargne/i.test(String((c.nom || '') + ' ' + (c.type || '') + ' ' + (c.nature || ''))));
+
+  let derniereDateReleve = null;
+  comptesSolde.forEach(c => {
+    const d = parametres['date_solde_releve_' + String(c.id || '')];
+    if (!d) return;
+    const x = new Date(d);
+    if (!isNaN(x) && (!derniereDateReleve || x > derniereDateReleve)) derniereDateReleve = x;
+  });
+  let reference = derniereOp || derniereDateReleve || finAuj;
+  if (derniereDateReleve && derniereDateReleve > reference) reference = derniereDateReleve;
+  if (reference > finAuj) reference = finAuj;
+
+  let total = 0;
+  let fiable = comptesSolde.length > 0;
+  let nbReleves = 0;
+  comptesSolde.forEach(c => {
+    const id = String(c.id || ''), nom = String(c.nom || '');
+    const soldeParam = parametres['solde_releve_' + id];
+    const dateParam = parametres['date_solde_releve_' + id];
+    const dateReleve = dateParam ? new Date(dateParam) : null;
+    const baseReleve = nombreCerbereV3_(soldeParam);
+    const correspond = o => String(o.compte || '') === id || String(o.compte || '') === nom;
+    let solde;
+
+    if (Number.isFinite(baseReleve) && dateReleve && !isNaN(dateReleve)) {
+      nbReleves++;
+      let mouvements = 0;
+      valides.forEach(o => {
+        if (!correspond(o)) return;
+        const d = new Date(dateComptableCerbere_(o));
+        if (d > dateReleve && d <= reference) mouvements += montantSigneCerbereV3_(o);
+      });
+      solde = baseReleve + mouvements;
+    } else {
+      fiable = false;
+      solde = nombreCerbereV3_(c.solde_initial);
+      if (!Number.isFinite(solde)) solde = 0;
+      valides.forEach(o => {
+        if (!correspond(o)) return;
+        const d = new Date(dateComptableCerbere_(o));
+        if (d <= reference) solde += montantSigneCerbereV3_(o);
+      });
+    }
+    total += solde;
+  });
+
+  const p1 = index && index[0] ? index[0] : null;
+  return {
+    courtTerme: {
+      dateReference: reference ? reference.toISOString() : null,
+      soldeBancaire: comptesSolde.length ? arrondirCerbereV3_(total) : null,
+      soldeFiable: fiable && nbReleves === comptesSolde.length,
+      comptesSolde: comptesSolde.map(c => String(c.nom || c.id || '')),
+      chargesFixes: null,
+      cbDifferees: null,
+      disponible: null,
+      revenusConstates: p1 ? arrondirCerbereV3_(p1.recettesReelles) : null,
+      depensesConstatees: p1 ? arrondirCerbereV3_(p1.depensesReelles) : null
+    }
+  };
+}
+
+function booleenCerbereV3_(v, defaut) {
+  if (v === undefined || v === null || v === '') return !!defaut;
+  if (v === true || v === 1) return true;
+  return ['true','vrai','oui','yes','1','x'].includes(String(v).trim().toLowerCase());
+}
+function nombreCerbereV3_(v) {
+  if (typeof v === 'number') return v;
+  if (v === undefined || v === null || String(v).trim() === '') return NaN;
+  const n = Number(String(v).replace(/\s/g,'').replace(',','.'));
+  return Number.isFinite(n) ? n : NaN;
+}
+function montantSigneCerbereV3_(o) {
+  const n = Number(o && o.montant || 0);
+  const type = String(o && o.type || '').toLowerCase();
+  if (type === 'depense') return -Math.abs(n);
+  if (type === 'revenu') return Math.abs(n);
+  return n;
 }
 
 function calculerPeriodeCerbereV3_(p, index, canon, p0, bucket, operations, planGlobal, reel) {
@@ -149,7 +290,7 @@ function calculerPeriodeCerbereV3_(p, index, canon, p0, bucket, operations, plan
   if(plan.actions.length)alertes.push({niveau:'info',code:'PLAN_APPLIQUE',message:plan.actions.length+' action(s) validée(s) appliquée(s) à cette période.'});
   const etat=alertes.some(a=>a.niveau==='rouge')||propositions.some(x=>x.niveau==='escalade')?'rouge':alertes.some(a=>a.niveau==='orange')?'orange':'vert';
 
-  return {index:index+1,periode:p,heritageP0:p0,plan,ressources:arrondirCerbereV3_(ressources),recettesStructurelles:arrondirCerbereV3_(recettesStructurelles),fixesBrutes:arrondirCerbereV3_(fixesP0),fixesPonderees:arrondirCerbereV3_(fixesPonderees),epargne:Number(canon.epargneProtegee||0),reserveObjectifs:arrondirCerbereV3_(reserveObjectifs),depensesExceptionnelles:arrondirCerbereV3_(depensesExceptionnelles),recettesReelles:arrondirCerbereV3_(recettesReelles),depensesReelles:arrondirCerbereV3_(depensesReelles),enveloppePilotable:arrondirCerbereV3_(coutP0Monetaire),margeStructurelle:arrondirCerbereV3_(margeStructurelle),soldeReporte:soldeReporte===null?null:arrondirCerbereV3_(soldeReporte),disponibleRestant:disponibleRestant===null?null:arrondirCerbereV3_(disponibleRestant),enveloppes,ecarts,propositions,alertes,etat};
+  return {index:index+1,periode:p,heritageP0:p0,plan,ressources:arrondirCerbereV3_(ressources),recettesStructurelles:arrondirCerbereV3_(recettesStructurelles),fixesBrutes:arrondirCerbereV3_(fixesP0),fixesPonderees:arrondirCerbereV3_(fixesPonderees),epargne:Number(canon.epargneProtegee||0),reserveObjectifs:arrondirCerbereV3_(reserveObjectifs),depensesExceptionnelles:arrondirCerbereV3_(depensesExceptionnelles),recettesReelles:arrondirCerbereV3_(recettesReelles),depensesReelles:arrondirCerbereV3_(depensesReelles),enveloppePilotable:arrondirCerbereV3_(coutP0Monetaire),margeStructurelle:arrondirCerbereV3_(margeStructurelle),soldeReporte:soldeReporte===null||!Number.isFinite(soldeReporte)?null:arrondirCerbereV3_(soldeReporte),disponibleRestant:disponibleRestant===null?null:arrondirCerbereV3_(disponibleRestant),enveloppes,ecarts,propositions,alertes,etat};
 }
 
 function construireHeritageP0CerbereV3_(canon){const postes=(canon.postes||[]).map(p=>({categorie:String(p.categorie||''),monetaire:Number(p.monetaire||0),pluxee:Number(p.pluxee||0),nature:String(p.nature||'ajustable'),protege:p.protege===true||String(p.protege).toLowerCase()==='true',ordre:Number(p.ordre||99)}));return {source:'P0',version:canon.version,postes,totalMonetaire:arrondirCerbereV3_(postes.reduce((s,p)=>s+p.monetaire,0)),totalPluxee:arrondirCerbereV3_(postes.reduce((s,p)=>s+p.pluxee,0)),total:arrondirCerbereV3_(postes.reduce((s,p)=>s+p.monetaire+p.pluxee,0))};}
