@@ -1,47 +1,83 @@
-const PLAN_ACTIONS_V4_VERSION='4.1.0';
+const PLAN_ACTIONS_V4_VERSION='4.2.0';
 
-function assurerPlanActionsV4_(){
-  assurerPlanActionsV3_();
-  const ss=SpreadsheetApp.getActive(), sh=ss.getSheetByName('Plan_Actions');
-  const extra=['nature_action','reevaluer_charges_fixes','affectation','source_remplacement_id','source_remplacement_libelle','dernier_recalcul'];
+function assurerColonnesPlanV4_(nom,extra){
+  const sh=SpreadsheetApp.getActive().getSheetByName(nom);if(!sh)return;
   const hs=sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(x=>String(x||'').trim());
-  const miss=extra.filter(x=>!hs.includes(x)); if(miss.length)sh.getRange(1,hs.length+1,1,miss.length).setValues([miss]);
+  const miss=extra.filter(x=>!hs.includes(x));if(miss.length)sh.getRange(1,hs.length+1,1,miss.length).setValues([miss]);
 }
-
+function assurerPlanActionsV4_(){
+  assurerPlanActionsV3_();assurerTablesPlanCerbere_();
+  assurerColonnesPlanV4_('Plan_Actions',['nature_action','reevaluer_charges_fixes','categorie','source_remplacement_id','source_remplacement_libelle','dernier_recalcul']);
+  assurerColonnesPlanV4_('Plan_Evenements',['categorie','recurrence','montant_reel','date_realisation','rapprochement_statut','operation_reelle_id','dernier_recalcul']);
+}
+function listerCategoriesPlanV4(){
+  const ss=SpreadsheetApp.getActive();let out=[];
+  try{out=lireTable_('Categories').map(x=>String(x.nom||x.categorie||'').trim()).filter(Boolean);}catch(e){}
+  if(!out.length){try{out=lireTablePlanCerbere_('Cerbere_Budget_Canonique').map(x=>String(x.categorie||'').trim()).filter(Boolean);}catch(e){}}
+  out.push('Crédits');return [...new Set(out)].sort((a,b)=>a.localeCompare(b,'fr'));
+}
 function chargerPlanActionsV4(){
   assurerPlanActionsV4_();
-  const base=chargerActionsPlanV3(), objectifs=base.objectifs||[], actions=base.actions||[];
+  const base=chargerActionsPlanV3(),objectifs=base.objectifs||[],actions=base.actions||[],evenements=lireFeuilleDynamiquePlan_('Plan_Evenements');
   const groupes=objectifs.map(o=>{const aa=actions.filter(a=>String(a.objectif_id||'')===String(o.id));return {objectif:o,actions:aa,impact:agregerImpactActionsV4_(aa)};});
-  return serialiserCerberePourClient_({version:PLAN_ACTIONS_V4_VERSION,groupes,sansObjectif:actions.filter(a=>!a.objectif_id),actions,objectifs,versions:base.versions||[],gains:base.gains||{},evenements:lireTablePlanCerbere_('Plan_Evenements')});
+  return serialiserCerberePourClient_({version:PLAN_ACTIONS_V4_VERSION,groupes,sansObjectif:actions.filter(a=>!a.objectif_id),actions,objectifs,versions:base.versions||[],gains:base.gains||{},evenements,categories:listerCategoriesPlanV4(),lignes_previsionnelles:construireLignesPrevisionnellesV4_(actions,evenements)});
 }
-
 function agregerImpactActionsV4_(actions){
   let confirme=0,attendu=0;(actions||[]).forEach(a=>{if(['Abandonnée','Annulée'].includes(String(a.statut)))return;const m=Number(a.impact_montant||0),mensuel=String(a.impact_frequence)==='mensuel'?m:0;if(a.impact_confirme===true||String(a.impact_confirme)==='true')confirme+=mensuel;else attendu+=mensuel;});
   return {mensuel_confirme:Math.round(confirme*100)/100,mensuel_attendu:Math.round(attendu*100)/100,annuel_confirme:Math.round(confirme*1200)/100,annuel_attendu:Math.round(attendu*1200)/100};
 }
-
+function upsertDynamiquePlanV4_(nom,d){
+  const sh=SpreadsheetApp.getActive().getSheetByName(nom),hs=sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(String),now=new Date().toISOString();
+  if(!d.id)d.id=Utilities.getUuid();const old=lireFeuilleDynamiquePlan_(nom).find(x=>String(x.id)===String(d.id))||{};
+  if(hs.includes('cree_le'))d.cree_le=old.cree_le||now;if(hs.includes('modifie_le'))d.modifie_le=now;
+  const vals=hs.map(h=>normaliserValeur_(d[h]!==undefined?d[h]:old[h]));const ids=sh.getLastRow()>1?sh.getRange(2,1,sh.getLastRow()-1,1).getValues().flat():[],p=ids.findIndex(x=>String(x)===String(d.id));
+  if(p>=0)sh.getRange(p+2,1,1,hs.length).setValues([vals]);else sh.appendRow(vals);return d;
+}
 function enregistrerActionPlanV4(d){
-  assurerPlanActionsV4_();d=Object.assign({},d||{});d.nature_action=String(d.nature_action||'autre');d.reevaluer_charges_fixes=d.reevaluer_charges_fixes===true||String(d.reevaluer_charges_fixes)==='true';d.affectation='Projet';d.projet='Projet';d.dernier_recalcul=new Date().toISOString();
+  assurerPlanActionsV4_();d=Object.assign({},d||{});d.nature_action=String(d.nature_action||'autre');d.categorie=String(d.categorie||'').trim();d.reevaluer_charges_fixes=d.reevaluer_charges_fixes===true||String(d.reevaluer_charges_fixes)==='true';d.dernier_recalcul=new Date().toISOString();
+  if(d.nature_action==='rembourser'&&!d.categorie)d.categorie='Crédits';
   enregistrerActionPlanV3(d);
   if(d.impact_confirme&&d.reevaluer_charges_fixes&&d.source_type==='charge_fixe'&&d.nature_action==='supprimer')cloturerChargeFixeDepuisActionV3(d.id,d.date_effet);
   recalculerPlanBudgetSoft_('action');return chargerPlanActionsV4();
 }
-function enregistrerEvenementPlanV4(d){enregistrerEvenementPlan(d);recalculerPlanBudgetSoft_('evenement');return chargerPlanActionsV4();}
-function supprimerElementPlanV4(type,id){supprimerElementPlan(type,id);recalculerPlanBudgetSoft_('suppression_'+type);return chargerPlanActionsV4();}
-
-function proposerResolutionSourceV4(sourceType,sourceId,mois){
-  sourceType=String(sourceType||'');sourceId=String(sourceId||'');mois=Math.max(1,Math.min(6,Number(mois||4)));
-  let capital=0;
-  if(sourceType==='credit'&&sourceId){const c=lireTable_('Credits').find(x=>String(x.id)===sourceId);capital=Math.abs(Number(c&&c.capital_restant||0));}
-  return calculerResolutionV4_(capital,mois);
+function enregistrerEvenementPlanV4(d){
+  assurerPlanActionsV4_();d=Object.assign({},d||{});d.libelle=String(d.libelle||'').trim();if(!d.libelle)throw new Error('Le libellé de l’événement est obligatoire.');d.montant=Math.abs(Number(d.montant||0));if(!d.montant)throw new Error('Le montant doit être supérieur à zéro.');d.categorie=String(d.categorie||'').trim();d.recurrence=String(d.recurrence||'ponctuel');d.statut=String(d.statut||'Prévu');d.certitude=String(d.certitude||'certaine');d.dernier_recalcul=new Date().toISOString();upsertDynamiquePlanV4_('Plan_Evenements',d);recalculerPlanBudgetSoft_('evenement');return chargerPlanActionsV4();
 }
-function proposerResolutionActionV4(actionId,mois){
-  assurerPlanActionsV4_();mois=Math.max(1,Math.min(6,Number(mois||4)));const a=lireFeuilleDynamiquePlan_('Plan_Actions').find(x=>String(x.id)===String(actionId));if(!a)throw new Error('Action introuvable.');
-  let capital=0;if(a.source_type==='credit'&&a.source_id){const c=lireTable_('Credits').find(x=>String(x.id)===String(a.source_id));capital=Math.abs(Number(c&&c.capital_restant||0));}
-  return calculerResolutionV4_(capital,mois);
+function supprimerElementPlanV4(type,id){
+  assurerPlanActionsV4_();if(type==='action')supprimerActionPlanV3(id);else supprimerElementPlan(type,id);recalculerPlanBudgetSoft_('suppression_'+type);return chargerPlanActionsV4();
 }
-function calculerResolutionV4_(capital,mois){
-  const cerbere=chargerCerbereV2(),ps=cerbere&&cerbere.ok?(cerbere.periodes||[]).slice(0,mois):[],disponibilites=ps.reduce((s,p)=>s+Math.max(0,Number(p.enveloppePilotable||0)),0),soutenable=capital>0&&disponibilites>=capital,echeance=soutenable?Math.ceil(capital/mois*100)/100:0;
-  return serialiserCerberePourClient_({capital_restant:capital,mois,disponibilites_mobilisables:Math.round(disponibilites*100)/100,soutenable,echeance_proposee:echeance,periodes_verifiees:ps.length,etapes:[{libelle:'Capital restant dû : '+capital.toFixed(2)+' €',montant_prevu:capital,statut:capital>0?'Calculée':'À renseigner'},{libelle:'Disponibilités mobilisables sur '+mois+' mois : '+disponibilites.toFixed(2)+' €',montant_prevu:disponibilites,statut:'Calculée après vérification P1–P6'},{libelle:soutenable?'Proposition : '+echeance.toFixed(2)+' € × '+mois+' mois':'Capacité insuffisante : ajustement nécessaire',montant_prevu:soutenable?capital:0,statut:'À valider'}]});
+function rechercherSourceActionV4(terme){
+  const base=rechercherSourceActionV3(terme)||[];
+  return serialiserCerberePourClient_(base.map(x=>{let cat='';try{if(x.type==='charge_fixe'){const r=lireTable_('Charges_fixes').find(y=>String(y.id)===String(x.id));cat=String(r&&r.categorie||'');}else if(x.type==='credit')cat='Crédits';else if(x.type==='operation'){const r=lireTable_('Operations').find(y=>String(y.id)===String(x.id));cat=String(r&&r.categorie||'');}}catch(e){}return Object.assign({},x,{categorie:cat});}));
 }
+function capitalSourcePlanV4_(type,id){
+  let row=null;if(type==='credit'){row=lireTable_('Credits').find(x=>String(x.id)===String(id));}
+  if(!row&&type==='dette'){try{row=lireTable_('Dettes').find(x=>String(x.id)===String(id));}catch(e){}}
+  if(!row)return 0;const keys=['capital_restant','capital_restant_du','reste_du','montant_restant','solde','capital'];for(const k of keys){const n=Math.abs(Number(row[k]||0));if(n>0)return n;}return 0;
+}
+function proposerResolutionSourceV4(sourceType,sourceId,mois,reels){return calculerResolutionV4_(capitalSourcePlanV4_(String(sourceType||''),String(sourceId||'')),mois,reels||[]);}
+function proposerResolutionActionV4(actionId,mois,reels){
+  assurerPlanActionsV4_();const a=lireFeuilleDynamiquePlan_('Plan_Actions').find(x=>String(x.id)===String(actionId));if(!a)throw new Error('Action introuvable.');return calculerResolutionV4_(capitalSourcePlanV4_(a.source_type,a.source_id),mois,reels||[]);
+}
+function calculerResolutionV4_(capital,mois,reels){
+  mois=Math.max(1,Math.min(6,Number(mois||4)));capital=Math.abs(Number(capital||0));reels=Array.isArray(reels)?reels:[];
+  const cerbere=chargerCerbereV2(),ps=cerbere&&cerbere.ok?(cerbere.periodes||[]).slice(0,mois):[],deja=reels.reduce((s,x)=>s+Math.max(0,Number(x||0)),0),reste=Math.max(0,capital-deja),dispo=ps.reduce((s,p)=>s+Math.max(0,Number(p.enveloppePilotable||0)),0);
+  let restant=reste;const echeancier=ps.map((p,i)=>{const reel=Math.max(0,Number(reels[i]||0));if(reel>0)return {periode:i+1,date:p.periode&&p.periode.debut||'',libelle:p.periode&&p.periode.libelle||('P'+(i+1)),capacite:Math.max(0,Number(p.enveloppePilotable||0)),montant_prevu:0,montant_reel:reel,statut:'Réalisé'};const nb=Math.max(1,ps.length-i),capa=Math.max(0,Number(p.enveloppePilotable||0)),cible=Math.ceil((restant/nb)*100)/100,m=Math.min(restant,capa,cible);restant=Math.max(0,restant-m);return {periode:i+1,date:p.periode&&p.periode.debut||'',libelle:p.periode&&p.periode.libelle||('P'+(i+1)),capacite:capa,montant_prevu:Math.round(m*100)/100,montant_reel:0,statut:'À valider'};});
+  if(restant>0){for(let i=0;i<echeancier.length&&restant>0;i++){if(echeancier[i].montant_reel>0)continue;const marge=Math.max(0,echeancier[i].capacite-echeancier[i].montant_prevu),add=Math.min(marge,restant);echeancier[i].montant_prevu=Math.round((echeancier[i].montant_prevu+add)*100)/100;restant-=add;}}
+  return serialiserCerberePourClient_({capital_restant:capital,capital_deja_regle:deja,reste_a_regler:Math.max(0,capital-deja),mois,disponibilites_mobilisables:Math.round(dispo*100)/100,soutenable:capital>0&&restant<=0,non_couvert:Math.round(restant*100)/100,echeancier,etapes:[{libelle:'Capital restant dû : '+capital.toFixed(2)+' €',statut:capital>0?'Calculé automatiquement':'Introuvable dans la source'},{libelle:'Disponibilités mobilisables sur '+mois+' mois : '+dispo.toFixed(2)+' €',statut:'Calculées après vérification P1–P6'},{libelle:restant<=0?'Échéancier proposé ci-dessous':'Échéancier partiel : '+restant.toFixed(2)+' € restent à répartir',statut:'À valider'}]});
+}
+function rechercherOperationsEvenementV4(d){
+  d=d||{};const montant=Math.abs(Number(d.montant||0)),date=d.date_effet?new Date(d.date_effet):null,cat=String(d.categorie||'');let ops=lireTable_('Operations').filter(o=>Number(o.montant||0)<0);
+  ops=ops.map(o=>{const om=Math.abs(Number(o.montant||0)),od=new Date(o.date_comptable||o.date||o.date_operation||0),jours=date&&!isNaN(date)&&!isNaN(od)?Math.abs(od-date)/86400000:99,score=Math.abs(om-montant)+(jours*2)+(cat&&String(o.categorie||'')!==cat?50:0);return {id:o.id||'',libelle:o.libelle||'',montant:om,date:o.date_comptable||o.date||o.date_operation||'',categorie:o.categorie||'',score};}).sort((a,b)=>a.score-b.score).slice(0,12);return serialiserCerberePourClient_(ops);
+}
+function rapprocherEvenementV4(eventId,operationId){
+  assurerPlanActionsV4_();const ev=lireFeuilleDynamiquePlan_('Plan_Evenements').find(x=>String(x.id)===String(eventId));if(!ev)throw new Error('Événement introuvable.');const op=lireTable_('Operations').find(x=>String(x.id)===String(operationId));if(!op)throw new Error('Opération introuvable.');ev.operation_reelle_id=operationId;ev.montant_reel=Math.abs(Number(op.montant||0));ev.date_realisation=op.date_comptable||op.date||op.date_operation||'';ev.rapprochement_statut='Rapproché';ev.statut='Rapproché';upsertDynamiquePlanV4_('Plan_Evenements',ev);recalculerPlanBudgetSoft_('rapprochement_evenement');return chargerPlanActionsV4();
+}
+function construireLignesPrevisionnellesV4_(actions,evenements){
+  let ps=[];try{const c=chargerCerbereV2();ps=c&&c.ok?c.periodes||[]:[];}catch(e){}
+  const lignes=[];function pIndex(date){const d=new Date(date);if(isNaN(d))return 0;const i=ps.findIndex(p=>{const a=new Date(p.periode.debut),b=new Date(p.periode.fin);return d>=a&&d<=b});return i>=0?i+1:0;}
+  (actions||[]).forEach(a=>{if(!yesPlanV4_(a.impact_confirme)||['Abandonnée','Annulée'].includes(String(a.statut)))return;const et=(a.etapes||[]).filter(e=>Number(e.montant_prevu||0)>0);if(et.length)et.forEach(e=>lignes.push({source:'Action',source_id:a.id,libelle:a.libelle,categorie:a.categorie||'',montant:Number(e.montant_prevu||0),date:e.date_prevue||'',periode:pIndex(e.date_prevue)}));else lignes.push({source:'Action',source_id:a.id,libelle:a.libelle,categorie:a.categorie||'',montant:Number(a.impact_montant||0),date:a.date_effet||'',periode:pIndex(a.date_effet)});});
+  (evenements||[]).forEach(e=>{if(['Rapproché','Annulé','Réalisé'].includes(String(e.statut)))return;lignes.push({source:'Événement',source_id:e.id,libelle:e.libelle,categorie:e.categorie||'',montant:e.type==='depense'?Math.abs(Number(e.montant||0)):-Math.abs(Number(e.montant||0)),date:e.date_effet||'',periode:pIndex(e.date_effet)});});return lignes;
+}
+function yesPlanV4_(v){return v===true||String(v)==='true';}
 function recalculerPlanBudgetSoft_(origine){const props=PropertiesService.getDocumentProperties();props.setProperty('PLAN_DERNIER_RECALCUL',new Date().toISOString());props.setProperty('PLAN_DERNIERE_ORIGINE',String(origine||'inconnue'));try{const c=chargerCerbereV2();return {ok:!!(c&&c.ok),origine,cerbere:c};}catch(e){return {ok:false,origine,erreur:e.message||String(e)};}}
