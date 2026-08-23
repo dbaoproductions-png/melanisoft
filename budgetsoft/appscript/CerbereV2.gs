@@ -1,4 +1,4 @@
-const CERBERE_V2_VERSION = '2.0.3';
+const CERBERE_V2_VERSION = '2.0.4';
 const CERBERE_EPARGNE_MENSUELLE = 50;
 
 /**
@@ -171,7 +171,7 @@ function repartirCanonCerbere_(canon, pilotable, ops) {
   const facteur = total > 0 ? Math.min(1, Math.max(0,pilotable)/total) : 0;
   return canon.map(c => {
     const prevu = c.nature === 'essentiel' ? c.montant : c.montant * facteur;
-    const reel = ops.filter(o => String(o.categorie||'').trim() === c.categorie && Number(o.montant||0) < 0).reduce((s,o)=>s+Math.abs(Number(o.montant||0)),0);
+    const reel = ops.filter(o => String(o.categorie||'').trim() === c.categorie && Number(o.montant||0) < 0 && !estTresorerieCerbere_(o)).reduce((s,o)=>s+Math.abs(Number(o.montant||0)),0);
     return Object.assign({},c,{prevu,reel,reste:prevu-reel,etat:reel>prevu?'rouge':reel>prevu*.8?'orange':'vert'});
   });
 }
@@ -208,22 +208,59 @@ function dateDansPeriodeCerbere_(v,p) {
   const d = debutJour_(new Date(v));
   return !isNaN(d.getTime()) && d >= p.debut && d <= p.fin;
 }
-function estTresorerieCerbere_(o) { return /^tresorerie_/i.test(String(o.type||'')); }
+
+/**
+ * La nature économique vient de la catégorie. Dans Operations, les transferts
+ * bancaires sont volontairement stockés avec type=revenu/depense pour conserver
+ * le signe, donc tester uniquement o.type était faux.
+ */
+function estTresorerieCerbere_(o) {
+  const cat = String(o && o.categorie || '').trim().toLowerCase();
+  if (['crédits de trésorerie','credits de tresorerie','virements internes','remboursements','remboursements santé','remboursements sante'].includes(cat)) return true;
+  return /^tresorerie_/i.test(String(o && o.type || ''));
+}
+
+/**
+ * P1 = recettes économiques réellement constatées dans le cycle courant.
+ * P2-P6 = modèle stable ancré sur les 6 derniers cycles CLOS au moment du calcul.
+ * Pour chaque catégorie de revenu, on prend la médiane des 6 totaux de cycle
+ * (zéros compris), puis on additionne les médianes. Le modèle ne se décale donc
+ * plus dans des mois futurs vides et ne s'effondre plus en novembre/décembre.
+ */
 function estimerRecettesStructurellesCerbere_(operations,p,index) {
-  const courant = operations
-    .filter(o => dateDansPeriodeCerbere_(dateComptableCerbere_(o),p) && Number(o.montant||0)>0 && !estTresorerieCerbere_(o))
-    .reduce((s,o)=>s+Number(o.montant||0),0);
-  if (index === 0 && courant > 0) return courant;
-  const avant = new Date(p.debut); avant.setMonth(avant.getMonth()-3);
-  const vals = operations.filter(o => {
+  if (index === 0) {
+    return operations
+      .filter(o => dateDansPeriodeCerbere_(dateComptableCerbere_(o),p) && Number(o.montant||0)>0 && !estTresorerieCerbere_(o))
+      .reduce((s,o)=>s+Number(o.montant||0),0);
+  }
+
+  const courant = calculerPeriodeBudgetaireCanonique_(new Date());
+  const cycles = [];
+  let reference = new Date(new Date(courant.debut).getTime() - 86400000);
+  for (let i=0;i<6;i++) {
+    const c = calculerPeriodeBudgetaireCanonique_(reference);
+    cycles.unshift({debut:debutJour_(new Date(c.debut)),fin:debutJour_(new Date(c.fin))});
+    reference = new Date(new Date(c.debut).getTime() - 86400000);
+  }
+
+  const categories = new Set();
+  operations.forEach(o => {
+    if (Number(o.montant||0) <= 0 || estTresorerieCerbere_(o)) return;
     const d = new Date(dateComptableCerbere_(o));
-    return d >= avant && d < p.debut && Number(o.montant||0)>0 && !estTresorerieCerbere_(o);
-  }).reduce((m,o)=>{
-    const d = new Date(dateComptableCerbere_(o));
-    const k = d.getFullYear()+'-'+d.getMonth();
-    m[k]=(m[k]||0)+Number(o.montant||0);
-    return m;
-  },{});
-  const mois = Object.values(vals);
-  return mois.length ? mois.reduce((a,b)=>a+b,0)/mois.length : 0;
+    if (isNaN(d)) return;
+    if (cycles.some(c => d>=c.debut && d<=c.fin)) categories.add(String(o.categorie||'').trim());
+  });
+
+  let total = 0;
+  categories.forEach(cat => {
+    if (!cat) return;
+    const vals = cycles.map(c => operations
+      .filter(o => String(o.categorie||'').trim()===cat && Number(o.montant||0)>0 && !estTresorerieCerbere_(o) && dateDansPeriodeCerbere_(dateComptableCerbere_(o),c))
+      .reduce((s,o)=>s+Number(o.montant||0),0)
+    ).sort((a,b)=>a-b);
+    if (!vals.length) return;
+    const m = Math.floor(vals.length/2);
+    total += vals.length%2 ? vals[m] : (vals[m-1]+vals[m])/2;
+  });
+  return total;
 }
