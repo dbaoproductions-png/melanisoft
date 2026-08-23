@@ -1,0 +1,20 @@
+<script>
+(function(){
+'use strict';
+/* Chargé après PlanCerbereUI mais avant CerbereUI : ce listener capture le clic
+   Plan en premier et force l'interface Plan V3. */
+document.addEventListener('click',function(e){
+  const b=e.target.closest&&e.target.closest('.nav-item[data-view="plan"]');
+  if(!b)return;
+  const fn=window.budgetsoftModules&&window.budgetsoftModules.plan;
+  if(typeof fn!=='function')return;
+  e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x===b));
+  const z=document.getElementById('generic-view');if(z)z.classList.add('active');
+  const title=document.getElementById('page-title');if(title)title.textContent='Plan';
+  const eye=document.getElementById('page-eyebrow');if(eye)eye.textContent='Stratégie et prévision';
+  fn();
+},true);
+})();
+</script>
