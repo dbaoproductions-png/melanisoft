@@ -26,13 +26,14 @@ jobs:
           echo "GITHUB_SHA=$GITHUB_SHA"
           echo "HEAD=$(git rev-parse HEAD)"
           echo "BRANCH=${GITHUB_REF_NAME}"
-          echo "Plan/Cerbere markers:"
+          echo "Planification V4 markers:"
           grep -n 'data-view="plan"' budgetsoft/appscript/Index.html
-          grep -n 'PlanCerbereUI' budgetsoft/appscript/Index.html
-          grep -n "PLAN_CERBERE_VERSION = '2.0.1'" budgetsoft/appscript/PlanCerbere.gs
+          grep -n "inclure('PlanPriorityUI')" budgetsoft/appscript/Index.html
+          grep -n 'Planification · Objectifs · Actions' budgetsoft/appscript/PlanPriorityUI.html
+          grep -n '＋ Nouvel objectif' budgetsoft/appscript/PlanPriorityUI.html
+          grep -n 'chargerPlanActionsV4' budgetsoft/appscript/PlanActionsV4.gs
+          grep -n 'proposerResolutionActionV4' budgetsoft/appscript/PlanActionsV4.gs
           grep -n "CERBERE_V2_VERSION = '2.0.2'" budgetsoft/appscript/CerbereV2.gs
-          grep -n 'diagnostiquerCerbereV2' budgetsoft/appscript/CerbereV2.gs
-          grep -n 'Routeur prioritaire' budgetsoft/appscript/CerbereUI.html
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -68,22 +69,23 @@ jobs:
           set -euo pipefail
           test -d budgetsoft/appscript
           test -f budgetsoft/appscript/appsscript.json
-          test -f budgetsoft/appscript/PlanCerbere.gs
+          test -f budgetsoft/appscript/PlanPriorityUI.html
+          test -f budgetsoft/appscript/PlanActionsV4.gs
           test -f budgetsoft/appscript/CerbereV2.gs
-          test -f budgetsoft/appscript/CerbereUI.html
-          test -f budgetsoft/appscript/PlanCerbereUI.html
           grep -n 'data-view="plan"' budgetsoft/appscript/Index.html
           grep -n 'data-view="cerbere"' budgetsoft/appscript/Index.html
-          grep -n 'PlanCerbereUI' budgetsoft/appscript/Index.html
-          grep -n "PLAN_CERBERE_VERSION = '2.0.1'" budgetsoft/appscript/PlanCerbere.gs
+          grep -n "inclure('PlanPriorityUI')" budgetsoft/appscript/Index.html
+          grep -n 'Planification · Objectifs · Actions' budgetsoft/appscript/PlanPriorityUI.html
+          grep -n '＋ Nouvel objectif' budgetsoft/appscript/PlanPriorityUI.html
+          grep -n 'window.budgetsoftModules.plan=afficherPlanV4' budgetsoft/appscript/PlanPriorityUI.html
+          grep -n 'chargerPlanActionsV4' budgetsoft/appscript/PlanActionsV4.gs
+          grep -n 'proposerResolutionActionV4' budgetsoft/appscript/PlanActionsV4.gs
           grep -n "CERBERE_V2_VERSION = '2.0.2'" budgetsoft/appscript/CerbereV2.gs
-          grep -n 'diagnostiquerCerbereV2' budgetsoft/appscript/CerbereV2.gs
-          grep -n 'Routeur prioritaire' budgetsoft/appscript/CerbereUI.html
           test "$(grep -R -h -E '^const CERBERE_VERSION[[:space:]]*=' budgetsoft/appscript/*.gs | wc -l)" -le 1 || { echo 'ERROR: duplicate global CERBERE_VERSION declarations'; exit 1; }
           test "$(grep -R -h -E '^const CERBERE_V2_VERSION[[:space:]]*=' budgetsoft/appscript/*.gs | wc -l)" -eq 1 || { echo 'ERROR: CERBERE_V2_VERSION must be declared exactly once'; exit 1; }
-          cp budgetsoft/appscript/PlanCerbere.gs /tmp/PlanCerbere.js
+          cp budgetsoft/appscript/PlanActionsV4.gs /tmp/PlanActionsV4.js
           cp budgetsoft/appscript/CerbereV2.gs /tmp/CerbereV2.js
-          node --check /tmp/PlanCerbere.js
+          node --check /tmp/PlanActionsV4.js
           node --check /tmp/CerbereV2.js
 
       - name: Show clasp status
@@ -107,11 +109,12 @@ jobs:
           cd /tmp/budgetsoft-clasp-verify
           npx --yes @google/clasp@3 pull
           grep -R -n 'data-view="plan"' . || { echo 'ERROR: pushed Apps Script has no Plan navigation'; exit 1; }
-          grep -R -n 'PlanCerbereUI' . || { echo 'ERROR: pushed Apps Script has no PlanCerbereUI include'; exit 1; }
-          grep -R -n "PLAN_CERBERE_VERSION = '2.0.1'" . || { echo 'ERROR: pushed Apps Script has no PlanCerbere 2.0.1'; exit 1; }
+          grep -R -n 'Planification · Objectifs · Actions' . || { echo 'ERROR: pushed Apps Script has no Planification V4 UI'; exit 1; }
+          grep -R -n '＋ Nouvel objectif' . || { echo 'ERROR: pushed Apps Script has no new objective control'; exit 1; }
+          grep -R -n 'window.budgetsoftModules.plan=afficherPlanV4' . || { echo 'ERROR: Planification V4 does not own plan route'; exit 1; }
+          grep -R -n 'chargerPlanActionsV4' . || { echo 'ERROR: pushed Apps Script has no PlanActions V4 engine'; exit 1; }
+          grep -R -n 'proposerResolutionActionV4' . || { echo 'ERROR: pushed Apps Script has no V4 resolution engine'; exit 1; }
           grep -R -n "CERBERE_V2_VERSION = '2.0.2'" . || { echo 'ERROR: pushed Apps Script has no Cerbere 2.0.2'; exit 1; }
-          grep -R -n 'diagnostiquerCerbereV2' . || { echo 'ERROR: pushed Apps Script has no Cerbere diagnostic'; exit 1; }
-          grep -R -n 'Routeur prioritaire' . || { echo 'ERROR: pushed Apps Script has no unified Plan/Cerbere router'; exit 1; }
           test "$(grep -R -h -E '^const CERBERE_VERSION[[:space:]]*=' ./*.gs 2>/dev/null | wc -l)" -le 1 || { echo 'ERROR: pushed Apps Script still has duplicate CERBERE_VERSION declarations'; exit 1; }
           test "$(grep -R -h -E '^const CERBERE_V2_VERSION[[:space:]]*=' ./*.gs 2>/dev/null | wc -l)" -eq 1 || { echo 'ERROR: pushed Apps Script has invalid CERBERE_V2_VERSION declaration count'; exit 1; }
 
