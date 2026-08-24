@@ -40,6 +40,15 @@ Les décisions les plus récentes priment lorsqu'elles modifient explicitement u
 - Cerbère ne qualifie pas une opération de charge fixe uniquement parce qu'elle lui ressemble.
 - Le réel CF0 repose sur l'étiquetage/liaison effectivement enregistré.
 - Le moteur de rapprochement peut proposer ; la validation des données fait autorité.
+- **Dans le cockpit Cerbère, CF0 est synthétique** : les charges fixes ne doivent pas créer de lignes/tirettes détaillées.
+
+### Affichage Cerbère : pilotable vs trésorerie globale
+- **Le détail et les tirettes Cerbère sont réservés au pilotable** : postes P0, Divers et projets/réservations dynamiques.
+- Une catégorie valide hors P0 conserve sa catégorie et son effet sur la trésorerie, mais **ne devient pas une ligne pilotable**.
+- Les flux hors P0 sont regroupés dans une synthèse « Hors enveloppes pilotables » ; ils ne deviennent pas Divers.
+- Le dépassement P0/Pn est calculé uniquement avec les dépenses pilotables.
+- Cerbère tient parallèlement un **contrôle de trésorerie global** qui inclut CF0, flux hors enveloppes, trésorerie, solde, R0, réel et Plan.
+- L'appréciation générale M/M+1 doit distinguer une tension des enveloppes pilotables d'un risque de trésorerie global.
 
 ### Santé
 - Cerbère utilise la **santé nette** : dépenses moins remboursements.
