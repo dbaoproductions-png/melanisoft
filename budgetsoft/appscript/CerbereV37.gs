@@ -1,15 +1,10 @@
-const CERBERE_V37_VERSION='3.7.1';
+const CERBERE_V37_VERSION='3.7.2';
 
 /**
- * Cerbère 3.7.1 — cockpit quotidien M/M+1.
- * Doctrine :
- * - le Réel vient uniquement d'Operations ;
- * - les recettes R0 sont créditées une fois au départ puis corrigées par l'écart réel ;
- * - les dépenses consomment progressivement la capacité ;
- * - les CB pilotables achetées en M sont engagées sur M+1 ;
- * - CF0 est synthétique et une occurrence réelle rapprochée remplace le prévu ;
- * - Planification réserve les dépenses futures et pondère les recettes futures ;
- * - le détail affiché reste strictement pilotable.
+ * Cerbère 3.7.2 — cockpit quotidien M/M+1.
+ * Invariants : M et M+1 sont affichés simultanément ; les allocations restent
+ * ajustables localement ; P0 reste maître ; CF0 reste synthétique ; la marge
+ * initiale n'est jamais confondue avec Divers.
  */
 function chargerCerbereV37(){
   const base=chargerCerbereRoulant();
@@ -26,6 +21,7 @@ function chargerCerbereV37(){
   const p0Cats=new Set((base.p0&&base.p0.postes||[]).map(x=>String(x.categorie||'').trim()).filter(Boolean));p0Cats.add('Divers');
   const catType={};(categories||[]).forEach(c=>catType[String(c.nom||c.categorie||'').trim()]=String(c.type||'').trim().toLowerCase());
   const soldeActuel=Number(base.reel&&base.reel.soldeBancaire||0);
+  const chargeById={};(charges||[]).forEach(c=>{const id=String(c.id||'').trim();if(id)chargeById[id]=c;});
   let reportProjete=null;
 
   periodes.forEach((p,i)=>{
@@ -35,34 +31,46 @@ function chargerCerbereV37(){
     const opsPeriode=operations.filter(o=>dateDansPeriodeV37_(dateOperationCouranteBudgetSoft_(o),pi));
     const opsPassees=i===0?opsPeriode.filter(o=>{const d=dateOperationCouranteBudgetSoft_(o);return d&&d<=new Date();}):[];
 
-    // R0 est chargé une fois. Le réel ne s'ajoute jamais au canon : il ne fait que corriger son écart.
+    // R0 est chargé une fois. Le Réel corrige l'écart ; il ne s'ajoute pas une seconde fois au canon.
     const reelR0={};
     opsPeriode.forEach(o=>{const m=Number(o.montant||0),cat=String(o.categorie||'').trim();if(m>0&&r0Cats.has(cat))reelR0[cat]=(reelR0[cat]||0)+m;});
     let correctionR0=0,recettesR0Restantes=0;
     r0Postes.forEach(x=>{const cat=String(x.categorie||'').trim(),canon=Number(x.montant||0),reel=Number(reelR0[cat]||0);if(i===0){if(reel>0)correctionR0+=reel-canon;else recettesR0Restantes+=canon;}});
 
-    // CF0 : seules les liaisons explicites charge_fixe_id réalisent une occurrence.
-    const idsFixesPasses=new Set(opsPeriode.map(o=>String(o.charge_fixe_id||'').trim()).filter(Boolean));
-    const chargesActives=(charges||[]).filter(c=>{try{return chargeActiveCerbere_(c,pi);}catch(e){return String(c.actif).toLowerCase()!=='false';}});
-    const cfTotal=arrV37_(chargesActives.reduce((s,c)=>s+Math.abs(Number(c.montant||c.montant_indicatif||0)),0));
-    const cfRestantes=i===0?arrV37_(chargesActives.reduce((s,c)=>s+(idsFixesPasses.has(String(c.id||'').trim())?0:Math.abs(Number(c.montant||c.montant_indicatif||0))),0)):cfTotal;
+    // CF0 : le moteur roulant a déjà construit le montant de la période et appliqué les effets Plan.
+    // On prend ce résultat comme source primaire, ce qui évite une seconde interprétation de la fréquence.
+    const cfSocle=Number(p.fixesPonderees!=null?p.fixesPonderees:p.fixesBrutes||0);
+    const cfTotal=arrV37_(cfSocle>0?cfSocle:cfTotalSecoursV372_(charges,pi));
+    let cfAttenduRealise=0,cfReelRealise=0,nbCfRealises=0;
+    if(i===0){
+      const vus=new Set();
+      opsPeriode.forEach(o=>{
+        const id=String(o.charge_fixe_id||'').trim();if(!id||vus.has(id))return;
+        vus.add(id);nbCfRealises++;
+        const c=chargeById[id];
+        cfAttenduRealise+=Math.abs(Number(c&&(c.montant!=null?c.montant:c.montant_indicatif)||0));
+        cfReelRealise+=Math.abs(Number(o.montant||0));
+      });
+    }
+    const cfRestantes=i===0?arrV37_(Math.max(0,cfTotal-cfAttenduRealise)):cfTotal;
 
-    // Le solde actuel est la vérité du présent. Pour les périodes futures on reporte la projection précédente.
+    // Solde d'ouverture reconstitué pour expliquer le point de départ ; le solde actuel reste la vérité de M.
     const mouvementPasse=opsPassees.reduce((s,o)=>s+Number(o.montant||0),0);
     const soldeOuverture=i===0?arrV37_(soldeActuel-mouvementPasse):arrV37_(reportProjete||0);
     const pointDepart=i===0
       ?arrV37_(soldeOuverture+r0Total+ev.recettesInitiales-cfTotal-ev.depensesHorsPilotable)
       :arrV37_(Number(reportProjete||0)+r0Total+ev.recettesInitiales-cfTotal-ev.depensesHorsPilotable);
-    const ecartInitial=arrV37_(pointDepart-p0Total);
 
-    // Joker : si les engagements hérités excèdent la capacité de compensation, retour explicite à P0.
     const cbHeritee=Number(p.roulant&&p.roulant.cbHeritee||0);
     const jokerAuto=cbHeritee>Math.max(0,pointDepart);
     const joker=etatJokerCerbereV37_(p,jokerAuto);
     if(joker.actif)(p.enveloppes||[]).forEach(x=>x.prevu=Number(x.canon||0));
-    else appliquerEcartInitialV37_(p,ecartInitial,p0Total);
 
-    // Les événements pilotables sont des réservations par catégorie. On évite de les perdre dans un Plan global.
+    // La marge de départ est un stock non affecté : elle ne devient jamais Divers.
+    const allocationAvant=arrV37_((p.enveloppes||[]).reduce((s,x)=>s+Number(x.prevu||0),0));
+    const margeInitiale=arrV37_(pointDepart-allocationAvant);
+    const ecartInitial=arrV37_(pointDepart-p0Total);
+
     let engagePilotable=0,restePilotable=0;
     (p.enveloppes||[]).forEach(x=>{
       const cat=String(x.categorie||'').trim();
@@ -71,20 +79,17 @@ function chargerCerbereV37(){
       const reelNet=Math.max(0,reelBrut-santeAttendue);
       const planBase=Number(x.planifie||0);
       const planEvent=Number(ev.depensesPilotablesParCategorie[cat]||0);
-      const plan=arrV37_(Math.max(planBase,planEvent)); // compatibilité : ne pas doubler un événement déjà projeté par le socle.
+      const plan=arrV37_(Math.max(planBase,planEvent));
       x.planifie=plan;x.reelNetPrevisionnel=arrV37_(reelNet);x.remboursementsAttendus=arrV37_(santeAttendue);
       x.engageV37=arrV37_(reelNet+plan);x.resteV37=arrV37_(Number(x.prevu||0)-x.engageV37);
       engagePilotable+=x.engageV37;restePilotable+=x.resteV37;
     });
 
-    // M = aujourd'hui -> 27 : le réel passé est déjà dans le solde actuel. On ne le soustrait donc pas une seconde fois.
-    // Les recettes R0 non encore constatées restent attendues ; celles constatées ne sont remplacées que par leur écart au canon.
     const sortiesConfirmees=arrV37_(ev.depensesFutures+ev.depensesHorsPilotableFutures);
     const recettesHorsR0Reelles=i===0?opsPeriode.reduce((s,o)=>{const m=Number(o.montant||0),cat=String(o.categorie||'').trim();return s+(m>0&&!r0Cats.has(cat)?m:0);},0):0;
     const ajustementTresorerie=i===0?arrV37_(recettesHorsR0Reelles):0;
     const disponibleJusquau27=i===0?arrV37_(soldeActuel+recettesR0Restantes+correctionR0+ev.recettesFutures-cfRestantes-sortiesConfirmees):null;
 
-    // M+1 : le report projeté est produit par M, puis R0/CF0/CB/Plan prennent le relais.
     const horsReel=Number(p.roulant&&p.roulant.horsPilotable&&p.roulant.horsPilotable.total||0);
     const planPilotable=arrV37_((p.enveloppes||[]).reduce((s,x)=>s+Number(x.planifie||0),0));
     const capaciteProjetee=i===0
@@ -93,11 +98,30 @@ function chargerCerbereV37(){
     const finProjetee=i===0?arrV37_(disponibleJusquau27-Math.max(0,restePilotable)):capaciteProjetee;
     reportProjete=finProjetee;
 
-    p.v37={pointDepart,soldeOuverture,ecartInitial,recettesCanon:arrV37_(r0Total),recettesR0Restantes:arrV37_(recettesR0Restantes),correctionRecettesReelles:arrV37_(correctionR0),recettesEvenements:arrV37_(ev.recettesInitiales),chargesFixesTotal:cfTotal,chargesFixesRestantes:cfRestantes,remboursementsSanteAttendus:arrV37_(ev.remboursementsSante),depensesEvenementsHorsPilotable:arrV37_(ev.depensesHorsPilotable),sortiesFuturesConfirmees:sortiesConfirmees,ajustementTresorerie,disponibleJusquau27,finProjetee,capaciteProjetee,disponibleEnveloppes:arrV37_(restePilotable),engagePilotable:arrV37_(engagePilotable),joker,doctrine:i===0?'Aujourd’hui → 27 : le solde actuel contient déjà le passé ; seules les recettes restantes, écarts R0, CF0 restantes et sorties futures confirmées modifient le disponible.':'28 → 27 : report projeté + R0 − CF0 − CB de M − Plan − hors-enveloppes connus.'};
-    p.capaciteTresorerie=arrV37_(capaciteProjetee);p.capacitePilotable=p.capaciteTresorerie;p.resteBudgetPilotable=arrV37_(restePilotable);p.resteBudgetAlloue=p.resteBudgetPilotable;p.budgetReparti=arrV37_((p.enveloppes||[]).reduce((s,x)=>s+Number(x.prevu||0),0));
+    p.v37={
+      pointDepart,soldeOuverture,ecartInitial,margeInitiale,
+      recettesCanon:arrV37_(r0Total),recettesR0Restantes:arrV37_(recettesR0Restantes),correctionRecettesReelles:arrV37_(correctionR0),recettesEvenements:arrV37_(ev.recettesInitiales),
+      chargesFixesTotal:cfTotal,chargesFixesRestantes:cfRestantes,chargesFixesAttenduRealise:arrV37_(cfAttenduRealise),chargesFixesReelRealise:arrV37_(cfReelRealise),chargesFixesRealisees:nbCfRealises,
+      remboursementsSanteAttendus:arrV37_(ev.remboursementsSante),depensesEvenementsHorsPilotable:arrV37_(ev.depensesHorsPilotable),sortiesFuturesConfirmees:sortiesConfirmees,ajustementTresorerie,
+      disponibleJusquau27,finProjetee,capaciteProjetee,disponibleEnveloppes:arrV37_(restePilotable),engagePilotable:arrV37_(engagePilotable),joker,
+      doctrine:i===0?'Aujourd’hui → 27 : le solde actuel contient déjà le passé ; seules les recettes restantes, écarts R0, CF0 restantes et sorties futures confirmées modifient le disponible.':'28 → 27 : report projeté + R0 − CF0 − CB de M − Plan − hors-enveloppes connus.'
+    };
+    p.capaciteTresorerie=arrV37_(capaciteProjetee);p.capacitePilotable=p.capaciteTresorerie;p.resteBudgetPilotable=arrV37_(restePilotable);p.resteBudgetAlloue=p.resteBudgetPilotable;p.budgetReparti=allocationAvant;
   });
 
-  base.version=CERBERE_V37_VERSION;base.principe='Cerbère 3.7 : présent et futur proche. Recettes chargées une fois puis corrigées par écart ; dépenses consommées au fil du réel/engagé ; CB pilotables de M portées par M+1 ; CF0 synthétique.';base.fenetreRoulante=fenetreV37_(periodes);base.diagnostic=base.diagnostic||{};base.diagnostic.moteur_37=CERBERE_V37_VERSION;base.diagnostic.doctrine_recettes='R0 initial + correction écart réel, jamais R0 + réel';return serialiserCerberePourClient_(base);
+  base.version=CERBERE_V37_VERSION;
+  base.principe='Cerbère 3.7 : M et M+1 simultanés, allocations locales, marge non affectée distincte de Divers, R0 chargé une fois puis corrigé par le Réel, CF0 synthétique.';
+  base.fenetreRoulante=fenetreV37_(periodes);base.diagnostic=base.diagnostic||{};base.diagnostic.moteur_37=CERBERE_V37_VERSION;base.diagnostic.doctrine_recettes='R0 initial + correction écart réel, jamais R0 + réel';base.diagnostic.doctrine_marge='marge non affectée distincte de Divers';
+  return serialiserCerberePourClient_(base);
+}
+
+function cfTotalSecoursV372_(charges,periode){
+  return arrV37_((charges||[]).reduce((s,c)=>{
+    const actif=!(c.actif===false||String(c.actif||'').trim().toLowerCase()==='false'||String(c.actif||'').trim().toLowerCase()==='non');if(!actif)return s;
+    const deb=dateValideVentilationBudgetSoft_(c.date_debut||c.debut||c.date_effet),fin=dateValideVentilationBudgetSoft_(c.date_fin||c.fin),p0=dateValideVentilationBudgetSoft_(periode&&periode.debut),p1=dateValideVentilationBudgetSoft_(periode&&periode.fin);
+    if(deb&&p1&&deb>p1)return s;if(fin&&p0&&fin<p0)return s;
+    return s+Math.abs(Number(c.montant!=null?c.montant:c.montant_indicatif||0));
+  },0));
 }
 
 function previsionsEvenementsV371_(events,periode,p0Cats,catType){
@@ -117,19 +141,7 @@ function previsionsEvenementsV371_(events,periode,p0Cats,catType){
   });
   Object.keys(out).forEach(k=>{if(typeof out[k]==='number')out[k]=arrV37_(out[k]);});return out;
 }
-
-function dateImpactCbPlanV37_(dateAchat){
-  const d=dateValideVentilationBudgetSoft_(dateAchat);if(!d)return dateAchat;
-  // Doctrine BudgetSoft : achat CB du cycle M -> cycle M+1. Le 28 du cycle suivant suffit à déterminer l'imputation.
-  const finCycle=d.getDate()>=28?new Date(d.getFullYear(),d.getMonth()+2,27):new Date(d.getFullYear(),d.getMonth()+1,27);
-  const debutSuivant=new Date(finCycle.getFullYear(),finCycle.getMonth(),28);debutSuivant.setMonth(debutSuivant.getMonth()-1);
-  return Utilities.formatDate(debutSuivant,Session.getScriptTimeZone(),'yyyy-MM-dd');
-}
-function appliquerEcartInitialV37_(p,ecart,p0Total){
-  if(Math.abs(ecart)<.01)return;
-  const total=Number(p.budgetReparti||0);if(Math.abs(total-p0Total)>.01)return; // une dérogation locale validée reste prioritaire.
-  const divers=(p.enveloppes||[]).find(x=>String(x.categorie||'').trim()==='Divers');if(divers)divers.prevu=arrV37_(Math.max(0,Number(divers.prevu||0)+ecart));
-}
+function dateImpactCbPlanV37_(dateAchat){const d=dateValideVentilationBudgetSoft_(dateAchat);if(!d)return dateAchat;const finCycle=d.getDate()>=28?new Date(d.getFullYear(),d.getMonth()+2,27):new Date(d.getFullYear(),d.getMonth()+1,27);const debutSuivant=new Date(finCycle.getFullYear(),finCycle.getMonth(),28);debutSuivant.setMonth(debutSuivant.getMonth()-1);return Utilities.formatDate(debutSuivant,Session.getScriptTimeZone(),'yyyy-MM-dd');}
 function assurerDiversV37_(p){const e=p.enveloppes||(p.enveloppes=[]);if(e.some(x=>String(x.categorie||'').trim()==='Divers'))return;e.push({categorie:'Divers',canon:0,monetaire:0,pluxee:0,nature:'ajustable',prevu:0,planifie:0});}
 function etatJokerCerbereV37_(p,auto){const cle='CERBERE_JOKER_'+String(p.clePilotage||p.periode&&p.periode.debut||'');const v=PropertiesService.getDocumentProperties().getProperty(cle),actif=v==='on'?true:v==='off'?false:!!auto;return{actif,automatique:v==null&&!!auto,raison:actif?'Engagements hérités supérieurs à la capacité de compensation : P0 sert temporairement de garde-fou.':'Joker désactivé : le Réel et les ajustements locaux reprennent la main.',cle};}
 function reglerJokerCerbereV37(cle,actif){if(!cle)throw new Error('Période Cerbère introuvable.');PropertiesService.getDocumentProperties().setProperty('CERBERE_JOKER_'+String(cle),actif?'on':'off');return chargerCerbereV37();}
