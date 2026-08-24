@@ -1,4 +1,4 @@
-const CERBERE_CONSOLIDATION_VERSION='1.0.0';
+const CERBERE_CONSOLIDATION_VERSION='1.0.1';
 
 /**
  * Couche de cohérence Cerbère ↔ Planification.
@@ -64,7 +64,6 @@ function diagnostiquerConsolidationCerbere(){
     });
   } else if(cerbere) erreurs.push('Cerbère a répondu en erreur : '+String(cerbere.erreur||cerbere.stage||'inconnue'));
 
-  // Une période ne doit mémoriser que sa propre clé ; aucune ligne sans période.
   try{
     const sh=SpreadsheetApp.getActive().getSheetByName('Cerbere_Ajustements');
     if(sh&&sh.getLastRow()>1){
