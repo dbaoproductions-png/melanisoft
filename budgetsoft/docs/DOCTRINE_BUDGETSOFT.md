@@ -54,6 +54,8 @@ CF0 est constitué des charges fixes effectivement définies/étiquetées comme 
 - Le prévisionnel CF0 vient de `Charges_fixes`, pondéré par les Actions/Événements validés.
 - Pour le réel, Cerbère ne décide pas heuristiquement qu'une opération « ressemble » à une charge fixe : il ne retient comme rapprochement certain que l'étiquetage/liaison effectivement enregistré dans les données.
 - Le moteur de rapprochement peut proposer une association ; la donnée validée fait autorité.
+- Une occurrence réelle rapprochée **remplace l'occurrence CF0 prévue pour le cycle**, y compris si son montant diffère. Ne jamais compter prévision + réel.
+- Une divergence ponctuelle modifie le réel du cycle, pas automatiquement le montant maître CF0. Une récurrence peut déclencher une proposition de réévaluation de CF0.
 - **Dans le cockpit Cerbère, CF0 reste synthétique.** Les charges fixes ne sont pas des enveloppes à piloter avec des tirettes et leur détail appartient au module Charges fixes.
 
 ## 6. Operations et catégories : autorité des données
@@ -64,8 +66,87 @@ Pour toute opération, **la catégorie inscrite fait autorité**.
 - Une catégorie valide absente de P0 conserve son nom et son sens ; elle ne devient pas automatiquement `Divers`.
 - `Divers` reçoit provisoirement les opérations réellement orphelines/non classées. L'utilisateur assure le classement après import.
 - Les modules ne doivent pas réinterpréter une opération catégorisée à partir de son libellé, sauf mécanisme explicitement destiné à proposer un classement, jamais à remplacer silencieusement la donnée validée.
+- **Operations est l'unique base du Réel.** Cerbère ne possède pas de copie indépendante des opérations et se reconstruit à partir d'Operations.
 
-## 7. Moteur commun de ventilation
+## 7. Doctrine d'import du Réel
+
+### 7.1 Hiérarchie des autorités
+
+Trois niveaux doivent être distingués :
+
+1. **PDF bancaire = vérité bancaire définitive** : montant, dates bancaires, libellé, carte, statut comptabilisé, solde et autres faits fournis par la banque.
+2. **Utilisateur = vérité métier** : catégorie corrigée/validée, rapprochement CF0, rapprochement Événement/Action, commentaire ou autre qualification fonctionnelle.
+3. **Copier-coller / saisie = réel rapide ou provisoire**, destiné à alimenter BudgetSoft avant consolidation par la source bancaire définitive.
+
+Quand le PDF retrouve une opération déjà importée ou saisie, il **consolide la même opération** au lieu d'en créer une deuxième. Il remplace les faits bancaires provisoires par les faits définitifs mais conserve les qualifications métier validées par l'utilisateur, sauf contradiction explicitement traitée.
+
+### 7.2 Responsabilité de l'import
+
+L'import **observe, normalise, rapproche et enregistre** ; il ne doit pas appliquer directement une doctrine Cerbère cachée.
+
+À sa sortie, une opération contient autant que possible : date, date comptable, date d'achat, montant signé, libellé bancaire, source, compte, carte, catégorie, type, statut provisoire/définitif, clé d'identité/rapprochement, `charge_fixe_id` et liens métier éventuels.
+
+Chaîne normative :
+
+`Importer -> normaliser -> identifier/dédoublonner -> consolider provisoire/PDF -> préserver qualifications humaines -> catégoriser -> rapprocher les liens certains -> créer la file de contrôle -> écrire en bloc -> recalculer Cerbère une seule fois`
+
+### 7.3 Identité et dédoublonnage
+
+Une opération bancaire possède une identité fonctionnelle indépendante de sa source. L'arrivée du PDF ne doit jamais faire disparaître puis recréer une dépense déjà prise en compte, ni provoquer un double comptage.
+
+Le moteur utilise les données structurées disponibles (dates, montant, carte, marchand/libellé normalisé, clés de rapprochement, etc.) pour consolider les représentations provisoire et définitive d'un même mouvement.
+
+### 7.4 Catégorisation
+
+- Une catégorie métier déjà validée par l'utilisateur survit au réimport PDF.
+- Une règle de catégorisation suffisamment fiable peut attribuer une catégorie automatiquement.
+- Une opération sans catégorie fiable reste **à catégoriser** et peut être intégrée provisoirement dans `Divers` afin que son montant ne disparaisse jamais du pilotage.
+- Après chaque import, les opérations non catégorisées doivent être présentées dans une file de contrôle permettant d'agir directement sur la base Operations.
+
+### 7.5 Rapprochements métier
+
+Une opération peut être :
+
+- une opération pilotable ordinaire ;
+- une occurrence CF0 ;
+- la réalisation d'un Événement ;
+- la réalisation d'une Action ou d'une étape de processus de résolution.
+
+Le moteur distingue trois niveaux : **certain**, **probable**, **inconnu**.
+
+- Certain : rapprochement automatique autorisé si la règle a été explicitement fiabilisée.
+- Probable : proposition à valider.
+- Inconnu : file manuelle.
+
+Une validation utilisateur doit, autant que possible, améliorer les rapprochements proposés lors des imports suivants.
+
+### 7.6 File de contrôle après import
+
+Après chaque import, afficher séparément au minimum :
+
+- opérations non catégorisées ;
+- rapprochements CF0 proposés/non validés ;
+- rapprochements Événements proposés/non validés ;
+- rapprochements Actions proposés/non validés ;
+- conflits ou doublons ambigus.
+
+Une opération correctement catégorisée et ne nécessitant aucun lien particulier **n'est pas « non rapprochée »** : elle est exploitable immédiatement.
+
+La file de contrôle doit utiliser le **même éditeur et la même base que l'écran Operations**, pas une base parallèle.
+
+### 7.7 Recalcul après import
+
+Cerbère peut être recalculé automatiquement même si des opérations restent à traiter, mais il affiche une alerte explicite du type :
+
+`X opérations non catégorisées · Y rapprochements à valider`
+
+Les montants doivent rester intégrés selon les informations disponibles afin de ne jamais masquer du réel. Toute correction dans Operations invalide ensuite Cerbère et provoque son recalcul consolidé.
+
+Principe directeur :
+
+> **L'import ne nourrit pas Cerbère directement. Il enrichit et fiabilise Operations ; Cerbère se reconstruit à partir d'Operations.**
+
+## 8. Moteur commun de ventilation
 
 Un socle commun doit lire `Operations + Categories` et produire des opérations propres : catégorie et type, montant signé, dates disponibles, éventuel `charge_fixe_id`, informations structurées de carte.
 
@@ -84,7 +165,7 @@ Pour les catégories de **trésorerie**, Cerbère ne cherche pas leur sens écon
 
 Attention : un transfert entre deux comptes appartenant au même périmètre global peut être neutre globalement. Le périmètre de trésorerie piloté doit donc être explicite.
 
-## 8. Doctrine CB à débit différé
+## 9. Doctrine CB à débit différé
 
 Les champs structurés du classeur font autorité ; éviter les heuristiques textuelles quand ils existent.
 
@@ -95,7 +176,9 @@ Une dépense CB différée est identifiée par les données structurées pertine
 
 Une CB est donc du **réel constaté**, mais du réel déjà engagé pour la période suivante. Le règlement bancaire global de la carte différée ne doit jamais provoquer un double comptage.
 
-## 9. Cerbère — mission et périmètre d'affichage
+Une opération CB identifiée comme occurrence CF0 ne consomme pas une enveloppe pilotable de M+1 : elle réalise CF0.
+
+## 10. Cerbère — mission et périmètre d'affichage
 
 Cerbère est le policier du budget quotidien. Il ne fait pas de stratégie et ne modifie ni le Réel ni la Planification.
 
@@ -117,35 +200,64 @@ Conséquences d'affichage :
 - CF0 reste une **case synthétique** ; son détail n'a pas à encombrer le cockpit quotidien.
 - Un dépassement P0/Pn ne doit être calculé qu'avec le **réel pilotable**. Une charge hors P0 peut détériorer la trésorerie globale sans être présentée comme un dépassement du budget pilotable.
 
+### Présent et futur proche
+
+Pour Cerbère, le passé n'est utile que pour établir la situation courante. Le cockpit doit répondre prioritairement à : **que puis-je encore faire maintenant, et que suis-je déjà en train de préparer pour le mois suivant ?**
+
+Pour M, le point de départ du cycle est un **budget initial réel** construit à partir du solde du 27 au soir, R0, CF0 et événements/engagements connus. L'écart entre ce budget initial et P0 constitue une marge ou un déficit à répartir, distinct de `Divers`.
+
+Au fil du mois, les opérations réelles pondèrent ce point de départ. L'indicateur principal devient le **reste pilotable aujourd'hui**.
+
 ### Poste de commandement M / M+1
 
 L'affichage principal est une **fenêtre roulante de deux mois**, M et M+1 simultanément, avec tirettes ajustables en connaissance de cause.
 
 Elle est coiffée d'une appréciation générale explicable sur les deux mois. Cette appréciation distingue autant que possible **tension des enveloppes pilotables** et **risque de trésorerie global**.
 
-Pour chaque mois, afficher notamment : budget pilotable, réel pilotable non-CB, CB pilotable héritée de M-1, Plan/réservations pilotables, capacité de trésorerie, synthèse CF0, synthèse hors enveloppes, objectifs, solde de départ et Pluxee lorsqu'il existe.
+Pour M, privilégier : budget initial du cycle, situation bancaire actuelle, flux encore attendus avant le 27, charges fixes restant à passer, autres sorties confirmées, reste pilotable aujourd'hui et CB de M déjà engagées pour M+1.
 
-Pour M, afficher aussi les CB déjà engagées pour M+1. P3…P6 restent disponibles pour l'anticipation mais ne sont pas le poste de commandement quotidien.
+Pour M+1, privilégier : solde projeté de fin M, R0 prévu, CF0 prévu, CB pilotables de M déjà engagées, Plan/réservations, hors-enveloppes déjà connus et capacité projetée.
 
-## 10. Capacité et « reste réellement pilotable »
+Les CB héritées de M-1 sont une donnée d'initialisation secondaire de M ; les CB créées pendant M pour M+1 sont une donnée de pilotage majeure.
 
-Ne pas confondre : budget alloué par P0/Pn, marge structurelle non affectée, reste dans une enveloppe, et capacité de trésorerie globale.
+P3…P6 restent disponibles pour l'anticipation mais ne sont pas le poste de commandement quotidien.
 
-Le **reste pilotable** concerne uniquement les enveloppes pilotables. La **capacité de trésorerie** tient compte de l'ensemble des flux connus : solde initial, ressources/renforts, CF0, flux hors enveloppes, réel pilotable, CB, Plan et réservations.
+### Joker / retour de sécurité à P0
 
-Une catégorie hors P0 ne doit donc pas réduire artificiellement le « reste P0 » ; elle doit en revanche peser sur la trésorerie globale.
+Si les engagements hérités rendent les ajustements locaux de la période incohérents ou insuffisamment soutenables, Cerbère peut activer un **Joker de sécurité** : retour des tirettes à P0 avant nouvelle ventilation, avec explication chiffrée.
 
-## 11. Solde de départ
+Le Joker est **réversible à tout moment** :
+
+- l'utilisateur peut le désactiver manuellement ;
+- après désactivation, le Réel reprend immédiatement la main et les tirettes sont recalculées à partir de la situation courante ;
+- une amélioration de liquidité (par exemple un crédit de trésorerie positif) peut rendre de nouveau le pilotage dynamique soutenable ;
+- un nouvel import ne réactive pas mécaniquement un Joker désactivé : Cerbère recalcule d'abord et ne le repropose que si la nouvelle situation le justifie ;
+- le Joker peut être réactivé manuellement ;
+- activations/désactivations et motifs doivent rester traçables.
+
+## 11. Capacité et « reste réellement pilotable »
+
+Ne pas confondre : budget alloué par P0/Pn, budget initial réel du cycle, marge/déficit à répartir, reste dans une enveloppe, reste pilotable aujourd'hui et capacité de trésorerie globale.
+
+Pour M, la logique est celle de **l'instant T jusqu'au 27** : solde bancaire actuel + recettes encore attendues − charges fixes restant à passer − autres sorties futures confirmées − engagements déjà pris = ce qui peut encore être engagé.
+
+Pour M+1 : solde projeté de fin M + R0 prévu − CF0 prévu − CB déjà engagées − Plan/réservations − autres flux connus = capacité projetée.
+
+Une catégorie hors P0 ne doit pas réduire artificiellement le « reste P0 » ; elle doit en revanche peser sur la trésorerie globale.
+
+## 12. Solde de départ
 
 Chaque cycle possède un solde de départ : idéalement le **27 au soir**, sinon le dernier solde fiable disponible avant le début du cycle, signalé comme approximation.
 
 Le solde initial est un **stock de trésorerie**, distinct de R0 qui décrit des flux.
 
-## 12. Santé nette
+## 13. Santé nette
 
-Cerbère raisonne sur la **santé nette estimée/constatée** : dépenses de santé moins remboursements. Distinguer remboursements constatés et attendus. Les cotisations de mutuelle relevant de CF0 restent des charges fixes.
+Cerbère raisonne sur la **santé nette estimée/constatée** : dépenses de santé moins remboursements.
 
-## 13. Planification
+Distinguer les remboursements **constatés** des remboursements **attendus**. Les remboursements attendus peuvent améliorer l'estimatif du coût net, mais ne doivent pas être présentés comme de la liquidité déjà disponible. Les cotisations de mutuelle relevant de CF0 restent des charges fixes.
+
+## 14. Planification
 
 Terminologie : **Planification -> Objectifs -> Actions**, avec un cadre séparé **Événements**.
 
@@ -157,10 +269,12 @@ Une Action doit rester simple, concrète et quantifiable. Elle peut porter une n
 
 Une Action confirmée avec montant/date suffisamment certains alimente les périodes concernées, **jamais P0**. Une option « réévaluer charges fixes » peut proposer l'effet sur CF0, avec validation humaine.
 
+Lorsqu'une opération réelle est rapprochée d'une Action/étape, le réel **remplace le prévu**, met à jour la progression de l'Objectif et peut déclencher une nouvelle proposition du processus de résolution.
+
 ### Projets / réservations
 Un projet qui réserve réellement une somme doit produire une **ligne budgétaire dynamique identifiée** dans les périodes concernées. Ne pas tout fondre dans une ligne générique `Projet`.
 
-## 14. Processus de résolution et versionnement
+## 15. Processus de résolution et versionnement
 
 Certaines décisions nécessitent un processus de résolution. Une proposition est calculée à l'instant T et n'est jamais une vérité définitive.
 
@@ -168,31 +282,33 @@ Certaines décisions nécessitent un processus de résolution. Une proposition e
 
 Chaque révision crée une nouvelle version. La progression d'un objectif est calculée à partir du **réel effectivement exécuté**, pas du prévu.
 
-## 15. Événements
+## 16. Événements
 
-Un Événement représente un impondérable ou fait futur positif/négatif, non une stratégie. Formulaire unique : date, montant, sens, catégorie, certitude, commentaire, rapprochement au Réel. Une fois réalisé et rapproché, il quitte le prévisionnel.
+Un Événement représente un impondérable ou fait futur positif/négatif, non une stratégie. Formulaire unique : date, montant, sens, catégorie, certitude, commentaire, rapprochement au Réel.
 
-## 16. Pluxee
+Lorsqu'une opération réelle est rapprochée d'un Événement, elle **remplace le montant prévu**, y compris si le montant réel diverge. L'Événement quitte alors le prévisionnel ; le Réel prend sa place et l'écart est immédiatement réinjecté dans Cerbère.
+
+## 17. Pluxee
 
 Pluxee est une poche séparée de la monnaie bancaire : abondement autour du 18, solde de départ du cycle, opérations importées, distinction au minimum Courses / Restaurants, disponible aujourd'hui distinct de l'abondement attendu.
 
-## 17. Recalculs
+## 18. Recalculs
 
 Doivent invalider/recalculer Cerbère : import Operations/Pluxee, création/modification/suppression Action ou Événement, rapprochement, modification P0/R0/CF0, modification structurante des charges fixes.
 
-Doctrine de performance : **invalidation immédiate, recalcul consolidé unique**.
+Doctrine de performance : **invalidation immédiate, recalcul consolidé unique**. Un import de N opérations ne doit jamais lancer N recalculs complets.
 
-## 18. Fiabilité et explicabilité
+## 19. Fiabilité et explicabilité
 
 Cerbère distingue autant que possible Réel, Confirmé, Prévu, Estimé. Une alerte doit toujours être explicable par des raisons chiffrées ; pas de score opaque.
 
-## 19. Clôture d'un cycle
+## 20. Clôture d'un cycle
 
 À la clôture du 27 : enregistrer le solde fiable, figer le bilan, assurer le passage des engagements CB, conserver les écarts P0/Pn/Réel, faire de M+1 le nouveau M et générer le nouvel horizon P6. L'historique ne doit pas être réécrit rétroactivement.
 
-## 20. Priorités de stabilisation
+## 21. Priorités de stabilisation
 
-1. fiabiliser le moteur commun Operations/Categories ;
+1. fiabiliser le moteur commun Operations/Categories et la chaîne d'import ;
 2. fiabiliser R0/CF0/P0 ;
 3. fiabiliser Cerbère M/M+1 et l'imputation CB ;
 4. consolider Planification et ses interactions avec Cerbère ;
