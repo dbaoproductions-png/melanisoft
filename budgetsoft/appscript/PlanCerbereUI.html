@@ -1,8 +1,47 @@
 <script>
-/* Legacy Plan UI retired: PlanPriorityUI is the sole owner of the `plan` route. */
 (function(){
-  'use strict';
-  window.budgetsoftLegacyModules = window.budgetsoftLegacyModules || {};
-  window.budgetsoftLegacyModules.planCerbereUIRetired = true;
+'use strict';
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const yes=v=>v===true||String(v)==='true';
+
+/*
+ * Correctif fonctionnel de la route Planification réellement utilisée.
+ * PlanPriorityUI reste propriétaire de l'écran. Ce module intercepte seulement
+ * l'ouverture des événements afin de garantir le formulaire doctrinal 4.5 :
+ * mode de paiement + catégorie complète + fractionnement.
+ */
+function rafraichirPlan_(){
+  if(window.budgetsoftModules&&typeof window.budgetsoftModules.plan==='function')window.budgetsoftModules.plan();
+}
+function optionsCategories_(cats,selected){return `<option value="">— À catégoriser —</option>${(cats||[]).map(c=>`<option value="${esc(c)}" ${String(c)===String(selected||'')?'selected':''}>${esc(c)}</option>`).join('')}`;}
+function ouvrirEvenementDoctrine_(eventId){
+  google.script.run.withSuccessHandler(d=>{
+    const e=(d.evenements||[]).find(x=>String(x.id)===String(eventId||''))||{};
+    const m=document.createElement('div');m.className='modal';m.id='pev45-modal';
+    m.innerHTML=`<div class="modal-card compact-modal"><div class="modal-heading"><div><p class="panel-kicker">Événement · doctrine 4.5</p><h2>${e.id?'Modifier':'Nouvel'} événement</h2></div><button class="modal-close" id="pev45-x">×</button></div><div class="form-grid"><label class="full-field">Libellé<input id="pev45-l" value="${esc(e.libelle||'')}"></label><label>Nature<select id="pev45-t"><option value="depense" ${e.type==='depense'?'selected':''}>Dépense</option><option value="recette" ${e.type==='recette'?'selected':''}>Recette</option></select></label><label>Catégorie<select id="pev45-cat">${optionsCategories_(d.categories,e.categorie)}</select></label><label>Montant total<input id="pev45-m" type="number" min="0" step="0.01" value="${Math.abs(Number(e.montant||0))}"></label><label>Date / première échéance<input id="pev45-d" type="date" value="${String(e.date_effet||'').slice(0,10)}"></label><label>Mode de paiement<select id="pev45-pay">${['CB','Chèque','Virement','Prélèvement','Espèces','Autre'].map(x=>`<option value="${x}" ${String(e.mode_paiement||'Virement')===x?'selected':''}>${x}</option>`).join('')}</select></label><label>Certitude<select id="pev45-c">${['certaine','probable','possible'].map(x=>`<option ${e.certitude===x?'selected':''}>${x}</option>`).join('')}</select><label>Statut<select id="pev45-st">${['Prévu','Réalisé','Rapproché','Annulé'].map(x=>`<option ${e.statut===x?'selected':''}>${x}</option>`).join('')}</select></label><label class="checkbox-line full-field"><input type="checkbox" id="pev45-frac" ${yes(e.fractionne)?'checked':''}> Paiement / encaissement en plusieurs fois</label><div class="form-grid full-field" id="pev45-fracbox"><label>Périodicité<select id="pev45-period"><option value="mensuel" ${e.periodicite_fractionnement!=='annuel'?'selected':''}>Mensuel</option><option value="annuel" ${e.periodicite_fractionnement==='annuel'?'selected':''}>Annuel</option></select></label><label>Nombre de fois<select id="pev45-count">${Array.from({length:11},(_,i)=>i+2).map(n=>`<option value="${n}" ${Number(e.nombre_fois||2)===n?'selected':''}>${n}</option>`).join('')}</select></label></div></div><div id="pev45-preview" class="pev45-preview"></div><label>Commentaire<textarea id="pev45-com" rows="2">${esc(e.commentaire||'')}</textarea></label><div id="pev45-match"></div><div class="form-actions">${e.id&&e.statut!=='Rapproché'?'<button class="secondary-button" id="pev45-link">Rapprocher avec une opération</button>':''}<button class="secondary-button" id="pev45-cancel">Annuler</button><button class="primary-button" id="pev45-save">Enregistrer</button></div></div>`;
+    document.body.appendChild(m);
+    const preview=()=>{const on=document.getElementById('pev45-frac').checked,n=on?Number(document.getElementById('pev45-count').value||2):1,total=Math.abs(Number(document.getElementById('pev45-m').value||0));document.getElementById('pev45-fracbox').style.display=on?'grid':'none';document.getElementById('pev45-preview').innerHTML=total?`<small>Prévision Cerbère</small><b>${n===1?total.toLocaleString('fr-FR',{style:'currency',currency:'EUR'}):n+' échéances d’environ '+(total/n).toLocaleString('fr-FR',{style:'currency',currency:'EUR'})}</b>`:'';};
+    document.getElementById('pev45-x').onclick=document.getElementById('pev45-cancel').onclick=()=>m.remove();
+    ['pev45-frac','pev45-count','pev45-period','pev45-m'].forEach(id=>document.getElementById(id).onchange=preview);preview();
+    if(document.getElementById('pev45-link'))document.getElementById('pev45-link').onclick=()=>{const z=document.getElementById('pev45-match');z.innerHTML='<div class="loading">Recherche…</div>';google.script.run.withSuccessHandler(r=>{z.innerHTML=(r||[]).map(x=>`<button class="source-hit" data-pev45-op="${esc(x.id)}"><b>${esc(x.libelle)}</b><span>${esc(String(x.date||'').slice(0,10))} · ${Math.abs(Number(x.montant||0)).toLocaleString('fr-FR',{style:'currency',currency:'EUR'})}</span></button>`).join('')||'<small>Aucune opération proche.</small>';z.querySelectorAll('[data-pev45-op]').forEach(b=>b.onclick=()=>google.script.run.withSuccessHandler(()=>{m.remove();rafraichirPlan_();}).withFailureHandler(x=>alert(x.message||x)).rapprocherEvenementV4(e.id,b.dataset.pev45Op));}).withFailureHandler(x=>z.textContent=x.message||x).rechercherOperationsEvenementV4({montant:Number(document.getElementById('pev45-m').value||0),date_effet:document.getElementById('pev45-d').value,categorie:document.getElementById('pev45-cat').value});};
+    document.getElementById('pev45-save').onclick=()=>{const frac=document.getElementById('pev45-frac').checked,dto={id:e.id||'',libelle:document.getElementById('pev45-l').value,type:document.getElementById('pev45-t').value,categorie:document.getElementById('pev45-cat').value,montant:Math.abs(Number(document.getElementById('pev45-m').value||0)),date_effet:document.getElementById('pev45-d').value,mode_paiement:document.getElementById('pev45-pay').value,certitude:document.getElementById('pev45-c').value,statut:document.getElementById('pev45-st').value,fractionne:frac,nombre_fois:frac?Number(document.getElementById('pev45-count').value||2):1,periodicite_fractionnement:frac?document.getElementById('pev45-period').value:'ponctuel',recurrence:frac?document.getElementById('pev45-period').value:'ponctuel',commentaire:document.getElementById('pev45-com').value};google.script.run.withSuccessHandler(()=>{m.remove();rafraichirPlan_();}).withFailureHandler(x=>alert(x.message||x)).enregistrerEvenementPlanV4(dto);};
+  }).withFailureHandler(e=>alert(e.message||e)).chargerPlanActionsV4();
+}
+
+/* Capture avant le onclick historique de PlanPriorityUI. */
+document.addEventListener('click',function(e){
+  const add=e.target.closest&&e.target.closest('#pv4-event');
+  const edit=e.target.closest&&e.target.closest('[data-edit-event]');
+  if(!add&&!edit)return;
+  e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
+  ouvrirEvenementDoctrine_(edit?edit.dataset.editEvent:'');
+},true);
+
+/* Le bouton « Nouvel objectif » en tête est redondant : les objectifs existants
+ * restent modifiables/supprimables par leurs icônes. */
+const obs=new MutationObserver(()=>{const b=document.getElementById('pv4-add-goal');if(b)b.style.display='none';});
+obs.observe(document.documentElement,{childList:true,subtree:true});
+
+const st=document.createElement('style');st.textContent='.pev45-preview{margin:10px 0;padding:10px;background:#f7fbf9;border-radius:10px}.pev45-preview small,.pev45-preview b{display:block}';document.head.appendChild(st);
 })();
 </script>
