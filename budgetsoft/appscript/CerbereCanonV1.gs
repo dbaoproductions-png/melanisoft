@@ -1,4 +1,4 @@
-const CERBERE_CANON_V1_VERSION = '1.1.1';
+const CERBERE_CANON_V1_VERSION = '1.1.2';
 
 /** Budget canonique prévisionnel. N'écrit jamais dans les opérations réelles. */
 function chargerCanonCerbereV1() {
@@ -42,6 +42,7 @@ function enregistrerCanonCerbereV1(postes) {
     const vals=[cat,arrondirCerbereCanon_(mon),arrondirCerbereCanon_(plu),String(old.nature||p.nature||'ajustable'),Number(old.ordre||p.ordre||i+1),protege,true];
     if(map[cat]) sh.getRange(map[cat].row,1,1,7).setValues([vals]); else sh.appendRow(vals);
   });
+  assurerPosteDiversCerbereCanon_(sh);
   const rebase=rebaserAjustementsPeriodesApresModificationP0_(ancienP0);
   SpreadsheetApp.flush();
   try{
@@ -82,14 +83,32 @@ function lireCanonCerbereV1_(sh){
   return sh.getRange(2,1,last-1,7).getValues().map(vals=>{const o={};headers.forEach((h,i)=>o[h]=vals[i]);return o;});
 }
 
+function assurerPosteDiversCerbereCanon_(sh){
+  const rows=lireCanonCerbereV1_(sh);
+  const parCat=Object.fromEntries(rows.map((r,i)=>[String(r.categorie||'').trim(),{r,row:i+2}]));
+  if(!parCat['Divers']) sh.appendRow(['Divers',0,0,'ajustable',10,false,true]);
+  // Divers est une soupape à 0. Épargne et Projet restent après les catégories courantes.
+  const last=sh.getLastRow();
+  if(last<2)return;
+  const vals=sh.getRange(2,1,last-1,7).getValues();
+  let change=false;
+  vals.forEach(r=>{
+    const cat=String(r[0]||'').trim();
+    if(cat==='Divers'&&Number(r[4])!==10){r[4]=10;change=true;}
+    if(cat==='Épargne'&&Number(r[4])!==11){r[4]=11;change=true;}
+    if(cat==='Projet'&&Number(r[4])!==12){r[4]=12;change=true;}
+  });
+  if(change)sh.getRange(2,1,vals.length,7).setValues(vals);
+}
+
 function assurerCanonCerbereV1_(){
   const ss=SpreadsheetApp.getActiveSpreadsheet();
   if(!ss) throw new Error('Classeur BudgetSoft introuvable.');
   let sh=ss.getSheetByName('Cerbere_Canon_V1');
-  if(sh)return sh;
+  if(sh){assurerPosteDiversCerbereCanon_(sh);return sh;}
   sh=ss.insertSheet('Cerbere_Canon_V1');
   sh.getRange(1,1,1,7).setValues([['categorie','monetaire','pluxee','nature','ordre','protege','actif']]);
-  const d=[['Courses',656,94,'essentiel',1,false,true],['Santé',50,0,'essentiel',2,false,true],['Animaux',50,0,'ajustable',3,false,true],['Maison / entretien',0,0,'ajustable',4,false,true],['Voitures',95,0,'ajustable',5,false,true],['Transports',39,0,'essentiel',6,false,true],['Restaurants',79,60,'discretionnaire',7,false,true],['Loisirs',100,0,'discretionnaire',8,false,true],['Achats personnels',200,0,'discretionnaire',9,false,true],['Épargne',50,0,'protection',10,true,true],['Projet',0,0,'solde',11,false,true]];
+  const d=[['Courses',656,94,'essentiel',1,false,true],['Santé',50,0,'essentiel',2,false,true],['Animaux',50,0,'ajustable',3,false,true],['Maison / entretien',0,0,'ajustable',4,false,true],['Voitures',95,0,'ajustable',5,false,true],['Transports',39,0,'essentiel',6,false,true],['Restaurants',79,60,'discretionnaire',7,false,true],['Loisirs',100,0,'discretionnaire',8,false,true],['Achats personnels',200,0,'discretionnaire',9,false,true],['Divers',0,0,'ajustable',10,false,true],['Épargne',50,0,'protection',11,true,true],['Projet',0,0,'solde',12,false,true]];
   sh.getRange(2,1,d.length,7).setValues(d); sh.setFrozenRows(1); return sh;
 }
 function arrondirCerbereCanon_(n){return Math.round(Number(n||0)*100)/100;}
