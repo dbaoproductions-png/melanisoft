@@ -54,6 +54,7 @@ CF0 est constitué des charges fixes effectivement définies/étiquetées comme 
 - Le prévisionnel CF0 vient de `Charges_fixes`, pondéré par les Actions/Événements validés.
 - Pour le réel, Cerbère ne décide pas heuristiquement qu'une opération « ressemble » à une charge fixe : il ne retient comme rapprochement certain que l'étiquetage/liaison effectivement enregistré dans les données.
 - Le moteur de rapprochement peut proposer une association ; la donnée validée fait autorité.
+- **Dans le cockpit Cerbère, CF0 reste synthétique.** Les charges fixes ne sont pas des enveloppes à piloter avec des tirettes et leur détail appartient au module Charges fixes.
 
 ## 6. Operations et catégories : autorité des données
 
@@ -66,15 +67,9 @@ Pour toute opération, **la catégorie inscrite fait autorité**.
 
 ## 7. Moteur commun de ventilation
 
-Un socle commun doit lire `Operations + Categories` et produire des opérations propres :
+Un socle commun doit lire `Operations + Categories` et produire des opérations propres : catégorie et type, montant signé, dates disponibles, éventuel `charge_fixe_id`, informations structurées de carte.
 
-- catégorie et type de catégorie ;
-- montant signé ;
-- dates disponibles ;
-- éventuel `charge_fixe_id` ;
-- informations structurées de carte (`date_achat`, `carte_fin`, etc.).
-
-Puis chaque module applique sa doctrine :
+Puis chaque module applique sa doctrine.
 
 ### Analyse
 Lecture économique/historique : catégories et types, mouvements de trésorerie séparés du résultat économique.
@@ -95,60 +90,50 @@ Les champs structurés du classeur font autorité ; éviter les heuristiques tex
 
 Une dépense CB différée est identifiée par les données structurées pertinentes, notamment `date_achat` et `carte_fin`.
 
-Règle Cerbère :
-
 - **CB achetée en période M -> imputation budgétaire M+1** ;
 - autres mouvements -> imputation sur leur période M selon `date_comptable`, puis date de secours si nécessaire.
 
-Une CB est donc du **réel constaté**, mais du réel déjà engagé pour la période suivante.
+Une CB est donc du **réel constaté**, mais du réel déjà engagé pour la période suivante. Le règlement bancaire global de la carte différée ne doit jamais provoquer un double comptage.
 
-Le règlement bancaire global de la carte différée ne doit jamais provoquer un double comptage des achats individuels déjà imputés.
-
-## 9. Cerbère — mission
+## 9. Cerbère — mission et périmètre d'affichage
 
 Cerbère est le policier du budget quotidien. Il ne fait pas de stratégie et ne modifie ni le Réel ni la Planification.
 
-Il doit :
+Il doit construire P1…P6, mesurer les écarts, surveiller la liquidité, proposer des alertes explicables et conserver les dérogations locales.
 
-- construire P1…P6 à partir des canons, du Plan et du Réel ;
-- mesurer les écarts ;
-- surveiller la liquidité ;
-- proposer des compensations/alertes explicables ;
-- conserver les dérogations manuelles propres à chaque période.
+### Principe capital : le détail Cerbère est pilotable
+
+Le cockpit détaillé de Cerbère doit être **concentré sur ce sur quoi l'utilisateur peut agir**.
+
+Deux lectures doivent coexister sans être confondues :
+
+1. **Contrôle des enveloppes pilotables** : P0/Pn − dépenses pilotables − CB pilotables − Plan/réservations pilotables.
+2. **Contrôle de trésorerie global** : solde + R0 + mouvements de trésorerie et autres flux − CF0 − flux hors enveloppes − dépenses pilotables − Plan.
+
+Conséquences d'affichage :
+
+- Les **tirettes et le tableau détaillé** affichent seulement les postes P0 pilotables, `Divers`, et les lignes dynamiques de projets/réservations issues de Planification.
+- Les catégories valides **hors P0** ne deviennent ni `Divers` ni des enveloppes avec tirettes. Elles restent catégorisées et affectent la trésorerie globale ; Cerbère les résume dans une information synthétique du type **« Hors enveloppes pilotables »**.
+- CF0 reste une **case synthétique** ; son détail n'a pas à encombrer le cockpit quotidien.
+- Un dépassement P0/Pn ne doit être calculé qu'avec le **réel pilotable**. Une charge hors P0 peut détériorer la trésorerie globale sans être présentée comme un dépassement du budget pilotable.
 
 ### Poste de commandement M / M+1
 
 L'affichage principal est une **fenêtre roulante de deux mois**, M et M+1 simultanément, avec tirettes ajustables en connaissance de cause.
 
-Elle est coiffée d'une appréciation générale explicable sur les deux mois : trajectoire saine, vigilance, risque de trésorerie, etc., avec raisons chiffrées.
+Elle est coiffée d'une appréciation générale explicable sur les deux mois. Cette appréciation distingue autant que possible **tension des enveloppes pilotables** et **risque de trésorerie global**.
 
-Pour chaque mois, afficher notamment :
+Pour chaque mois, afficher notamment : budget pilotable, réel pilotable non-CB, CB pilotable héritée de M-1, Plan/réservations pilotables, capacité de trésorerie, synthèse CF0, synthèse hors enveloppes, objectifs, solde de départ et Pluxee lorsqu'il existe.
 
-- budget de la période / reste réellement pilotable ;
-- réel non-CB imputé ;
-- CB héritée de M-1 ;
-- Plan à venir ;
-- réservations/projets ;
-- objectifs en cours et progression fondée sur le réel ;
-- solde de départ ;
-- informations Pluxee lorsqu'elles existent.
-
-Pour M, afficher aussi les CB déjà engagées pour M+1.
-
-P3…P6 restent disponibles pour l'anticipation mais ne sont pas le poste de commandement quotidien.
+Pour M, afficher aussi les CB déjà engagées pour M+1. P3…P6 restent disponibles pour l'anticipation mais ne sont pas le poste de commandement quotidien.
 
 ## 10. Capacité et « reste réellement pilotable »
 
-Ne pas confondre :
+Ne pas confondre : budget alloué par P0/Pn, marge structurelle non affectée, reste dans une enveloppe, et capacité de trésorerie globale.
 
-- budget alloué par P0/Pn ;
-- marge structurelle non affectée ;
-- reste dans une enveloppe ;
-- capacité réellement pilotable.
+Le **reste pilotable** concerne uniquement les enveloppes pilotables. La **capacité de trésorerie** tient compte de l'ensemble des flux connus : solde initial, ressources/renforts, CF0, flux hors enveloppes, réel pilotable, CB, Plan et réservations.
 
-La **capacité réellement pilotable** représente ce qui peut encore être engagé sans mettre la période en danger compte tenu de ce que Cerbère sait à l'instant T.
-
-Elle tient notamment compte de : solde initial, ressources/renforts de trésorerie, CF0, réel imputé, CB héritées, Plan, réservations de projets et protections.
+Une catégorie hors P0 ne doit donc pas réduire artificiellement le « reste P0 » ; elle doit en revanche peser sur la trésorerie globale.
 
 ## 11. Solde de départ
 
@@ -158,116 +143,54 @@ Le solde initial est un **stock de trésorerie**, distinct de R0 qui décrit des
 
 ## 12. Santé nette
 
-Cerbère raisonne sur la **santé nette estimée/constatée** : dépenses de santé moins remboursements.
-
-Distinguer les remboursements déjà constatés des remboursements seulement attendus afin de ne pas créer une fausse impression de liquidité immédiate.
-
-Les cotisations de mutuelle relevant de CF0 restent des charges fixes.
+Cerbère raisonne sur la **santé nette estimée/constatée** : dépenses de santé moins remboursements. Distinguer remboursements constatés et attendus. Les cotisations de mutuelle relevant de CF0 restent des charges fixes.
 
 ## 13. Planification
 
 Terminologie : **Planification -> Objectifs -> Actions**, avec un cadre séparé **Événements**.
 
 ### Objectif
-Intention mesurable, par exemple : diminuer les charges fixes, solder Oney, préparer des vacances.
-
-La liste des objectifs est hiérarchique et agrège automatiquement l'impact des Actions liées.
+Intention mesurable. La liste des objectifs est hiérarchique et agrège automatiquement l'impact des Actions liées.
 
 ### Action
-Une Action doit rester aussi simple, concrète et quantifiable que possible : résilier Deezer, remplacer une mutuelle, verser une somme à Oney, etc.
+Une Action doit rester simple, concrète et quantifiable. Elle peut porter une nature : supprimer, remplacer, réduire, augmenter, rembourser, acheter, réserver, etc. Elle peut être rapprochée des données BudgetSoft.
 
-Elle peut porter une nature : supprimer, remplacer, réduire, augmenter, rembourser, acheter, réserver, etc.
-
-Elle peut être rapprochée des données BudgetSoft (charges fixes, crédits, opérations).
-
-Une Action confirmée avec montant/date suffisamment certains alimente les périodes concernées, **jamais P0**.
-
-Une option « réévaluer charges fixes » peut proposer l'effet sur CF0 (suppression/remplacement), avec validation humaine avant mutation d'une donnée structurante.
+Une Action confirmée avec montant/date suffisamment certains alimente les périodes concernées, **jamais P0**. Une option « réévaluer charges fixes » peut proposer l'effet sur CF0, avec validation humaine.
 
 ### Projets / réservations
-Un projet qui réserve réellement une somme doit produire une **ligne budgétaire dynamique identifiée** dans les périodes concernées (ex. `Remboursement Oney`, `Vacances`).
-
-Ne pas tout fondre dans une ligne générique `Projet`.
+Un projet qui réserve réellement une somme doit produire une **ligne budgétaire dynamique identifiée** dans les périodes concernées. Ne pas tout fondre dans une ligne générique `Projet`.
 
 ## 14. Processus de résolution et versionnement
 
-Certaines décisions nécessitent un processus de résolution.
-
-Exemple `Solder Oney` : BudgetSoft peut lire le capital restant dû, calculer les disponibilités soutenables sur P1…P6 et proposer un échéancier concret.
-
-Une proposition est calculée à l'instant T et n'est jamais une vérité définitive.
-
-Boucle normative :
+Certaines décisions nécessitent un processus de résolution. Une proposition est calculée à l'instant T et n'est jamais une vérité définitive.
 
 `Plan -> validation -> Cerbère -> Réel -> écart -> nouvelle proposition -> validation`
 
-Chaque révision crée une nouvelle version. Les anciennes versions restent dans l'historique.
-
-La progression d'un objectif est calculée à partir du **réel effectivement exécuté**, pas du prévu.
+Chaque révision crée une nouvelle version. La progression d'un objectif est calculée à partir du **réel effectivement exécuté**, pas du prévu.
 
 ## 15. Événements
 
-Un Événement représente un impondérable ou fait futur positif/négatif, non une stratégie.
-
-Formulaire unique : date, montant, sens, catégorie, certitude, commentaire, rapprochement au Réel.
-
-Une fois réalisé et rapproché avec l'opération réelle, il **quitte le prévisionnel** : le Réel prend le relais.
-
-Les anciens ajustements ponctuels de charges fixes (ex. suspension CASDEN) ont vocation à être représentés comme Événements lorsque c'est leur vraie nature fonctionnelle.
+Un Événement représente un impondérable ou fait futur positif/négatif, non une stratégie. Formulaire unique : date, montant, sens, catégorie, certitude, commentaire, rapprochement au Réel. Une fois réalisé et rapproché, il quitte le prévisionnel.
 
 ## 16. Pluxee
 
-Pluxee est une poche séparée de la monnaie bancaire.
-
-- abondement autour du 18 de chaque mois ;
-- solde de départ du cycle, idéalement au 27 au soir ou dernier solde disponible ;
-- opérations importées lorsqu'un module Pluxee sera disponible ;
-- distinction au minimum Courses / Restaurants ;
-- affichage `disponible aujourd'hui` distinct de l'abondement seulement attendu.
-
-Exemple d'affichage : total disponible, dont Courses X et Restaurants Y.
+Pluxee est une poche séparée de la monnaie bancaire : abondement autour du 18, solde de départ du cycle, opérations importées, distinction au minimum Courses / Restaurants, disponible aujourd'hui distinct de l'abondement attendu.
 
 ## 17. Recalculs
 
-Doivent invalider/recalculer Cerbère :
+Doivent invalider/recalculer Cerbère : import Operations/Pluxee, création/modification/suppression Action ou Événement, rapprochement, modification P0/R0/CF0, modification structurante des charges fixes.
 
-- import d'Operations ;
-- futur import Pluxee ;
-- création/modification/suppression d'Action ;
-- création/modification/suppression d'Événement ;
-- rapprochement au Réel ;
-- modification P0/R0/CF0 ;
-- modification structurante des charges fixes.
-
-Doctrine de performance : **invalidation immédiate, recalcul consolidé unique**. Un import de N opérations ne doit pas lancer N recalculs complets.
+Doctrine de performance : **invalidation immédiate, recalcul consolidé unique**.
 
 ## 18. Fiabilité et explicabilité
 
-Cerbère doit pouvoir distinguer autant que possible :
-
-- Réel ;
-- Confirmé ;
-- Prévu ;
-- Estimé.
-
-Une appréciation/alerte doit toujours être explicable par des raisons chiffrées ; pas de score opaque.
+Cerbère distingue autant que possible Réel, Confirmé, Prévu, Estimé. Une alerte doit toujours être explicable par des raisons chiffrées ; pas de score opaque.
 
 ## 19. Clôture d'un cycle
 
-À la clôture du 27 :
-
-1. enregistrer le dernier solde fiable ;
-2. figer le bilan du cycle ;
-3. assurer le passage des engagements CB vers la période suivante ;
-4. conserver les écarts P0/Pn/Réel pour Analyse ;
-5. faire de M+1 le nouveau M ;
-6. générer le nouvel horizon P6 à partir des canons et du Plan.
-
-L'historique ne doit pas être réécrit rétroactivement par un recalcul futur.
+À la clôture du 27 : enregistrer le solde fiable, figer le bilan, assurer le passage des engagements CB, conserver les écarts P0/Pn/Réel, faire de M+1 le nouveau M et générer le nouvel horizon P6. L'historique ne doit pas être réécrit rétroactivement.
 
 ## 20. Priorités de stabilisation
-
-Avant les fonctionnalités sophistiquées à long terme :
 
 1. fiabiliser le moteur commun Operations/Categories ;
 2. fiabiliser R0/CF0/P0 ;
@@ -277,5 +200,3 @@ Avant les fonctionnalités sophistiquées à long terme :
 6. développer Pluxee ;
 7. ajouter notifications mail ;
 8. nettoyer code, boutons et fonctions historiques devenus inutiles.
-
-Les projections sophistiquées à 3/5/10 ans, SMS et stratégie automatique avancée restent ultérieures.
