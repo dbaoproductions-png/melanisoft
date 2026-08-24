@@ -40,11 +40,7 @@ function chargerCerbereRoulant(){
 
   periodes.forEach((p,i)=>{
     const r=roll[i];assurerDiversDansPeriodeCerbere361_(p);
-    // V3.5 retire l'épargne de la capacité brute alors que l'épargne est déjà une
-    // ligne de P0. Dans le cockpit roulant on la réintègre ici pour ne la compter
-    // qu'une seule fois, lors de l'allocation de la ligne Épargne.
     if((p.enveloppes||[]).some(x=>String(x.categorie||'').trim()==='Épargne'))p.budgetDisponible=arrondirCerbereV3_(Number(p.budgetDisponible||0)+Number(p.epargne||0));
-
     const exist=new Set((p.enveloppes||[]).map(x=>String(x.categorie||'')));
     Object.keys(r.nonCbParCategorie).concat(Object.keys(r.cbParCategorie)).forEach(cat=>{if(cat&&!exist.has(cat)){(p.enveloppes||(p.enveloppes=[])).push({categorie:cat,canon:0,monetaire:0,pluxee:0,nature:'ajustable',prevu:0,planifie:0});exist.add(cat);}});
     let nonCb=0,cb=0,plan=0,budget=0;
@@ -73,9 +69,14 @@ function construireFenetreRoulanteCerbere361_(periodes){
   else if(budM<-.009||budN<-.009||cbDoute){niveau='orange';titre='Vigilance : budget dépassé ou imputation CB à contrôler';}
   else if(Number(n.roulant&&n.roulant.cbHeritee||0)>Number(n.budgetReparti||0)*.6){niveau='orange';titre='Vigilance : le mois suivant est déjà fortement engagé par la CB';}
   const raisons=[];
-  if(budM<-.009)raisons.push('M dépasse son budget alloué de '+arrondirCerbereV3_(Math.abs(budM))+' €');if(budN<-.009)raisons.push('M+1 dépasse déjà son budget alloué de '+arrondirCerbereV3_(Math.abs(budN))+' €');
-  if(Number(n.roulant&&n.roulant.cbHeritee||0)>0)raisons.push(arrondirCerbereV3_(n.roulant.cbHeritee)+' € de CB de M déjà imputés à M+1');if(Number(n.engagementsPlanifies||0)>0)raisons.push(arrondirCerbereV3_(n.engagementsPlanifies)+' € de Plan à venir sur M+1');if(Number(m.engagementsPlanifies||0)>0)raisons.push(arrondirirCerbereV3_(m.engagementsPlanifies)+' € de Plan à venir sur M');
-  if(cbDoute)raisons.push('des opérations ressemblant à des paiements CB restent à classifier');if(!recOk)raisons.push('écart de réconciliation entre index et lignes affichées');if(!raisons.length)raisons.push('budgets alloués et capacité de trésorerie restent positifs sur M et M+1');
+  if(budM<-.009)raisons.push('M dépasse son budget alloué de '+arrondirCerbereV3_(Math.abs(budM))+' €');
+  if(budN<-.009)raisons.push('M+1 dépasse déjà son budget alloué de '+arrondirCerbereV3_(Math.abs(budN))+' €');
+  if(Number(n.roulant&&n.roulant.cbHeritee||0)>0)raisons.push(arrondirCerbereV3_(n.roulant.cbHeritee)+' € de CB de M déjà imputés à M+1');
+  if(Number(n.engagementsPlanifies||0)>0)raisons.push(arrondirCerbereV3_(n.engagementsPlanifies)+' € de Plan à venir sur M+1');
+  if(Number(m.engagementsPlanifies||0)>0)raisons.push(arrondirCerbereV3_(m.engagementsPlanifies)+' € de Plan à venir sur M');
+  if(cbDoute)raisons.push('des opérations ressemblant à des paiements CB restent à classifier');
+  if(!recOk)raisons.push('écart de réconciliation entre index et lignes affichées');
+  if(!raisons.length)raisons.push('budgets alloués et capacité de trésorerie restent positifs sur M et M+1');
   return{niveau,titre,raisons,resteM:arrondirCerbereV3_(capM),resteM1:arrondirCerbereV3_(capN),resteBudgetM:arrondirCerbereV3_(budM),resteBudgetM1:arrondirCerbereV3_(budN)};
 }
 
