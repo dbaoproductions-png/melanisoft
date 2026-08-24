@@ -1,24 +1,44 @@
 <script>
 (function(){'use strict';
-const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c])),money=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));
+const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),money=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));
 const mois=p=>{const d=new Date(p?.periode?.fin||p?.periode?.debut);return isNaN(d)?'P'+(p?.index||''):d.toLocaleDateString('fr-FR',{month:'long'}).replace(/^./,c=>c.toUpperCase());};
 let data=null,req=0;
 
-function appreciation(d){
-  const f=d.fenetreRoulante||{},cls='cr36-'+(f.niveau||'vert');
-  return `<section class="cr36-app ${cls}"><div><small>APPRÉCIATION GÉNÉRALE · 2 MOIS ROULANTS</small><h2>${esc(f.titre||'Lecture de la trajectoire')}</h2><p>${(f.raisons||[]).map(esc).join(' · ')||'Aucune tension particulière détectée.'}</p></div><div class="cr36-restes"><span>Capacité M <b>${money(f.resteM)}</b><small>après réel + Plan</small></span><span>Capacité M+1 <b>${money(f.resteM1)}</b><small>après réel engagé + Plan</small></span></div></section>`;
+function etatFenetreClient(){
+  const p=data?.periodes||[],m=p[0],n=p[1];if(!m||!n)return{niveau:'vert',titre:'Lecture de la trajectoire',raisons:[],resteM:0,resteM1:0};
+  const capM=Number(m.capacitePilotable||0),capN=Number(n.capacitePilotable||0),budM=Number(m.resteBudgetAlloue||0),budN=Number(n.resteBudgetAlloue||0);
+  const recOk=[m,n].every(x=>Math.abs(Number(x.roulant?.reconciliation?.ecart||0))<.01),cbDoute=[m,n].some(x=>Number(x.roulant?.candidatsCbNonReconnus||0)>0);
+  let niveau='vert',titre='Trajectoire saine sur deux mois';
+  if(!recOk){niveau='rouge';titre='Calcul incomplet : le réel affiché ne se réconcilie pas';}
+  else if(capM<-.009||capN<-.009){niveau='rouge';titre='Risque de trésorerie sur la fenêtre roulante';}
+  else if(budM<-.009||budN<-.009||cbDoute){niveau='orange';titre='Vigilance : budget dépassé ou imputation CB à contrôler';}
+  else if(Number(n.roulant?.cbHeritee||0)>Number(n.budgetReparti||0)*.6){niveau='orange';titre='Vigilance : le mois suivant est déjà fortement engagé par la CB';}
+  const raisons=[];
+  if(budM<-.009)raisons.push('M dépasse son budget alloué de '+money(Math.abs(budM)));
+  if(budN<-.009)raisons.push('M+1 dépasse déjà son budget alloué de '+money(Math.abs(budN)));
+  if(Number(n.roulant?.cbHeritee||0)>0)raisons.push(money(n.roulant.cbHeritee)+' de CB de M déjà imputés à M+1');
+  if(Number(n.engagementsPlanifies||0)>0)raisons.push(money(n.engagementsPlanifies)+' de Plan à venir sur M+1');
+  if(Number(m.engagementsPlanifies||0)>0)raisons.push(money(m.engagementsPlanifies)+' de Plan à venir sur M');
+  if(cbDoute)raisons.push('des opérations ressemblant à des paiements CB restent à classifier');
+  if(!recOk)raisons.push('écart de réconciliation entre index et lignes affichées');
+  if(!raisons.length)raisons.push('budgets alloués et capacité de trésorerie restent positifs sur M et M+1');
+  return{niveau,titre,raisons,resteM:capM,resteM1:capN};
+}
+function appreciation(){
+  const f=etatFenetreClient();
+  return `<section id="cr36-app" class="cr36-app cr36-${f.niveau}"><div><small>APPRÉCIATION GÉNÉRALE · 2 MOIS ROULANTS</small><h2 data-app-title>${esc(f.titre)}</h2><p data-app-reasons>${f.raisons.map(esc).join(' · ')}</p></div><div class="cr36-restes"><span>Capacité M <b data-app-m>${money(f.resteM)}</b><small>après réel + Plan</small></span><span>Capacité M+1 <b data-app-m1>${money(f.resteM1)}</b><small>après réel engagé + Plan</small></span></div></section>`;
 }
 function topo(p,pos){
   const r=p.roulant||{},delta=Number(p.budgetReparti||0)-Number(data.p0?.totaux?.monetaire||0),rb=Number(p.resteBudgetAlloue||0),cap=Number(p.capacitePilotable||0),marge=Number(p.margeNonAffectee||0);
-  const cbDiag=Number(r.operationsCb||0)===0&&Number(r.candidatsCbNonReconnus||0)>0?`<small class="warn">${r.candidatsCbNonReconnus} opération(s) à vérifier comme CB</small>`:'';
+  const cbDiag=Number(r.candidatsCbNonReconnus||0)>0?`<small class="warn">${r.candidatsCbNonReconnus} opération(s) ressemblant à une CB à vérifier</small>`:'';
   return `<div class="cr36-topo">
-    <div><span>Budget alloué pour la période</span><b>${money(p.budgetReparti)}</b><small>${Math.abs(delta)<.01?'conforme à P0':(delta>0?'+':'')+money(delta)+' par rapport à P0'}</small></div>
+    <div><span>Budget alloué pour la période</span><b data-budget>${money(p.budgetReparti)}</b><small data-delta>${Math.abs(delta)<.01?'conforme à P0':(delta>0?'+':'')+money(delta)+' par rapport à P0'}</small></div>
     <div><span>Réel non-CB imputé à ${esc(mois(p))}</span><b>${money(r.reelNonCb)}</b><small>hors charges fixes et lignes techniques</small></div>
     <div><span>CB héritée de M−1</span><b>${money(r.cbHeritee)}</b><small>achats déjà engagés sur cette période</small>${cbDiag}</div>
     <div><span>Plan à venir catégorisé</span><b>${money(p.planDansEnveloppes||0)}</b><small>Actions / Événements encore prévisionnels</small></div>
-    <div><span>Reste dans le budget alloué</span><b class="${rb<0?'neg':''}">${money(rb)}</b><small>budget − réel imputé − Plan</small></div>
-    <div><span>Capacité réellement pilotable</span><b class="${cap<0?'neg':''}">${money(cap)}</b><small>capacité de trésorerie après réel + Plan</small></div>
-    <div><span>Marge structurelle non affectée</span><b class="${marge<0?'neg':''}">${money(marge)}</b><small>capacité brute − budget alloué</small></div>
+    <div><span>Reste dans le budget alloué</span><b data-reste-budget class="${rb<0?'neg':''}">${money(rb)}</b><small>budget − réel imputé − Plan</small></div>
+    <div><span>Capacité réellement pilotable</span><b data-capacite class="${cap<0?'neg':''}">${money(cap)}</b><small>capacité de trésorerie après réel + Plan</small></div>
+    <div><span>Marge structurelle non affectée</span><b data-marge class="${marge<0?'neg':''}">${money(marge)}</b><small>capacité brute − budget alloué</small></div>
     ${pos===0?`<div><span>CB déjà engagée pour M+1</span><b>${money(r.cbEngageePourSuivant)}</b><small>${Number(r.operationsCb||0)} opération(s) CB reconnue(s)</small></div>`:''}
   </div>`;
 }
@@ -31,31 +51,30 @@ function budget(p,pos){
   const audit=`<details class="cr36-audit"><summary>Contrôles de cohérence</summary><div>Réconciliation réel affiché : <b>${Math.abs(Number(r.reconciliation?.ecart||0))<.01?'OK':'ÉCART '+money(r.reconciliation?.ecart)}</b> · Charges fixes neutralisées : ${money(r.chargesFixesNeutralisees)} · Lignes techniques neutralisées : ${money(r.lignesTechniquesNeutralisees)} · Règlements CB neutralisés : ${money(r.reglementsCarteNeutralises)}</div>${Object.keys(r.diversSources||{}).length?`<div>Divers regroupe : ${Object.keys(r.diversSources).map(k=>esc(k)+' ('+r.diversSources[k]+')').join(', ')}</div>`:''}</details>`;
   return `<article class="cr36-month" id="${id}"><header><div><small>${pos===0?'M · MOIS EN COURS':'M+1 · MOIS SUIVANT'}</small><h3>${esc(nom)}</h3></div><span>${new Date(p.periode.debut).toLocaleDateString('fr-FR')} → ${new Date(p.periode.fin).toLocaleDateString('fr-FR')}</span></header>${topo(p,pos)}${audit}<div class="cr36-actions"><button class="secondary-button" data-reset>Revenir à P0</button><button class="primary-button" data-save>Valider uniquement ${esc(nom)}</button></div><div class="cr36-head"><span>Catégorie</span><span>P0</span><span>Budget ${esc(nom)}</span><span>Réel non-CB</span><span>CB M−1</span><span>Plan</span><span>Reste budget</span></div><div class="cr36-lines">${(p.enveloppes||[]).map((x,j)=>ligne(x,j)).join('')}</div></article>`;
 }
+function majSynthese(root,p){
+  const delta=Number(p.budgetReparti||0)-Number(data.p0?.totaux?.monetaire||0),set=(sel,v,neg)=>{const e=root.querySelector(sel);if(e){e.textContent=money(v);if(neg)e.classList.toggle('neg',Number(v)<0);}};
+  set('[data-budget]',p.budgetReparti);set('[data-reste-budget]',p.resteBudgetAlloue,true);set('[data-capacite]',p.capacitePilotable,true);set('[data-marge]',p.margeNonAffectee,true);
+  const d=root.querySelector('[data-delta]');if(d)d.textContent=Math.abs(delta)<.01?'conforme à P0':(delta>0?'+':'')+money(delta)+' par rapport à P0';
+}
+function majAppreciation(){
+  const f=etatFenetreClient(),root=$('cr36-app');if(!root)return;root.className='cr36-app cr36-'+f.niveau;
+  root.querySelector('[data-app-title]').textContent=f.titre;root.querySelector('[data-app-reasons]').textContent=f.raisons.join(' · ');root.querySelector('[data-app-m]').textContent=money(f.resteM);root.querySelector('[data-app-m1]').textContent=money(f.resteM1);
+}
 function recalculerPeriode(p,root){
   let total=0,reel=0,cb=0,plan=0;
-  root.querySelectorAll('.cr36-line').forEach((row,j)=>{
-    const inp=row.querySelector('input'),v=Number(inp.value||0),x=p.enveloppes[j];x.prevu=v;total+=v;
-    reel+=Number(x.reelNonCb||0);cb+=Number(x.cbHeritee||0);plan+=Number(x.planifie||0);
-    row.querySelector('.cr36-slider b').textContent=money(v);
-    const reste=v-Number(x.reelImpute||0)-Number(x.planifie||0),last=row.lastElementChild;
-    last.textContent=money(reste);last.classList.toggle('neg',reste<0);
-  });
-  p.budgetReparti=total;p.planDansEnveloppes=plan;
-  p.resteBudgetAlloue=total-reel-cb-plan;
-  p.margeNonAffectee=Number(p.budgetDisponible||0)-total;
-  p.resteAVentiler=p.margeNonAffectee;
-  p.capacitePilotable=Number(p.budgetDisponible||0)-reel-cb-plan;
+  root.querySelectorAll('.cr36-line').forEach((row,j)=>{const inp=row.querySelector('input'),v=Number(inp.value||0),x=p.enveloppes[j];x.prevu=v;total+=v;reel+=Number(x.reelNonCb||0);cb+=Number(x.cbHeritee||0);plan+=Number(x.planifie||0);row.querySelector('.cr36-slider b').textContent=money(v);const reste=v-Number(x.reelImpute||0)-Number(x.planifie||0),last=row.lastElementChild;last.textContent=money(reste);last.classList.toggle('neg',reste<0);});
+  p.budgetReparti=total;p.planDansEnveloppes=plan;p.resteBudgetAlloue=total-reel-cb-plan;p.margeNonAffectee=Number(p.budgetDisponible||0)-total;p.resteAVentiler=p.margeNonAffectee;p.capacitePilotable=Number(p.budgetDisponible||0)-reel-cb-plan;
+  majSynthese(root,p);majAppreciation();
 }
 function brancher(p,pos){
-  const root=$('cr36-'+pos);if(!root)return;
-  const maj=()=>recalculerPeriode(p,root);
+  const root=$('cr36-'+pos);if(!root)return;const maj=()=>recalculerPeriode(p,root);
   root.querySelectorAll('.cr36-line').forEach(row=>{const inp=row.querySelector('input');inp.oninput=maj;row.querySelectorAll('button[data-d]').forEach(b=>b.onclick=()=>{inp.value=Math.max(0,Math.min(Number(inp.max),Number(inp.value)+Number(b.dataset.d)));maj();});});
   root.querySelector('[data-save]').onclick=()=>{maj();if(Number(p.margeNonAffectee)<-.009){alert('Le budget alloué dépasse la capacité structurelle de cette période. Réduisez une ou plusieurs enveloppes avant validation.');return;}const postes=p.enveloppes.map(x=>({categorie:x.categorie,montant:Number(x.prevu||0)}));google.script.run.withSuccessHandler(()=>window.chargerCerbereV2UI()).withFailureHandler(e=>alert(e.message||e)).sauvegarderBudgetPeriodeCerbereV33({cle:p.clePilotage,postes});};
   root.querySelector('[data-reset]').onclick=()=>{if(confirm('Supprimer les ajustements locaux de '+mois(p)+' et réhériter du P0 courant ?'))google.script.run.withSuccessHandler(()=>window.chargerCerbereV2UI()).reinitialiserBudgetPeriodeCerbereV33(p.clePilotage);};
 }
 function rendre(d){
   const z=$('cerbere-content');if(!z)return;const p=d.periodes||[],r=d.reel||{};
-  z.innerHTML=`<div class="cr36-canons"><span><small>P0 · DÉPENSES MAÎTRE</small><b>${money(d.p0?.totaux?.monetaire)}</b></span><span><small>R0 · RECETTES MAÎTRE</small><b>${money(d.recettesCanon?.total)}</b></span><span><small>SOLDE ACTUEL</small><b>${r.soldeBancaire==null?'—':money(r.soldeBancaire)}</b></span><span><small>MOTEUR</small><b>${esc(d.version||'')}</b></span></div>${appreciation(d)}<div class="cr36-window">${p[0]?budget(p[0],0):''}${p[1]?budget(p[1],1):''}</div><details class="cr36-horizon"><summary>Voir l’horizon P3–P6</summary><div>${p.slice(2).map(x=>`<span><b>${esc(mois(x))}</b> · capacité ${money(x.capacitePilotable??x.budgetDisponible)} · plan ${money(x.engagementsPlanifies)}</span>`).join('')}</div></details>`;
+  z.innerHTML=`<div class="cr36-canons"><span><small>P0 · DÉPENSES MAÎTRE</small><b>${money(d.p0?.totaux?.monetaire)}</b></span><span><small>R0 · RECETTES MAÎTRE</small><b>${money(d.recettesCanon?.total)}</b></span><span><small>SOLDE ACTUEL</small><b>${r.soldeBancaire==null?'—':money(r.soldeBancaire)}</b></span><span><small>MOTEUR</small><b>${esc(d.version||'')}</b></span></div>${appreciation()}<div class="cr36-window">${p[0]?budget(p[0],0):''}${p[1]?budget(p[1],1):''}</div><details class="cr36-horizon"><summary>Voir l’horizon P3–P6</summary><div>${p.slice(2).map(x=>`<span><b>${esc(mois(x))}</b> · capacité ${money(x.capacitePilotable??x.budgetDisponible)} · plan ${money(x.engagementsPlanifies)}</span>`).join('')}</div></details>`;
   if(p[0])brancher(p[0],0);if(p[1])brancher(p[1],1);
 }
 window.chargerCerbereV2UI=function(){
