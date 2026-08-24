@@ -1,8 +1,8 @@
-const CERBERE_RECETTES_CANON_VERSION = '1.0.0';
+const CERBERE_RECETTES_CANON_VERSION = '1.1.0';
 const CERBERE_RECETTES_CANON_SHEET = 'Cerbere_Recettes_Canon_V1';
 
 /**
- * Canon de recettes de Cerbère.
+ * Canon de recettes de Cerbère (R0).
  * Il décrit le mois normal attendu. Le réel courant et les événements/actions
  * ne réécrivent jamais ce canon : ils le pondèrent seulement dans P1-P6.
  */
@@ -23,6 +23,7 @@ function chargerCanonRecettesCerbereV1() {
     .sort((a,b)=>a.ordre-b.ordre||a.categorie.localeCompare(b.categorie,'fr'));
   return {
     version:CERBERE_RECETTES_CANON_VERSION,
+    principe:'R0 est la référence maître persistante des recettes normales ; le Plan et le réel ne la réécrivent pas.',
     postes,
     total:arrondirCerbereV3_(postes.reduce((s,x)=>s+x.montant,0))
   };
@@ -65,5 +66,14 @@ function enregistrerCanonRecettesCerbereV1(postes) {
   ]).filter(r=>r[0]);
   if(sh.getLastRow()>1)sh.getRange(2,1,sh.getLastRow()-1,Math.max(sh.getLastColumn(),headers.length)).clearContent();
   if(rows.length)sh.getRange(2,1,rows.length,headers.length).setValues(rows);
+  SpreadsheetApp.flush();
+  try{
+    if(typeof invaliderProjectionBudgetSoft_==='function')invaliderProjectionBudgetSoft_('validation_R0');
+    else{
+      const props=PropertiesService.getDocumentProperties();
+      props.setProperty('PLAN_DERNIER_RECALCUL',new Date().toISOString());
+      props.setProperty('PLAN_DERNIERE_ORIGINE','validation_R0');
+    }
+  }catch(e){}
   return chargerCanonRecettesCerbereV1();
 }
