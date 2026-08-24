@@ -1,4 +1,4 @@
-const CERBERE_CANON_V1_VERSION = '1.0.1';
+const CERBERE_CANON_V1_VERSION = '1.1.0';
 
 /** Budget canonique prévisionnel. N'écrit jamais dans les opérations réelles. */
 function chargerCanonCerbereV1() {
@@ -10,7 +10,7 @@ function chargerCanonCerbereV1() {
   const monetaire = rows.reduce((s,r)=>s+Number(r.monetaire||0),0);
   return {
     version:CERBERE_CANON_V1_VERSION,
-    principe:'Une hausse doit être compensée : le total pilotable ne se crée pas.',
+    principe:'P0 est la référence maître persistante. P1–P6 n’enregistrent que leurs dérogations locales.',
     pluxeeMensuel:154,
     moisSansPluxee:5,
     epargneProtegee:50,
@@ -19,8 +19,17 @@ function chargerCanonCerbereV1() {
   };
 }
 
+/**
+ * Valide un nouveau P0 et rebase les dérogations P1–P6.
+ *
+ * Règle : une valeur locale qui était identique à l'ancien P0 n'était pas une
+ * vraie dérogation ; elle est supprimée afin que la période hérite du nouveau P0.
+ * Une valeur réellement différente de l'ancien P0 reste locale à sa période.
+ */
 function enregistrerCanonCerbereV1(postes) {
   if (!Array.isArray(postes) || !postes.length) throw new Error('Aucun poste canonique à enregistrer.');
+  const avant = chargerCanonCerbereV1();
+  const ancienP0 = Object.fromEntries((avant.postes||[]).map(x=>[String(x.categorie||''),Number(x.monetaire||0)]));
   const sh = assurerCanonCerbereV1_();
   const existants = lireCanonCerbereV1_(sh);
   const map = {};
@@ -34,8 +43,34 @@ function enregistrerCanonCerbereV1(postes) {
     const vals=[cat,arrondirCerbereCanon_(mon),arrondirCerbereCanon_(plu),String(old.nature||p.nature||'ajustable'),Number(old.ordre||p.ordre||i+1),protege,true];
     if(map[cat]) sh.getRange(map[cat].row,1,1,7).setValues([vals]); else sh.appendRow(vals);
   });
+  rebaserAjustementsPeriodesApresModificationP0_(ancienP0);
   SpreadsheetApp.flush();
+  try {
+    const props=PropertiesService.getDocumentProperties();
+    props.setProperty('CERBERE_P0_DERNIERE_VALIDATION',new Date().toISOString());
+    props.setProperty('PLAN_DERNIER_RECALCUL',new Date().toISOString());
+    props.setProperty('PLAN_DERNIERE_ORIGINE','validation_P0');
+  } catch(e) {}
   return chargerCanonCerbereV1();
+}
+
+function rebaserAjustementsPeriodesApresModificationP0_(ancienP0){
+  const ss=SpreadsheetApp.getActive();
+  const sh=ss.getSheetByName('Cerbere_Ajustements');
+  if(!sh||sh.getLastRow()<2)return {supprimes:0,conserves:0};
+  const hs=sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(x=>String(x||'').trim());
+  const iCat=hs.indexOf('categorie'),iMont=hs.indexOf('montant');
+  if(iCat<0||iMont<0)return {supprimes:0,conserves:0};
+  const rows=sh.getRange(2,1,sh.getLastRow()-1,hs.length).getValues();
+  const garder=[];let supprimes=0;
+  rows.forEach(r=>{
+    const cat=String(r[iCat]||'').trim(),mont=Number(r[iMont]||0);
+    const base=Object.prototype.hasOwnProperty.call(ancienP0,cat)?Number(ancienP0[cat]):0;
+    if(Number.isFinite(mont)&&Math.abs(mont-base)<=.009)supprimes++;else garder.push(r);
+  });
+  sh.getRange(2,1,sh.getLastRow()-1,hs.length).clearContent();
+  if(garder.length)sh.getRange(2,1,garder.length,hs.length).setValues(garder);
+  return {supprimes,conserves:garder.length};
 }
 
 function lireCanonCerbereV1_(sh){
