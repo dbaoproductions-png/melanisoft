@@ -1,4 +1,4 @@
-const CERBERE_CANON_V1_VERSION = '1.1.0';
+const CERBERE_CANON_V1_VERSION = '1.1.1';
 
 /** Budget canonique prévisionnel. N'écrit jamais dans les opérations réelles. */
 function chargerCanonCerbereV1() {
@@ -21,10 +21,9 @@ function chargerCanonCerbereV1() {
 
 /**
  * Valide un nouveau P0 et rebase les dérogations P1–P6.
- *
- * Règle : une valeur locale qui était identique à l'ancien P0 n'était pas une
- * vraie dérogation ; elle est supprimée afin que la période hérite du nouveau P0.
- * Une valeur réellement différente de l'ancien P0 reste locale à sa période.
+ * Une valeur locale identique à l'ancien P0 n'était pas une vraie dérogation :
+ * elle est supprimée pour que la période hérite du nouveau P0.
+ * Une vraie dérogation reste propre à sa période.
  */
 function enregistrerCanonCerbereV1(postes) {
   if (!Array.isArray(postes) || !postes.length) throw new Error('Aucun poste canonique à enregistrer.');
@@ -43,13 +42,17 @@ function enregistrerCanonCerbereV1(postes) {
     const vals=[cat,arrondirCerbereCanon_(mon),arrondirCerbereCanon_(plu),String(old.nature||p.nature||'ajustable'),Number(old.ordre||p.ordre||i+1),protege,true];
     if(map[cat]) sh.getRange(map[cat].row,1,1,7).setValues([vals]); else sh.appendRow(vals);
   });
-  rebaserAjustementsPeriodesApresModificationP0_(ancienP0);
+  const rebase=rebaserAjustementsPeriodesApresModificationP0_(ancienP0);
   SpreadsheetApp.flush();
-  try {
+  try{
     const props=PropertiesService.getDocumentProperties();
     props.setProperty('CERBERE_P0_DERNIERE_VALIDATION',new Date().toISOString());
-    props.setProperty('PLAN_DERNIER_RECALCUL',new Date().toISOString());
-    props.setProperty('PLAN_DERNIERE_ORIGINE','validation_P0');
+    props.setProperty('CERBERE_P0_REBASE',JSON.stringify(rebase));
+    if(typeof invaliderProjectionBudgetSoft_==='function')invaliderProjectionBudgetSoft_('validation_P0');
+    else{
+      props.setProperty('PLAN_DERNIER_RECALCUL',new Date().toISOString());
+      props.setProperty('PLAN_DERNIERE_ORIGINE','validation_P0');
+    }
   } catch(e) {}
   return chargerCanonCerbereV1();
 }
