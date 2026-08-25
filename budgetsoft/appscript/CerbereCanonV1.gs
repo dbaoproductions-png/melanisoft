@@ -1,4 +1,4 @@
-const CERBERE_CANON_V1_VERSION = '1.1.2';
+const CERBERE_CANON_V1_VERSION = '1.2.0';
 
 /** Budget canonique prévisionnel. N'écrit jamais dans les opérations réelles. */
 function chargerCanonCerbereV1() {
@@ -10,7 +10,7 @@ function chargerCanonCerbereV1() {
   const monetaire = rows.reduce((s,r)=>s+Number(r.monetaire||0),0);
   return {
     version:CERBERE_CANON_V1_VERSION,
-    principe:'P0 est la référence maître persistante. P1–P6 n’enregistrent que leurs dérogations locales.',
+    principe:'P0 est la référence maître persistante. Le Réel ne le modifie jamais ; seule une validation explicite de P0 change la référence.',
     pluxeeMensuel:154,
     moisSansPluxee:5,
     epargneProtegee:50,
@@ -87,7 +87,7 @@ function assurerPosteDiversCerbereCanon_(sh){
   const rows=lireCanonCerbereV1_(sh);
   const parCat=Object.fromEntries(rows.map((r,i)=>[String(r.categorie||'').trim(),{r,row:i+2}]));
   if(!parCat['Divers']) sh.appendRow(['Divers',0,0,'ajustable',10,false,true]);
-  // Divers est une soupape à 0. Épargne et Projet restent après les catégories courantes.
+  // Divers est une vraie catégorie à 0 par défaut, jamais une réserve de solde.
   const last=sh.getLastRow();
   if(last<2)return;
   const vals=sh.getRange(2,1,last-1,7).getValues();
@@ -111,4 +111,71 @@ function assurerCanonCerbereV1_(){
   const d=[['Courses',656,94,'essentiel',1,false,true],['Santé',50,0,'essentiel',2,false,true],['Animaux',50,0,'ajustable',3,false,true],['Maison / entretien',0,0,'ajustable',4,false,true],['Voitures',95,0,'ajustable',5,false,true],['Transports',39,0,'essentiel',6,false,true],['Restaurants',79,60,'discretionnaire',7,false,true],['Loisirs',100,0,'discretionnaire',8,false,true],['Achats personnels',200,0,'discretionnaire',9,false,true],['Divers',0,0,'ajustable',10,false,true],['Épargne',50,0,'protection',11,true,true],['Projet',0,0,'solde',12,false,true]];
   sh.getRange(2,1,d.length,7).setValues(d); sh.setFrozenRows(1); return sh;
 }
+
+/**
+ * Historique d'aide au reparamétrage de P0.
+ * Il applique exactement la ventilation Cerbère : catégorie enregistrée autoritaire,
+ * charges fixes exclues, santé nette, CB de M imputée à M+1.
+ * Cet historique n'écrit jamais dans P0.
+ */
+function chargerHistoriqueP0CerbereV1(nombreMois){
+  const n=Math.max(2,Math.min(12,Number(nombreMois||6)));
+  const canon=chargerCanonCerbereV1();
+  const periodes=construirePeriodesHistoriqueP0CerbereV1_(n);
+  const operations=lireTable_('Operations');
+  const categories=lireTable_('Categories');
+  if(typeof construireVentilationOperationsBudgetSoft_!=='function')throw new Error('Moteur commun de ventilation indisponible.');
+  const ventilation=construireVentilationOperationsBudgetSoft_(operations,categories,periodes);
+  const lignes=(canon.postes||[]).map(p=>{
+    const categorie=String(p.categorie||'').trim();
+    const valeurs=(ventilation.buckets||[]).map(b=>arrondirCerbereCanon_(Number(b.nonCbParCategorie&&b.nonCbParCategorie[categorie]||0)+Number(b.cbParCategorie&&b.cbParCategorie[categorie]||0)));
+    return {categorie,p0:Number(p.monetaire||0),valeurs,moyenne:arrondirCerbereCanon_(valeurs.reduce((s,x)=>s+x,0)/Math.max(1,valeurs.length))};
+  });
+  return {
+    version:CERBERE_CANON_V1_VERSION,
+    doctrine:'Historique réel engagé selon la doctrine Cerbère. Il aide à décider ; il ne modifie jamais P0 automatiquement.',
+    periodes:periodes.map((p,i)=>({debut:formatDateCanonV1_(p.debut),fin:formatDateCanonV1_(p.fin),enCours:i===periodes.length-1})),
+    lignes,
+    stats:ventilation.stats||{}
+  };
+}
+
+function construirePeriodesHistoriqueP0CerbereV1_(n){
+  const now=new Date();
+  const debutCourant=now.getDate()>=28?new Date(now.getFullYear(),now.getMonth(),28):new Date(now.getFullYear(),now.getMonth()-1,28);
+  const out=[];
+  for(let k=n-1;k>=0;k--){
+    const d=new Date(debutCourant.getFullYear(),debutCourant.getMonth()-k,28);
+    const f=new Date(d.getFullYear(),d.getMonth()+1,27);
+    out.push({debut:d,fin:f});
+  }
+  return out;
+}
+
+/** Lecture synthétique du référentiel CF0 sans le modifier. */
+function chargerEtatCF0CerbereV1(){
+  const charges=lireTable_('Charges_fixes');
+  const now=new Date();
+  const debut=now.getDate()>=28?new Date(now.getFullYear(),now.getMonth(),28):new Date(now.getFullYear(),now.getMonth()-1,28);
+  const fin=new Date(debut.getFullYear(),debut.getMonth()+1,27);
+  const periode={debut,fin};
+  const actives=(charges||[]).filter(c=>{
+    try{if(typeof chargeActiveCerbere_==='function')return chargeActiveCerbere_(c,periode);}catch(e){}
+    const v=String(c.actif==null?'true':c.actif).trim().toLowerCase();return !['false','non','0'].includes(v);
+  }).map(c=>({id:String(c.id||''),libelle:String(c.libelle||c.libelle_bancaire||'Charge fixe'),montant:Math.abs(Number(c.montant!=null?c.montant:c.montant_indicatif||0)),frequence:String(c.frequence||''),date_debut:c.date_debut||'',date_fin:c.date_fin||''}));
+  return {
+    total:arrondirCerbereCanon_(actives.reduce((s,c)=>s+c.montant,0)),
+    nombreActives:actives.length,
+    periode:{debut:formatDateCanonV1_(debut),fin:formatDateCanonV1_(fin)},
+    charges:actives,
+    doctrine:'CF0 est le référentiel maître. La période doit en recevoir une photographie au 28 ; le Réel de la période ne réécrit jamais CF0.'
+  };
+}
+
+function recalculerEtatCF0CerbereV1(){
+  try{if(typeof invaliderProjectionBudgetSoft_==='function')invaliderProjectionBudgetSoft_('recalcul_CF0_manuel');}catch(e){}
+  return chargerEtatCF0CerbereV1();
+}
+
+function formatDateCanonV1_(d){return Utilities.formatDate(new Date(d),Session.getScriptTimeZone(),'yyyy-MM-dd');}
 function arrondirCerbereCanon_(n){return Math.round(Number(n||0)*100)/100;}
