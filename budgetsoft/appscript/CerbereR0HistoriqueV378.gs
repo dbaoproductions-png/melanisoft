@@ -1,13 +1,15 @@
-const CERBERE_R0_HISTORIQUE_V378_VERSION='3.7.9';
+const CERBERE_R0_HISTORIQUE_V378_VERSION='3.7.10';
 
 /**
- * Applique les changements datés du canon R0 sans réécrire l'histoire.
- * Revenus fonciers : 755 € jusqu'au cycle d'août 2026,
+ * Applique d'abord la passe comptable 3.7.10, puis les changements datés du canon R0
+ * sans réécrire l'histoire. Revenus fonciers : 755 € jusqu'au cycle d'août 2026,
  * puis 780 € à partir du cycle ouvrant le 28/08/2026.
- * Passe défensive : aucune hypothèse sur la présence des tableaux.
  */
 function appliquerHistoriqueR0V378_(base){
   if(!base||base.ok===false)return base;
+  if(typeof appliquerCorrectifsComptablesV3710_==='function')base=appliquerCorrectifsComptablesV3710_(base);
+  if(!base||base.ok===false)return base;
+
   const postes=Array.isArray(base.recettesCanon&&base.recettesCanon.postes)?base.recettesCanon.postes:[];
   const periodes=Array.isArray(base.periodes)?base.periodes:[];
   if(!postes.length||!periodes.length){
@@ -64,7 +66,7 @@ function appliquerHistoriqueR0V378_(base){
 
   base.version=CERBERE_R0_HISTORIQUE_V378_VERSION;
   base.diagnostic=base.diagnostic||{};
-  base.diagnostic.r0_historique='canon R0 daté : ancien montant avant date_effet, nouveau montant à partir du cycle concerné';
+  base.diagnostic.r0_historique='canon R0 daté après passe comptable 3.7.10';
   return base;
 }
 
