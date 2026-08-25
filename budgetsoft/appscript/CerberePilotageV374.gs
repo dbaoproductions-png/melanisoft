@@ -1,9 +1,10 @@
-const CERBERE_PILOTAGE_V374_VERSION='3.7.7';
+const CERBERE_PILOTAGE_V374_VERSION='3.7.8';
 
 /**
- * Cerbère 3.7.7 — cockpit court terme audité.
+ * Cerbère 3.7.8 — cockpit court terme audité.
  * La 3.7.6 fixe la doctrine d'affichage ; appliquerAuditCerbereV377_ fiabilise
- * les briques comptables SS1 / Rt1 / CFt1 / DPt1 / HEt1 avant affichage.
+ * les briques comptables SS1 / Rt1 / CFt1 / DPt1 / HEt1 ;
+ * appliquerHistoriqueR0V378_ applique ensuite les changements de R0 selon leur date d'effet.
  */
 function appliquerResteReellementPilotableV374_(base){
   if(!base||base.ok===false)return base;
@@ -41,6 +42,8 @@ function recalculerCfFutursDepuisCf0CourantV375_(base){
 
 function chargerCerbereV374(){
   const base=appliquerResteReellementPilotableV374_(chargerCerbereV37());
-  return serialiserCerberePourClient_(typeof appliquerAuditCerbereV377_==='function'?appliquerAuditCerbereV377_(base):base);
+  const audite=typeof appliquerAuditCerbereV377_==='function'?appliquerAuditCerbereV377_(base):base;
+  const historique=typeof appliquerHistoriqueR0V378_==='function'?appliquerHistoriqueR0V378_(audite):audite;
+  return serialiserCerberePourClient_(historique);
 }
 function arrV374_(n){return Math.round((Number(n)||0)*100)/100;}
