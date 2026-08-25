@@ -1,0 +1,18 @@
+const CERBERE_PROJECTION_FRONTIERE_V3713B_VERSION='3.7.13';
+
+/** Correctif de non-régression : une CF n'est considérée réalisée que si son
+ * opération rapprochée appartient au cycle courant, jamais parce qu'elle a été
+ * payée lors d'un ancien cycle. */
+function corrigerProjectionFrontiereV3713b_(base){
+  const ps=tableauCerbereV379_(base&&base.periodes);if(ps.length<2)return base;
+  const m=ps[0],n=ps[1],v=m.v37||{},vn=n.v37||(n.v37={}),periode=m.periode||m;
+  const solde=Number(v.shbt1);if(!Number.isFinite(solde))return base;
+  const ops=tableauCerbereV379_(lireTable_('Operations')),charges=tableauCerbereV379_(lireTable_('Charges_fixes')),rap=typeof lireRapprochementsChargesFixes==='function'?tableauCerbereV379_(lireRapprochementsChargesFixes()):[],actions=typeof lireFeuilleDynamiquePlan_==='function'?tableauCerbereV379_(lireFeuilleDynamiquePlan_('Plan_Actions')):[],events=typeof lireFeuilleDynamiquePlan_==='function'?tableauCerbereV379_(lireFeuilleDynamiquePlan_('Plan_Evenements')):[];
+  const liens=construireLiensCfV3713_(ops,charges,rap),now=jourCivilV3710_(new Date()),fin=jourCivilV3710_(periode&&periode.fin);if(!now||!fin)return base;
+  const realises=new Set();ops.forEach(o=>{const id=String(o&&o.id||'').trim(),d=dateOperationBanqueV377_(o);if(id&&liens[id]&&d&&dateDansCycleV377_(d,periode))realises.add(String(liens[id]));});
+  let delta=0;const detail=[],ref=calculerCfReferenceCycleV3710_(charges,actions,periode);
+  tableauCerbereV379_(ref.lignes).forEach(c=>{if(realises.has(String(c.id)))return;const ch=charges.find(x=>String(x&&x.id||'')===String(c.id)),occ=ch?occurrenceChargeCycleV3710_(ch,periode):null;if(occ&&occ>now&&occ<=fin){delta-=Number(c.montant||0);detail.push({type:'CF restante',libelle:c.libelle,montant:-arrV3713_(c.montant),date:formatJourV3712_(occ)});}});
+  const ids=new Set(ops.map(o=>String(o&&o.id||'')).filter(Boolean));events.forEach(e=>{const d=jourCivilV3710_(e&&e.date_effet),stat=normaliserV377_(e&&e.statut),op=String(e&&e.operation_reelle_id||'').trim();if(!d||d<=now||d>fin||(op&&ids.has(op))||stat==='annule'||stat==='annulee')return;const montant=Math.abs(Number(e&&e.montant||0));if(!montant)return;const signe=normaliserV377_(e&&e.type)==='recette'?1:-1;delta+=signe*montant;detail.push({type:'Événement restant',libelle:String(e&&e.libelle||''),montant:arrV3713_(signe*montant),date:formatJourV3712_(d)});});
+  vn.ss1=arrV3713_(solde+delta);vn.soldeOuverture=vn.ss1;vn.ss1Statut='projeté au 27 avant salaire depuis SHBt1 + seuls flux certains restant à passer';vn.ss1Projection={montant:vn.ss1,shbt1:arrV3713_(solde),deltaFluxRestants:arrV3713_(delta),detail:detail,doctrine:'projection bancaire au 27 avant salaire ; allocations P1 non dépensées exclues'};
+  vn.dt1=arrV3713_(Number(vn.cft1||0)+Number(vn.dpt1||0)+Number(vn.het1||0));vn.sct1=arrV3713_(vn.ss1+Number(vn.rt1||0)-vn.dt1);vn.rpt1=vn.sct1;vn.resteReellementPilotable=vn.sct1;vn.disponibleJusquau27=vn.sct1;vn.capaciteAvantPilotable=arrV3713_(vn.ss1+Number(vn.rt1||0)-Number(vn.cft1||0)-Number(vn.het1||0));const env=tableauCerbereV379_(n.enveloppes),alloc=env.reduce((s,x)=>s+Math.max(0,Number(x&&x.prevu||0)),0),dep=env.reduce((s,x)=>s+Math.max(0,Number(x&&x.engageV37||0)-Math.max(0,Number(x&&x.prevu||0))),0);vn.aReequilibrer=arrV3713_(vn.capaciteAvantPilotable-alloc-dep);vn.aReequilibrerReference=vn.aReequilibrer;vn.auditReequilibrage={attendu:vn.sct1,reel:vn.aReequilibrer,ecart:arrV3713_(vn.aReequilibrer-vn.sct1),ok:Math.abs(vn.aReequilibrer-vn.sct1)<.011};n.resteReellementPilotable=vn.sct1;n.capacitePilotable=vn.sct1;n.capaciteTresorerie=vn.sct1;base.fenetreRoulante=typeof fenetreV37_==='function'?fenetreV37_(ps):base.fenetreRoulante;return base;
+}
