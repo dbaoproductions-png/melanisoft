@@ -1,4 +1,4 @@
-const CERBERE_RECETTES_CANON_VERSION = '1.1.0';
+const CERBERE_RECETTES_CANON_VERSION = '1.1.1';
 const CERBERE_RECETTES_CANON_SHEET = 'Cerbere_Recettes_Canon_V1';
 
 /**
@@ -39,7 +39,7 @@ function assurerCanonRecettesCerbereV1_() {
     const defaults=[
       ['Salaires',2455.90,'structurelle',1,true,'Revenu mensuel canonique'],
       ['France Travail',1046.93,'structurelle',2,true,'Revenu mensuel canonique'],
-      ['Revenus fonciers',755.00,'structurelle',3,true,'Revenu mensuel canonique'],
+      ['Revenus fonciers',780.00,'structurelle',3,true,'750 € logement + 30 € garage à partir de septembre 2026'],
       ['Cours',416.09,'variable',4,true,'Montant mensuel de référence'],
       ['Concerts',283.62,'variable',5,true,'Montant mensuel de référence']
     ];
@@ -75,5 +75,30 @@ function enregistrerCanonRecettesCerbereV1(postes) {
       props.setProperty('PLAN_DERNIERE_ORIGINE','validation_R0');
     }
   }catch(e){}
+  return chargerCanonRecettesCerbereV1();
+}
+
+/**
+ * Migration ponctuelle du canon déjà existant : à exécuter une fois dans Apps Script.
+ * Met Revenus fonciers à 780 € sans toucher aux autres lignes R0.
+ */
+function migrerR0RevenusFonciers780_20260825(){
+  const sh=assurerCanonRecettesCerbereV1_();
+  const hs=sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(x=>String(x||'').trim());
+  const iCat=hs.indexOf('categorie'), iMont=hs.indexOf('montant'), iCom=hs.indexOf('commentaire');
+  if(iCat<0||iMont<0)throw new Error('Schéma R0 incomplet.');
+  const n=Math.max(0,sh.getLastRow()-1);
+  const rows=n?sh.getRange(2,1,n,hs.length).getValues():[];
+  let trouve=false;
+  rows.forEach((r,j)=>{
+    if(String(r[iCat]||'').trim().toLowerCase()==='revenus fonciers'){
+      sh.getRange(j+2,iMont+1).setValue(780);
+      if(iCom>=0)sh.getRange(j+2,iCom+1).setValue('750 € logement + 30 € garage à partir de septembre 2026');
+      trouve=true;
+    }
+  });
+  if(!trouve)throw new Error('Ligne Revenus fonciers introuvable dans R0.');
+  SpreadsheetApp.flush();
+  try{if(typeof invaliderProjectionBudgetSoft_==='function')invaliderProjectionBudgetSoft_('migration_R0_foncier_780');}catch(e){}
   return chargerCanonRecettesCerbereV1();
 }
