@@ -316,3 +316,32 @@ Cerbère distingue autant que possible Réel, Confirmé, Prévu, Estimé. Une al
 6. développer Pluxee ;
 7. ajouter notifications mail ;
 8. nettoyer code, boutons et fonctions historiques devenus inutiles.
+
+## 22. Précisions normatives sur P0, R0 et CF0 — 25/08/2026
+
+Cette section **précise et remplace toute formulation antérieure incompatible** dans ce document.
+
+### P0 est un maître immuable face au Réel
+
+- Une opération importée, saisie, rapprochée ou recatégorisée **ne modifie jamais P0**.
+- P0 ne change que par une action humaine explicite : ouverture du paramétrage P0, modification des postes, puis validation comme **nouvelle référence maître**.
+- Le paramétrage P0 est accessible directement depuis le bandeau Cerbère et reprend l'ergonomie des périodes : tirettes, pas de 10 € et saisie directe.
+- Le **total de P0 peut lui-même être reparamétré**. Il n'existe aucune obligation de conserver le total précédent ni de verser automatiquement un écart dans `Projet` ou `Divers`.
+- Pour aider à réviser P0, l'écran de paramétrage présente l'historique mensuel des **dépenses réellement engagées par poste P0**, calculé avec la même doctrine que Cerbère : charges fixes exclues, santé nette, CB imputées au cycle d'impact. Cet historique est une aide à la décision et ne modifie jamais automatiquement P0.
+
+### R0 reste R0 ; le Réel corrige Rn
+
+- R0 est une référence maître indépendante du Réel.
+- Lorsqu'une recette réelle diffère du montant canonique, **R0 reste inchangé**.
+- L'écart `réel − R0` est porté uniquement par la période concernée : **R1/Rn**. Par exemple, une recette prévue à 2 500 € et réellement reçue à 2 430 € crée un ajustement de −70 € dans la période ; elle ne transforme pas R0 en 2 430 €.
+- Seule une validation humaine dans le paramétrage R0 crée une nouvelle référence maître.
+
+### CF0 maître et photographie de période
+
+- **CF0 est le référentiel maître des charges fixes**. Il n'est pas « pondéré » par le Réel et ne doit pas changer au fil des opérations.
+- La pondération, les suppressions temporaires, les événements et les réalisations concernent **la période**, pas CF0 maître.
+- Au démarrage d'un nouveau cycle, le **28 à 00:01**, la période doit recevoir une **photographie de CF0**. Cette photographie devient la référence fixe du cycle 28→27.
+- Au cours du cycle, une opération réelle rapprochée d'une charge fixe remplace l'occurrence prévue de cette photographie, y compris si son montant diffère ; elle ne réécrit ni la photographie de départ ni CF0 maître.
+- Le bandeau Cerbère affiche CF0 maître et donne un accès direct à son inspection/reparamétrage. Le reparamétrage du maître se fait dans le référentiel Charges fixes et doit être explicite.
+- Un recalcul manuel du référentiel est possible. Toute décision de **remplacer la photographie déjà figée d'un cycle** doit être une action explicite et distincte, jamais une conséquence silencieuse d'un import.
+- La mise en œuvre du déclenchement horaire exact de la photographie relève du mécanisme d'exécution planifiée ; elle ne doit pas être obtenue en modifiant silencieusement l'infrastructure existante.
