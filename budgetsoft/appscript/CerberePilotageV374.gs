@@ -1,7 +1,7 @@
-const CERBERE_PILOTAGE_V374_VERSION='3.7.9';
+const CERBERE_PILOTAGE_V374_VERSION='3.7.10';
 
 /**
- * Cerbère 3.7.9 — cockpit court terme audité et défensif.
+ * Cerbère 3.7.10 — cockpit court terme audité et défensif.
  * La doctrine d'affichage reste inchangée ; les passes d'audit fiabilisent
  * SS1 / Rt1 / CFt1 / DPt1 / HEt1 puis le canon R0 daté.
  */
@@ -48,7 +48,7 @@ function chargerCerbereV374(){
   const base=appliquerResteReellementPilotableV374_(brut);
   const audite=typeof appliquerAuditCerbereV377_==='function'?appliquerAuditCerbereV377_(base):base;
   const historique=typeof appliquerHistoriqueR0V378_==='function'?appliquerHistoriqueR0V378_(audite):audite;
-  if(historique&&typeof historique==='object')historique.version=CERBERE_PILOTAGE_V374_VERSION;
+  if(historique&&typeof historique==='object'&&!historique.version)historique.version=CERBERE_PILOTAGE_V374_VERSION;
   return serialiserCerberePourClient_(historique);
 }
 function arrV374_(n){return Math.round((Number(n)||0)*100)/100;}
