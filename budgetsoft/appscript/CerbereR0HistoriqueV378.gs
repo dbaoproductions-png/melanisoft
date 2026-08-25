@@ -1,42 +1,44 @@
-const CERBERE_R0_HISTORIQUE_V378_VERSION='3.7.8';
+const CERBERE_R0_HISTORIQUE_V378_VERSION='3.7.9';
 
 /**
  * Applique les changements datés du canon R0 sans réécrire l'histoire.
- * Exemple : Revenus fonciers = 755 € jusqu'au cycle d'août 2026,
+ * Revenus fonciers : 755 € jusqu'au cycle d'août 2026,
  * puis 780 € à partir du cycle ouvrant le 28/08/2026.
- *
- * Cette passe intervient après l'audit 3.7.7 : elle ne refait pas le moteur,
- * elle corrige uniquement la part canonique de Rt1 puis repropage SCt1 M -> M+1.
+ * Passe défensive : aucune hypothèse sur la présence des tableaux.
  */
 function appliquerHistoriqueR0V378_(base){
   if(!base||base.ok===false)return base;
-  const postes=(base.recettesCanon&&base.recettesCanon.postes)||[];
-  if(!postes.length)return base;
+  const postes=Array.isArray(base.recettesCanon&&base.recettesCanon.postes)?base.recettesCanon.postes:[];
+  const periodes=Array.isArray(base.periodes)?base.periodes:[];
+  if(!postes.length||!periodes.length){
+    base.diagnostic=base.diagnostic||{};
+    base.diagnostic.r0_historique='non appliqué : canon R0 ou périodes absents';
+    base.version=CERBERE_R0_HISTORIQUE_V378_VERSION;
+    return base;
+  }
 
   let report=null;
-  (base.periodes||[]).forEach((p,i)=>{
+  periodes.forEach((p,i)=>{
+    if(!p||typeof p!=='object')return;
     const v=p.v37||(p.v37={});
     const periode=p.periode||p;
 
-    // M+1 hérite toujours de la fin corrigée de M.
     if(i>0&&report!==null){
       v.ss1=arrV378_(report);
       v.soldeOuverture=v.ss1;
       v.ss1Statut='projeté depuis la fin Cerbère corrigée de la période précédente';
     }
 
-    const reelParCat=(v.rt1Audit&&v.rt1Audit.reelParCategorie)||{};
+    const reelParCat=(v.rt1Audit&&v.rt1Audit.reelParCategorie&&typeof v.rt1Audit.reelParCategorie==='object')?v.rt1Audit.reelParCategorie:{};
     let deltaRt=0;
     const canonEffectif={};
 
     postes.forEach(x=>{
+      if(!x||typeof x!=='object')return;
       const cat=String(x.categorie||'').trim();
       const canonCourant=Math.max(0,Number(x.montant||0));
       const canonCycle=montantR0PourCycleV378_(x,periode);
       const reel=Math.max(0,Number(reelParCat[cat]||0));
-
-      // L'audit 3.7.7 a calculé M avec max(canon courant, réel),
-      // et les périodes futures avec le canon courant pur.
       const utiliseAvant=i===0?Math.max(canonCourant,reel):canonCourant;
       const utiliseApres=i===0?Math.max(canonCycle,reel):canonCycle;
       deltaRt+=utiliseApres-utiliseAvant;
@@ -44,12 +46,11 @@ function appliquerHistoriqueR0V378_(base){
     });
 
     v.rt1=arrV378_(Number(v.rt1||0)+deltaRt);
-    v.rt1Audit=v.rt1Audit||{};
+    v.rt1Audit=v.rt1Audit&&typeof v.rt1Audit==='object'?v.rt1Audit:{};
     v.rt1Audit.deltaHistoriqueR0=arrV378_(deltaRt);
     v.rt1Audit.canonEffectifParCategorie=canonEffectif;
     v.rt1Audit.versionHistorique=CERBERE_R0_HISTORIQUE_V378_VERSION;
 
-    // Toutes les autres briques ont déjà été auditées en 3.7.7.
     v.dt1=arrV378_(Number(v.cft1||0)+Number(v.dpt1||0)+Number(v.het1||0));
     v.sct1=arrV378_(Number(v.ss1||0)+Number(v.rt1||0)-v.dt1);
     v.rpt1=v.sct1;
