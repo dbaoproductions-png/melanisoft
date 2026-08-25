@@ -1,60 +1,35 @@
-const CERBERE_PILOTAGE_V374_VERSION='3.7.12';
+const CERBERE_PILOTAGE_V374_VERSION='3.7.13';
 
 /**
- * Cerbère 3.7.12 — cockpit court terme audité et défensif.
- * Chaîne de non-régression :
- * socle -> audit -> correctifs 3.7.10 via R0 historique -> rapprochement CF 3.7.11
- * -> doctrine cycle 3.7.12 -> convention salaire 28 sur M/M+1.
+ * Cerbère 3.7.13 — cockpit court terme audité et défensif.
+ * Chaîne : socle -> audit -> 3.7.10/R0 historique -> CF 3.7.11 -> doctrine 3.7.12
+ * -> salaire 28 -> frontière bancaire / qualifications 3.7.13 -> effet financier Actions.
  */
 function appliquerResteReellementPilotableV374_(base){
   if(!base||base.ok===false)return base;
   recalculerCfFutursDepuisCf0CourantV375_(base);
-
-  let reportPrecedent=null;
-  const periodes=Array.isArray(base.periodes)?base.periodes:[];
-  periodes.forEach((p,i)=>{
-    if(!p||typeof p!=='object')return;
-    const v=p.v37||(p.v37={});
-    const r=p.roulant&&typeof p.roulant==='object'?p.roulant:{};
-    const h=r.horsPilotable&&typeof r.horsPilotable==='object'?r.horsPilotable:{};
-    if(i>0&&reportPrecedent!==null){v.ss1=arrV374_(reportPrecedent);v.soldeOuverture=v.ss1;v.ss1Statut='projeté depuis la fin Cerbère de la période précédente';}
-    const ret1=arrV374_(Number(v.disponibleEnveloppes!=null?v.disponibleEnveloppes:(p.resteBudgetPilotable||0)));
-    const het1=arrV374_(Math.max(0,Number(v.horsPilotableAControler!=null?v.horsPilotableAControler:0)));
-    v.ret1=ret1;v.het1=het1;v.horsPilotableBrut=arrV374_(Number(h.total||0));
-    v.dt1=arrV374_(Number(v.cft1||0)+Number(v.dpt1||0)+het1);
-    v.sct1=arrV374_(Number(v.ss1||0)+Number(v.rt1||0)-v.dt1);
-    v.rpt1=v.sct1;v.resteReellementPilotable=v.sct1;v.disponibleJusquau27=v.sct1;
-    v.formuleSCt1='SCt1 = SS1 + Rt1 - CFt1 - DPt1 - HEt1';v.formuleREt1='REt1 = P1 - pilotable consommé/réservé';
-    const enveloppes=Array.isArray(p.enveloppes)?p.enveloppes:[];
-    const absorbable=arrV374_(enveloppes.reduce((s,x)=>s+Math.max(0,Number(x&&x.prevu||0)-Number(x&&x.reelNetPrevisionnel!=null?x.reelNetPrevisionnel:(x&&x.reelImpute||0))-Number(x&&x.planifie||0)),0));
-    v.absorbableParAllocations=absorbable;v.incompressible=arrV374_(v.sct1<0?Math.max(0,Math.abs(v.sct1)-absorbable):0);
-    p.v37=v;p.resteReellementPilotable=v.sct1;p.capacitePilotable=v.sct1;p.resteBudgetPilotable=ret1;p.capaciteTresorerie=v.sct1;reportPrecedent=v.sct1;
-  });
-  base.version=CERBERE_PILOTAGE_V374_VERSION;return base;
+  let reportPrecedent=null;const periodes=Array.isArray(base.periodes)?base.periodes:[];
+  periodes.forEach((p,i)=>{if(!p||typeof p!=='object')return;const v=p.v37||(p.v37={}),r=p.roulant&&typeof p.roulant==='object'?p.roulant:{},h=r.horsPilotable&&typeof r.horsPilotable==='object'?r.horsPilotable:{};
+    if(i>0&&reportPrecedent!==null){v.ss1=arrV374_(reportPrecedent);v.soldeOuverture=v.ss1;v.ss1Statut='projection provisoire héritée du socle';}
+    const ret1=arrV374_(Number(v.disponibleEnveloppes!=null?v.disponibleEnveloppes:(p.resteBudgetPilotable||0))),het1=arrV374_(Math.max(0,Number(v.horsPilotableAControler!=null?v.horsPilotableAControler:0)));
+    v.ret1=ret1;v.het1=het1;v.horsPilotableBrut=arrV374_(Number(h.total||0));v.dt1=arrV374_(Number(v.cft1||0)+Number(v.dpt1||0)+het1);v.sct1=arrV374_(Number(v.ss1||0)+Number(v.rt1||0)-v.dt1);v.rpt1=v.sct1;v.resteReellementPilotable=v.sct1;v.disponibleJusquau27=v.sct1;v.formuleSCt1='SCt1 = SS1 + Rt1 - CFt1 - DPt1 - HEt1';v.formuleREt1='REt1 = P1 - pilotable consommé/réservé';
+    const env=Array.isArray(p.enveloppes)?p.enveloppes:[],abs=arrV374_(env.reduce((s,x)=>s+Math.max(0,Number(x&&x.prevu||0)-Number(x&&x.reelNetPrevisionnel!=null?x.reelNetPrevisionnel:(x&&x.reelImpute||0))-Number(x&&x.planifie||0)),0));v.absorbableParAllocations=abs;v.incompressible=arrV374_(v.sct1<0?Math.max(0,Math.abs(v.sct1)-abs):0);p.v37=v;p.resteReellementPilotable=v.sct1;p.capacitePilotable=v.sct1;p.resteBudgetPilotable=ret1;p.capaciteTresorerie=v.sct1;reportPrecedent=v.sct1;
+  });base.version=CERBERE_PILOTAGE_V374_VERSION;return base;
 }
 
-/** M est figé ; M+1 et futur repartent du CF0 courant jusqu'à ouverture. */
-function recalculerCfFutursDepuisCf0CourantV375_(base){
-  const periodes=Array.isArray(base&&base.periodes)?base.periodes:[];if(periodes.length<2)return;
-  const charges=Array.isArray(lireTable_('Charges_fixes'))?lireTable_('Charges_fixes'):[];
-  periodes.forEach((p,i)=>{if(i===0||!p||typeof p!=='object')return;const v=p.v37||(p.v37={}),periode=p.periode||p;
-    const cf0Courant=arrV374_(cfTotalSecoursV372_(charges,periode));const effets=p.plan&&p.plan.effets||{};
-    const deltaPlan=arrV374_(Number(effets.hausseCharges||0)-Number(effets.baisseCharges||0)-Number(effets.chargesEvitees||0));
-    const cf1=arrV374_(Math.max(0,cf0Courant+deltaPlan));v.cf0CourantSource=cf0Courant;v.deltaPlanCharges=deltaPlan;v.chargesFixesTotal=cf1;v.chargesFixesRestantes=cf1;v.chargesFixesAttenduRealise=0;v.chargesFixesReelRealise=0;v.chargesFixesRealisees=0;v.cft1=cf1;v.cf1Statut='projection dynamique depuis CF0 courant jusqu’à ouverture du cycle';
-  });
-}
+function recalculerCfFutursDepuisCf0CourantV375_(base){const periodes=Array.isArray(base&&base.periodes)?base.periodes:[];if(periodes.length<2)return;const charges=Array.isArray(lireTable_('Charges_fixes'))?lireTable_('Charges_fixes'):[];periodes.forEach((p,i)=>{if(i===0||!p||typeof p!=='object')return;const v=p.v37||(p.v37={}),periode=p.periode||p,cf0=arrV374_(cfTotalSecoursV372_(charges,periode)),effets=p.plan&&p.plan.effets||{},delta=arrV374_(Number(effets.hausseCharges||0)-Number(effets.baisseCharges||0)-Number(effets.chargesEvitees||0)),cf1=arrV374_(Math.max(0,cf0+delta));v.cf0CourantSource=cf0;v.deltaPlanCharges=delta;v.chargesFixesTotal=cf1;v.chargesFixesRestantes=cf1;v.chargesFixesAttenduRealise=0;v.chargesFixesReelRealise=0;v.chargesFixesRealisees=0;v.cft1=cf1;v.cf1Statut='projection dynamique depuis CF0 courant jusqu’à ouverture du cycle';});}
 
 function chargerCerbereV374(){
   const brut=chargerCerbereV37();
   const base=appliquerResteReellementPilotableV374_(brut);
   const audite=typeof appliquerAuditCerbereV377_==='function'?appliquerAuditCerbereV377_(base):base;
-  // appliquerHistoriqueR0V378_ appelle lui-même la passe comptable 3.7.10 avant
-  // d'appliquer le canon R0 daté : ne pas appeler 3.7.10 une seconde fois ici.
   const historique=typeof appliquerHistoriqueR0V378_==='function'?appliquerHistoriqueR0V378_(audite):audite;
   const rapproche=typeof appliquerRapprochementCerbereV3711_==='function'?appliquerRapprochementCerbereV3711_(historique):historique;
   const cycle=typeof appliquerDoctrineCycleV3712_==='function'?appliquerDoctrineCycleV3712_(rapproche):rapproche;
   const salaire=typeof appliquerConventionSalaireTousCyclesV3712_==='function'?appliquerConventionSalaireTousCyclesV3712_(cycle):cycle;
-  if(salaire&&typeof salaire==='object')salaire.version=CERBERE_PILOTAGE_V374_VERSION;
-  return serialiserCerberePourClient_(salaire);
+  const frontiere=typeof appliquerProjectionFrontiereV3713_==='function'?appliquerProjectionFrontiereV3713_(salaire):salaire;
+  const effets=typeof corrigerEffetsFinanciersActionsV3713_==='function'?corrigerEffetsFinanciersActionsV3713_(frontiere):frontiere;
+  if(effets&&typeof effets==='object')effets.version=CERBERE_PILOTAGE_V374_VERSION;
+  return serialiserCerberePourClient_(effets);
 }
 function arrV374_(n){return Math.round((Number(n)||0)*100)/100;}
