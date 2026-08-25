@@ -1,10 +1,16 @@
-const CERBERE_V37_VERSION='3.7.2';
+const CERBERE_V37_VERSION='3.7.3';
 
 /**
- * Cerbère 3.7.2 — cockpit quotidien M/M+1.
- * Invariants : M et M+1 sont affichés simultanément ; les allocations restent
- * ajustables localement ; P0 reste maître ; CF0 reste synthétique ; la marge
- * initiale n'est jamais confondue avec Divers.
+ * Cerbère 3.7.3 — cockpit quotidien M/M+1.
+ * Invariants :
+ * - P0/R0/CF0 restent des maîtres et ne sont jamais réécrits par le Réel ;
+ * - P1 est l'allocation pilotable locale du cycle ;
+ * - RPt1 = P1 - pilotable déjà consommé/engagé ;
+ * - Rt1/CFt1/DPt1 réévaluent le cycle : réel pour ce qui est réalisé,
+ *   prévision de période pour ce qui reste à venir ;
+ * - SS1 est le solde significatif de départ ;
+ * - SCt1 = SS1 + Rt1 - CFt1 - DPt1 ;
+ * - SHBt1 est comparé au solde Cerbère présent pour expliquer tout écart.
  */
 function chargerCerbereV37(){
   const base=chargerCerbereRoulant();
@@ -22,56 +28,84 @@ function chargerCerbereV37(){
   const catType={};(categories||[]).forEach(c=>catType[String(c.nom||c.categorie||'').trim()]=String(c.type||'').trim().toLowerCase());
   const soldeActuel=Number(base.reel&&base.reel.soldeBancaire||0);
   const chargeById={};(charges||[]).forEach(c=>{const id=String(c.id||'').trim();if(id)chargeById[id]=c;});
+  const maintenant=new Date();
   let reportProjete=null;
 
   periodes.forEach((p,i)=>{
     const pi=p.periode||p;
     assurerDiversV37_(p);
     const ev=previsionsEvenementsV371_(events,pi,p0Cats,catType);
+
+    // Deux lectures des dates coexistent volontairement :
+    // - date bancaire/comptable pour reconstruire le solde du compte ;
+    // - date d'imputation Cerbère déjà portée par le moteur roulant pour les enveloppes.
     const opsPeriode=operations.filter(o=>dateDansPeriodeV37_(dateOperationCouranteBudgetSoft_(o),pi));
-    const opsPassees=i===0?opsPeriode.filter(o=>{const d=dateOperationCouranteBudgetSoft_(o);return d&&d<=new Date();}):[];
+    const opsPassees=i===0?opsPeriode.filter(o=>{const d=dateOperationCouranteBudgetSoft_(o);return d&&d<=maintenant;}):[];
 
-    // R0 est chargé une fois. Le Réel corrige l'écart ; il ne s'ajoute pas une seconde fois au canon.
+    /* ========================= Rt1 · recettes réévaluées =========================
+     * Pour chaque poste R1 : le Réel constaté remplace la prévision ; sinon la
+     * prévision du cycle reste retenue. Les recettes réelles hors R0 et les
+     * événements futurs confirmés s'ajoutent comme déformations propres au cycle.
+     */
     const reelR0={};
-    opsPeriode.forEach(o=>{const m=Number(o.montant||0),cat=String(o.categorie||'').trim();if(m>0&&r0Cats.has(cat))reelR0[cat]=(reelR0[cat]||0)+m;});
-    let correctionR0=0,recettesR0Restantes=0;
-    r0Postes.forEach(x=>{const cat=String(x.categorie||'').trim(),canon=Number(x.montant||0),reel=Number(reelR0[cat]||0);if(i===0){if(reel>0)correctionR0+=reel-canon;else recettesR0Restantes+=canon;}});
+    opsPeriode.forEach(o=>{
+      const d=dateOperationCouranteBudgetSoft_(o),m=Number(o.montant||0),cat=String(o.categorie||'').trim();
+      if(d&&d<=maintenant&&m>0&&r0Cats.has(cat))reelR0[cat]=(reelR0[cat]||0)+m;
+    });
+    let rt1Socle=0,correctionR0=0,recettesR0Restantes=0;
+    r0Postes.forEach(x=>{
+      const cat=String(x.categorie||'').trim(),canon=Number(x.montant||0),reel=Number(reelR0[cat]||0);
+      const retenu=reel>0?reel:canon;
+      rt1Socle+=retenu;
+      if(i===0){if(reel>0)correctionR0+=reel-canon;else recettesR0Restantes+=canon;}
+    });
+    const recettesHorsR0Reelles=i===0?opsPeriode.reduce((s,o)=>{
+      const d=dateOperationCouranteBudgetSoft_(o),m=Number(o.montant||0),cat=String(o.categorie||'').trim();
+      if(!d||d>maintenant||m<=0||r0Cats.has(cat))return s;
+      return s+m;
+    },0):0;
+    const rt1=arrV37_(rt1Socle+recettesHorsR0Reelles+ev.recettesFutures);
 
-    // CF0 : le moteur roulant a déjà construit le montant de la période et appliqué les effets Plan.
-    // On prend ce résultat comme source primaire, ce qui évite une seconde interprétation de la fréquence.
+    /* ========================= CFt1 · charges fixes réévaluées ========================= */
     const cfSocle=Number(p.fixesPonderees!=null?p.fixesPonderees:p.fixesBrutes||0);
     const cfTotal=arrV37_(cfSocle>0?cfSocle:cfTotalSecoursV372_(charges,pi));
     let cfAttenduRealise=0,cfReelRealise=0,nbCfRealises=0;
     if(i===0){
       const vus=new Set();
       opsPeriode.forEach(o=>{
-        const id=String(o.charge_fixe_id||'').trim();if(!id||vus.has(id))return;
+        const d=dateOperationCouranteBudgetSoft_(o),id=String(o.charge_fixe_id||'').trim();
+        if(!d||d>maintenant||!id||vus.has(id))return;
         vus.add(id);nbCfRealises++;
         const c=chargeById[id];
         cfAttenduRealise+=Math.abs(Number(c&&(c.montant!=null?c.montant:c.montant_indicatif)||0));
         cfReelRealise+=Math.abs(Number(o.montant||0));
       });
     }
+    const cft1=arrV37_(Math.max(0,cfTotal-cfAttenduRealise)+cfReelRealise);
     const cfRestantes=i===0?arrV37_(Math.max(0,cfTotal-cfAttenduRealise)):cfTotal;
 
-    // Solde d'ouverture reconstitué pour expliquer le point de départ ; le solde actuel reste la vérité de M.
-    const mouvementPasse=opsPassees.reduce((s,o)=>s+Number(o.montant||0),0);
-    const soldeOuverture=i===0?arrV37_(soldeActuel-mouvementPasse):arrV37_(reportProjete||0);
-    const pointDepart=i===0
-      ?arrV37_(soldeOuverture+r0Total+ev.recettesInitiales-cfTotal-ev.depensesHorsPilotable)
-      :arrV37_(Number(reportProjete||0)+r0Total+ev.recettesInitiales-cfTotal-ev.depensesHorsPilotable);
+    /* ========================= SS1 · solde significatif =========================
+     * Tant qu'aucun SS1 validé n'est stocké pour le cycle, on reconstitue un
+     * candidat depuis SHBt1 et les mouvements bancaires réellement présents.
+     * Ce candidat est explicitement marqué « reconstitué » : il ne vaut pas
+     * validation de frontière 27/28.
+     */
+    const clePeriode=String(p.clePilotage||pi.debut||'');
+    const propSS1=PropertiesService.getDocumentProperties().getProperty('CERBERE_SS1_'+clePeriode);
+    const mouvementBancairePasse=opsPassees.reduce((s,o)=>s+Number(o.montant||0),0);
+    const ss1Valide=propSS1!==null&&propSS1!==''&&Number.isFinite(Number(propSS1));
+    const ss1=i===0
+      ?arrV37_(ss1Valide?Number(propSS1):soldeActuel-mouvementBancairePasse)
+      :arrV37_(Number(reportProjete||0));
 
     const cbHeritee=Number(p.roulant&&p.roulant.cbHeritee||0);
-    const jokerAuto=cbHeritee>Math.max(0,pointDepart);
+    const jokerAuto=cbHeritee>Math.max(0,ss1+rt1-cft1);
     const joker=etatJokerCerbereV37_(p,jokerAuto);
     if(joker.actif)(p.enveloppes||[]).forEach(x=>x.prevu=Number(x.canon||0));
 
-    // La marge de départ est un stock non affecté : elle ne devient jamais Divers.
+    /* ========================= P1 / RPt1 / DPt1 ========================= */
     const allocationAvant=arrV37_((p.enveloppes||[]).reduce((s,x)=>s+Number(x.prevu||0),0));
-    const margeInitiale=arrV37_(pointDepart-allocationAvant);
-    const ecartInitial=arrV37_(pointDepart-p0Total);
-
-    let engagePilotable=0,restePilotable=0;
+    let engagePilotable=0,restePilotable=0,dpt1=0;
     (p.enveloppes||[]).forEach(x=>{
       const cat=String(x.categorie||'').trim();
       const santeAttendue=cat==='Santé'?Number(ev.remboursementsSante||0):0;
@@ -80,39 +114,81 @@ function chargerCerbereV37(){
       const planBase=Number(x.planifie||0);
       const planEvent=Number(ev.depensesPilotablesParCategorie[cat]||0);
       const plan=arrV37_(Math.max(planBase,planEvent));
-      x.planifie=plan;x.reelNetPrevisionnel=arrV37_(reelNet);x.remboursementsAttendus=arrV37_(santeAttendue);
-      x.engageV37=arrV37_(reelNet+plan);x.resteV37=arrV37_(Number(x.prevu||0)-x.engageV37);
-      engagePilotable+=x.engageV37;restePilotable+=x.resteV37;
+      const engage=arrV37_(reelNet+plan);
+      const allocation=Math.max(0,Number(x.prevu||0));
+      x.planifie=plan;
+      x.reelNetPrevisionnel=arrV37_(reelNet);
+      x.remboursementsAttendus=arrV37_(santeAttendue);
+      x.engageV37=engage;
+      x.resteV37=arrV37_(allocation-engage);
+      // DPt1 = Réel/engagé pour la partie connue + D1 pour le futur restant.
+      // Tant que l'enveloppe n'est pas dépassée, la dépense de fin de cycle
+      // projetée est donc l'allocation P1 ; un dépassement réel l'augmente.
+      x.dpt1=arrV37_(Math.max(allocation,engage));
+      engagePilotable+=engage;
+      restePilotable+=x.resteV37;
+      dpt1+=x.dpt1;
     });
+    dpt1=arrV37_(dpt1);
+    restePilotable=arrV37_(restePilotable);
+    engagePilotable=arrV37_(engagePilotable);
 
-    const sortiesConfirmees=arrV37_(ev.depensesFutures+ev.depensesHorsPilotableFutures);
-    const recettesHorsR0Reelles=i===0?opsPeriode.reduce((s,o)=>{const m=Number(o.montant||0),cat=String(o.categorie||'').trim();return s+(m>0&&!r0Cats.has(cat)?m:0);},0):0;
-    const ajustementTresorerie=i===0?arrV37_(recettesHorsR0Reelles):0;
-    const disponibleJusquau27=i===0?arrV37_(soldeActuel+recettesR0Restantes+correctionR0+ev.recettesFutures-cfRestantes-sortiesConfirmees):null;
+    /* ========================= SCt1 · trajectoire réévaluée ========================= */
+    const dt1=arrV37_(cft1+dpt1);
+    const sct1=arrV37_(ss1+rt1-dt1);
 
-    const horsReel=Number(p.roulant&&p.roulant.horsPilotable&&p.roulant.horsPilotable.total||0);
-    const planPilotable=arrV37_((p.enveloppes||[]).reduce((s,x)=>s+Number(x.planifie||0),0));
-    const capaciteProjetee=i===0
-      ?disponibleJusquau27
-      :arrV37_(Number(reportProjete||0)+r0Total+ev.recettesInitiales-cfTotal-cbHeritee-planPilotable-horsReel-ev.depensesHorsPilotable);
-    const finProjetee=i===0?arrV37_(disponibleJusquau27-Math.max(0,restePilotable)):capaciteProjetee;
+    /* ========================= contrôle SHBt1 / SC-présent =========================
+     * Le solde Cerbère présent utilise uniquement les mouvements bancaires déjà
+     * constatés depuis SS1. S'il diffère de Hello bank, l'écart doit être expliqué
+     * par les frontières, opérations manquantes/provisoires ou décalages bancaires.
+     */
+    const scPresent=i===0?arrV37_(ss1+mouvementBancairePasse):null;
+    const ecartHelloCerbere=i===0?arrV37_(soldeActuel-scPresent):null;
+
+    // Compatibilité avec les autres composants 3.7 : le « disponible » principal
+    // devient le reliquat pilotable RPt1. La soutenabilité est portée par SCt1.
+    const disponibleJusquau27=i===0?restePilotable:null;
+    const capaciteProjetee=sct1;
+    const finProjetee=sct1;
     reportProjete=finProjetee;
 
+    const pointDepart=arrV37_(ss1+rt1-cft1);
+    const margeInitiale=arrV37_(pointDepart-allocationAvant);
+    const ecartInitial=arrV37_(pointDepart-p0Total);
+
     p.v37={
-      pointDepart,soldeOuverture,ecartInitial,margeInitiale,
-      recettesCanon:arrV37_(r0Total),recettesR0Restantes:arrV37_(recettesR0Restantes),correctionRecettesReelles:arrV37_(correctionR0),recettesEvenements:arrV37_(ev.recettesInitiales),
+      pointDepart,soldeOuverture:ss1,ss1,ss1Valide,ss1Statut:ss1Valide?'validé':'reconstitué à contrôler',
+      rt1,cft1,dpt1,dt1,sct1,scPresent,shbt1:i===0?arrV37_(soldeActuel):null,ecartHelloCerbere,
+      ecartInitial,margeInitiale,
+      recettesCanon:arrV37_(r0Total),recettesR0Restantes:arrV37_(recettesR0Restantes),correctionRecettesReelles:arrV37_(correctionR0),recettesEvenements:arrV37_(ev.recettesFutures),recettesHorsR0Reelles:arrV37_(recettesHorsR0Reelles),
       chargesFixesTotal:cfTotal,chargesFixesRestantes:cfRestantes,chargesFixesAttenduRealise:arrV37_(cfAttenduRealise),chargesFixesReelRealise:arrV37_(cfReelRealise),chargesFixesRealisees:nbCfRealises,
-      remboursementsSanteAttendus:arrV37_(ev.remboursementsSante),depensesEvenementsHorsPilotable:arrV37_(ev.depensesHorsPilotable),sortiesFuturesConfirmees:sortiesConfirmees,ajustementTresorerie,
-      disponibleJusquau27,finProjetee,capaciteProjetee,disponibleEnveloppes:arrV37_(restePilotable),engagePilotable:arrV37_(engagePilotable),joker,
-      doctrine:i===0?'Aujourd’hui → 27 : le solde actuel contient déjà le passé ; seules les recettes restantes, écarts R0, CF0 restantes et sorties futures confirmées modifient le disponible.':'28 → 27 : report projeté + R0 − CF0 − CB de M − Plan − hors-enveloppes connus.'
+      remboursementsSanteAttendus:arrV37_(ev.remboursementsSante),depensesEvenementsHorsPilotable:arrV37_(ev.depensesHorsPilotable),
+      disponibleJusquau27,finProjetee,capaciteProjetee,disponibleEnveloppes:restePilotable,engagePilotable,joker,
+      doctrine:i===0?'RPt1 = P1 − pilotable consommé/engagé. SCt1 = SS1 + Rt1 − CFt1 − DPt1. SHBt1 est contrôlé séparément contre le solde Cerbère présent.':'M+1 utilise comme SS1 le SCt1 projeté de M, puis applique Rt1 − CFt1 − DPt1.'
     };
-    p.capaciteTresorerie=arrV37_(capaciteProjetee);p.capacitePilotable=p.capaciteTresorerie;p.resteBudgetPilotable=arrV37_(restePilotable);p.resteBudgetAlloue=p.resteBudgetPilotable;p.budgetReparti=allocationAvant;
+    p.capaciteTresorerie=sct1;
+    p.capacitePilotable=restePilotable;
+    p.resteBudgetPilotable=restePilotable;
+    p.resteBudgetAlloue=restePilotable;
+    p.budgetReparti=allocationAvant;
   });
 
   base.version=CERBERE_V37_VERSION;
-  base.principe='Cerbère 3.7 : M et M+1 simultanés, allocations locales, marge non affectée distincte de Divers, R0 chargé une fois puis corrigé par le Réel, CF0 synthétique.';
-  base.fenetreRoulante=fenetreV37_(periodes);base.diagnostic=base.diagnostic||{};base.diagnostic.moteur_37=CERBERE_V37_VERSION;base.diagnostic.doctrine_recettes='R0 initial + correction écart réel, jamais R0 + réel';base.diagnostic.doctrine_marge='marge non affectée distincte de Divers';
+  base.principe='Cerbère 3.7.3 : P1 mesure l’autorisation pilotable ; RPt1 son reliquat. SS1 + Rt1 − CFt1 − DPt1 produit SCt1, trajectoire réévaluée de fin de cycle. SHBt1 est contrôlé séparément.';
+  base.fenetreRoulante=fenetreV37_(periodes);
+  base.diagnostic=base.diagnostic||{};
+  base.diagnostic.moteur_37=CERBERE_V37_VERSION;
+  base.diagnostic.doctrine_pt='RPt1 = P1 - consommé/engagé ; SCt1 = SS1 + Rt1 - CFt1 - DPt1';
+  base.diagnostic.doctrine_coherence='SHBt1 comparé au solde Cerbère présent ; tout écart doit être mathématiquement explicable';
   return serialiserCerberePourClient_(base);
+}
+
+/** Valide explicitement le solde significatif du cycle. */
+function enregistrerSS1CerbereV373(cle,montant){
+  if(!cle)throw new Error('Période Cerbère introuvable.');
+  const n=Number(montant);if(!Number.isFinite(n))throw new Error('SS1 invalide.');
+  PropertiesService.getDocumentProperties().setProperty('CERBERE_SS1_'+String(cle),String(arrV37_(n)));
+  return chargerCerbereV37();
 }
 
 function cfTotalSecoursV372_(charges,periode){
@@ -126,6 +202,7 @@ function cfTotalSecoursV372_(charges,periode){
 
 function previsionsEvenementsV371_(events,periode,p0Cats,catType){
   const out={recettesInitiales:0,recettesFutures:0,depensesFutures:0,depensesHorsPilotable:0,depensesHorsPilotableFutures:0,remboursementsSante:0,depensesPilotablesParCategorie:{}};
+  const maintenant=new Date();
   (events||[]).forEach(e=>{
     if(['Rapproché','Annulé','Réalisé'].includes(String(e.statut||''))||String(e.certitude||'certaine')==='possible')return;
     const occ=typeof occurrencesEvenementV4_==='function'?occurrencesEvenementV4_(e):[{montant:Math.abs(Number(e.montant||0)),date:e.date_effet}];
@@ -133,10 +210,22 @@ function previsionsEvenementsV371_(events,periode,p0Cats,catType){
       let impact=o.date;
       if(String(e.type||'')==='depense'&&normaliserV37_(e.mode_paiement)==='cb')impact=dateImpactCbPlanV37_(o.date);
       if(!dateDansPeriodeV37_(impact,periode))return;
+      const dateImpact=dateValideVentilationBudgetSoft_(impact);
+      const futur=!dateImpact||dateImpact>maintenant;
       const m=Math.abs(Number(o.montant||0)),cat=String(e.categorie||'').trim(),isRec=String(e.type||'')==='recette';
-      if(isRec){out.recettesInitiales+=m;out.recettesFutures+=m;if(/sante|remboursement/.test(normaliserV37_(cat+' '+e.libelle)))out.remboursementsSante+=m;return;}
-      if(p0Cats.has(cat)){out.depensesPilotablesParCategorie[cat]=(out.depensesPilotablesParCategorie[cat]||0)+m;out.depensesFutures+=m;}
-      else{out.depensesHorsPilotable+=m;out.depensesHorsPilotableFutures+=m;}
+      if(isRec){
+        out.recettesInitiales+=m;
+        if(futur)out.recettesFutures+=m;
+        if(/sante|remboursement/.test(normaliserV37_(cat+' '+e.libelle)))out.remboursementsSante+=m;
+        return;
+      }
+      if(p0Cats.has(cat)){
+        out.depensesPilotablesParCategorie[cat]=(out.depensesPilotablesParCategorie[cat]||0)+m;
+        if(futur)out.depensesFutures+=m;
+      }else{
+        out.depensesHorsPilotable+=m;
+        if(futur)out.depensesHorsPilotableFutures+=m;
+      }
     });
   });
   Object.keys(out).forEach(k=>{if(typeof out[k]==='number')out[k]=arrV37_(out[k]);});return out;
@@ -146,7 +235,22 @@ function assurerDiversV37_(p){const e=p.enveloppes||(p.enveloppes=[]);if(e.some(
 function etatJokerCerbereV37_(p,auto){const cle='CERBERE_JOKER_'+String(p.clePilotage||p.periode&&p.periode.debut||'');const v=PropertiesService.getDocumentProperties().getProperty(cle),actif=v==='on'?true:v==='off'?false:!!auto;return{actif,automatique:v==null&&!!auto,raison:actif?'Engagements hérités supérieurs à la capacité de compensation : P0 sert temporairement de garde-fou.':'Joker désactivé : le Réel et les ajustements locaux reprennent la main.',cle};}
 function reglerJokerCerbereV37(cle,actif){if(!cle)throw new Error('Période Cerbère introuvable.');PropertiesService.getDocumentProperties().setProperty('CERBERE_JOKER_'+String(cle),actif?'on':'off');return chargerCerbereV37();}
 function reinitialiserJokerAutoCerbereV37(cle){PropertiesService.getDocumentProperties().deleteProperty('CERBERE_JOKER_'+String(cle));return chargerCerbereV37();}
-function fenetreV37_(periodes){const m=periodes[0],n=periodes[1];if(!m||!n)return null;const cm=Number(m.v37&&m.v37.capaciteProjetee||0),cn=Number(n.v37&&n.v37.capaciteProjetee||0);let niveau='vert',titre='Pilotage quotidien soutenable';const raisons=[];if(cm<0||cn<0){niveau='rouge';titre='Risque de trésorerie à court terme';}else if(Number(m.resteBudgetPilotable||0)<0||Number(n.resteBudgetPilotable||0)<0){niveau='orange';titre='Enveloppes à rééquilibrer';}if(cm<0)raisons.push('M : capacité restante '+arrV37_(cm)+' €');if(cn<0)raisons.push('M+1 : capacité projetée '+arrV37_(cn)+' €');if(m.v37&&m.v37.joker&&m.v37.joker.actif)raisons.push('joker actif sur M');if(n.v37&&n.v37.joker&&n.v37.joker.actif)raisons.push('joker actif sur M+1');if(Number(n.roulant&&n.roulant.cbHeritee||0)>0)raisons.push(arrV37_(n.roulant.cbHeritee)+' € de CB pilotables de M déjà engagées sur M+1');if(Number(m.v37&&m.v37.correctionRecettesReelles||0)!==0)raisons.push('écart réel/R0 sur M : '+arrV37_(m.v37.correctionRecettesReelles)+' €');if(Number(m.v37&&m.v37.remboursementsSanteAttendus||0)>0)raisons.push(arrV37_(m.v37.remboursementsSanteAttendus)+' € de remboursements santé attendus intégrés');if(!raisons.length)raisons.push('le disponible à court terme reste positif');return{niveau,titre,raisons,disponibleM:arrV37_(cm),capaciteM1:arrV37_(cn)};}
+function fenetreV37_(periodes){
+  const m=periodes[0],n=periodes[1];if(!m||!n)return null;
+  const scm=Number(m.v37&&m.v37.sct1||0),scn=Number(n.v37&&n.v37.sct1||0),rpm=Number(m.resteBudgetPilotable||0),rpn=Number(n.resteBudgetPilotable||0);
+  let niveau='vert',titre='Pilotage quotidien soutenable';const raisons=[];
+  if(scm<0||scn<0){niveau='rouge';titre='Trajectoire de fin de cycle à corriger';}
+  else if(rpm<0||rpn<0){niveau='orange';titre='Enveloppes à rééquilibrer';}
+  if(rpm<0)raisons.push('M : reliquat P1 '+arrV37_(rpm)+' €');
+  if(scm<0)raisons.push('M : SCt1 '+arrV37_(scm)+' €');
+  if(scn<0)raisons.push('M+1 : SCt1 projeté '+arrV37_(scn)+' €');
+  if(m.v37&&Math.abs(Number(m.v37.ecartHelloCerbere||0))>.01)raisons.push('écart SHB/SC présent '+arrV37_(m.v37.ecartHelloCerbere)+' € à expliquer');
+  if(m.v37&&m.v37.joker&&m.v37.joker.actif)raisons.push('joker actif sur M');
+  if(n.v37&&n.v37.joker&&n.v37.joker.actif)raisons.push('joker actif sur M+1');
+  if(Number(n.roulant&&n.roulant.cbHeritee||0)>0)raisons.push(arrV37_(n.roulant.cbHeritee)+' € de CB pilotables de M déjà engagées sur M+1');
+  if(!raisons.length)raisons.push('reliquat pilotable et trajectoire de fin de cycle restent positifs');
+  return{niveau,titre,raisons,disponibleM:arrV37_(rpm),capaciteM1:arrV37_(scn)};
+}
 function dateDansPeriodeV37_(date,p){const d=dateValideVentilationBudgetSoft_(date),a=dateValideVentilationBudgetSoft_(p&&p.debut),z=dateValideVentilationBudgetSoft_(p&&p.fin);if(!d||!a||!z)return false;const t=new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime();return t>=new Date(a.getFullYear(),a.getMonth(),a.getDate()).getTime()&&t<=new Date(z.getFullYear(),z.getMonth(),z.getDate()).getTime();}
 function normaliserV37_(v){return String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();}
 function arrV37_(n){return Math.round(Number(n||0)*100)/100;}
