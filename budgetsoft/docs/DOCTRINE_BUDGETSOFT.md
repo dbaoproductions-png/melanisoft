@@ -345,3 +345,79 @@ Cette section **précise et remplace toute formulation antérieure incompatible*
 - Le bandeau Cerbère affiche CF0 maître et donne un accès direct à son inspection/reparamétrage. Le reparamétrage du maître se fait dans le référentiel Charges fixes et doit être explicite.
 - Un recalcul manuel du référentiel est possible. Toute décision de **remplacer la photographie déjà figée d'un cycle** doit être une action explicite et distincte, jamais une conséquence silencieuse d'un import.
 - La mise en œuvre du déclenchement horaire exact de la photographie relève du mécanisme d'exécution planifiée ; elle ne doit pas être obtenue en modifiant silencieusement l'infrastructure existante.
+
+## 23. Nomenclature de pilotage quotidien Cerbère — 25/08/2026
+
+Cette section **remplace les anciennes formules de capacité M/M+1 lorsqu'elles sont incompatibles**. Cerbère distingue strictement l'autorisation pilotable, la trajectoire réévaluée du cycle et le contrôle bancaire.
+
+### P0, P1 et RPt1
+
+- **P0** = référence pilotable maître. Le Réel ne la modifie jamais.
+- **P1** = budget pilotable décidé pour le cycle courant. Il est la somme des allocations locales/molettes du cycle. Une opération réelle ne modifie pas P1 ; seule une action explicite sur les allocations le fait.
+- **RPt1** = reliquat pilotable à l'instant `t` :
+
+`RPt1 = P1 − dépenses pilotables déjà consommées ou engagées`
+
+RPt1 est la **synthèse des molettes** et constitue le grand indicateur quotidien : « combien me reste-t-il dans le plan pilotable ? ».
+
+### R1 et Rt1
+
+- **R1** = recettes prévues du cycle, construites à partir de R0 puis déformées par les événements/ajustements propres au cycle.
+- **Rt1** = recettes du cycle réévaluées à l'instant `t` :
+  - pour une recette déjà réalisée, le montant **réel remplace le prévu** ;
+  - pour une recette non encore réalisée, la prévision R1 reste retenue ;
+  - une entrée exceptionnelle réellement constatée ou un événement futur confirmé peut déformer Rt1 sans modifier R0.
+
+### D1, CFt1 et DPt1
+
+- **D1 = CF1 + DP1**, c'est-à-dire charges fixes du cycle + dépenses pilotables du cycle.
+- **CFt1** = charges fixes réévaluées à `t` : occurrence réelle rapprochée si elle est passée, sinon occurrence prévue dans la photographie CF1.
+- **DPt1** = dépenses pilotables réévaluées à `t` : réel/engagé pour la partie connue, prévision P1 pour le futur restant. Tant qu'une enveloppe n'est pas dépassée, sa dépense projetée de fin de cycle reste son allocation P1 ; un dépassement réel/engagé augmente DPt1.
+- **Dt1 = CFt1 + DPt1**.
+- Une dépense non fixe qui ne relève d'aucun poste P1 doit être considérée comme une anomalie de classement à expliquer/reclasser, typiquement vers `Divers`, et ne doit pas devenir silencieusement une troisième famille permanente de dépenses Cerbère.
+
+### SS1 — solde significatif de départ
+
+- **SS1** = solde significatif à la frontière du cycle, idéalement le 27 à 23:59 / 28 à 00:01.
+- « Significatif » signifie que la frontière doit être contrôlée : opération du cycle suivant déjà comptabilisée, opération du cycle précédent encore absente, chèque ou CB en décalage, autre mouvement de frontière.
+- Tant que SS1 n'a pas été validé, Cerbère peut proposer/reconstituer un candidat, mais il doit l'afficher comme **reconstitué à contrôler**, jamais comme vérité validée.
+- La validation de SS1 est explicite et propre au cycle.
+
+### SCt1 — trajectoire Cerbère réévaluée
+
+Le solde Cerbère projeté à la fin du cycle est :
+
+`SCt1 = SS1 + Rt1 − Dt1`
+
+soit :
+
+`SCt1 = SS1 + Rt1 − CFt1 − DPt1`
+
+SCt1 répond à : **« avec tout ce que je sais aujourd'hui, où le cycle devrait-il terminer si le plan P1 restant est consommé ? »**. Il contrôle la soutenabilité de P1 ; il ne remplace pas RPt1.
+
+Ainsi deux informations peuvent diverger légitimement :
+
+- `RPt1 > 0` : il reste du budget dans les molettes ;
+- `SCt1 < 0` : consommer tout ce reliquat conduirait à une fin de cycle négative ; Cerbère doit alors alerter et proposer un resserrement de P1.
+
+### SHBt1 et contrôle de cohérence bancaire
+
+- **SHBt1** = solde Hello bank réellement affiché à l'instant `t`.
+- **SC-présent(t)** = solde Cerbère reconstruit à l'instant `t` à partir de SS1 et des seuls mouvements bancaires réellement constatés depuis la frontière.
+- Cerbère calcule :
+
+`écart(t) = SHBt1 − SC-présent(t)`
+
+- Les deux soldes suivent des logiques différentes, mais **tout écart doit être mathématiquement explicable** : opération bancaire non importée, provisoire/définitive, décalage de frontière, CB, chèque, opération rattachée à un autre cycle, etc.
+- Lorsque SS1 est seulement reconstitué à partir du solde courant, un écart nul n'est pas encore une preuve de cohérence ; le vrai contrôle prend sa valeur après validation explicite de SS1.
+
+### Affichage prioritaire
+
+Pour chaque période M/M+1, le cockpit doit privilégier dans cet ordre :
+
+1. **RPt1 — reste pilotable** ;
+2. **SCt1 — trajectoire réévaluée de fin de cycle** ;
+3. **SS1, Rt1, CFt1, DPt1** comme décomposition explicable ;
+4. pour M seulement, **SHBt1 / SC-présent(t) / écart** comme contrôle de cohérence bancaire.
+
+P0, R0 et CF0 restent visibles comme référentiels maîtres, sans être modifiés par ces calculs.
