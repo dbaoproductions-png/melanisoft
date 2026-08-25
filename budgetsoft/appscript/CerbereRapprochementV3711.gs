@@ -33,7 +33,6 @@ function appliquerRapprochementCerbereV3711_(base){
       v.ss1Statut='projeté depuis la fin Cerbère corrigée de la période précédente';
     }
 
-    // 1. CF : la référence du cycle reste celle de 3.7.10 ; le réel reconnu remplace le prévu.
     const cfRef=calculerCfReferenceCycleV3710_(charges,actions,periode);
     const remplacements={},detailRapproches=[];
     operations.forEach(o=>{
@@ -51,7 +50,6 @@ function appliquerRapprochementCerbereV3711_(base){
     v.cft1=arrV3711_(cft1);
     v.cft1Audit={reference:arrV3711_(cfRef.total),remplacements:remplacements,actionsAppliquees:cfRef.actionsAppliquees,rapproches:detailRapproches,version:CERBERE_RAPPROCHEMENT_V3711_VERSION};
 
-    // 2. Pilotable : repartir du réel brut d'origine, puis retirer toutes les CF reconnues.
     const fuiteCfParCat={};
     operations.forEach(o=>{
       const opId=String(o&&o.id||'').trim();if(!liens[opId])return;
@@ -74,19 +72,23 @@ function appliquerRapprochementCerbereV3711_(base){
     });
     v.dpt1=arrV3711_(dpt1);v.ret1=arrV3711_(ret1);v.fuiteCfCorrigeeParCategorie=fuiteCfParCat;
 
-    // 3. Hors pilotable : seules restent les sorties réelles qui ne sont ni P0 ni CF reconnue.
-    let het1=0;const heDetail={};
+    // Hors pilotable net : uniquement ce qui n'est toujours ni P0 ni CF reconnue.
+    let het1=0,nonCb=0,cb=0;const heDetail={},nonCbParCategorie={},cbParCategorie={};
     operations.forEach(o=>{
       const d=dateImputationCerbereV377_(o),m=Number(o&&o.montant||0),cat=String(o&&o.categorie||'').trim();
       if(!d||!dateDansCycleV377_(d,periode)||m>=0||p0Cats.has(cat))return;
       const opId=String(o&&o.id||'').trim();if(liens[opId])return;
       if(estReglementCbTechniqueV377_(o))return;
-      const a=Math.abs(m);het1+=a;heDetail[cat]=Number(heDetail[cat]||0)+a;
+      const a=Math.abs(m),estCb=!!String(o&&o.carte_fin||'').trim();
+      het1+=a;heDetail[cat]=Number(heDetail[cat]||0)+a;
+      if(estCb){cb+=a;cbParCategorie[cat]=Number(cbParCategorie[cat]||0)+a;}
+      else{nonCb+=a;nonCbParCategorie[cat]=Number(nonCbParCategorie[cat]||0)+a;}
     });
-    Object.keys(heDetail).forEach(k=>heDetail[k]=arrV3711_(heDetail[k]));
+    [heDetail,nonCbParCategorie,cbParCategorie].forEach(obj=>Object.keys(obj).forEach(k=>obj[k]=arrV3711_(obj[k])));
     v.het1=arrV3711_(het1);v.horsPilotableAControler=v.het1;v.het1Detail=heDetail;
+    p.roulant=p.roulant&&typeof p.roulant==='object'?p.roulant:{};
+    p.roulant.horsPilotable={total:arrV3711_(het1),nonCb:arrV3711_(nonCb),cb:arrV3711_(cb),nonCbParCategorie:nonCbParCategorie,cbParCategorie:cbParCategorie,netApresRapprochementCf:true};
 
-    // 4. Pilotage : aucune autre doctrine ne change.
     v.dt1=arrV3711_(Number(v.cft1||0)+Number(v.dpt1||0)+Number(v.het1||0));
     v.sct1=arrV3711_(Number(v.ss1||0)+Number(v.rt1||0)-v.dt1);
     v.rpt1=v.sct1;v.resteReellementPilotable=v.sct1;v.disponibleJusquau27=v.sct1;
@@ -99,7 +101,7 @@ function appliquerRapprochementCerbereV3711_(base){
 
   base.version=CERBERE_RAPPROCHEMENT_V3711_VERSION;
   base.diagnostic=base.diagnostic||{};
-  base.diagnostic.rapprochement_3711='CF : id/validation puis libellé fort unique, montant réel autorisé à diverger ; recalcul DPt1/HEt1 sans double compte';
+  base.diagnostic.rapprochement_3711='CF : id/validation puis libellé fort unique, montant réel autorisé à diverger ; DPt1 et HEt1 recalculés sans double compte';
   return base;
 }
 
