@@ -1,101 +1,93 @@
-const CERBERE_PILOTAGE_V374_VERSION='3.7.5';
+const CERBERE_PILOTAGE_V374_VERSION='3.7.6';
 
 /**
- * Complément moteur 3.7.5.
- * Ne modifie aucun maître P0/R0/CF0.
- *
- * Règle CF :
- * - M conserve sa photographie CF1 du début de cycle ;
- * - M+1 et les périodes futures n'étant pas encore ouvertes repartent du CF0
- *   courant, puis appliquent les effets Actions/Événements de leur période ;
- * - au 28, la période devient à son tour figée.
- *
- * RPt1 reste provisoirement calculé comme REt1 + variations ; l'audit métier
- * déterminera ensuite si SCt1 devient directement l'indicateur principal.
+ * Cerbère 3.7.6 — doctrine stabilisée du cockpit court terme.
+ * - SCt1 = indicateur principal « Encore disponible jusqu’au 27 ».
+ * - REt1 = situation par rapport au budget initial P1 (bilan secondaire).
+ * - DPt1 = dépenses pilotables estimées sur le cycle.
+ * - HEt1 = sorties hors enveloppes connues et non déjà comptées ailleurs.
+ * - M+1 hérite immédiatement de la fin projetée de M.
+ * - Santé : uniquement le réel du cycle ; aucun remboursement hypothétique.
  */
 function appliquerResteReellementPilotableV374_(base){
   if(!base||base.ok===false)return base;
-
-  // Correction ciblée CF1 futur : le référentiel d'une période non ouverte ne
-  // doit jamais rester accroché à une ancienne photographie de CF0.
   recalculerCfFutursDepuisCf0CourantV375_(base);
 
+  let reportPrecedent=null;
   (base.periodes||[]).forEach((p,i)=>{
-    const v=p.v37||{};
-    const re=arrV374_(Number(p.resteBudgetPilotable!=null?p.resteBudgetPilotable:v.disponibleEnveloppes||0));
+    const v=p.v37||(p.v37={});
+    const r=p.roulant||{};
+    const h=r.horsPilotable||{};
 
-    // ΔR : uniquement l'écart au socle R1 + les ressources nouvelles.
-    const deltaR=arrV374_(
-      Number(v.correctionRecettesReelles||0)+
-      Number(v.recettesHorsR0Reelles||0)+
-      Number(v.recettesEvenements||0)
-    );
+    if(i>0 && reportPrecedent!==null){
+      v.ss1=arrV374_(reportPrecedent);
+      v.soldeOuverture=v.ss1;
+      v.ss1Statut='projeté depuis la fin Cerbère de la période précédente';
+    }
 
-    // ΔCF : économie positive / surcoût négatif par rapport au CF1 du cycle.
-    const cfReference=Number(v.chargesFixesTotal||0);
-    const cfReevalue=Number(v.cft1||cfReference);
-    const deltaCF=arrV374_(cfReference-cfReevalue);
+    // Situation par rapport au budget initial : P1 - consommé/réservé.
+    const ret1=arrV374_(Number(v.disponibleEnveloppes!=null?v.disponibleEnveloppes:(p.resteBudgetPilotable||0)));
 
-    const deltaAutres=arrV374_(Number(v.deltaAutresPilotage||0));
-    const rpt1=arrV374_(re+deltaR+deltaCF+deltaAutres);
+    // Dépenses hors enveloppes connues. Elles ne doivent peser sur SCt1 que si
+    // elles ne sont déjà ni CF rapprochées, ni mouvements de trésorerie, ni
+    // intégrées au pilotable. Le moteur amont peut fournir horsPilotableAControler.
+    // À défaut, le bloc horsPilotable est traité comme « à contrôler » : on ne
+    // l'injecte pas silencieusement dans SCt1 afin d'éviter tout double comptage.
+    const het1Explicite=Number(v.horsPilotableAControler!=null?v.horsPilotableAControler:0);
+    const het1=arrV374_(Math.max(0,het1Explicite));
 
-    v.ret1=re;
-    v.deltaRt1=deltaR;
-    v.deltaCFt1=deltaCF;
-    v.deltaAt1=deltaAutres;
-    v.rpt1=rpt1;
-    v.resteReellementPilotable=rpt1;
-    v.formuleRPt1='RPt1 = REt1 + ΔRt1 + ΔCFt1 + ΔAt1';
-    v.explicationRPt1={
-      resteEnveloppes:re,
-      variationRecettes:deltaR,
-      variationChargesFixes:deltaCF,
-      autresVariations:deltaAutres
-    };
+    v.ret1=ret1;
+    v.het1=het1;
+    v.horsPilotableBrut=arrV374_(Number(h.total||0));
+    v.dt1=arrV374_(Number(v.cft1||0)+Number(v.dpt1||0)+het1);
+    v.sct1=arrV374_(Number(v.ss1||0)+Number(v.rt1||0)-v.dt1);
+    v.rpt1=v.sct1; // compatibilité : l'ancien nom pointe désormais sur le vrai indicateur.
+    v.resteReellementPilotable=v.sct1;
+    v.disponibleJusquau27=v.sct1;
+    v.formuleSCt1='SCt1 = SS1 + Rt1 - CFt1 - DPt1 - HEt1';
+    v.formuleREt1='REt1 = P1 - pilotable consommé/réservé';
+
+    // Capacité réellement absorbable par les allocations encore non consommées.
+    const absorbable=arrV374_((p.enveloppes||[]).reduce((s,x)=>{
+      const allocation=Number(x.prevu||0);
+      const reel=Number(x.reelNetPrevisionnel!=null?x.reelNetPrevisionnel:(x.reelImpute||0));
+      const plan=Number(x.planifie||0);
+      return s+Math.max(0,allocation-reel-plan);
+    },0));
+    v.absorbableParAllocations=absorbable;
+    v.incompressible=arrV374_(v.sct1<0?Math.max(0,Math.abs(v.sct1)-absorbable):0);
+
     p.v37=v;
-    p.resteReellementPilotable=rpt1;
-    p.capacitePilotable=rpt1;
-    p.resteBudgetPilotable=rpt1;
-    if(i===0)v.disponibleJusquau27=rpt1;
+    p.resteReellementPilotable=v.sct1;
+    p.capacitePilotable=v.sct1;
+    p.resteBudgetPilotable=ret1;
+    p.capaciteTresorerie=v.sct1;
+    reportPrecedent=v.sct1;
   });
 
   base.version=CERBERE_PILOTAGE_V374_VERSION;
-  base.principe='Cerbère 3.7.5 : M conserve son CF1 figé ; M+1 repart du CF0 courant puis applique les Actions/Événements de sa période. RPt1 reste séparé de SCt1 pendant l’audit.';
+  base.principe='Cerbère 3.7.6 : SCt1 pilote le présent et M+1 ; REt1 reste un bilan du budget initial ; les hors-pilotable non rapprochés restent à contrôler avant impact automatique.';
   base.diagnostic=base.diagnostic||{};
   base.diagnostic.moteur_pilotage=CERBERE_PILOTAGE_V374_VERSION;
-  base.diagnostic.doctrine_cf1='M figé ; M+1 et futur = CF0 courant + effets Plan de période jusqu’à leur ouverture';
-  base.diagnostic.doctrine_rpt1='RPt1 = REt1 + deltaR + deltaCF + deltaAutres ; formule encore sous audit face à SCt1';
+  base.diagnostic.doctrine_sc='SCt1 = Encore disponible jusqu’au 27';
+  base.diagnostic.doctrine_re='REt1 = situation par rapport au budget initial P1';
+  base.diagnostic.doctrine_sante='remboursements santé uniquement lorsqu’ils sont réellement constatés sur le cycle';
   return base;
 }
 
-/**
- * Recalcule seulement les CF des périodes FUTURES.
- * M (index 0) reste volontairement immuable.
- */
+/** M est figé ; M+1 et futur repartent du CF0 courant jusqu'à ouverture. */
 function recalculerCfFutursDepuisCf0CourantV375_(base){
   const periodes=base.periodes||[];
   if(periodes.length<2)return;
   const charges=lireTable_('Charges_fixes');
-
-  let reportPrecedent=null;
   periodes.forEach((p,i)=>{
+    if(i===0)return;
     const v=p.v37||(p.v37={});
-
-    if(i===0){
-      reportPrecedent=Number(v.sct1||0);
-      return;
-    }
-
     const periode=p.periode||p;
     const cf0Courant=arrV374_(cfTotalSecoursV372_(charges,periode));
     const effets=p.plan&&p.plan.effets||{};
-    const deltaPlan=arrV374_(
-      Number(effets.hausseCharges||0)-
-      Number(effets.baisseCharges||0)-
-      Number(effets.chargesEvitees||0)
-    );
+    const deltaPlan=arrV374_(Number(effets.hausseCharges||0)-Number(effets.baisseCharges||0)-Number(effets.chargesEvitees||0));
     const cf1=arrV374_(Math.max(0,cf0Courant+deltaPlan));
-
     v.cf0CourantSource=cf0Courant;
     v.deltaPlanCharges=deltaPlan;
     v.chargesFixesTotal=cf1;
@@ -105,28 +97,10 @@ function recalculerCfFutursDepuisCf0CourantV375_(base){
     v.chargesFixesRealisees=0;
     v.cft1=cf1;
     v.cf1Statut='projection dynamique depuis CF0 courant jusqu’à ouverture du cycle';
-
-    // Pour M+1 et au-delà, le report doit suivre la trajectoire corrigée de la
-    // période précédente, sinon une correction CF ne se propagerait pas.
-    if(reportPrecedent!==null){
-      v.ss1=arrV374_(reportPrecedent);
-      v.soldeOuverture=v.ss1;
-      v.ss1Statut='projeté depuis SCt1 de la période précédente';
-    }
-
-    v.dt1=arrV374_(Number(v.cft1||0)+Number(v.dpt1||0));
-    v.sct1=arrV374_(Number(v.ss1||0)+Number(v.rt1||0)-v.dt1);
-    v.pointDepart=arrV374_(Number(v.ss1||0)+Number(v.rt1||0)-Number(v.cft1||0));
-    v.finProjetee=v.sct1;
-    v.capaciteProjetee=v.sct1;
-    p.capaciteTresorerie=v.sct1;
-    reportPrecedent=v.sct1;
   });
 }
 
-/** Point d'entrée conservé pour ne pas toucher au circuit UI. */
 function chargerCerbereV374(){
   return serialiserCerberePourClient_(appliquerResteReellementPilotableV374_(chargerCerbereV37()));
 }
-
 function arrV374_(n){return Math.round((Number(n)||0)*100)/100;}
