@@ -2,7 +2,9 @@ const CERBERE_PILOTAGE_V374_VERSION='3.7.12';
 
 /**
  * Cerbère 3.7.12 — cockpit court terme audité et défensif.
- * Chaîne : socle -> audit -> R0 daté -> rapprochements CF -> doctrine du cycle.
+ * Chaîne de non-régression :
+ * socle -> audit -> correctifs 3.7.10 via R0 historique -> rapprochement CF 3.7.11
+ * -> doctrine cycle 3.7.12 -> convention salaire 28 sur M/M+1.
  */
 function appliquerResteReellementPilotableV374_(base){
   if(!base||base.ok===false)return base;
@@ -46,10 +48,13 @@ function chargerCerbereV374(){
   const brut=chargerCerbereV37();
   const base=appliquerResteReellementPilotableV374_(brut);
   const audite=typeof appliquerAuditCerbereV377_==='function'?appliquerAuditCerbereV377_(base):base;
+  // appliquerHistoriqueR0V378_ appelle lui-même la passe comptable 3.7.10 avant
+  // d'appliquer le canon R0 daté : ne pas appeler 3.7.10 une seconde fois ici.
   const historique=typeof appliquerHistoriqueR0V378_==='function'?appliquerHistoriqueR0V378_(audite):audite;
   const rapproche=typeof appliquerRapprochementCerbereV3711_==='function'?appliquerRapprochementCerbereV3711_(historique):historique;
   const cycle=typeof appliquerDoctrineCycleV3712_==='function'?appliquerDoctrineCycleV3712_(rapproche):rapproche;
-  if(cycle&&typeof cycle==='object')cycle.version=CERBERE_PILOTAGE_V374_VERSION;
-  return serialiserCerberePourClient_(cycle);
+  const salaire=typeof appliquerConventionSalaireTousCyclesV3712_==='function'?appliquerConventionSalaireTousCyclesV3712_(cycle):cycle;
+  if(salaire&&typeof salaire==='object')salaire.version=CERBERE_PILOTAGE_V374_VERSION;
+  return serialiserCerberePourClient_(salaire);
 }
 function arrV374_(n){return Math.round((Number(n)||0)*100)/100;}
