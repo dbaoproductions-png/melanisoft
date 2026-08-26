@@ -1,4 +1,4 @@
-const CERBERE_PILOTAGE_V374_VERSION='3.7.19';
+const CERBERE_PILOTAGE_V374_VERSION='3.7.20';
 
 function appliquerResteReellementPilotableV374_(base){if(!base||base.ok===false)return base;recalculerCfFutursDepuisCf0CourantV375_(base);let reportPrecedent=null;const periodes=Array.isArray(base.periodes)?base.periodes:[];periodes.forEach((p,i)=>{if(!p||typeof p!=='object')return;const v=p.v37||(p.v37={}),r=p.roulant&&typeof p.roulant==='object'?p.roulant:{},h=r.horsPilotable&&typeof r.horsPilotable==='object'?r.horsPilotable:{};if(i>0&&reportPrecedent!==null){v.ss1=arrV374_(reportPrecedent);v.soldeOuverture=v.ss1;v.ss1Statut='projection provisoire héritée du socle';}const ret1=arrV374_(Number(v.disponibleEnveloppes!=null?v.disponibleEnveloppes:(p.resteBudgetPilotable||0))),het1=arrV374_(Math.max(0,Number(v.horsPilotableAControler!=null?v.horsPilotableAControler:0)));v.ret1=ret1;v.het1=het1;v.horsPilotableBrut=arrV374_(Number(h.total||0));v.dt1=arrV374_(Number(v.cft1||0)+Number(v.dpt1||0)+het1);v.sct1=arrV374_(Number(v.ss1||0)+Number(v.rt1||0)-v.dt1);v.rpt1=v.sct1;v.resteReellementPilotable=v.sct1;v.disponibleJusquau27=v.sct1;v.formuleSCt1='SCt1 = SS1 + Rt1 - CFt1 - DPt1 - HEt1';v.formuleREt1='REt1 = P1 - pilotable consommé/réservé';const env=Array.isArray(p.enveloppes)?p.enveloppes:[],abs=arrV374_(env.reduce((s,x)=>s+Math.max(0,Number(x&&x.prevu||0)-Number(x&&x.reelNetPrevisionnel!=null?x.reelNetPrevisionnel:(x&&x.reelImpute||0))-Number(x&&x.planifie||0)),0));v.absorbableParAllocations=abs;v.incompressible=arrV374_(v.sct1<0?Math.max(0,Math.abs(v.sct1)-abs):0);p.v37=v;p.resteReellementPilotable=v.sct1;p.capacitePilotable=v.sct1;p.resteBudgetPilotable=ret1;p.capaciteTresorerie=v.sct1;reportPrecedent=v.sct1;});base.version=CERBERE_PILOTAGE_V374_VERSION;return base;}
 
@@ -25,14 +25,13 @@ function stabiliserCerbereV3716_(base){
 }
 
 /**
- * Passe terminale 3.7.19.
- * - M+1 utilise le R0 courant persistant : une transition déjà effective ne peut plus
- *   retomber sur l'ancien montant à cause d'un décalage de date/UTC.
- * - les effets de suspension/report d'une CF sont reconnus même si la carte les a
- *   classés information : la catégorie et le libellé métier servent de garde-fou.
- * - tout Réel lié à une CF remplace l'occurrence prévue ; s'il n'existe pas de ligne
- *   d'occurrence dans la référence du cycle, le Réel est tout de même porté en CF
- *   et signalé dans l'audit au lieu de disparaître de HEt1 sans contrepartie.
+ * Passe terminale 3.7.20.
+ * - R0 futur verrouillé sur le canon courant.
+ * - un Réel CF relié à une occurrence de référence la remplace ; si l'identifiant
+ *   diffère, on cherche l'occurrence équivalente et on applique seulement le delta
+ *   Réel - prévu. On n'ajoute jamais aveuglément tout le Réel une deuxième fois.
+ * - une suspension/report de CF est reconnue par sa cible OU par le libellé du
+ *   créancier dans Charges_fixes (cas CASDEN), même si la carte l'a classée information.
  */
 function stabiliserCerbereV3717_(base){
   if(!base||base.ok===false)return base;
@@ -47,14 +46,13 @@ function stabiliserCerbereV3717_(base){
   const canonFrais=typeof chargerCanonRecettesCerbereV1==='function'?chargerCanonRecettesCerbereV1():base.recettesCanon;
   const postes=tableauCerbereV379_(canonFrais&&canonFrais.postes);
   const liens=construireLiensCfV3717_(operations,charges,rapprochements);
+  const chargeParId={};charges.forEach(c=>{const id=String(c&&c.id||'').trim();if(id)chargeParId[id]=c;});
 
   periodes.forEach((p,i)=>{
     if(!p||typeof p!=='object')return;
     const v=p.v37||(p.v37={}),periode=p.periode||p;
     const effetsCarte=tableauCerbereV379_(v.actionsEvenementsCycle);
 
-    // Pour M+1 et au-delà, le canon courant est la vérité. L'historique sert aux
-    // cycles passés/courants, jamais à rabaisser un futur déjà ouvert au nouveau R0.
     if(i>0&&postes.length){
       const socle=arrV374_(postes.reduce((s,x)=>s+Math.max(0,Number(x&&x.montant||0)),0));
       const recettesCarte=arrV374_(effetsCarte.reduce((s,x)=>normaliserV377_(x&&x.cible)==='recette'?s+Math.max(0,Number(x&&x.montantSigne||0)):s,0));
@@ -62,14 +60,32 @@ function stabiliserCerbereV3717_(base){
       const plan=recettesCarte>0?recettesCarte:planAudit;
       const avant=arrV374_(Number(v.rt1||0));v.rt1=arrV374_(socle+plan);
       v.rt1Audit=v.rt1Audit&&typeof v.rt1Audit==='object'?v.rt1Audit:{};
-      v.rt1Audit.socleCanonTerminal3719=socle;v.rt1Audit.recettesCarteTerminal3719=recettesCarte;v.rt1Audit.planAuditTerminal3719=planAudit;v.rt1Audit.planTerminal3719=plan;v.rt1Audit.rt1AvantTerminal3719=avant;v.rt1Audit.deltaTerminal3719=arrV374_(v.rt1-avant);v.rt1Audit.sourceTerminal3719='R0 courant persistant + carte Actions/Événements';
+      v.rt1Audit.socleCanonTerminal3720=socle;v.rt1Audit.recettesCarteTerminal3720=recettesCarte;v.rt1Audit.planAuditTerminal3720=planAudit;v.rt1Audit.planTerminal3720=plan;v.rt1Audit.rt1AvantTerminal3720=avant;v.rt1Audit.deltaTerminal3720=arrV374_(v.rt1-avant);v.rt1Audit.sourceTerminal3720='R0 courant persistant + carte Actions/Événements';
     }
 
     const ref=calculerCfReferenceCycleV3710_(charges,actions,periode),refLignes=tableauCerbereV379_(ref.lignes),refIds=new Set(refLignes.map(c=>String(c&&c.id||'')).filter(Boolean)),remplacements={},rapproches=[];
     operations.forEach(o=>{const id=String(o&&o.id||'').trim(),cfId=liens[id],d=dateOperationBanqueV377_(o);if(!cfId||!d||!dateDansCycleV377_(d,periode))return;const a=Math.abs(Number(o&&o.montant||0));remplacements[cfId]=Number(remplacements[cfId]||0)+a;rapproches.push({operation_id:id,charge_fixe_id:cfId,montant:arrV374_(a),categorie:String(o&&o.categorie||''),libelle:String(o&&o.libelle||o&&o.libelle_bancaire||''),dansReference:refIds.has(String(cfId))});});
+
     let cft1AvantEffets=0;refLignes.forEach(c=>{const id=String(c&&c.id||'');cft1AvantEffets+=Object.prototype.hasOwnProperty.call(remplacements,id)?Number(remplacements[id]):Number(c&&c.montant||0);});
-    const reelsSansOccurrence=[];Object.keys(remplacements).forEach(id=>{if(refIds.has(String(id)))return;const montant=Number(remplacements[id]||0);if(montant>0){cft1AvantEffets+=montant;reelsSansOccurrence.push({charge_fixe_id:id,montant:arrV374_(montant)});}});
-    const effetCfNet=arrV374_(effetsCarte.reduce((s,x)=>estEffetCfEviteV3719_(x,refLignes)?s+Math.max(0,Number(x&&x.montantSigne||0)):normaliserV377_(x&&x.cible)==='charge_fixe'?s+Number(x&&x.montantSigne||0):s,0));
+
+    // Alias d'occurrence : si le lien pointe sur la CF maître mais que la ligne du
+    // cycle a un autre id, remplacer économiquement la ligne équivalente par delta.
+    const aliasUtilises=new Set(),ajustementsAlias=[],reelsSansOccurrence=[];
+    Object.keys(remplacements).forEach(id=>{
+      if(refIds.has(String(id)))return;
+      const reel=Number(remplacements[id]||0),maitre=chargeParId[id];
+      if(!(reel>0)||!maitre)return;
+      const candidats=refLignes.filter(c=>!aliasUtilises.has(String(c&&c.id||''))&&equivalentCfReferenceV3720_(maitre,c));
+      if(candidats.length===1){
+        const c=candidats[0],prevu=Math.abs(Number(c&&c.montant||0)),delta=reel-prevu;
+        cft1AvantEffets+=delta;aliasUtilises.add(String(c&&c.id||''));
+        ajustementsAlias.push({charge_fixe_id:id,reference_id:String(c&&c.id||''),prevu:arrV374_(prevu),reel:arrV374_(reel),delta:arrV374_(delta)});
+      }else{
+        reelsSansOccurrence.push({charge_fixe_id:id,montant:arrV374_(reel),candidats:candidats.length});
+      }
+    });
+
+    const effetCfNet=arrV374_(effetsCarte.reduce((s,x)=>estEffetCfEviteV3720_(x,charges,refLignes)?s+Math.max(0,Number(x&&x.montantSigne||0)):normaliserV377_(x&&x.cible)==='charge_fixe'?s+Number(x&&x.montantSigne||0):s,0));
     v.chargesFixesTotal=arrV374_(ref.total);v.cft1=arrV374_(Math.max(0,cft1AvantEffets-effetCfNet));
 
     const cfParCat={};operations.forEach(o=>{const id=String(o&&o.id||'').trim(),cfId=liens[id],d=dateImputationCerbereV377_(o);if(!cfId||!d||!dateDansCycleV377_(d,periode))return;const cat=String(o&&o.categorie||'').trim();cfParCat[cat]=Number(cfParCat[cat]||0)+Math.abs(Number(o&&o.montant||0));});
@@ -84,24 +100,41 @@ function stabiliserCerbereV3717_(base){
 
     let rejetes=typeof diagnostiquerCandidatsCfRejetesV3715_==='function'?diagnostiquerCandidatsCfRejetesV3715_(operations,refLignes,liens,periode):[];
     rejetes=tableauCerbereV379_(rejetes).map(x=>{const cs=tableauCerbereV379_(x&&x.candidats).filter(c=>c&&((c.memeCategorie===true)||c.libelleProche===true||memeFamilleCfV3717_(x&&x.categorie,c&&c.categorie)));return Object.assign({},x,{candidats:cs});}).filter(x=>x.candidats.length);
-    v.cft1Audit={reference:arrV374_(ref.total),avantEffetsCycle:arrV374_(cft1AvantEffets),effetNetCycle:effetCfNet,apresEffetsCycle:v.cft1,remplacements:remplacements,reelsSansOccurrenceReference:reelsSansOccurrence,actionsAppliquees:ref.actionsAppliquees,rapproches:rapproches,candidatsRejetes:rejetes,version:'3.7.19'};
-    p.roulant=p.roulant&&typeof p.roulant==='object'?p.roulant:{};p.roulant.horsPilotable={total:v.het1,nonCb:arrV374_(nonCb),cb:arrV374_(cb),nonCbParCategorie:ncb,cbParCategorie:cbd,netApresRapprochementCf:true,candidatsCfRejetes:rejetes,version:'3.7.19'};
+    v.cft1Audit={reference:arrV374_(ref.total),avantEffetsCycle:arrV374_(cft1AvantEffets),effetNetCycle:effetCfNet,apresEffetsCycle:v.cft1,remplacements:remplacements,ajustementsAlias:ajustementsAlias,reelsSansOccurrenceReference:reelsSansOccurrence,actionsAppliquees:ref.actionsAppliquees,rapproches:rapproches,candidatsRejetes:rejetes,version:'3.7.20'};
+    p.roulant=p.roulant&&typeof p.roulant==='object'?p.roulant:{};p.roulant.horsPilotable={total:v.het1,nonCb:arrV374_(nonCb),cb:arrV374_(cb),nonCbParCategorie:ncb,cbParCategorie:cbd,netApresRapprochementCf:true,candidatsCfRejetes:rejetes,version:'3.7.20'};
     v.candidatsCfRejetes=rejetes;
     recalculerDerivesCerbereV3717_(p);
   });
 
-  base.recettesCanon=canonFrais||base.recettesCanon;base.version=CERBERE_PILOTAGE_V374_VERSION;base.diagnostic=base.diagnostic||{};base.diagnostic.stabilisation_3719='M+1 sur R0 courant ; suspensions/report CF détectés par métier ; Réel CF sans occurrence de référence conservé en CF ; dérivés recalculés';
+  base.recettesCanon=canonFrais||base.recettesCanon;base.version=CERBERE_PILOTAGE_V374_VERSION;base.diagnostic=base.diagnostic||{};base.diagnostic.stabilisation_3720='R0 futur courant ; CF aliasées par remplacement delta ; suspension/report détecté par créancier ; aucun Réel CF sans occurrence ajouté aveuglément';
   base.fenetreRoulante=typeof fenetreV37_==='function'?fenetreV37_(periodes):base.fenetreRoulante;
   return base;
 }
 
-function estEffetCfEviteV3719_(x,refLignes){
+function equivalentCfReferenceV3720_(maitre,ref){
+  if(!maitre||!ref)return false;
+  const ml=normaliserV377_(maitre.libelle_bancaire||maitre.libelle||''),rl=normaliserV377_(ref.libelle_bancaire||ref.libelle||'');
+  const mc=normaliserV377_(maitre.categorie||''),rc=normaliserV377_(ref.categorie||'');
+  const mm=Math.abs(Number(maitre.montant||0)),rm=Math.abs(Number(ref.montant||0));
+  const nom=ml&&rl&&(ml===rl||ml.indexOf(rl)>=0||rl.indexOf(ml)>=0);
+  const famille=memeFamilleCfV3717_(mc,rc);
+  const montant=Math.abs(mm-rm)<=.011;
+  return !!(nom||(famille&&montant));
+}
+
+function estEffetCfEviteV3720_(x,charges,refLignes){
   if(!x||Number(x.montantSigne||0)<=0)return false;
   if(normaliserV377_(x.cible)==='charge_fixe')return true;
   const lib=normaliserV377_(x.libelle||''),cat=normaliserV377_(x.categorie||'');
   const mot=/(suspension|suspend|report|reporte|suppression|supprime|annulation|annule|echeance)/.test(lib);
-  if(!mot||!cat)return false;
-  return tableauCerbereV379_(refLignes).some(c=>{const cc=normaliserV377_(c&&c.categorie||'');return cc===cat||memeFamilleCfV3717_(cat,cc);});
+  if(!mot)return false;
+  const refs=tableauCerbereV379_(refLignes),masters=tableauCerbereV379_(charges);
+  if(cat&&refs.some(c=>{const cc=normaliserV377_(c&&c.categorie||'');return cc===cat||memeFamilleCfV3717_(cat,cc);}))return true;
+  return masters.some(c=>{
+    const actif=!(c&&c.actif===false||normaliserV377_(c&&c.actif)==='false'||normaliserV377_(c&&c.actif)==='non');if(!actif)return false;
+    const nom=normaliserV377_(c&&c.libelle_bancaire||c&&c.libelle||'');if(!nom||nom.length<4)return false;
+    return lib.indexOf(nom)>=0||nom.indexOf(lib)>=0;
+  });
 }
 
 function construireLiensCfV3717_(operations,charges,rapprochements){
