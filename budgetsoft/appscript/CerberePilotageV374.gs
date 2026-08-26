@@ -1,4 +1,4 @@
-const CERBERE_PILOTAGE_V374_VERSION='3.7.22';
+const CERBERE_PILOTAGE_V374_VERSION='3.7.23';
 
 function appliquerResteReellementPilotableV374_(base){if(!base||base.ok===false)return base;recalculerCfFutursDepuisCf0CourantV375_(base);let reportPrecedent=null;const periodes=Array.isArray(base.periodes)?base.periodes:[];periodes.forEach((p,i)=>{if(!p||typeof p!=='object')return;const v=p.v37||(p.v37={}),r=p.roulant&&typeof p.roulant==='object'?p.roulant:{},h=r.horsPilotable&&typeof r.horsPilotable==='object'?r.horsPilotable:{};if(i>0&&reportPrecedent!==null){v.ss1=arrV374_(reportPrecedent);v.soldeOuverture=v.ss1;v.ss1Statut='projection provisoire héritée du socle';}const ret1=arrV374_(Number(v.disponibleEnveloppes!=null?v.disponibleEnveloppes:(p.resteBudgetPilotable||0))),het1=arrV374_(Math.max(0,Number(v.horsPilotableAControler!=null?v.horsPilotableAControler:0)));v.ret1=ret1;v.het1=het1;v.horsPilotableBrut=arrV374_(Number(h.total||0));v.dt1=arrV374_(Number(v.cft1||0)+Number(v.dpt1||0)+het1);v.sct1=arrV374_(Number(v.ss1||0)+Number(v.rt1||0)-v.dt1);v.rpt1=v.sct1;v.resteReellementPilotable=v.sct1;v.disponibleJusquau27=v.sct1;v.formuleSCt1='SCt1 = SS1 + Rt1 - CFt1 - DPt1 - HEt1';v.formuleREt1='REt1 = P1 - pilotable consommé/réservé';const env=Array.isArray(p.enveloppes)?p.enveloppes:[],abs=arrV374_(env.reduce((s,x)=>s+Math.max(0,Number(x&&x.prevu||0)-Number(x&&x.reelNetPrevisionnel!=null?x.reelNetPrevisionnel:(x&&x.reelImpute||0))-Number(x&&x.planifie||0)),0));v.absorbableParAllocations=abs;v.incompressible=arrV374_(v.sct1<0?Math.max(0,Math.abs(v.sct1)-abs):0);p.v37=v;p.resteReellementPilotable=v.sct1;p.capacitePilotable=v.sct1;p.resteBudgetPilotable=ret1;p.capaciteTresorerie=v.sct1;reportPrecedent=v.sct1;});base.version=CERBERE_PILOTAGE_V374_VERSION;return base;}
 
@@ -25,11 +25,9 @@ function stabiliserCerbereV3716_(base){
 }
 
 /**
- * Passe terminale 3.7.22.
- * R0 futur et CASDEN restent verrouillés. Pour une opération déjà reconnue comme CF,
- * le réel remplace le prévu. Si l'occurrence technique du cycle ne peut pas être
- * retrouvée de façon unique, le montant maître constitue un dernier secours : on
- * applique uniquement le delta Réel - montant maître, jamais le Réel complet.
+ * Passe terminale 3.7.23.
+ * Reconnaissance CF issue du coeur commun, avec repli strict sur la 3.7.22 si le coeur
+ * n'est pas disponible. Aucun changement du registre Operations n'est effectué ici.
  */
 function stabiliserCerbereV3717_(base){
   if(!base||base.ok===false)return base;
@@ -43,7 +41,7 @@ function stabiliserCerbereV3717_(base){
   const types={};categories.forEach(c=>types[String(c&&c.nom||'').trim()]=normaliserV377_(c&&c.type));
   const canonFrais=typeof chargerCanonRecettesCerbereV1==='function'?chargerCanonRecettesCerbereV1():base.recettesCanon;
   const postes=tableauCerbereV379_(canonFrais&&canonFrais.postes);
-  const liens=construireLiensCfV3717_(operations,charges,rapprochements);
+  const liens=typeof construireLiensChargesFixesCommuns_==='function'?construireLiensChargesFixesCommuns_(operations,charges,rapprochements):construireLiensCfV3717_(operations,charges,rapprochements);
   const chargeParId={};charges.forEach(c=>{const id=String(c&&c.id||'').trim();if(id)chargeParId[id]=c;});
 
   periodes.forEach((p,i)=>{
@@ -58,7 +56,7 @@ function stabiliserCerbereV3717_(base){
       const plan=recettesCarte>0?recettesCarte:planAudit;
       const avant=arrV374_(Number(v.rt1||0));v.rt1=arrV374_(socle+plan);
       v.rt1Audit=v.rt1Audit&&typeof v.rt1Audit==='object'?v.rt1Audit:{};
-      v.rt1Audit.socleCanonTerminal3722=socle;v.rt1Audit.recettesCarteTerminal3722=recettesCarte;v.rt1Audit.planAuditTerminal3722=planAudit;v.rt1Audit.planTerminal3722=plan;v.rt1Audit.rt1AvantTerminal3722=avant;v.rt1Audit.deltaTerminal3722=arrV374_(v.rt1-avant);v.rt1Audit.sourceTerminal3722='R0 courant persistant + carte Actions/Événements';
+      v.rt1Audit.socleCanonTerminal3723=socle;v.rt1Audit.recettesCarteTerminal3723=recettesCarte;v.rt1Audit.planAuditTerminal3723=planAudit;v.rt1Audit.planTerminal3723=plan;v.rt1Audit.rt1AvantTerminal3723=avant;v.rt1Audit.deltaTerminal3723=arrV374_(v.rt1-avant);v.rt1Audit.sourceTerminal3723='R0 courant persistant + carte Actions/Événements';
     }
 
     const ref=calculerCfReferenceCycleV3710_(charges,actions,periode),refLignes=tableauCerbereV379_(ref.lignes),refIds=new Set(refLignes.map(c=>String(c&&c.id||'')).filter(Boolean)),remplacements={},rapproches=[],opsParCfId={};
@@ -102,13 +100,13 @@ function stabiliserCerbereV3717_(base){
 
     let rejetes=typeof diagnostiquerCandidatsCfRejetesV3715_==='function'?diagnostiquerCandidatsCfRejetesV3715_(operations,refLignes,liens,periode):[];
     rejetes=tableauCerbereV379_(rejetes).map(x=>{const cs=tableauCerbereV379_(x&&x.candidats).filter(c=>c&&((c.memeCategorie===true)||c.libelleProche===true||memeFamilleCfV3717_(x&&x.categorie,c&&c.categorie)));return Object.assign({},x,{candidats:cs});}).filter(x=>x.candidats.length);
-    v.cft1Audit={reference:arrV374_(ref.total),avantEffetsCycle:arrV374_(cft1AvantEffets),effetNetCycle:effetCfNet,apresEffetsCycle:v.cft1,remplacements:remplacements,ajustementsAlias:ajustementsAlias,reelsSansOccurrenceReference:reelsSansOccurrence,actionsAppliquees:ref.actionsAppliquees,rapproches:rapproches,candidatsRejetes:rejetes,version:'3.7.22'};
-    p.roulant=p.roulant&&typeof p.roulant==='object'?p.roulant:{};p.roulant.horsPilotable={total:v.het1,nonCb:arrV374_(nonCb),cb:arrV374_(cb),nonCbParCategorie:ncb,cbParCategorie:cbd,netApresRapprochementCf:true,candidatsCfRejetes:rejetes,version:'3.7.22'};
+    v.cft1Audit={reference:arrV374_(ref.total),avantEffetsCycle:arrV374_(cft1AvantEffets),effetNetCycle:effetCfNet,apresEffetsCycle:v.cft1,remplacements:remplacements,ajustementsAlias:ajustementsAlias,reelsSansOccurrenceReference:reelsSansOccurrence,actionsAppliquees:ref.actionsAppliquees,rapproches:rapproches,candidatsRejetes:rejetes,version:'3.7.23',moteurReconnaissanceCf:typeof construireLiensChargesFixesCommuns_==='function'?'commun-1.0.1':'fallback-legacy'};
+    p.roulant=p.roulant&&typeof p.roulant==='object'?p.roulant:{};p.roulant.horsPilotable={total:v.het1,nonCb:arrV374_(nonCb),cb:arrV374_(cb),nonCbParCategorie:ncb,cbParCategorie:cbd,netApresRapprochementCf:true,candidatsCfRejetes:rejetes,version:'3.7.23'};
     v.candidatsCfRejetes=rejetes;
     recalculerDerivesCerbereV3717_(p);
   });
 
-  base.recettesCanon=canonFrais||base.recettesCanon;base.version=CERBERE_PILOTAGE_V374_VERSION;base.diagnostic=base.diagnostic||{};base.diagnostic.stabilisation_3722='R0/CASDEN stabilisés ; Réel CF remplace prévu via occurrence ou montant maître de secours ; dérivés recalculés';
+  base.recettesCanon=canonFrais||base.recettesCanon;base.version=CERBERE_PILOTAGE_V374_VERSION;base.diagnostic=base.diagnostic||{};base.diagnostic.stabilisation_3723='Cerbère consomme le coeur commun de reconnaissance CF ; fallback 3.7.22 conservé ; aucun écrit dans Operations';
   base.fenetreRoulante=typeof fenetreV37_==='function'?fenetreV37_(periodes):base.fenetreRoulante;
   return base;
 }
