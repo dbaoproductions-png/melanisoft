@@ -1,4 +1,4 @@
-const BANKING_SAFETY_V2='2.8';
+const BANKING_SAFETY_V2='2.9';
 
 function restaurerOperationsDepuisSauvegardeV2(nom){
   const ss=SpreadsheetApp.getActiveSpreadsheet(),src=ss.getSheetByName(String(nom||'')),dst=ss.getSheetByName('Operations');
@@ -58,7 +58,10 @@ function planifierSnapshotV23_(incoming,ops,compte){
   });
   matches.forEach(m=>{existants.forEach(o=>{if(used.has(String(o.id))||!estRecurrenceV23_(o))return;if(centimesBanque_(o.montant)!==centimesBanque_(m.n.montant))return;if(dateJourV23_(o.date_comptable||o.date)!==dateJourV23_(m.n.date_comptable||m.n.date))return;if(!identiteProcheV23_(o.libelle_bancaire||o.libelle,m.n.libelle_bancaire||m.n.libelle))return;used.add(String(o.id));absorbees.push({placeholder:o,cible:m.o,n:m.n});});});
   const dates=incoming.map(n=>dateJourV23_(n.date_comptable||n.date)).filter(Boolean).sort(),minDate=dates[0]||'',maxDate=dates[dates.length-1]||'';
-  const orphelines=existants.filter(o=>{const d=dateJourV23_(o.date_comptable||o.date),src=String(o.source_bancaire||'').toLowerCase();if(!d||d<minDate||d>maxDate||used.has(String(o.id)))return false;return estRecurrenceV23_(o)||src==='flux';});
+  // Un copier-coller bancaire peut être un sous-ensemble (ex. seulement les CB différées).
+  // L'absence d'une ligne du lot ne prouve donc jamais qu'une opération existante est orpheline.
+  // On ne supprime que les placeholders/récurrences explicitement absorbés par une correspondance.
+  const orphelines=[];
   return{matches,nouvelles,ambigues,absorbees,orphelines,minDate,maxDate};
 }
 
@@ -75,7 +78,7 @@ function importerFluxBancaireControleV2(lignes,compte){
     const ss=SpreadsheetApp.getActiveSpreadsheet(),f=ss.getSheetByName('Operations'),headers=assurerColonnesBancaires_(),ops=lireOperationsBancaires_().map(enrichirDepuisCommentaireBanque_),avant=checksumOperationsBanque_(ops),p=planifierSnapshotV23_(incoming,ops,compte),ctx=contexteCategoriesFluxV27_(ops);
     if(p.ambigues.length)return{bloque:true,message:'Import bloqué : '+p.ambigues.length+' ambiguïté(s).'};
     backup=creerSauvegardeOperationsSecurite_('import flux');
-    const supprimer=new Set(p.absorbees.map(x=>String(x.placeholder.id)).concat(p.orphelines.map(x=>String(x.id))));
+    const supprimer=new Set(p.absorbees.map(x=>String(x.placeholder.id)));
     const matchById=new Map(p.matches.map(m=>[String(m.o.id),m]));
     const nouveaux=[];let protegeesPdf=0,modifieesExistantes=0,categorisees=0;
     const out=ops.filter(o=>!supprimer.has(String(o.id))).map(o=>{
@@ -87,8 +90,8 @@ function importerFluxBancaireControleV2(lignes,compte){
     });
     p.nouvelles.forEach(a=>{const now=new Date(),n=a.n,nouveau=Object.assign({id:Utilities.getUuid(),categorie:'',commentaire:'',cree_le:now,modifie_le:now},n),pc=propositionCategorieFluxV27_(n,ctx);if(pc&&pc.categorie){nouveau.categorie=pc.categorie;categorisees++;}nouveau.cle_rapprochement=cleTransactionUnique_(nouveau);out.push(nouveau);nouveaux.push(nouveau.id);});
     const vals=out.map(o=>serialiserOpBancaire_(o,headers));f.clearContents();f.getRange(1,1,1,headers.length).setValues([headers]);if(vals.length)f.getRange(2,1,vals.length,headers.length).setValues(vals);f.setFrozenRows(1);SpreadsheetApp.flush();
-    const apresOps=lireOperationsBancaires_(),apres=checksumOperationsBanque_(apresOps),attendu=avant.nombre-p.absorbees.length-p.orphelines.length+p.nouvelles.length;const cles=apresOps.map(o=>String(o.cle_rapprochement||'').trim()).filter(Boolean);
+    const apresOps=lireOperationsBancaires_(),apres=checksumOperationsBanque_(apresOps),attendu=avant.nombre-p.absorbees.length+p.nouvelles.length;const cles=apresOps.map(o=>String(o.cle_rapprochement||'').trim()).filter(Boolean);
     if(apres.nombre!==attendu||apres.ids!==apres.nombre||cles.length!==new Set(cles).size){f.clearContents();const bv=backup.getDataRange().getValues();f.getRange(1,1,bv.length,bv[0].length).setValues(bv);SpreadsheetApp.flush();throw new Error('Contrôle après écriture échoué ; restauration automatique effectuée.');}
-    return{bloque:false,recues:incoming.length,remplacees:modifieesExistantes,existantes:p.matches.length,protegeesPdf,creees:p.nouvelles.length,categorisees,placeholdersSupprimes:p.absorbees.length,orphelinesSupprimees:p.orphelines.length,controle:ctl,sauvegarde:backup.getName(),totalApres:apres.nombre};
+    return{bloque:false,recues:incoming.length,remplacees:modifieesExistantes,existantes:p.matches.length,protegeesPdf,creees:p.nouvelles.length,categorisees,placeholdersSupprimes:p.absorbees.length,orphelinesSupprimees:0,controle:ctl,sauvegarde:backup.getName(),totalApres:apres.nombre};
   }finally{lock.releaseLock();}
 }
