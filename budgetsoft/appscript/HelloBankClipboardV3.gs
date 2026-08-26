@@ -1,4 +1,4 @@
-const HELLOBANK_CLIPBOARD_V3='3.4';
+const HELLOBANK_CLIPBOARD_V3='3.5';
 
 function hb3Date_(s){
   const m=String(s||'').match(/(\d{2})\/(\d{2})\/(\d{4})/);if(!m)return'';
@@ -57,9 +57,6 @@ function hb3LibelleLisible_(texte,contrepartie){
   return joli||(typeof titreLibelle==='function'?titreLibelle(brut):brut);
 }
 
-// Le parseur V3 historique reste disponible pour les variantes contenant explicitement
-// "Débitée/Créditée le". Le copier-coller courant de Hello bank est toutefois mieux
-// découpé par analyserCollerHelloBank(), qui sait gérer les en-têtes de jours.
 function hb3Parser_(texte,compte){
   const lines=String(texte||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean),out=[];let lib='';
   for(let i=0;i<lines.length;i++){
@@ -83,8 +80,6 @@ function hb3Parser_(texte,compte){
   return out;
 }
 
-// Pont V3.4 : on conserve le découpage éprouvé du parseur HelloBankPaste (199 lignes
-// sur le jeu de test), puis on enrichit sans toucher au libellé bancaire brut N.
 function analyserCollerHelloBankEnrichiV34(texte,compte){
   const legacy=analyserCollerHelloBank(texte,compte),lignes=(legacy.lignes||[]).map(x=>{
     const brut=String(x.libelle||'').trim();
@@ -127,10 +122,42 @@ function analyserCollerHelloBankV3(texte,compte){
   lignes.forEach(n=>{const c=index[hb3Identity_(n)]||[];if(c.length===1)existantes++;else if(c.length>1){ambigues++;details.push({libelle:n.libelle_bancaire,montant:n.montant,candidats:c.length});}else nouvelles++;});
   return {version:HELLOBANK_CLIPBOARD_V3,controle:ctl,recues:lignes.length,existantes,nouvelles,ambigues,pret:lignes.length>0&&ambigues===0,lignes:lignes.map(o=>({date:isoJourBanque_(o.date),date_achat:isoJourBanque_(o.date_achat),date_comptable:isoJourBanque_(o.date_comptable),libelle:o.libelle,libelle_bancaire:o.libelle_bancaire,marchand_normalise:o.marchand_normalise,carte_fin:o.carte_fin,montant:o.montant,type:o.type,compte:o.compte,source_bancaire:o.source_bancaire,statut_bancaire:o.statut_bancaire})),detailsAmbigues:details.slice(0,30),lectureSeule:true};
 }
+
+/**
+ * Applique aux nouvelles lignes copier-coller exactement le meme matcher automatique
+ * que l'import PDF via le coeur commun. On n'auto-persiste que les reconnaissances
+ * issues du matcher PDF historique ; l'evaluateur Operations reste diagnostic.
+ */
+function hb3PersisterChargesFixesCommunes_(lignes,compte){
+  if(typeof reconnaitreChargeFixeCommune_!=='function')return{analysees:0,rapprochees:0,raison:'coeur commun indisponible'};
+  const charges=lireTable_('Charges_fixes').filter(c=>typeof convertirBooleen_==='function'?convertirBooleen_(c.actif):c.actif!==false);
+  const rap=typeof lireRapprochementsChargesFixes==='function'?lireRapprochementsChargesFixes():[];
+  const ids=new Set((lignes||[]).map(hb3Identity_));
+  const ops=lireOperationsBancaires_().map(enrichirDepuisCommentaireBanque_);
+  let analysees=0,rapprochees=0,deja=0,diagnostic=0;
+  ops.forEach(o=>{
+    if(String(o.compte||'')!==String(compte||''))return;
+    if(String(o.source_bancaire||'').toLowerCase()!=='flux')return;
+    if(!ids.has(hb3Identity_(o)))return;
+    analysees++;
+    if(String(o.charge_fixe_id||'').trim()||/\[CHARGE_FIXE:[^\]]+\]/i.test(String(o.commentaire||''))){deja++;return;}
+    const r=reconnaitreChargeFixeCommune_(o,charges,rap);
+    if(!r||!r.charge_fixe_id)return;
+    if(String(r.source||'')!=='legacy_pdf_matcher'){diagnostic++;return;}
+    const marqueur='[CHARGE_FIXE:'+String(r.charge_fixe_id)+']',commentaire=String(o.commentaire||'');
+    enregistrerLigne('Operations',Object.assign({},o,{charge_fixe_id:String(r.charge_fixe_id),statut_bancaire:'rapprochee_charge_fixe',commentaire:commentaire.includes(marqueur)?commentaire:[commentaire,marqueur].filter(Boolean).join(' ')}));
+    if(r.charge){
+      enregistrerLigne('Charges_fixes',Object.assign({},r.charge,{dernier_rapprochement_id:String(o.cle_rapprochement||o.id||''),dernier_rapprochement_date:isoJourBanque_(o.date_comptable||o.date),dernier_montant_reel:Math.abs(Number(o.montant||0)),statut_rapprochement:'Rapprochée'}));
+    }
+    rapprochees++;
+  });
+  return{analysees:analysees,rapprochees:rapprochees,deja:deja,diagnosticSeulement:diagnostic,moteur:'commun '+(typeof FIXED_CHARGE_RECOGNITION_CORE_VERSION!=='undefined'?FIXED_CHARGE_RECOGNITION_CORE_VERSION:'?')};
+}
+
 function importerCollerHelloBankV3(texte,compte){
   const sim=analyserCollerHelloBankV3(texte,compte);if(!sim.pret)throw new Error('Import refusé : simulation vide ou ambiguë.');
   const lignes=hb3Parser_(texte,compte),ops=lireOperationsBancaires_().map(enrichirDepuisCommentaireBanque_),existing=new Map();ops.filter(o=>String(o.compte||'')===String(compte||'')).forEach(o=>existing.set(hb3Identity_(o),o));
   const nouvelles=lignes.filter(n=>!existing.has(hb3Identity_(n)));if(!nouvelles.length)return{ok:true,creees:0,existantes:lignes.length,message:'Import idempotent : aucune nouvelle opération.'};
-  const res=upsertOperationsBancairesTransactionnel(nouvelles,compte,'flux',null),enrichies=hb3ReparerEnrichissementFlux_(nouvelles,compte);
-  return Object.assign({ok:true,existantes:sim.existantes,enrichies:enrichies},res);
+  const res=upsertOperationsBancairesTransactionnel(nouvelles,compte,'flux',null),enrichies=hb3ReparerEnrichissementFlux_(nouvelles,compte),cf=hb3PersisterChargesFixesCommunes_(nouvelles,compte);
+  return Object.assign({ok:true,existantes:sim.existantes,enrichies:enrichies,chargesFixes:cf},res);
 }
