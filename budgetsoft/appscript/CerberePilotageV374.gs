@@ -1,16 +1,9 @@
-const CERBERE_PILOTAGE_V374_VERSION='3.7.16';
+const CERBERE_PILOTAGE_V374_VERSION='3.7.17';
 
 function appliquerResteReellementPilotableV374_(base){if(!base||base.ok===false)return base;recalculerCfFutursDepuisCf0CourantV375_(base);let reportPrecedent=null;const periodes=Array.isArray(base.periodes)?base.periodes:[];periodes.forEach((p,i)=>{if(!p||typeof p!=='object')return;const v=p.v37||(p.v37={}),r=p.roulant&&typeof p.roulant==='object'?p.roulant:{},h=r.horsPilotable&&typeof r.horsPilotable==='object'?r.horsPilotable:{};if(i>0&&reportPrecedent!==null){v.ss1=arrV374_(reportPrecedent);v.soldeOuverture=v.ss1;v.ss1Statut='projection provisoire héritée du socle';}const ret1=arrV374_(Number(v.disponibleEnveloppes!=null?v.disponibleEnveloppes:(p.resteBudgetPilotable||0))),het1=arrV374_(Math.max(0,Number(v.horsPilotableAControler!=null?v.horsPilotableAControler:0)));v.ret1=ret1;v.het1=het1;v.horsPilotableBrut=arrV374_(Number(h.total||0));v.dt1=arrV374_(Number(v.cft1||0)+Number(v.dpt1||0)+het1);v.sct1=arrV374_(Number(v.ss1||0)+Number(v.rt1||0)-v.dt1);v.rpt1=v.sct1;v.resteReellementPilotable=v.sct1;v.disponibleJusquau27=v.sct1;v.formuleSCt1='SCt1 = SS1 + Rt1 - CFt1 - DPt1 - HEt1';v.formuleREt1='REt1 = P1 - pilotable consommé/réservé';const env=Array.isArray(p.enveloppes)?p.enveloppes:[],abs=arrV374_(env.reduce((s,x)=>s+Math.max(0,Number(x&&x.prevu||0)-Number(x&&x.reelNetPrevisionnel!=null?x.reelNetPrevisionnel:(x&&x.reelImpute||0))-Number(x&&x.planifie||0)),0));v.absorbableParAllocations=abs;v.incompressible=arrV374_(v.sct1<0?Math.max(0,Math.abs(v.sct1)-abs):0);p.v37=v;p.resteReellementPilotable=v.sct1;p.capacitePilotable=v.sct1;p.resteBudgetPilotable=ret1;p.capaciteTresorerie=v.sct1;reportPrecedent=v.sct1;});base.version=CERBERE_PILOTAGE_V374_VERSION;return base;}
 
 function recalculerCfFutursDepuisCf0CourantV375_(base){const periodes=Array.isArray(base&&base.periodes)?base.periodes:[];if(periodes.length<2)return;const charges=Array.isArray(lireTable_('Charges_fixes'))?lireTable_('Charges_fixes'):[];periodes.forEach((p,i)=>{if(i===0||!p||typeof p!=='object')return;const v=p.v37||(p.v37={}),periode=p.periode||p,cf0=arrV374_(cfTotalSecoursV372_(charges,periode)),effets=p.plan&&p.plan.effets||{},delta=arrV374_(Number(effets.hausseCharges||0)-Number(effets.baisseCharges||0)-Number(effets.chargesEvitees||0)),cf1=arrV374_(Math.max(0,cf0+delta));v.cf0CourantSource=cf0;v.deltaPlanCharges=delta;v.chargesFixesTotal=cf1;v.chargesFixesRestantes=cf1;v.chargesFixesAttenduRealise=0;v.chargesFixesReelRealise=0;v.chargesFixesRealisees=0;v.cft1=cf1;v.cf1Statut='projection dynamique depuis CF0 courant jusqu’à ouverture du cycle';});}
 
-/**
- * Passe terminale 3.7.16.
- * Elle ne redécouvre rien : elle protège les deux briques déjà qualifiées en amont.
- * - R0 futur est relu depuis le canon courant daté, et non depuis un audit intermédiaire.
- * - les candidats CF rejetés par la passe 3.7.11 survivent aux passes frontière.
- * - toutes les grandeurs dérivées sont recalculées une seule fois après stabilisation.
- */
 function stabiliserCerbereV3716_(base){
   if(!base||base.ok===false)return base;
   const periodes=Array.isArray(base.periodes)?base.periodes:[];
@@ -18,49 +11,109 @@ function stabiliserCerbereV3716_(base){
   periodes.forEach((p,i)=>{
     if(!p||typeof p!=='object')return;
     const v=p.v37||(p.v37={}),periode=p.periode||p;
-
     if(i>0&&postes.length){
-      const socle=arrV374_(postes.reduce((s,x)=>{
-        if(!x||typeof x!=='object')return s;
-        const montant=typeof montantR0PourCycleV378_==='function'?montantR0PourCycleV378_(x,periode):Math.max(0,Number(x.montant||0));
-        return s+Math.max(0,Number(montant||0));
-      },0));
+      const socle=arrV374_(postes.reduce((s,x)=>{if(!x||typeof x!=='object')return s;const montant=typeof montantR0PourCycleV378_==='function'?montantR0PourCycleV378_(x,periode):Math.max(0,Number(x.montant||0));return s+Math.max(0,Number(montant||0));},0));
       const plan=arrV374_(Number(v.rt1Audit&&v.rt1Audit.planCycle!=null?v.rt1Audit.planCycle:0));
-      const avant=arrV374_(Number(v.rt1||0));
-      v.rt1=arrV374_(socle+plan);
-      v.rt1Audit=v.rt1Audit&&typeof v.rt1Audit==='object'?v.rt1Audit:{};
-      v.rt1Audit.socleCanonTerminal3716=socle;
-      v.rt1Audit.planTerminal3716=plan;
-      v.rt1Audit.rt1AvantTerminal3716=avant;
-      v.rt1Audit.deltaTerminal3716=arrV374_(v.rt1-avant);
+      const avant=arrV374_(Number(v.rt1||0));v.rt1=arrV374_(socle+plan);
+      v.rt1Audit=v.rt1Audit&&typeof v.rt1Audit==='object'?v.rt1Audit:{};v.rt1Audit.socleCanonTerminal3716=socle;v.rt1Audit.planTerminal3716=plan;v.rt1Audit.rt1AvantTerminal3716=avant;v.rt1Audit.deltaTerminal3716=arrV374_(v.rt1-avant);
     }
-
     const rejetes=Array.isArray(v.cft1Audit&&v.cft1Audit.candidatsRejetes)?v.cft1Audit.candidatsRejetes:[];
-    p.roulant=p.roulant&&typeof p.roulant==='object'?p.roulant:{};
-    p.roulant.horsPilotable=p.roulant.horsPilotable&&typeof p.roulant.horsPilotable==='object'?p.roulant.horsPilotable:{};
-    if(rejetes.length)p.roulant.horsPilotable.candidatsCfRejetes=rejetes;
-    v.candidatsCfRejetes=rejetes;
-
-    v.dt1=arrV374_(Number(v.cft1||0)+Number(v.dpt1||0)+Number(v.het1||0));
-    v.sct1=arrV374_(Number(v.ss1||0)+Number(v.rt1||0)-v.dt1);
-    v.rpt1=v.sct1;v.resteReellementPilotable=v.sct1;v.disponibleJusquau27=v.sct1;
-    v.capaciteAvantPilotable=arrV374_(Number(v.ss1||0)+Number(v.rt1||0)-Number(v.cft1||0)-Number(v.het1||0));
-    const env=Array.isArray(p.enveloppes)?p.enveloppes:[];
-    const allocation=arrV374_(env.reduce((s,x)=>s+Math.max(0,Number(x&&x.prevu||0)),0));
-    const dep=arrV374_(env.reduce((s,x)=>s+Math.max(0,Number(x&&x.engageV37||0)-Math.max(0,Number(x&&x.prevu||0))),0));
-    v.allocationP1Courante=allocation;v.depassementsPilotables=dep;
-    v.aReequilibrer=arrV374_(v.capaciteAvantPilotable-allocation-dep);v.aReequilibrerReference=v.aReequilibrer;
-    const abs=arrV374_(env.reduce((s,x)=>s+Math.max(0,Number(x&&x.prevu||0)-Number(x&&x.engageV37||0)),0));
-    v.absorbableParAllocations=abs;v.incompressible=arrV374_(v.aReequilibrer<0?Math.max(0,Math.abs(v.aReequilibrer)-abs):0);
-    v.auditReequilibrage={attendu:v.sct1,reel:v.aReequilibrer,ecart:arrV374_(v.aReequilibrer-v.sct1),ok:Math.abs(v.aReequilibrer-v.sct1)<.011};
-    p.resteReellementPilotable=v.sct1;p.capacitePilotable=v.sct1;p.capaciteTresorerie=v.sct1;
+    p.roulant=p.roulant&&typeof p.roulant==='object'?p.roulant:{};p.roulant.horsPilotable=p.roulant.horsPilotable&&typeof p.roulant.horsPilotable==='object'?p.roulant.horsPilotable:{};if(rejetes.length)p.roulant.horsPilotable.candidatsCfRejetes=rejetes;v.candidatsCfRejetes=rejetes;
+    recalculerDerivesCerbereV3717_(p);
   });
-  base.version=CERBERE_PILOTAGE_V374_VERSION;
-  base.diagnostic=base.diagnostic||{};
-  base.diagnostic.stabilisation_3716='R0 futur relu depuis canon daté ; diagnostic CF préservé ; dérivés recalculés en passe terminale';
-  return base;
+  base.version=CERBERE_PILOTAGE_V374_VERSION;base.diagnostic=base.diagnostic||{};base.diagnostic.stabilisation_3716='R0 futur relu depuis canon daté ; diagnostic CF préservé ; dérivés recalculés en passe terminale';return base;
 }
 
-function chargerCerbereV374(){const brut=chargerCerbereV37(),base=appliquerResteReellementPilotableV374_(brut),audite=typeof appliquerAuditCerbereV377_==='function'?appliquerAuditCerbereV377_(base):base,historique=typeof appliquerHistoriqueR0V378_==='function'?appliquerHistoriqueR0V378_(audite):audite,rapproche=typeof appliquerRapprochementCerbereV3711_==='function'?appliquerRapprochementCerbereV3711_(historique):historique,cycle=typeof appliquerDoctrineCycleV3712_==='function'?appliquerDoctrineCycleV3712_(rapproche):rapproche,salaire=typeof appliquerConventionSalaireTousCyclesV3712_==='function'?appliquerConventionSalaireTousCyclesV3712_(cycle):cycle,frontiere=typeof appliquerProjectionFrontiereV3713_==='function'?appliquerProjectionFrontiereV3713_(salaire):salaire,frontiere2=typeof corrigerProjectionFrontiereV3713b_==='function'?corrigerProjectionFrontiereV3713b_(frontiere):frontiere,effets=typeof corrigerEffetsFinanciersActionsV3713_==='function'?corrigerEffetsFinanciersActionsV3713_(frontiere2):frontiere2,stable=stabiliserCerbereV3716_(effets);if(stable&&typeof stable==='object')stable.version=CERBERE_PILOTAGE_V374_VERSION;return serialiserCerberePourClient_(stable);}
+/**
+ * Passe terminale 3.7.17 : la source canonique et la qualification CF sont relues
+ * directement dans leurs référentiels persistants. On ne dépend plus d'un objet
+ * intermédiaire qui aurait pu conserver un ancien R0 ou perdre un rapprochement.
+ */
+function stabiliserCerbereV3717_(base){
+  if(!base||base.ok===false)return base;
+  const operations=tableauCerbereV379_(lireTable_('Operations'));
+  const charges=tableauCerbereV379_(lireTable_('Charges_fixes'));
+  const categories=tableauCerbereV379_(lireTable_('Categories'));
+  const rapprochements=typeof lireRapprochementsChargesFixes==='function'?tableauCerbereV379_(lireRapprochementsChargesFixes()):[];
+  const actions=typeof lireFeuilleDynamiquePlan_==='function'?tableauCerbereV379_(lireFeuilleDynamiquePlan_('Plan_Actions')):[];
+  const periodes=tableauCerbereV379_(base.periodes);
+  const p0Cats=new Set(tableauCerbereV379_(base.p0&&base.p0.postes).map(x=>String(x&&x.categorie||'').trim()).filter(Boolean));p0Cats.add('Divers');
+  const types={};categories.forEach(c=>types[String(c&&c.nom||'').trim()]=normaliserV377_(c&&c.type));
+  const canonFrais=typeof chargerCanonRecettesCerbereV1==='function'?chargerCanonRecettesCerbereV1():base.recettesCanon;
+  const postes=tableauCerbereV379_(canonFrais&&canonFrais.postes);
+  const liens=construireLiensCfV3717_(operations,charges,rapprochements);
+
+  periodes.forEach((p,i)=>{
+    if(!p||typeof p!=='object')return;
+    const v=p.v37||(p.v37={}),periode=p.periode||p;
+
+    // R0 futur : relire le canon persistant, y compris l'historique daté 755 -> 780.
+    if(i>0&&postes.length){
+      const socle=arrV374_(postes.reduce((s,x)=>{const montant=typeof montantR0PourCycleV378_==='function'?montantR0PourCycleV378_(x,periode):Math.max(0,Number(x&&x.montant||0));return s+Math.max(0,Number(montant||0));},0));
+      const plan=arrV374_(Number(v.rt1Audit&&v.rt1Audit.planCycle!=null?v.rt1Audit.planCycle:0));
+      const avant=arrV374_(Number(v.rt1||0));v.rt1=arrV374_(socle+plan);
+      v.rt1Audit=v.rt1Audit&&typeof v.rt1Audit==='object'?v.rt1Audit:{};
+      v.rt1Audit.socleCanonTerminal3717=socle;v.rt1Audit.planTerminal3717=plan;v.rt1Audit.rt1AvantTerminal3717=avant;v.rt1Audit.deltaTerminal3717=arrV374_(v.rt1-avant);v.rt1Audit.sourceTerminal3717='Cerbere_Recettes_Canon_V1';
+    }
+
+    // CF : le réel lié remplace l'occurrence prévue, y compris pour les familles
+    // Énergies <- Gaz/Électricité et les libellés courts exacts uniques (ex. FLOA).
+    const ref=calculerCfReferenceCycleV3710_(charges,actions,periode),remplacements={},rapproches=[];
+    operations.forEach(o=>{const id=String(o&&o.id||'').trim(),cfId=liens[id],d=dateOperationBanqueV377_(o);if(!cfId||!d||!dateDansCycleV377_(d,periode))return;const a=Math.abs(Number(o&&o.montant||0));remplacements[cfId]=Number(remplacements[cfId]||0)+a;rapproches.push({operation_id:id,charge_fixe_id:cfId,montant:arrV374_(a),categorie:String(o&&o.categorie||''),libelle:String(o&&o.libelle||o&&o.libelle_bancaire||'')});});
+    let cft1=0;tableauCerbereV379_(ref.lignes).forEach(c=>{cft1+=Object.prototype.hasOwnProperty.call(remplacements,c.id)?Number(remplacements[c.id]):Number(c.montant||0);});
+    v.chargesFixesTotal=arrV374_(ref.total);v.cft1=arrV374_(cft1);
+
+    // Retirer les CF des molettes à partir du Réel brut, puis recalculer DPt1/REt1.
+    const cfParCat={};operations.forEach(o=>{const id=String(o&&o.id||'').trim(),d=dateImputationCerbereV377_(o);if(!liens[id]||!d||!dateDansCycleV377_(d,periode))return;const cat=String(o&&o.categorie||'').trim();cfParCat[cat]=Number(cfParCat[cat]||0)+Math.abs(Number(o&&o.montant||0));});
+    const env=tableauCerbereV379_(p.enveloppes);let dpt=0,ret=0;
+    env.forEach(x=>{const cat=String(x&&x.categorie||'').trim(),brut=Math.max(0,Number(x&&x.reelImpute!=null?x.reelImpute:x&&x.reelNetPrevisionnel||0)),reel=Math.max(0,brut-Number(cfParCat[cat]||0)),plan=Number(x&&x.planifie||0),alloc=Math.max(0,Number(x&&x.prevu||0)),eng=arrV374_(reel+plan);x.reelNetPrevisionnel=arrV374_(reel);x.engageV37=eng;x.resteV37=arrV374_(alloc-eng);x.dpt1=arrV374_(Math.max(alloc,eng));dpt+=x.dpt1;ret+=x.resteV37;});
+    v.dpt1=arrV374_(dpt);v.ret1=arrV374_(ret);v.fuiteCfCorrigeeParCategorie=cfParCat;
+
+    // HEt1 : uniquement les sorties réelles hors P1, hors CF et hors trésorerie.
+    let het=0,nonCb=0,cb=0;const det={},ncb={},cbd={};
+    operations.forEach(o=>{const d=dateImputationCerbereV377_(o),m=Number(o&&o.montant||0),cat=String(o&&o.categorie||'').trim(),id=String(o&&o.id||'').trim();if(!d||!dateDansCycleV377_(d,periode)||m>=0||p0Cats.has(cat)||liens[id]||types[cat]==='tresorerie'||estReglementCbTechniqueV377_(o))return;const a=Math.abs(m),isCb=!!String(o&&o.carte_fin||'').trim();het+=a;det[cat]=Number(det[cat]||0)+a;if(isCb){cb+=a;cbd[cat]=Number(cbd[cat]||0)+a;}else{nonCb+=a;ncb[cat]=Number(ncb[cat]||0)+a;}});
+    [det,ncb,cbd].forEach(z=>Object.keys(z).forEach(k=>z[k]=arrV374_(z[k])));
+    v.het1Reel=arrV374_(het);v.het1=arrV374_(het+Number(v.het1Plan||0));v.horsPilotableAControler=v.het1;v.het1Detail=det;
+
+    // Diagnostic utile seulement : supprimer les faux candidats fondés sur le seul montant.
+    let rejetes=typeof diagnostiquerCandidatsCfRejetesV3715_==='function'?diagnostiquerCandidatsCfRejetesV3715_(operations,ref.lignes,liens,periode):[];
+    rejetes=tableauCerbereV379_(rejetes).map(x=>{const cs=tableauCerbereV379_(x&&x.candidats).filter(c=>c&&((c.memeCategorie===true)||c.libelleProche===true||memeFamilleCfV3717_(x&&x.categorie,c&&c.categorie)));return Object.assign({},x,{candidats:cs});}).filter(x=>x.candidats.length);
+    v.cft1Audit={reference:arrV374_(ref.total),remplacements:remplacements,actionsAppliquees:ref.actionsAppliquees,rapproches:rapproches,candidatsRejetes:rejetes,version:'3.7.17'};
+    p.roulant=p.roulant&&typeof p.roulant==='object'?p.roulant:{};p.roulant.horsPilotable={total:v.het1,nonCb:arrV374_(nonCb),cb:arrV374_(cb),nonCbParCategorie:ncb,cbParCategorie:cbd,netApresRapprochementCf:true,candidatsCfRejetes:rejetes,version:'3.7.17'};
+    v.candidatsCfRejetes=rejetes;
+
+    recalculerDerivesCerbereV3717_(p);
+  });
+
+  base.recettesCanon=canonFrais||base.recettesCanon;base.version=CERBERE_PILOTAGE_V374_VERSION;base.diagnostic=base.diagnostic||{};base.diagnostic.stabilisation_3717='R0 relu dans le canon persistant ; CF réconciliées en terminal avec familles métier sûres ; HEt1 et molettes recalculés depuis le Réel brut';return base;
+}
+
+function construireLiensCfV3717_(operations,charges,rapprochements){
+  const out=typeof construireLiensCfV3713_==='function'?construireLiensCfV3713_(operations,charges,rapprochements):construireLiensCfFortsV3711_(operations,charges,rapprochements);
+  const cs=tableauCerbereV379_(charges).filter(c=>!(c&&c.actif===false||normaliserV377_(c&&c.actif)==='false'||normaliserV377_(c&&c.actif)==='non'));
+  tableauCerbereV379_(operations).forEach(o=>{
+    const id=String(o&&o.id||'').trim();if(!id||out[id]||Number(o&&o.montant||0)>=0)return;
+    const cat=String(o&&o.categorie||'').trim(),fam=familleCfV3717_(cat),mont=Math.abs(Number(o&&o.montant||0)),d=dateOperationBanqueV377_(o),nom=normaliserV377_(o&&o.libelle||o&&o.libelle_bancaire);
+    if(!mont||!d)return;
+    // 1) Famille métier + montant exact + date proche. Cas canonique : Gaz/Électricité -> Énergies.
+    const parFamille=cs.filter(c=>memeFamilleCfV3717_(cat,c&&c.categorie)&&Math.abs(Math.abs(Number(c&&c.montant||0))-mont)<=.011&&distanceJourMoisV3714_(d.getDate(),jourCfV3714_(c)||d.getDate())<=7);
+    if(parFamille.length===1){out[id]=String(parFamille[0].id||'');return;}
+    // 2) Libellé court exact, catégorie/famille identique et candidat unique. Le montant réel peut varier.
+    if(nom&&nom.length>=4){const exactNom=cs.filter(c=>{const cn=normaliserV377_(c&&c.libelle_bancaire||c&&c.libelle);return cn===nom&&memeFamilleCfV3717_(cat,c&&c.categorie);});if(exactNom.length===1)out[id]=String(exactNom[0].id||'');}
+  });
+  return out;
+}
+function familleCfV3717_(cat){const n=normaliserV377_(cat);if(n==='gaz'||n==='electricite'||n==='energie'||n==='energies')return 'energies';return n;}
+function memeFamilleCfV3717_(a,b){const x=familleCfV3717_(a),y=familleCfV3717_(b);return !!(x&&y&&x===y);}
+
+function recalculerDerivesCerbereV3717_(p){
+  if(!p||typeof p!=='object')return;const v=p.v37||(p.v37={}),env=Array.isArray(p.enveloppes)?p.enveloppes:[];
+  v.dt1=arrV374_(Number(v.cft1||0)+Number(v.dpt1||0)+Number(v.het1||0));v.sct1=arrV374_(Number(v.ss1||0)+Number(v.rt1||0)-v.dt1);v.rpt1=v.sct1;v.resteReellementPilotable=v.sct1;v.disponibleJusquau27=v.sct1;
+  v.capaciteAvantPilotable=arrV374_(Number(v.ss1||0)+Number(v.rt1||0)-Number(v.cft1||0)-Number(v.het1||0));
+  const allocation=arrV374_(env.reduce((s,x)=>s+Math.max(0,Number(x&&x.prevu||0)),0)),dep=arrV374_(env.reduce((s,x)=>s+Math.max(0,Number(x&&x.engageV37||0)-Math.max(0,Number(x&&x.prevu||0))),0));v.allocationP1Courante=allocation;v.depassementsPilotables=dep;v.aReequilibrer=arrV374_(v.capaciteAvantPilotable-allocation-dep);v.aReequilibrerReference=v.aReequilibrer;
+  const abs=arrV374_(env.reduce((s,x)=>s+Math.max(0,Number(x&&x.prevu||0)-Number(x&&x.engageV37||0)),0));v.absorbableParAllocations=abs;v.incompressible=arrV374_(v.aReequilibrer<0?Math.max(0,Math.abs(v.aReequilibrer)-abs):0);v.auditReequilibrage={attendu:v.sct1,reel:v.aReequilibrer,ecart:arrV374_(v.aReequilibrer-v.sct1),ok:Math.abs(v.aReequilibrer-v.sct1)<.011};p.resteBudgetPilotable=Number(v.ret1||0);p.resteReellementPilotable=v.sct1;p.capacitePilotable=v.sct1;p.capaciteTresorerie=v.sct1;
+}
+
+function chargerCerbereV374(){const brut=chargerCerbereV37(),base=appliquerResteReellementPilotableV374_(brut),audite=typeof appliquerAuditCerbereV377_==='function'?appliquerAuditCerbereV377_(base):base,historique=typeof appliquerHistoriqueR0V378_==='function'?appliquerHistoriqueR0V378_(audite):audite,rapproche=typeof appliquerRapprochementCerbereV3711_==='function'?appliquerRapprochementCerbereV3711_(historique):historique,cycle=typeof appliquerDoctrineCycleV3712_==='function'?appliquerDoctrineCycleV3712_(rapproche):rapproche,salaire=typeof appliquerConventionSalaireTousCyclesV3712_==='function'?appliquerConventionSalaireTousCyclesV3712_(cycle):cycle,frontiere=typeof appliquerProjectionFrontiereV3713_==='function'?appliquerProjectionFrontiereV3713_(salaire):salaire,frontiere2=typeof corrigerProjectionFrontiereV3713b_==='function'?corrigerProjectionFrontiereV3713b_(frontiere):frontiere,effets=typeof corrigerEffetsFinanciersActionsV3713_==='function'?corrigerEffetsFinanciersActionsV3713_(frontiere2):frontiere2,stable16=stabiliserCerbereV3716_(effets),stable=stabiliserCerbereV3717_(stable16);if(stable&&typeof stable==='object')stable.version=CERBERE_PILOTAGE_V374_VERSION;return serialiserCerberePourClient_(stable);}
 
 function arrV374_(n){return Math.round((Number(n)||0)*100)/100;}
