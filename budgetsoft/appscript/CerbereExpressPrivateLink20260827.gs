@@ -1,4 +1,4 @@
-const CERBERE_EXPRESS_PRIVATE_VERSION = '2026-08-27.1';
+const CERBERE_EXPRESS_PRIVATE_VERSION = '2026-08-27.2';
 const CERBERE_EXPRESS_PRIVATE_PROP_PREFIX = 'CERBERE_EXPRESS_TOKEN_';
 
 /**
@@ -42,12 +42,18 @@ function servirCerbereExpressPrive20260827_(e) {
     return HtmlService.createHtmlOutput('<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><title>Cerbère Express</title></head><body style="font-family:system-ui;padding:32px"><h2>Lien Cerbère Express invalide ou révoqué.</h2></body></html>')
       .setTitle('Cerbère Express');
   }
+
+  // Pour le lien privé, on calcule la vue côté serveur pendant doGet.
+  // La page mobile n'attend donc plus un second appel google.script.run,
+  // ce qui évite les écrans de chargement bloqués dans certains contextes /dev ou mobiles.
+  const vue = chargerVueCerbereExpress20260827();
   const template = HtmlService.createTemplateFromFile('CerbereExpressMobile20260827');
   template.tokenExpress = token;
+  template.vueExpressJson = JSON.stringify(vue || {ok:false,erreur:'Cerbère Express indisponible'});
   return template.evaluate().setTitle('Cerbère Express').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
-/** Chargement RPC protégé : la page mobile doit présenter son token à chaque lecture. */
+/** Chargement RPC protégé : conservé pour les usages embarqués. */
 function chargerVueCerbereExpressPrive20260827(token) {
   if (!verifierTokenCerbereExpress20260827_(token)) throw new Error('Lien Cerbère Express invalide ou révoqué.');
   return chargerVueCerbereExpress20260827();
