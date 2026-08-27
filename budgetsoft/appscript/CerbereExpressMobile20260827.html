@@ -13,6 +13,7 @@
 <div class="wrap" id="app"><div class="loading">Chargement de Cerbère Express…</div></div>
 <script>
 (function(){
+  const TOKEN_EXPRESS = <?!= JSON.stringify(typeof tokenExpress === 'undefined' ? '' : tokenExpress) ?>;
   const €=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));
   const pct=n=>Math.max(0,Math.min(100,Number(n||0)));
   function row(x){
@@ -33,7 +34,13 @@
       <div class="card"><div class="section-title">Contexte prochain cycle</div><div class="context">CB déjà engagée : <strong>${€(v.contexte&&v.contexte.cbDejaEngageeM1)}</strong><br>Trajectoire Cerbère M+1 : <strong>${€(v.contexte&&v.contexte.prochainCycle)}</strong></div></div>
       <div class="footer">Décisions quotidiennes à la date réelle d’achat · Cerbère complet reste l’autorité financière.</div>`;
   }
-  google.script.run.withSuccessHandler(render).withFailureHandler(e=>{document.getElementById('app').innerHTML='<div class="error">'+esc(e&&e.message||e)+'</div>';}).chargerVueCerbereExpress20260827();
+  const success=render;
+  const failure=e=>{document.getElementById('app').innerHTML='<div class="error">'+esc(e&&e.message||e)+'</div>';};
+  if(TOKEN_EXPRESS){
+    google.script.run.withSuccessHandler(success).withFailureHandler(failure).chargerVueCerbereExpressPrive20260827(TOKEN_EXPRESS);
+  }else{
+    google.script.run.withSuccessHandler(success).withFailureHandler(failure).chargerVueCerbereExpress20260827();
+  }
 })();
 </script>
 </body>
