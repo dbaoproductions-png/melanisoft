@@ -1,12 +1,24 @@
-const CERBERE_EXPRESS_VIEW_VERSION = '2026-08-27.2';
+const CERBERE_EXPRESS_VIEW_VERSION = '2026-08-27.3';
 
 /**
  * Couche de présentation de Cerbère Express.
  * Lecture seule : aucune donnée BudgetSoft n'est modifiée.
  * Les retraits/espèces volontairement catégorisés restent comptés dans leur catégorie,
  * conformément à la décision utilisateur portée par Operations.
+ *
+ * La vue est exécutée dans un contexte de lecture mémoïsé : une même feuille n'est
+ * lue qu'une fois pendant cette requête, même si le moteur Cerbère profond la redemande.
+ * Le contexte est détruit à la fin de l'appel : aucune donnée n'est conservée entre
+ * deux requêtes, donc aucune donnée périmée n'est servie.
  */
 function chargerVueCerbereExpress20260827() {
+  if (typeof avecContexteLectureBudgetSoft20260827_ === 'function') {
+    return avecContexteLectureBudgetSoft20260827_('cerbere-express', chargerVueCerbereExpressSansContexte20260827_);
+  }
+  return chargerVueCerbereExpressSansContexte20260827_();
+}
+
+function chargerVueCerbereExpressSansContexte20260827_() {
   const e = chargerCerbereExpress20260827();
   if (!e || e.ok === false) return e || {ok:false,erreur:'Cerbère Express indisponible'};
 
@@ -104,5 +116,24 @@ function auditerVueCerbereExpress20260827() {
     contexte:v&&v.contexte
   };
   console.log(JSON.stringify(out));
+  return out;
+}
+
+/** Mesure la vue réelle et expose les lectures de feuilles évitées. */
+function auditerPerformanceCerbereExpress20260827() {
+  const t=Date.now();
+  const v=chargerVueCerbereExpress20260827();
+  const dureeMs=Date.now()-t;
+  const stats=(typeof BUDGETSOFT_READ_CONTEXT_LAST_STATS_!=='undefined'&&BUDGETSOFT_READ_CONTEXT_LAST_STATS_)
+    ? BUDGETSOFT_READ_CONTEXT_LAST_STATS_
+    : null;
+  const out={
+    ok:!!(v&&v.ok),
+    version:CERBERE_EXPRESS_VIEW_VERSION,
+    dureeMs,
+    dureeSecondes:Math.round(dureeMs/100)/10,
+    lectures:stats
+  };
+  console.log('[PERF Cerbere Express] '+JSON.stringify(out));
   return out;
 }
