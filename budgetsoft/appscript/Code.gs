@@ -27,7 +27,11 @@ function onOpen() {
     .addItem('Vérifier la configuration','verifierConfiguration')
     .addToUi();
 }
-function doGet(){return HtmlService.createTemplateFromFile('Index').evaluate().setTitle('BudgetSoft').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);}
+function doGet(e){
+  const view=String(e&&e.parameter&&e.parameter.view||'').toLowerCase();
+  if(view==='cerbere-express')return servirCerbereExpressPrive20260827_(e);
+  return HtmlService.createTemplateFromFile('Index').evaluate().setTitle('BudgetSoft').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
 function inclure(nomFichier){return HtmlService.createHtmlOutputFromFile(nomFichier).getContent();}
 function initialiserBudgetSoft(){const ss=SpreadsheetApp.getActiveSpreadsheet();Object.entries(TABLES).forEach(([nom,entetes])=>{let feuille=ss.getSheetByName(nom);if(!feuille)feuille=ss.insertSheet(nom);if(feuille.getLastRow()===0)feuille.getRange(1,1,1,entetes.length).setValues([entetes]);else{const largeur=Math.max(feuille.getLastColumn(),1),presentes=feuille.getRange(1,1,1,largeur).getValues()[0].map(v=>String(v||'').trim()),manquantes=entetes.filter(e=>!presentes.includes(e));if(manquantes.length)feuille.getRange(1,largeur+1,1,manquantes.length).setValues([manquantes]);}feuille.setFrozenRows(1);feuille.getRange(1,1,1,entetes.length).setFontWeight('bold').setBackground('#147d64').setFontColor('#ffffff');feuille.autoResizeColumns(1,entetes.length);});ajouterDonneesInitiales_();mettreAJourVersion_();PropertiesService.getDocumentProperties().setProperty('BUDGETSOFT_INITIALISE','true');SpreadsheetApp.getUi().alert('BudgetSoft est initialisé et à jour (version '+BUDGETSOFT_VERSION+').');}
 function verifierConfiguration(){const ss=SpreadsheetApp.getActiveSpreadsheet(),manquantes=Object.keys(TABLES).filter(n=>!ss.getSheetByName(n)),colonnesManquantes=[];Object.entries(TABLES).forEach(([nom,entetes])=>{const f=ss.getSheetByName(nom);if(!f||f.getLastRow()===0)return;const largeur=Math.max(f.getLastColumn(),1),presentes=f.getRange(1,1,1,largeur).getValues()[0].map(v=>String(v||'').trim());entetes.filter(e=>!presentes.includes(e)).forEach(e=>colonnesManquantes.push(nom+'.'+e));});let message='Configuration valide. BudgetSoft est prêt.';if(manquantes.length)message='Onglets manquants : '+manquantes.join(', ');else if(colonnesManquantes.length)message='Colonnes manquantes : '+colonnesManquantes.join(', ');SpreadsheetApp.getUi().alert(message);return{ok:!manquantes.length&&!colonnesManquantes.length,manquantes,colonnesManquantes};}
