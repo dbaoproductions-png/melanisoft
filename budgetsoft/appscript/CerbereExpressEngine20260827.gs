@@ -1,4 +1,4 @@
-const CERBERE_EXPRESS_VERSION = '2026-08-27.1';
+const CERBERE_EXPRESS_VERSION = '2026-08-27.2';
 
 /**
  * Cerbère Express — moteur comportemental V1.
@@ -9,7 +9,7 @@ const CERBERE_EXPRESS_VERSION = '2026-08-27.1';
  * - une dépense est consommée à sa date réelle d'achat : date_achat pour une CB
  *   structurée, sinon date comptable/date de l'opération ;
  * - les CB différées ne sont donc PAS translatées vers M+1 dans les jauges Express ;
- * - les charges fixes, revenus et mouvements hors catégories P1 sont exclus ;
+ * - les charges fixes reconnues par le coeur commun Cerbère sont exclues ;
  * - le rythme compare la part consommée à la part du cycle 28 -> 27 écoulée ;
  * - Pluxee conserve sa fenêtre propre depuis le dernier rechargement ;
  * - Cerbère complet reste l'autorité pour la trajectoire financière M/M+1.
@@ -26,29 +26,56 @@ function chargerCerbereExpress20260827() {
   const fin = dateExpress_(p.periode.fin);
   if (!debut || !fin) throw new Error('Bornes du cycle Cerbère invalides.');
 
-  const enveloppes = (p.enveloppes || []).map(x => ({
-    categorie:String(x && x.categorie || '').trim(),
-    allocation:arrExpress_(Math.max(0, Number(x && x.prevu || 0))),
-    canon:arrExpress_(Math.max(0, Number(x && x.canon || 0)))
-  })).filter(x => x.categorie);
+  const enveloppes = (p.enveloppes || []).map(x => {
+    const categorie=String(x && x.categorie || '').trim();
+    const allocation=arrExpress_(Math.max(0, Number(x && x.prevu || 0)));
+    const canon=arrExpress_(Math.max(0, Number(x && x.canon || 0)));
+    return {
+      categorie,
+      allocation,
+      canon,
+      ecartP1P0:arrExpress_(allocation-canon),
+      estDerogationP1:Math.abs(allocation-canon)>.009
+    };
+  }).filter(x => x.categorie);
   const categoriesPilotables = new Set(enveloppes.map(x => x.categorie));
 
   const operationsBrutes = lireTable_('Operations') || [];
   const operations = typeof dedoublonnerOperationsCartesBudgetSoft_ === 'function'
     ? dedoublonnerOperationsCartesBudgetSoft_(operationsBrutes)
     : operationsBrutes;
+  const charges = lireTable_('Charges_fixes') || [];
+  const rapprochements = typeof lireRapprochementsChargesFixes === 'function' ? (lireRapprochementsChargesFixes() || []) : [];
+  const liensCf = typeof construireLiensChargesFixesCommuns_ === 'function'
+    ? (construireLiensChargesFixesCommuns_(operations, charges, rapprochements) || {})
+    : {};
 
   const consommeParCategorie = {};
-  let nbDepenses = 0;
+  const exclusCfParCategorie = {};
+  let nbDepenses = 0, nbCandidates=0, nbExcluesCf=0, montantExcluCf=0, montantInclus=0;
   operations.forEach(o => {
     const montant = Number(o && o.montant || 0);
     if (!Number.isFinite(montant) || montant >= 0) return;
-    if (String(o && o.charge_fixe_id || '').trim()) return;
     const categorie = String(o && o.categorie || '').trim();
     if (!categoriesPilotables.has(categorie)) return;
     const d = dateAchatExpress_(o);
     if (!d || d > maintenant || !dansCycleExpress_(d, debut, fin)) return;
-    consommeParCategorie[categorie] = Number(consommeParCategorie[categorie] || 0) + Math.abs(montant);
+    nbCandidates++;
+
+    const id = String(o && o.id || '').trim();
+    const cfDirect = String(o && o.charge_fixe_id || '').trim();
+    const cfReconnu = cfDirect || (id ? String(liensCf[id] || '').trim() : '');
+    if (cfReconnu) {
+      const a=Math.abs(montant);
+      nbExcluesCf++;
+      montantExcluCf+=a;
+      exclusCfParCategorie[categorie]=Number(exclusCfParCategorie[categorie]||0)+a;
+      return;
+    }
+
+    const a=Math.abs(montant);
+    consommeParCategorie[categorie] = Number(consommeParCategorie[categorie] || 0) + a;
+    montantInclus+=a;
     nbDepenses++;
   });
 
@@ -62,6 +89,8 @@ function chargerCerbereExpress20260827() {
       categorie:x.categorie,
       allocation:x.allocation,
       canon:x.canon,
+      ecartP1P0:x.ecartP1P0,
+      estDerogationP1:x.estDerogationP1,
       consomme,
       reste,
       partConsommee:arrExpress_(partConsommee * 100),
@@ -70,8 +99,31 @@ function chargerCerbereExpress20260827() {
   });
 
   const totalAllocation = arrExpress_(lignes.reduce((s,x)=>s+x.allocation,0));
+  const totalCanon = arrExpress_(lignes.reduce((s,x)=>s+x.canon,0));
   const totalConsomme = arrExpress_(lignes.reduce((s,x)=>s+x.consomme,0));
   const totalReste = arrExpress_(totalAllocation-totalConsomme);
+  const categoriesDerogees = lignes.filter(x=>x.estDerogationP1).map(x=>({categorie:x.categorie,p0:x.canon,p1:x.allocation,ecart:x.ecartP1P0}));
+
+  const diagnosticLecture = {
+    operationsSource:operationsBrutes.length,
+    operationsApresDedoublonnage:operations.length,
+    candidatesPilotablesCycle:nbCandidates,
+    depensesIncluses:nbDepenses,
+    montantInclus:arrExpress_(montantInclus),
+    chargesFixesExclues:nbExcluesCf,
+    montantChargesFixesExclu:arrExpress_(montantExcluCf),
+    chargesFixesExcluesParCategorie:Object.keys(exclusCfParCategorie).sort().reduce((o,k)=>{o[k]=arrExpress_(exclusCfParCategorie[k]);return o;},{}),
+    moteurCf:typeof construireLiensChargesFixesCommuns_ === 'function' ? 'coeur commun' : 'charge_fixe_id seulement'
+  };
+
+  const referenceP1 = {
+    totalP0:totalCanon,
+    totalP1:totalAllocation,
+    ecartP1P0:arrExpress_(totalAllocation-totalCanon),
+    nombreCategoriesDerogees:categoriesDerogees.length,
+    categoriesDerogees,
+    source:'p.enveloppes[].prevu retourné par chargerCerbereV374()'
+  };
 
   const pluxee = construirePluxeeExpress_();
   const contexteFinancier = contexteFinancierExpress_(cerbere);
@@ -82,7 +134,7 @@ function chargerCerbereExpress20260827() {
     ok:true,
     version:CERBERE_EXPRESS_VERSION,
     genereLe:Utilities.formatDate(maintenant, Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm:ss"),
-    doctrine:'Lecture comportementale : P1 des molettes comme référence ; consommation à la date réelle d’achat ; aucune translation CB vers M+1.',
+    doctrine:'Lecture comportementale : P1 des molettes comme référence ; consommation à la date réelle d’achat ; aucune translation CB vers M+1 ; charges fixes exclues par le coeur commun.',
     cycle:{
       debut:formatDateExpress_(debut),
       fin:formatDateExpress_(fin),
@@ -90,6 +142,8 @@ function chargerCerbereExpress20260827() {
       jours:progression.jours,
       progressionPct:arrExpress_(progression.ratio*100)
     },
+    referenceP1,
+    diagnosticLecture,
     pilotable:{
       allocation:totalAllocation,
       consomme:totalConsomme,
@@ -124,7 +178,6 @@ function vigilanceExpress_(partConsommee, partTemps, reste, allocation, jour) {
   } else if (allocation <= 0 && pc <= 0) {
     niveau='vert'; libelle='Aucune dépense engagée';
   } else if (jour <= 3) {
-    // Début de cycle : un achat hebdomadaire peut mécaniquement créer un gros écart.
     if (pc >= .65) {niveau='orange'; libelle='Départ très rapide';}
     else {niveau='vert'; libelle='Début de cycle à observer';}
   } else if (ecartPts > 25) {
@@ -157,7 +210,6 @@ function construirePluxeeExpress_() {
   const e = chargerPluxeeCerbere20260827();
   const debut = e && e.cycle && e.cycle.dateRecharge ? dateExpress_(e.cycle.dateRecharge) : null;
   const maintenant = new Date();
-  // Fenêtre comportementale simple Pluxee : 30 jours après la recharge.
   const ratio = debut ? Math.max(0, Math.min(1, (jourCivilExpress_(maintenant)-jourCivilExpress_(debut)+1)/30)) : 0;
   const jour = debut ? Math.max(1, Math.floor(jourCivilExpress_(maintenant)-jourCivilExpress_(debut))+1) : 1;
   const cats=['Courses','Restaurants'];
@@ -188,7 +240,6 @@ function contexteFinancierExpress_(cerbere) {
     disponibleCerbereM:arrExpress_(Number(m&&m.v37&&m.v37.sct1||0)),
     disponibleCerbereM1:arrExpress_(Number(n&&n.v37&&n.v37.sct1||0)),
     cbDejaEngageeM1:arrExpress_(Number(n&&n.roulant&&n.roulant.cbHeritee||0)),
-    // Contexte uniquement : ces montants ne modifient jamais les jauges Express.
     doctrine:'Contexte de vigilance issu de Cerbère complet ; sans effet sur la consommation comportementale Express.'
   };
 }
@@ -244,14 +295,25 @@ function formatDateExpress_(d){return Utilities.formatDate(new Date(d),Session.g
 function formatEuroExpress_(n){return arrExpress_(n).toFixed(2).replace('.',',')+' €';}
 function arrExpress_(n){return Math.round(Number(n||0)*100)/100;}
 
-/** Audit sans écriture : permet de valider la couche moteur avant toute UI/SMS. */
+/** Audit sans écriture : valide à la fois les masses, la source P1 et les exclusions CF. */
 function auditerCerbereExpress20260827() {
   const e=chargerCerbereExpress20260827();
   const sommeAlloc=arrExpress_((e.pilotable.lignes||[]).reduce((s,x)=>s+Number(x.allocation||0),0));
   const sommeCons=arrExpress_((e.pilotable.lignes||[]).reduce((s,x)=>s+Number(x.consomme||0),0));
   const sommeReste=arrExpress_((e.pilotable.lignes||[]).reduce((s,x)=>s+Number(x.reste||0),0));
   const ok=Math.abs(sommeAlloc-e.pilotable.allocation)<.01&&Math.abs(sommeCons-e.pilotable.consomme)<.01&&Math.abs(sommeReste-e.pilotable.reste)<.01&&Math.abs(arrExpress_(e.pilotable.allocation-e.pilotable.consomme)-e.pilotable.reste)<.01;
-  const out={ok,version:e.version,cycle:e.cycle,pilotable:{allocation:e.pilotable.allocation,consomme:e.pilotable.consomme,reste:e.pilotable.reste,nombreDepenses:e.pilotable.nombreDepenses,lignes:e.pilotable.lignes},pluxee:e.pluxee,contexteFinancier:e.contexteFinancier,meteo:e.meteo,consigneSaillante:e.consigneSaillante};
+  const out={
+    ok,
+    version:e.version,
+    cycle:e.cycle,
+    referenceP1:e.referenceP1,
+    diagnosticLecture:e.diagnosticLecture,
+    pilotable:{allocation:e.pilotable.allocation,consomme:e.pilotable.consomme,reste:e.pilotable.reste,nombreDepenses:e.pilotable.nombreDepenses,lignes:e.pilotable.lignes},
+    pluxee:e.pluxee,
+    contexteFinancier:e.contexteFinancier,
+    meteo:e.meteo,
+    consigneSaillante:e.consigneSaillante
+  };
   console.log(JSON.stringify(out));
   return out;
 }
