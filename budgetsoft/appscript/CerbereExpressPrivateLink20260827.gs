@@ -1,4 +1,4 @@
-const CERBERE_EXPRESS_PRIVATE_VERSION = '2026-08-27.2';
+const CERBERE_EXPRESS_PRIVATE_VERSION = '2026-08-27.3';
 const CERBERE_EXPRESS_PRIVATE_PROP_PREFIX = 'CERBERE_EXPRESS_TOKEN_';
 
 /**
@@ -43,20 +43,51 @@ function servirCerbereExpressPrive20260827_(e) {
       .setTitle('Cerbère Express');
   }
 
-  // Pour le lien privé, on calcule la vue côté serveur pendant doGet.
-  // La page mobile n'attend donc plus un second appel google.script.run,
-  // ce qui évite les écrans de chargement bloqués dans certains contextes /dev ou mobiles.
-  const vue = chargerVueCerbereExpress20260827();
+  // Chemin rapide : on sert le dernier snapshot immédiatement.
+  // S'il est périmé, le navigateur déclenche ensuite un rafraîchissement en arrière-plan.
+  let snapshot = typeof chargerSnapshotCerbereExpress20260827 === 'function'
+    ? chargerSnapshotCerbereExpress20260827()
+    : {ok:true,disponible:false,perime:true};
+
+  // Première utilisation seulement : aucun snapshot n'existe encore, donc on le construit une fois.
+  if (!snapshot || !snapshot.disponible) {
+    const initialise = typeof rafraichirSnapshotCerbereExpress20260827 === 'function'
+      ? rafraichirSnapshotCerbereExpress20260827()
+      : null;
+    snapshot = initialise && initialise.vue
+      ? {ok:true,disponible:true,perime:false,vue:initialise.vue,genereLe:initialise.genereLe||''}
+      : (initialise && initialise.snapshot ? initialise.snapshot : snapshot);
+  }
+
+  const vue = snapshot && snapshot.vue
+    ? snapshot.vue
+    : {ok:false,erreur:'Cerbère Express indisponible'};
+
   const template = HtmlService.createTemplateFromFile('CerbereExpressMobile20260827');
   template.tokenExpress = token;
-  template.vueExpressJson = JSON.stringify(vue || {ok:false,erreur:'Cerbère Express indisponible'});
+  template.vueExpressJson = JSON.stringify(vue);
+  template.snapshotExpressMetaJson = JSON.stringify({
+    disponible:!!(snapshot&&snapshot.disponible),
+    perime:!!(snapshot&&snapshot.perime),
+    genereLe:String(snapshot&&snapshot.genereLe||''),
+    dureeLectureMs:Number(snapshot&&snapshot.dureeLectureMs||0)
+  });
   return template.evaluate().setTitle('Cerbère Express').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
-/** Chargement RPC protégé : conservé pour les usages embarqués. */
+/** Chargement RPC protégé : renvoie le snapshot, sans relancer Cerbère complet. */
 function chargerVueCerbereExpressPrive20260827(token) {
   if (!verifierTokenCerbereExpress20260827_(token)) throw new Error('Lien Cerbère Express invalide ou révoqué.');
+  const s = typeof chargerSnapshotCerbereExpress20260827 === 'function' ? chargerSnapshotCerbereExpress20260827() : null;
+  if (s && s.disponible && s.vue) return s.vue;
   return chargerVueCerbereExpress20260827();
+}
+
+/** Rafraîchissement protégé lancé en arrière-plan si le snapshot est périmé. */
+function rafraichirSnapshotCerbereExpressPrive20260827(token) {
+  if (!verifierTokenCerbereExpress20260827_(token)) throw new Error('Lien Cerbère Express invalide ou révoqué.');
+  if (typeof rafraichirSnapshotCerbereExpress20260827 !== 'function') throw new Error('Moteur de snapshot Cerbère Express indisponible.');
+  return rafraichirSnapshotCerbereExpress20260827();
 }
 
 /**
@@ -65,7 +96,8 @@ function chargerVueCerbereExpressPrive20260827(token) {
  */
 function genererSmsCerbereExpress20260827(profil) {
   profil = normaliserProfilCerbereExpress20260827_(profil);
-  const v = chargerVueCerbereExpress20260827();
+  const s = typeof chargerSnapshotCerbereExpress20260827 === 'function' ? chargerSnapshotCerbereExpress20260827() : null;
+  const v = s && s.disponible && s.vue ? s.vue : chargerVueCerbereExpress20260827();
   const lien = preparerLiensPrivesCerbereExpress20260827().liens[profil];
   const meteo = v && v.meteo || {};
   const consigne = v && v.consigneSaillante || {};
