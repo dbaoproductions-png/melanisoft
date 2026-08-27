@@ -1,13 +1,17 @@
-const CERBERE_EXPRESS_PRIVATE_VERSION = '2026-08-27.3';
+const CERBERE_EXPRESS_PRIVATE_VERSION = '2026-08-27.4';
 const CERBERE_EXPRESS_PRIVATE_PROP_PREFIX = 'CERBERE_EXPRESS_TOKEN_';
+const CERBERE_EXPRESS_WEBAPP_URL_PROP = 'CERBERE_EXPRESS_WEBAPP_URL';
 
 /**
  * Crée (ou relit) deux liens privés révocables : principal et conjointe.
  * Les tokens sont conservés dans les propriétés du script, jamais dans le classeur.
+ * Pour les SMS de production, CERBERE_EXPRESS_WEBAPP_URL doit contenir l'URL /exec stable.
  */
 function preparerLiensPrivesCerbereExpress20260827() {
   const props = PropertiesService.getScriptProperties();
-  const base = ScriptApp.getService().getUrl();
+  const configuree = String(props.getProperty(CERBERE_EXPRESS_WEBAPP_URL_PROP) || '').trim();
+  const native = ScriptApp.getService().getUrl();
+  const base = configuree || native;
   if (!base) throw new Error('Aucune URL de déploiement web disponible. Déployez BudgetSoft en application web.');
 
   const profils = ['principal', 'conjointe'];
@@ -19,10 +23,10 @@ function preparerLiensPrivesCerbereExpress20260827() {
       token = creerTokenCerbereExpress20260827_();
       props.setProperty(cle, token);
     }
-    liens[profil] = base + '?view=cerbere-express&t=' + encodeURIComponent(token);
+    liens[profil] = base.replace(/\?.*$/,'') + '?view=cerbere-express&t=' + encodeURIComponent(token);
   });
 
-  const out = {ok:true, version:CERBERE_EXPRESS_PRIVATE_VERSION, liens};
+  const out = {ok:true, version:CERBERE_EXPRESS_PRIVATE_VERSION, liens, urlSource:configuree?'propriete-script':'ScriptApp'};
   console.log(JSON.stringify(out));
   return out;
 }
@@ -43,13 +47,10 @@ function servirCerbereExpressPrive20260827_(e) {
       .setTitle('Cerbère Express');
   }
 
-  // Chemin rapide : on sert le dernier snapshot immédiatement.
-  // S'il est périmé, le navigateur déclenche ensuite un rafraîchissement en arrière-plan.
   let snapshot = typeof chargerSnapshotCerbereExpress20260827 === 'function'
     ? chargerSnapshotCerbereExpress20260827()
     : {ok:true,disponible:false,perime:true};
 
-  // Première utilisation seulement : aucun snapshot n'existe encore, donc on le construit une fois.
   if (!snapshot || !snapshot.disponible) {
     const initialise = typeof rafraichirSnapshotCerbereExpress20260827 === 'function'
       ? rafraichirSnapshotCerbereExpress20260827()
@@ -103,9 +104,9 @@ function genererSmsCerbereExpress20260827(profil) {
   const consigne = v && v.consigneSaillante || {};
   const reste = Number(v && v.pilotable && v.pilotable.reste || 0);
   const texte = [
-    '🐺 Cerbère — ' + String(meteo.emoji || '🌤️') + ' ' + String(meteo.libelle || 'Situation'),
-    'Pilotable restant : ' + formaterEurosSmsCerbereExpress20260827_(reste),
-    '⚠️ ' + String(consigne.texte || 'Cap tenu.'),
+    'Cerbere - ' + String(meteo.libelle || 'Situation'),
+    'Pilotable : ' + formaterEurosSmsCerbereExpress20260827_(reste),
+    String(consigne.texte || 'Cap tenu.'),
     lien
   ].join('\n');
   return {ok:true, version:CERBERE_EXPRESS_PRIVATE_VERSION, profil, texte, lien};
@@ -116,13 +117,16 @@ function auditerLiensPrivesCerbereExpress20260827() {
   const props = PropertiesService.getScriptProperties();
   const principal = props.getProperty(CERBERE_EXPRESS_PRIVATE_PROP_PREFIX + 'PRINCIPAL') || '';
   const conjointe = props.getProperty(CERBERE_EXPRESS_PRIVATE_PROP_PREFIX + 'CONJOINTE') || '';
+  const configuree = String(props.getProperty(CERBERE_EXPRESS_WEBAPP_URL_PROP) || '').trim();
   const out = {
     ok: !!(liens && liens.ok && principal && conjointe),
     version: CERBERE_EXPRESS_PRIVATE_VERSION,
     principalValide: verifierTokenCerbereExpress20260827_(principal),
     conjointeValide: verifierTokenCerbereExpress20260827_(conjointe),
     tokensDistincts: principal !== conjointe,
-    urlDisponible: !!ScriptApp.getService().getUrl()
+    urlDisponible: !!(configuree || ScriptApp.getService().getUrl()),
+    urlProductionConfiguree: !!configuree,
+    urlProductionExec: !!(configuree && /\/exec(?:\?|$)/.test(configuree))
   };
   console.log(JSON.stringify(out));
   return out;
@@ -156,5 +160,5 @@ function normaliserProfilCerbereExpress20260827_(profil) {
 
 function formaterEurosSmsCerbereExpress20260827_(n) {
   const signe = Number(n) < 0 ? '-' : '';
-  return signe + Math.abs(Number(n || 0)).toFixed(0).replace('.', ',') + ' €';
+  return signe + Math.abs(Number(n || 0)).toFixed(0).replace('.', ',') + ' EUR';
 }
