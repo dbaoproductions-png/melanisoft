@@ -14,7 +14,8 @@
 <script>
 (function(){
   const TOKEN_EXPRESS = <?!= JSON.stringify(typeof tokenExpress === 'undefined' ? '' : tokenExpress) ?>;
-  const money = n => new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));
+  const VUE_PRECHARGEE = <?!= (typeof vueExpressJson === 'undefined' || !vueExpressJson) ? 'null' : vueExpressJson ?>;
+  const money=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));
   const pct=n=>Math.max(0,Math.min(100,Number(n||0)));
   function row(x){
     const width=pct(x.partConsommee);
@@ -22,7 +23,7 @@
   }
   function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
   function render(v){
-    if(!v||v.ok===false){document.getElementById('app').innerHTML='<div class="error">Cerbère Express indisponible.</div>';return;}
+    if(!v||v.ok===false){document.getElementById('app').innerHTML='<div class="error">Cerbère Express indisponible'+(v&&v.erreur?': '+esc(v.erreur):'.')+'</div>';return;}
     const p=v.pilotable||{},pl=v.pluxee||{},m=v.meteo||{},c=v.consigneSaillante||{};
     const date=(v.cycle&&v.cycle.fin)?`Cycle jusqu’au ${v.cycle.fin.split('-').reverse().join('/')}`:'';
     document.getElementById('app').innerHTML=`
@@ -34,13 +35,28 @@
       <div class="card"><div class="section-title">Contexte prochain cycle</div><div class="context">CB déjà engagée : <strong>${money(v.contexte&&v.contexte.cbDejaEngageeM1)}</strong><br>Trajectoire Cerbère M+1 : <strong>${money(v.contexte&&v.contexte.prochainCycle)}</strong></div></div>
       <div class="footer">Décisions quotidiennes à la date réelle d’achat · Cerbère complet reste l’autorité financière.</div>`;
   }
-  const success=render;
   const failure=e=>{document.getElementById('app').innerHTML='<div class="error">'+esc(e&&e.message||e)+'</div>';};
-  if(TOKEN_EXPRESS){
-    google.script.run.withSuccessHandler(success).withFailureHandler(failure).chargerVueCerbereExpressPrive20260827(TOKEN_EXPRESS);
-  }else{
-    google.script.run.withSuccessHandler(success).withFailureHandler(failure).chargerVueCerbereExpress20260827();
+
+  if(VUE_PRECHARGEE){
+    render(VUE_PRECHARGEE);
+    return;
   }
+
+  if(typeof google==='undefined'||!google.script||!google.script.run){
+    failure('Pont Apps Script indisponible.');
+    return;
+  }
+
+  if(TOKEN_EXPRESS){
+    google.script.run.withSuccessHandler(render).withFailureHandler(failure).chargerVueCerbereExpressPrive20260827(TOKEN_EXPRESS);
+  }else{
+    google.script.run.withSuccessHandler(render).withFailureHandler(failure).chargerVueCerbereExpress20260827();
+  }
+
+  setTimeout(()=>{
+    const app=document.getElementById('app');
+    if(app&&app.querySelector('.loading'))failure('Chargement trop long : aucune réponse Apps Script.');
+  },15000);
 })();
 </script>
 </body>
