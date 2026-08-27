@@ -1,4 +1,4 @@
-const CERBERE_EXPRESS_VIEW_VERSION = '2026-08-27.1';
+const CERBERE_EXPRESS_VIEW_VERSION = '2026-08-27.2';
 
 /**
  * Couche de présentation de Cerbère Express.
@@ -66,13 +66,27 @@ function chargerVueCerbereExpress20260827() {
   };
 }
 
-/** Aperçu de la future mini-page depuis le classeur. */
+/**
+ * Aperçu depuis le classeur : barre latérale plutôt que modal.
+ * Cela reste visible même quand la fonction est lancée depuis l’éditeur Apps Script.
+ */
 function ouvrirCerbereExpress20260827() {
   const html=HtmlService.createTemplateFromFile('CerbereExpressMobile20260827')
     .evaluate()
-    .setWidth(430)
-    .setHeight(760);
-  SpreadsheetApp.getUi().showModalDialog(html,'Cerbère Express');
+    .setTitle('Cerbère Express');
+  SpreadsheetApp.getUi().showSidebar(html);
+}
+
+/**
+ * Installe immédiatement une entrée de menu dans le classeur courant.
+ * À lancer une seule fois pour le test ; le menu reste disponible tant que le classeur est ouvert.
+ */
+function installerMenuCerbereExpress20260827() {
+  SpreadsheetApp.getUi()
+    .createMenu('🐺 Cerbère Express')
+    .addItem('Ouvrir Cerbère Express','ouvrirCerbereExpress20260827')
+    .addToUi();
+  return {ok:true,version:CERBERE_EXPRESS_VIEW_VERSION,message:'Menu Cerbère Express installé dans Google Sheets.'};
 }
 
 /** Audit court de la couche de présentation. */
