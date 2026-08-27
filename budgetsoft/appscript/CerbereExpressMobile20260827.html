@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     :root{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#18322b;background:#f5f7f4}
-    *{box-sizing:border-box} body{margin:0;background:#f5f7f4}.wrap{width:100%;max-width:none;margin:0;padding:12px 10px 22px}.head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}.brand{font-size:22px;font-weight:800}.muted{color:#6d7d77;font-size:12px}.weather,.card{width:100%;background:white;border-radius:16px;padding:14px;box-shadow:0 8px 24px rgba(27,57,48,.08);margin-bottom:10px}.weather{display:flex;gap:14px;align-items:center}.weather .emoji{font-size:42px}.weather h1{font-size:20px;margin:0 0 3px}.weather p{margin:0;color:#50625c;font-size:14px}.alert{font-weight:700;font-size:16px;line-height:1.35}.summary{display:grid;grid-template-columns:1fr 1fr;gap:10px}.metric{background:#f2f6f3;border-radius:14px;padding:12px}.metric span{font-size:11px;color:#71817c;text-transform:uppercase;letter-spacing:.05em}.metric strong{display:block;font-size:21px;margin-top:3px}.section-title{font-size:13px;font-weight:800;margin:2px 0 10px;color:#365047;text-transform:uppercase;letter-spacing:.04em}.row{padding:11px 0;border-top:1px solid #edf0ed}.row:first-of-type{border-top:none}.row-head{display:flex;justify-content:space-between;gap:12px;align-items:baseline}.row-name{font-weight:700}.row-remain{font-weight:800}.bar{height:8px;background:#e8ece9;border-radius:999px;overflow:hidden;margin:7px 0 0}.fill{height:100%;background:#5f7e73;border-radius:999px}.row.orange .fill{background:#b8871f}.row.rouge .fill{background:#ad4a41}.row.orange .row-remain{color:#9a6c0e}.row.rouge .row-remain{color:#a13f38}.pluxee-balance{font-size:28px;font-weight:800}.context{font-size:13px;line-height:1.45;color:#52655e}.loading,.error{text-align:center;padding:50px 20px;color:#65766f}.error{color:#9c3f39}.footer{text-align:center;font-size:11px;color:#89958f;margin-top:12px}
+    *{box-sizing:border-box} body{margin:0;background:#f5f7f4}.wrap{width:100%;max-width:none;margin:0;padding:12px 10px 22px}.head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}.brand{font-size:22px;font-weight:800}.muted{color:#6d7d77;font-size:12px}.weather,.card{width:100%;background:white;border-radius:16px;padding:14px;box-shadow:0 8px 24px rgba(27,57,48,.08);margin-bottom:10px}.weather{display:flex;gap:14px;align-items:center}.weather .emoji{font-size:42px}.weather h1{font-size:20px;margin:0 0 3px}.weather p{margin:0;color:#50625c;font-size:14px}.alert{font-weight:700;font-size:16px;line-height:1.35}.summary{display:grid;grid-template-columns:1fr 1fr;gap:10px}.metric{background:#f2f6f3;border-radius:14px;padding:12px}.metric span{font-size:11px;color:#71817c;text-transform:uppercase;letter-spacing:.05em}.metric strong{display:block;font-size:21px;margin-top:3px}.section-title{font-size:13px;font-weight:800;margin:2px 0 10px;color:#365047;text-transform:uppercase;letter-spacing:.04em}.row{padding:11px 0;border-top:1px solid #edf0ed}.row:first-of-type{border-top:none}.row-head{display:flex;justify-content:space-between;gap:12px;align-items:baseline}.row-name{font-weight:700}.row-remain{font-weight:800}.bar{height:8px;background:#e8ece9;border-radius:999px;overflow:hidden;margin:7px 0 0}.fill{height:100%;background:#5f7e73;border-radius:999px}.row.orange .fill{background:#b8871f}.row.rouge .fill{background:#ad4a41}.row.orange .row-remain{color:#9a6c0e}.row.rouge .row-remain{color:#a13f38}.pluxee-balance{font-size:28px;font-weight:800}.context{font-size:13px;line-height:1.45;color:#52655e}.loading,.error{text-align:center;padding:50px 20px;color:#65766f}.error{color:#9c3f39}.footer{text-align:center;font-size:11px;color:#89958f;margin-top:12px}.freshness{font-size:10px;color:#8a9691;margin-top:4px}.freshness.refreshing{color:#8a6a1d}
     @media(min-width:700px){.wrap{max-width:760px;margin:0 auto;padding:18px 14px 28px}}
   </style>
 </head>
@@ -16,6 +16,7 @@
 (function(){
   const TOKEN_EXPRESS = <?!= JSON.stringify(typeof tokenExpress === 'undefined' ? '' : tokenExpress) ?>;
   const VUE_PRECHARGEE = <?!= (typeof vueExpressJson === 'undefined' || !vueExpressJson) ? 'null' : vueExpressJson ?>;
+  const SNAPSHOT_META = <?!= (typeof snapshotExpressMetaJson === 'undefined' || !snapshotExpressMetaJson) ? 'null' : snapshotExpressMetaJson ?>;
   const money=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));
   const pct=n=>Math.max(0,Math.min(100,Number(n||0)));
   function row(x){
@@ -25,12 +26,15 @@
     return `<div class="row ${x.niveau||'vert'}"><div class="row-head"><div class="row-name">${esc(x.categorie)}</div><div class="row-remain">${montant}</div></div><div class="bar"><div class="fill" style="width:${width}%"></div></div></div>`;
   }
   function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-  function render(v){
+  function render(v,meta){
     if(!v||v.ok===false){document.getElementById('app').innerHTML='<div class="error">Cerbère Express indisponible'+(v&&v.erreur?': '+esc(v.erreur):'.')+'</div>';return;}
     const p=v.pilotable||{},pl=v.pluxee||{},m=v.meteo||{},c=v.consigneSaillante||{};
     const date=(v.cycle&&v.cycle.fin)?`Cycle jusqu’au ${v.cycle.fin.split('-').reverse().join('/')}`:'';
+    const freshness=meta&&meta.perime
+      ? '<div class="freshness refreshing" id="snapshot-state">Mise à jour en arrière-plan…</div>'
+      : (meta&&meta.genereLe?`<div class="freshness" id="snapshot-state">Actualisé ${esc(meta.genereLe.replace('T',' '))}</div>`:'');
     document.getElementById('app').innerHTML=`
-      <div class="head"><div><div class="brand">🐺 Cerbère Express</div><div class="muted">${esc(date)}</div></div><div class="muted">Lecture seule</div></div>
+      <div class="head"><div><div class="brand">🐺 Cerbère Express</div><div class="muted">${esc(date)}</div>${freshness}</div><div class="muted">Lecture seule</div></div>
       <div class="weather"><div class="emoji">${esc(m.emoji||'🌤️')}</div><div><h1>${esc(m.libelle||'Situation')}</h1><p>${esc(m.resume||'')}</p></div></div>
       <div class="card"><div class="section-title">À retenir</div><div class="alert">${esc(c.texte||'')}</div></div>
       <div class="card"><div class="section-title">Pilotable</div><div class="summary"><div class="metric"><span>Reste</span><strong>${money(p.reste)}</strong></div><div class="metric"><span>Consommé</span><strong>${money(p.consomme)}</strong></div></div>${(p.lignes||[]).map(row).join('')}</div>
@@ -41,7 +45,19 @@
   const failure=e=>{document.getElementById('app').innerHTML='<div class="error">'+esc(e&&e.message||e)+'</div>';};
 
   if(VUE_PRECHARGEE){
-    render(VUE_PRECHARGEE);
+    render(VUE_PRECHARGEE,SNAPSHOT_META);
+    if(SNAPSHOT_META&&SNAPSHOT_META.perime&&TOKEN_EXPRESS&&typeof google!=='undefined'&&google.script&&google.script.run){
+      google.script.run
+        .withSuccessHandler(r=>{
+          if(r&&r.vue){render(r.vue,{perime:false,genereLe:r.genereLe||''});return;}
+          if(r&&r.snapshot&&r.snapshot.vue){render(r.snapshot.vue,{perime:!!r.snapshot.perime,genereLe:r.snapshot.genereLe||''});}
+        })
+        .withFailureHandler(()=>{
+          const s=document.getElementById('snapshot-state');
+          if(s){s.textContent='Dernière vue disponible';s.classList.remove('refreshing');}
+        })
+        .rafraichirSnapshotCerbereExpressPrive20260827(TOKEN_EXPRESS);
+    }
     return;
   }
 
@@ -51,9 +67,9 @@
   }
 
   if(TOKEN_EXPRESS){
-    google.script.run.withSuccessHandler(render).withFailureHandler(failure).chargerVueCerbereExpressPrive20260827(TOKEN_EXPRESS);
+    google.script.run.withSuccessHandler(v=>render(v,null)).withFailureHandler(failure).chargerVueCerbereExpressPrive20260827(TOKEN_EXPRESS);
   }else{
-    google.script.run.withSuccessHandler(render).withFailureHandler(failure).chargerVueCerbereExpress20260827();
+    google.script.run.withSuccessHandler(v=>render(v,null)).withFailureHandler(failure).chargerVueCerbereExpress20260827();
   }
 
   setTimeout(()=>{
