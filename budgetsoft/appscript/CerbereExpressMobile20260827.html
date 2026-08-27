@@ -14,11 +14,11 @@
 <script>
 (function(){
   const TOKEN_EXPRESS = <?!= JSON.stringify(typeof tokenExpress === 'undefined' ? '' : tokenExpress) ?>;
-  const €=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));
+  const money = n => new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));
   const pct=n=>Math.max(0,Math.min(100,Number(n||0)));
   function row(x){
     const width=pct(x.partConsommee);
-    return `<div class="row ${x.niveau||'vert'}"><div class="row-head"><div class="row-name">${esc(x.categorie)}</div><div class="row-remain">${€(x.reste)} restants</div></div><div class="bar"><div class="fill" style="width:${width}%"></div></div><div class="note">${€(x.consomme)} / ${€(x.allocation)} · ${esc(x.message||'')}</div></div>`;
+    return `<div class="row ${x.niveau||'vert'}"><div class="row-head"><div class="row-name">${esc(x.categorie)}</div><div class="row-remain">${money(x.reste)} restants</div></div><div class="bar"><div class="fill" style="width:${width}%"></div></div><div class="note">${money(x.consomme)} / ${money(x.allocation)} · ${esc(x.message||'')}</div></div>`;
   }
   function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
   function render(v){
@@ -29,9 +29,9 @@
       <div class="head"><div><div class="brand">🐺 Cerbère Express</div><div class="muted">${esc(date)}</div></div><div class="muted">Lecture seule</div></div>
       <div class="weather"><div class="emoji">${esc(m.emoji||'🌤️')}</div><div><h1>${esc(m.libelle||'Situation')}</h1><p>${esc(m.resume||'')}</p></div></div>
       <div class="card"><div class="section-title">À retenir</div><div class="alert">${esc(c.texte||'')}</div></div>
-      <div class="card"><div class="section-title">Pilotable</div><div class="summary"><div class="metric"><span>Reste</span><strong>${€(p.reste)}</strong></div><div class="metric"><span>Consommé</span><strong>${€(p.consomme)}</strong></div></div>${(p.lignes||[]).map(row).join('')}</div>
-      ${pl.disponible?`<div class="card"><div class="section-title">Pluxee</div><div class="pluxee-balance">${€(pl.soldeReel)}</div><div class="muted">Solde réel · théorique ${€(pl.soldeTheorique)}</div>${(pl.lignes||[]).map(row).join('')}</div>`:''}
-      <div class="card"><div class="section-title">Contexte prochain cycle</div><div class="context">CB déjà engagée : <strong>${€(v.contexte&&v.contexte.cbDejaEngageeM1)}</strong><br>Trajectoire Cerbère M+1 : <strong>${€(v.contexte&&v.contexte.prochainCycle)}</strong></div></div>
+      <div class="card"><div class="section-title">Pilotable</div><div class="summary"><div class="metric"><span>Reste</span><strong>${money(p.reste)}</strong></div><div class="metric"><span>Consommé</span><strong>${money(p.consomme)}</strong></div></div>${(p.lignes||[]).map(row).join('')}</div>
+      ${pl.disponible?`<div class="card"><div class="section-title">Pluxee</div><div class="pluxee-balance">${money(pl.soldeReel)}</div><div class="muted">Solde réel · théorique ${money(pl.soldeTheorique)}</div>${(pl.lignes||[]).map(row).join('')}</div>`:''}
+      <div class="card"><div class="section-title">Contexte prochain cycle</div><div class="context">CB déjà engagée : <strong>${money(v.contexte&&v.contexte.cbDejaEngageeM1)}</strong><br>Trajectoire Cerbère M+1 : <strong>${money(v.contexte&&v.contexte.prochainCycle)}</strong></div></div>
       <div class="footer">Décisions quotidiennes à la date réelle d’achat · Cerbère complet reste l’autorité financière.</div>`;
   }
   const success=render;
