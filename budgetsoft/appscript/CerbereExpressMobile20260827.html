@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#18322b;background:#f5f7f4}
+    *{box-sizing:border-box} body{margin:0;background:#f5f7f4}.wrap{max-width:430px;margin:0 auto;padding:18px 14px 28px}.head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}.brand{font-size:22px;font-weight:800}.muted{color:#6d7d77;font-size:12px}.weather,.card{background:white;border-radius:18px;padding:16px;box-shadow:0 8px 24px rgba(27,57,48,.08);margin-bottom:12px}.weather{display:flex;gap:14px;align-items:center}.weather .emoji{font-size:42px}.weather h1{font-size:20px;margin:0 0 3px}.weather p{margin:0;color:#50625c;font-size:14px}.alert{font-weight:700;font-size:16px;line-height:1.35}.summary{display:grid;grid-template-columns:1fr 1fr;gap:10px}.metric{background:#f2f6f3;border-radius:14px;padding:12px}.metric span{font-size:11px;color:#71817c;text-transform:uppercase;letter-spacing:.05em}.metric strong{display:block;font-size:21px;margin-top:3px}.section-title{font-size:13px;font-weight:800;margin:2px 0 10px;color:#365047;text-transform:uppercase;letter-spacing:.04em}.row{padding:11px 0;border-top:1px solid #edf0ed}.row:first-of-type{border-top:none}.row-head{display:flex;justify-content:space-between;gap:12px;align-items:baseline}.row-name{font-weight:700}.row-remain{font-weight:800}.bar{height:8px;background:#e8ece9;border-radius:999px;overflow:hidden;margin:7px 0 5px}.fill{height:100%;background:#5f7e73;border-radius:999px}.row.orange .fill{background:#b8871f}.row.rouge .fill{background:#ad4a41}.row.orange .row-remain{color:#9a6c0e}.row.rouge .row-remain{color:#a13f38}.note{font-size:12px;color:#6b7b75}.pluxee-balance{font-size:28px;font-weight:800}.context{font-size:13px;line-height:1.45;color:#52655e}.loading,.error{text-align:center;padding:50px 20px;color:#65766f}.error{color:#9c3f39}.footer{text-align:center;font-size:11px;color:#89958f;margin-top:12px}
+  </style>
+</head>
+<body>
+<div class="wrap" id="app"><div class="loading">Chargement de Cerbère Express…</div></div>
+<script>
+(function(){
+  const €=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));
+  const pct=n=>Math.max(0,Math.min(100,Number(n||0)));
+  function row(x){
+    const width=pct(x.partConsommee);
+    return `<div class="row ${x.niveau||'vert'}"><div class="row-head"><div class="row-name">${esc(x.categorie)}</div><div class="row-remain">${€(x.reste)} restants</div></div><div class="bar"><div class="fill" style="width:${width}%"></div></div><div class="note">${€(x.consomme)} / ${€(x.allocation)} · ${esc(x.message||'')}</div></div>`;
+  }
+  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  function render(v){
+    if(!v||v.ok===false){document.getElementById('app').innerHTML='<div class="error">Cerbère Express indisponible.</div>';return;}
+    const p=v.pilotable||{},pl=v.pluxee||{},m=v.meteo||{},c=v.consigneSaillante||{};
+    const date=(v.cycle&&v.cycle.fin)?`Cycle jusqu’au ${v.cycle.fin.split('-').reverse().join('/')}`:'';
+    document.getElementById('app').innerHTML=`
+      <div class="head"><div><div class="brand">🐺 Cerbère Express</div><div class="muted">${esc(date)}</div></div><div class="muted">Lecture seule</div></div>
+      <div class="weather"><div class="emoji">${esc(m.emoji||'🌤️')}</div><div><h1>${esc(m.libelle||'Situation')}</h1><p>${esc(m.resume||'')}</p></div></div>
+      <div class="card"><div class="section-title">À retenir</div><div class="alert">${esc(c.texte||'')}</div></div>
+      <div class="card"><div class="section-title">Pilotable</div><div class="summary"><div class="metric"><span>Reste</span><strong>${€(p.reste)}</strong></div><div class="metric"><span>Consommé</span><strong>${€(p.consomme)}</strong></div></div>${(p.lignes||[]).map(row).join('')}</div>
+      ${pl.disponible?`<div class="card"><div class="section-title">Pluxee</div><div class="pluxee-balance">${€(pl.soldeReel)}</div><div class="muted">Solde réel · théorique ${€(pl.soldeTheorique)}</div>${(pl.lignes||[]).map(row).join('')}</div>`:''}
+      <div class="card"><div class="section-title">Contexte prochain cycle</div><div class="context">CB déjà engagée : <strong>${€(v.contexte&&v.contexte.cbDejaEngageeM1)}</strong><br>Trajectoire Cerbère M+1 : <strong>${€(v.contexte&&v.contexte.prochainCycle)}</strong></div></div>
+      <div class="footer">Décisions quotidiennes à la date réelle d’achat · Cerbère complet reste l’autorité financière.</div>`;
+  }
+  google.script.run.withSuccessHandler(render).withFailureHandler(e=>{document.getElementById('app').innerHTML='<div class="error">'+esc(e&&e.message||e)+'</div>';}).chargerVueCerbereExpress20260827();
+})();
+</script>
+</body>
+</html>
