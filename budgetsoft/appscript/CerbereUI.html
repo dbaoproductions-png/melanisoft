@@ -148,7 +148,14 @@ function ouvrirExpress_(){
   assurerSectionExpress_().classList.add('active');chargerExpress_();
 }
 document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('.nav-item[data-view="cerbere-express"]');if(!b)return;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();ouvrirExpress_();},true);
-document.addEventListener('DOMContentLoaded',assurerNavExpress_);setTimeout(assurerNavExpress_,500);
+function maintenirNavExpress_(){assurerNavExpress_();}
+maintenirNavExpress_();
+document.addEventListener('DOMContentLoaded',maintenirNavExpress_);
+setTimeout(maintenirNavExpress_,100);
+setTimeout(maintenirNavExpress_,500);
+setTimeout(maintenirNavExpress_,1500);
+const observerNavExpress_=new MutationObserver(()=>maintenirNavExpress_());
+observerNavExpress_.observe(document.documentElement,{childList:true,subtree:true});
 window.ouvrirCerbereExpressUI=ouvrirExpress_;
 const st=document.createElement('style');st.textContent=`.cex-shell{max-width:760px}.cex-weather{display:flex;gap:14px;align-items:center;background:#f4f8f6;border-radius:14px;padding:14px;margin:12px 0}.cex-weather>span{font-size:42px}.cex-weather h3,.cex-weather p{margin:0}.cex-action{background:#fff4dd;border-radius:14px;padding:14px;margin:12px 0}.cex-action small{display:block;font-weight:800;margin-bottom:4px}.cex-action strong{font-size:18px}.cex-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}.cex-metric{background:#eef6f2;border-radius:14px;padding:12px}.cex-metric small{display:block}.cex-metric b{font-size:22px}.cex-card{border:1px solid #e4ece8;border-radius:14px;padding:14px;margin-top:12px}.cex-card h3{margin:0 0 8px}.cex-row{padding:10px 0;border-top:1px solid #edf1ef}.cex-row:first-of-type{border-top:0}.cex-row-head{display:flex;justify-content:space-between;gap:12px}.cex-bar{height:8px;background:#e7ece9;border-radius:999px;overflow:hidden;margin:6px 0}.cex-bar span{display:block;height:100%;background:#5f7e73}.cex-row.orange .cex-bar span{background:#b8871f}.cex-row.rouge .cex-bar span{background:#ad4a41}.cex-row.orange .cex-row-head b{color:#9a6c0e}.cex-row.rouge .cex-row-head b{color:#a13f38}.cex-row small{color:#687a73}@media(max-width:700px){.cex-grid{grid-template-columns:1fr}.cex-shell{max-width:none}}`;document.head.appendChild(st);
 })();
