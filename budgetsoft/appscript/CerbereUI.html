@@ -98,3 +98,58 @@ document.addEventListener('DOMContentLoaded',()=>{installerGardeCerbere_();charg
 const st=document.createElement('style');st.textContent=`.c37-pluxee{margin:12px 0;border:1px solid #c9dfd7;border-radius:14px;background:#fbfdfc;padding:12px}.c37-pluxee-head{display:grid;grid-template-columns:1fr 1.6fr;gap:12px;align-items:center}.c37-pluxee-head h3{margin:2px 0 0;font-size:19px}.c37-pluxee-head small,.c37-pluxee-head span{display:block}.c37-pluxee-bal{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.c37-pluxee-bal span{background:#edf7f3;border-radius:9px;padding:8px;font-size:11px}.c37-pluxee-bal b{display:block;font-size:17px}.c37-pluxee-bal small{font-size:9px}.c37-pluxee-headrow,.c37-pluxee-row{display:grid;grid-template-columns:1.2fr .6fr 1.6fr .7fr .8fr;gap:8px;align-items:center}.c37-pluxee-headrow{font-size:10px;font-weight:800;color:#65746f;padding:10px 6px 5px}.c37-pluxee-row{border-top:1px solid #e7efec;padding:8px 6px;font-size:12px}.c37-pluxee-row div{display:grid;grid-template-columns:1fr 62px;gap:6px}.c37-pluxee-row input[type=number]{width:100%;box-sizing:border-box}.c37-pluxee-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:10px}.c37-pluxee-actions small{margin-right:auto}.c37-pluxee-warn{background:#fff4dd;border-radius:8px;padding:7px 9px;font-size:11px}@media(max-width:900px){.c37-pluxee-head{grid-template-columns:1fr}.c37-pluxee-bal{grid-template-columns:1fr 1fr 1fr}}@media(max-width:700px){.c37-pluxee-headrow{display:none}.c37-pluxee-row{grid-template-columns:1fr}.c37-pluxee-bal{grid-template-columns:1fr}.c37-pluxee-actions{display:grid}.c37-pluxee-actions small{margin:0}}`;document.head.appendChild(st);
 })();
 </script>
+
+<script>
+(function(){
+'use strict';
+const q=id=>document.getElementById(id);
+const money=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function assurerNavExpress_(){
+  const nav=document.querySelector('.nav');if(!nav)return;
+  if(document.querySelector('[data-view="cerbere-express"]'))return;
+  const cerbere=document.querySelector('[data-view="cerbere"]');
+  const b=document.createElement('button');b.className='nav-item';b.dataset.view='cerbere-express';b.innerHTML='⚡ <span>Cerbère Express</span>';
+  if(cerbere&&cerbere.nextSibling)nav.insertBefore(b,cerbere.nextSibling);else nav.appendChild(b);
+}
+function assurerSectionExpress_(){
+  let s=q('cerbere-express');if(s)return s;
+  const main=document.querySelector('.main'),generic=q('generic-view');
+  s=document.createElement('section');s.id='cerbere-express';s.className='view';main.insertBefore(s,generic);return s;
+}
+function ligne_(x){
+  const pct=Math.max(0,Math.min(100,Number(x.partConsommee||0)));
+  return `<div class="cex-row ${esc(x.niveau||'vert')}"><div class="cex-row-head"><strong>${esc(x.categorie)}</strong><b>${money(x.reste)}</b></div><div class="cex-bar"><span style="width:${pct}%"></span></div><small>${money(x.consomme)} / ${money(x.allocation)} · ${esc(x.message||'')}</small></div>`;
+}
+function renderExpress_(v){
+  const s=assurerSectionExpress_();
+  if(!v||v.ok===false){s.innerHTML='<article class="card panel"><div class="cerb-error">Cerbère Express indisponible.</div></article>';return;}
+  const p=v.pilotable||{},pl=v.pluxee||{},m=v.meteo||{},c=v.consigneSaillante||{};
+  s.innerHTML=`<article class="card panel cex-shell"><div class="panel-heading"><div><span class="panel-kicker">DÉCISION QUOTIDIENNE</span><h2>⚡ Cerbère Express</h2></div><button class="secondary-button" id="cex-refresh">Actualiser</button></div>
+  <div class="cex-weather"><span>${esc(m.emoji||'🌤️')}</span><div><h3>${esc(m.libelle||'Situation')}</h3><p>${esc(m.resume||'')}</p></div></div>
+  <div class="cex-action"><small>À RETENIR</small><strong>${esc(c.texte||'')}</strong></div>
+  <div class="cex-grid"><div class="cex-metric"><small>Reste pilotable</small><b>${money(p.reste)}</b></div><div class="cex-metric"><small>Consommé</small><b>${money(p.consomme)}</b></div></div>
+  <div class="cex-card"><h3>Pilotable</h3>${(p.lignes||[]).map(ligne_).join('')}</div>
+  ${pl.disponible?`<div class="cex-card"><h3>Pluxee · solde réel ${money(pl.soldeReel)}</h3><small>Solde théorique ${money(pl.soldeTheorique)}</small>${(pl.lignes||[]).map(ligne_).join('')}</div>`:''}
+  <div class="cex-card"><h3>Prochain cycle</h3><p>CB déjà engagée : <b>${money(v.contexte&&v.contexte.cbDejaEngageeM1)}</b><br>Trajectoire M+1 : <b>${money(v.contexte&&v.contexte.prochainCycle)}</b></p></div>
+  <p class="helper-text">Lecture seule · décisions à la date réelle d’achat · Cerbère complet reste l’autorité financière.</p></article>`;
+  const r=q('cex-refresh');if(r)r.onclick=chargerExpress_;
+}
+function chargerExpress_(){
+  const s=assurerSectionExpress_();
+  s.innerHTML='<article class="card panel"><div class="loading">Chargement de Cerbère Express…</div></article>';
+  google.script.run.withSuccessHandler(renderExpress_).withFailureHandler(e=>{s.innerHTML='<article class="card panel"><div class="cerb-error">'+esc(e&&e.message||e)+'</div></article>';}).chargerVueCerbereExpress20260827();
+}
+function ouvrirExpress_(){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view==='cerbere-express'));
+  if(q('page-title'))q('page-title').textContent='Cerbère Express';
+  if(q('page-eyebrow'))q('page-eyebrow').textContent='Décision quotidienne';
+  assurerSectionExpress_().classList.add('active');chargerExpress_();
+}
+document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('.nav-item[data-view="cerbere-express"]');if(!b)return;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();ouvrirExpress_();},true);
+document.addEventListener('DOMContentLoaded',assurerNavExpress_);setTimeout(assurerNavExpress_,500);
+window.ouvrirCerbereExpressUI=ouvrirExpress_;
+const st=document.createElement('style');st.textContent=`.cex-shell{max-width:760px}.cex-weather{display:flex;gap:14px;align-items:center;background:#f4f8f6;border-radius:14px;padding:14px;margin:12px 0}.cex-weather>span{font-size:42px}.cex-weather h3,.cex-weather p{margin:0}.cex-action{background:#fff4dd;border-radius:14px;padding:14px;margin:12px 0}.cex-action small{display:block;font-weight:800;margin-bottom:4px}.cex-action strong{font-size:18px}.cex-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}.cex-metric{background:#eef6f2;border-radius:14px;padding:12px}.cex-metric small{display:block}.cex-metric b{font-size:22px}.cex-card{border:1px solid #e4ece8;border-radius:14px;padding:14px;margin-top:12px}.cex-card h3{margin:0 0 8px}.cex-row{padding:10px 0;border-top:1px solid #edf1ef}.cex-row:first-of-type{border-top:0}.cex-row-head{display:flex;justify-content:space-between;gap:12px}.cex-bar{height:8px;background:#e7ece9;border-radius:999px;overflow:hidden;margin:6px 0}.cex-bar span{display:block;height:100%;background:#5f7e73}.cex-row.orange .cex-bar span{background:#b8871f}.cex-row.rouge .cex-bar span{background:#ad4a41}.cex-row.orange .cex-row-head b{color:#9a6c0e}.cex-row.rouge .cex-row-head b{color:#a13f38}.cex-row small{color:#687a73}@media(max-width:700px){.cex-grid{grid-template-columns:1fr}.cex-shell{max-width:none}}`;document.head.appendChild(st);
+})();
+</script>
