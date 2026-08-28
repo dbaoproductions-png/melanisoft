@@ -12,8 +12,10 @@
   let afficherArchives=false;
   let derniereSynthese=null;
   let chargementEnCours=false;
+  let structureInstallee=false;
 
   function installerStructure(){
+    if(structureInstallee&&document.getElementById('placements-balance')&&document.getElementById('accounts-archive-toggle'))return;
     const cartes=document.querySelector('#comptes .accounts-summary');
     if(cartes){
       cartes.innerHTML=`
@@ -35,6 +37,7 @@
         heading.appendChild(bouton);
       }
     }
+    structureInstallee=true;
   }
 
   function sourceLibelle(c){
@@ -86,6 +89,7 @@
   }
 
   // Remplace le rendu historique : on ne rescane plus toutes les opérations compte par compte côté navigateur.
+  // La structure n'est créée qu'une fois : pendant les actualisations, les derniers montants restent visibles.
   window.rendreComptes=function(){
     installerStructure();
     chargerSynthese();
