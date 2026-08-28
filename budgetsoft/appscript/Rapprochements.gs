@@ -47,25 +47,25 @@ function fusionnerOperationsRapprochement_(rapprochement) {
   if (!manuelle) throw new Error('La saisie manuelle à fusionner n’existe plus.');
   if (!importee) throw new Error('L’opération bancaire à fusionner n’existe plus.');
 
+  // Doctrine bancaire : la ligne importée est l'enveloppe de référence.
+  // On conserve son ID et toutes ses métadonnées bancaires, puis on y transfère
+  // uniquement les enrichissements métier utiles de la saisie manuelle.
   const commentaire = [
-    manuelle.commentaire || '',
     importee.commentaire || '',
+    manuelle.commentaire || '',
     '[VALIDATION_RAPPROCHEMENT:' + rapprochement.id + ']'
   ].filter(Boolean).join(' ');
 
-  enregistrerLigne('Operations', {
-    id: manuelle.id,
-    date: importee.date || manuelle.date,
+  const fusion = Object.assign({}, importee, {
+    id: importee.id,
     libelle: manuelle.libelle || importee.libelle,
     categorie: manuelle.categorie || importee.categorie,
-    compte: manuelle.compte || importee.compte,
-    montant: Math.abs(Number(importee.montant || manuelle.montant || 0)),
-    type: importee.type || manuelle.type,
     commentaire,
-    cree_le: manuelle.cree_le || ''
+    cree_le: importee.cree_le || manuelle.cree_le || ''
   });
 
-  supprimerLigne('Operations', importee.id);
+  enregistrerLigne('Operations', fusion);
+  supprimerLigne('Operations', manuelle.id);
 }
 
 function trouverRapprochementParId_(id) {
