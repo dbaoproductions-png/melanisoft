@@ -12,9 +12,8 @@
   let afficherArchives=false;
   let derniereSynthese=null;
   let chargementEnCours=false;
+  let rafraichissementSnapshotEnCours=false;
   let structureInstallee=false;
-  let dernierChargementMs=0;
-  const REUTILISATION_MS=5000;
 
   function installerStructure(){
     if(structureInstallee&&document.getElementById('placements-balance')&&document.getElementById('accounts-archive-toggle'))return;
@@ -79,38 +78,48 @@
     }).join('');
   }
 
-  function chargerSynthese(force){
+  function rafraichirSnapshotSilencieusement(){
+    if(rafraichissementSnapshotEnCours)return;
+    rafraichissementSnapshotEnCours=true;
+    google.script.run
+      .withSuccessHandler(function(x){
+        rafraichissementSnapshotEnCours=false;
+        if(x&&x.ok&&x.vue)rendreSynthese(x.vue);
+      })
+      .withFailureHandler(function(){rafraichissementSnapshotEnCours=false;})
+      .rafraichirSnapshotComptes20260828();
+  }
+
+  function chargerSynthese(){
     if(chargementEnCours)return;
-    const maintenant=Date.now();
-    if(!force&&derniereSynthese&&(maintenant-dernierChargementMs)<REUTILISATION_MS){rendreSynthese(derniereSynthese);return;}
     chargementEnCours=true;
     const zone=document.getElementById('accounts-list');
     if(zone&&!derniereSynthese){zone.className='empty-state';zone.textContent='Chargement des soldes réels…';}
     google.script.run
-      .withSuccessHandler(function(r){chargementEnCours=false;dernierChargementMs=Date.now();rendreSynthese(r);})
+      .withSuccessHandler(function(r){
+        chargementEnCours=false;
+        rendreSynthese(r);
+        if(r&&r.snapshotPerime)rafraichirSnapshotSilencieusement();
+      })
       .withFailureHandler(function(e){chargementEnCours=false;const msg=e&&e.message?e.message:String(e||'Erreur inconnue');if(zone){zone.className='empty-state';zone.textContent='Impossible de charger les comptes : '+msg;}})
       .chargerSyntheseComptes20260828();
   }
 
-  // API locale : les mutations de données peuvent forcer le prochain rechargement.
-  window.invaliderSyntheseComptes20260828=function(){dernierChargementMs=0;};
+  window.invaliderSyntheseComptes20260828=function(){derniereSynthese=null;};
 
   // Lazy loading : chargerToutesLesDonnees() appelle rendreComptes() même depuis le Dashboard.
-  // On ne déclenche plus de calcul Comptes tant que l'utilisateur n'ouvre pas réellement cet écran.
+  // Aucun appel Comptes tant que l'utilisateur n'ouvre pas réellement cet écran.
   window.rendreComptes=function(){
     installerStructure();
     if(typeof state!=='undefined'&&state.currentView!=='comptes'&&!derniereSynthese)return;
-    chargerSynthese(false);
+    chargerSynthese();
   };
 
   document.addEventListener('DOMContentLoaded',function(){
     installerStructure();
     const refresh=document.getElementById('refresh-button');
     if(refresh)refresh.addEventListener('click',function(){
-      if(typeof state!=='undefined'&&state.currentView==='comptes'){
-        window.invaliderSyntheseComptes20260828();
-        setTimeout(function(){chargerSynthese(true);},0);
-      }
+      if(typeof state!=='undefined'&&state.currentView==='comptes')setTimeout(chargerSynthese,0);
     });
   });
 })();
