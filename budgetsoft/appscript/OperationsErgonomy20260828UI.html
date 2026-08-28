@@ -152,8 +152,6 @@
 
   function chargerOperations(force){
     installerLimiteur();brancherResetLimite();
-    // L'écran Opérations possède déjà son indicateur local (« Chargement des opérations… »).
-    // On ne montre donc jamais le bandeau global « Chargement des données… » ici.
     masquerChargement();
     if(!force&&snapshotOperations)afficherSnapshot(snapshotOperations);
     else if(!snapshotCharge)prechargerSnapshot(s=>{if(window.state&&state.currentView==='operations'&&!donneesCompletes&&s)afficherSnapshot(s)});
@@ -178,8 +176,6 @@
   };
 
   window.ouvrirVue=function(view){
-    // Le routeur historique ne retirait pas la classe active de Charges fixes.
-    // Une fois cet onglet visité, son bloc pouvait donc rester visible sous Comptes ou Opérations.
     if(view!=='charges_fixes')q('charges_fixes')?.classList.remove('active');
     const r=typeof ouvrirVueBase==='function'?ouvrirVueBase.apply(this,arguments):undefined;
     if(view==='operations')chargerOperations(false);
@@ -187,7 +183,6 @@
     return r;
   };
 
-  // Filet de sécurité pour les vues qui interceptent elles-mêmes le clic de navigation.
   document.addEventListener('click',e=>{
     const b=e.target.closest?.('.nav-item[data-view]');
     if(b&&b.dataset.view!=='charges_fixes')q('charges_fixes')?.classList.remove('active');
@@ -195,5 +190,30 @@
 
   window.chargerOperationsLeger20260828UI=chargerOperations;
   document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>{installerLimiteur();brancherResetLimite();prechargerSnapshot()},80));
+})();
+
+// Feedback explicite pour le bouton Actualiser de Pluxee.
+// Le chargeur Pluxee existant reste la source de vérité ; on observe simplement
+// son rerendu afin d'éviter l'impression d'un bouton inopérant.
+(function(){
+  function installerFeedbackPluxee(){
+    const b=document.getElementById('pluxee-refresh');
+    const zone=document.getElementById('pluxee-list');
+    if(!b||!zone||b.dataset.feedback20260828)return;
+    b.dataset.feedback20260828='1';
+    let statut=document.getElementById('pluxee-refresh-status');
+    if(!statut){
+      statut=document.createElement('small');statut.id='pluxee-refresh-status';statut.className='helper-text';statut.style.marginLeft='8px';b.after(statut);
+    }
+    b.addEventListener('click',()=>{
+      const texte=b.textContent;b.disabled=true;b.textContent='Actualisation…';statut.textContent='';
+      let termine=false;
+      const finir=()=>{if(termine)return;termine=true;obs.disconnect();b.disabled=false;b.textContent=texte;statut.textContent='Actualisé à '+new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});setTimeout(()=>{if(statut)statut.textContent=''},3500)};
+      const obs=new MutationObserver(finir);obs.observe(zone,{childList:true,subtree:true});
+      setTimeout(finir,8000);
+    },true);
+  }
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(installerFeedbackPluxee,1200));
+  setTimeout(installerFeedbackPluxee,1800);
 })();
 </script>
