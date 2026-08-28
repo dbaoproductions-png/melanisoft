@@ -1,0 +1,41 @@
+<script>
+(function(){
+  const VERSION='2026-08-28.1';
+
+  function nettoyerVueChargesFixes_(view){
+    if(view!=='charges_fixes')document.getElementById('charges_fixes')?.classList.remove('active');
+  }
+
+  // Le routeur historique ne connaît que dashboard/comptes/operations.
+  // Après une ouverture de Charges fixes, il laissait donc cette section active
+  // lors des navigations suivantes. On complète le routeur sans modifier les
+  // écrans spécialisés (Pluxee, Cerbère, etc.).
+  const ouvrirVueBase=window.ouvrirVue;
+  if(typeof ouvrirVueBase==='function'&&!ouvrirVueBase.__fixChargesPersistantes20260828){
+    const wrapper=function(view){
+      nettoyerVueChargesFixes_(view);
+      return ouvrirVueBase.apply(this,arguments);
+    };
+    wrapper.__fixChargesPersistantes20260828=true;
+    window.ouvrirVue=wrapper;
+  }
+
+  document.addEventListener('click',e=>{
+    const b=e.target.closest?.('.nav-item[data-view]');
+    if(!b)return;
+    nettoyerVueChargesFixes_(b.dataset.view);
+  },true);
+
+  // Filet de sécurité : une seule vue principale doit rester active.
+  document.addEventListener('DOMContentLoaded',()=>{
+    document.querySelectorAll('.nav-item[data-view]').forEach(b=>{
+      b.addEventListener('click',()=>setTimeout(()=>{
+        const view=b.dataset.view;
+        if(view!=='charges_fixes')document.getElementById('charges_fixes')?.classList.remove('active');
+      },0));
+    });
+  });
+
+  window.NAVIGATION_VIEW_FIX_20260828_VERSION=VERSION;
+})();
+</script>
