@@ -1,18 +1,23 @@
-const COMPTES_REVIEW_20260828_VERSION='2026-08-28.2';
+const COMPTES_REVIEW_20260828_VERSION='2026-08-28.3';
 
 /**
- * Vue Comptes : source de vérité du solde bancaire = même doctrine que chargerDashboardReelV2().
- * Pour les comptes bancaires : dernier solde de relevé certifié + mouvements réellement
- * débités/crédités après la référence, selon date_comptable (et non date d'achat).
- * Le solde initial n'est utilisé qu'en absence de référence de relevé.
+ * Vue Comptes rapide.
+ * Source de vérité bancaire : dernier solde de relevé certifié + mouvements réels
+ * postérieurs selon date_comptable. Le Dashboard n'est JAMAIS recalculé dans le
+ * chemin normal d'affichage ; sa comparaison reste réservée à l'audit explicite.
  */
 function chargerSyntheseComptes20260828(){
-  verifierInitialisation_();
+  const t0=Date.now();
+  const r=construireSyntheseComptes20260828_();
+  r.performance={dureeMs:Date.now()-t0,controleDashboardExecute:false};
+  return r;
+}
+
+function construireSyntheseComptes20260828_(){
+  // Pas de verifierInitialisation_() ici : l'écran de lecture ne doit pas déclencher
+  // une initialisation/inspection globale du classeur à chaque ouverture.
   const comptes=lireTable_('Comptes');
-  const operations=lireTable_('Operations').map(function(o){
-    try{return typeof enrichirDepuisCommentaireBanque_==='function'?enrichirDepuisCommentaireBanque_(o):o;}
-    catch(e){return o;}
-  });
+  const operations=lireTable_('Operations');
   const parametres=Object.fromEntries(lireTable_('Parametres').map(function(p){return[String(p.cle),p.valeur];}));
   const aujourdHuiFin=new Date();aujourdHuiFin.setHours(23,59,59,999);
 
@@ -42,19 +47,23 @@ function chargerSyntheseComptes20260828(){
     derniereDateReelle[id]=null;
   });
 
-  // IMPORTANT : même logique que DashboardData.chargerDashboardReel().
-  // Une carte différée compte au jour de débit bancaire (date_comptable), pas au jour d'achat.
-  operations.forEach(function(o){
-    if(/\[RECURRENCE:[^\]]+\]/.test(String(o&&o.commentaire||'')))return;
-    const d=new Date((o&&o.date_comptable)|| (o&&o.date));
+  // Une seule passe sur Operations. On évite l'enrichissement complet de chaque ligne :
+  // les imports modernes portent déjà date_comptable ; on n'enrichit qu'en repli si elle manque.
+  operations.forEach(function(brut){
+    if(/\[RECURRENCE:[^\]]+\]/.test(String(brut&&brut.commentaire||'')))return;
+    let o=brut;
+    if(!(o&&o.date_comptable)&&typeof enrichirDepuisCommentaireBanque_==='function'){
+      try{o=enrichirDepuisCommentaireBanque_(brut)||brut;}catch(e){o=brut;}
+    }
+    const d=new Date((o&&o.date_comptable)||(o&&o.date));
     if(isNaN(d)||d>aujourdHuiFin)return;
     const type=String(o&&o.type||'').toLowerCase();
     if(type!=='revenu'&&type!=='depense')return;
     const compte=comptesParCle[String(o.compte)];
     if(!compte)return;
-    const id=String(compte.id),brut=Math.abs(Number(o.montant||0));
-    if(!Number.isFinite(brut)||brut<=0)return;
-    const montant=type==='depense'?-brut:brut;
+    const id=String(compte.id),brutMontant=Math.abs(Number(o.montant||0));
+    if(!Number.isFinite(brutMontant)||brutMontant<=0)return;
+    const montant=type==='depense'?-brutMontant:brutMontant;
     cumulReel[id]+=montant;
     if(!derniereDateReelle[id]||d>derniereDateReelle[id])derniereDateReelle[id]=d;
     const ref=refs[id];
@@ -78,43 +87,54 @@ function chargerSyntheseComptes20260828(){
 
   const actifs=lignes.filter(function(c){return actifComptes20260828_(c.actif);});
   const sommeTypes=function(types){return arrondirComptes20260828_(actifs.filter(function(c){return types.indexOf(String(c.type||'').toLowerCase())>=0;}).reduce(function(s,c){return s+c.soldeReel;},0));};
+
   let pluxee=null;
   try{const p=chargerPluxee();pluxee=p&&p.ok?Number(p.solde):null;}catch(e){pluxee=null;}
 
-  const synthese={
-    disponible:sommeTypes(['courant','especes']),
-    epargne:sommeTypes(['epargne']),
-    placements:sommeTypes(['placement']),
-    pluxee:Number.isFinite(pluxee)?arrondirComptes20260828_(pluxee):null
-  };
-
-  // Garde-fou : pour le total bancaire courant, le chiffre Comptes doit rester identique
-  // au chiffre validé du Dashboard. On expose l'écart à l'audit sans refaire le rendu côté UI.
-  let dashboardSolde=null;
-  try{
-    const d=chargerDashboardReelV2();
-    dashboardSolde=d&&d.courtTerme&&Number.isFinite(Number(d.courtTerme.soldeBancaire))?Number(d.courtTerme.soldeBancaire):null;
-  }catch(e){dashboardSolde=null;}
-
   return {
     ok:true,version:COMPTES_REVIEW_20260828_VERSION,
-    synthese:synthese,
+    synthese:{
+      disponible:sommeTypes(['courant','especes']),
+      epargne:sommeTypes(['epargne']),
+      placements:sommeTypes(['placement']),
+      pluxee:Number.isFinite(pluxee)?arrondirComptes20260828_(pluxee):null
+    },
     comptes:lignes,
-    archives:lignes.filter(function(c){return !actifComptes20260828_(c.actif);}).length,
-    controleDashboard:{
-      solde:Number.isFinite(dashboardSolde)?arrondirComptes20260828_(dashboardSolde):null,
-      ecart:Number.isFinite(dashboardSolde)?arrondirComptes20260828_(synthese.disponible-dashboardSolde):null
-    }
+    archives:lignes.filter(function(c){return !actifComptes20260828_(c.actif);}).length
   };
 }
 
+/**
+ * Audit volontairement plus lourd : mesure séparément la vue Comptes puis le Dashboard.
+ * Le Dashboard ne doit jamais faire partie du temps d'ouverture normal de Comptes.
+ */
 function auditerSyntheseComptes20260828(){
-  const r=chargerSyntheseComptes20260828();
+  const tComptes=Date.now();
+  const r=construireSyntheseComptes20260828_();
+  const dureeComptesMs=Date.now()-tComptes;
+
+  let dashboardSolde=null,dashboardErreur='',dureeDashboardMs=null;
+  const tDashboard=Date.now();
+  try{
+    const d=chargerDashboardReelV2();
+    dashboardSolde=d&&d.courtTerme&&Number.isFinite(Number(d.courtTerme.soldeBancaire))?Number(d.courtTerme.soldeBancaire):null;
+  }catch(e){dashboardErreur=e&&e.message?e.message:String(e);}
+  dureeDashboardMs=Date.now()-tDashboard;
+
   const audit={
     ok:r.ok===true,
     version:r.version,
     synthese:r.synthese,
-    controleDashboard:r.controleDashboard,
+    controleDashboard:{
+      solde:Number.isFinite(dashboardSolde)?arrondirComptes20260828_(dashboardSolde):null,
+      ecart:Number.isFinite(dashboardSolde)?arrondirComptes20260828_(r.synthese.disponible-dashboardSolde):null,
+      erreur:dashboardErreur||null
+    },
+    performance:{
+      comptesMs:dureeComptesMs,
+      dashboardMs:dureeDashboardMs,
+      totalAuditMs:dureeComptesMs+dureeDashboardMs
+    },
     comptes:r.comptes.map(function(c){return{nom:c.nom,type:c.type,actif:actifComptes20260828_(c.actif),soldeReel:c.soldeReel,dateSolde:c.dateSolde,sourceSolde:c.sourceSolde};}),
     archives:r.archives
   };
