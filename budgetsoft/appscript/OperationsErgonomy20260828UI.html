@@ -1,13 +1,6 @@
 <script>
 (function(){
-  const VERSION='2026-08-28.2';
-  let chargementEnCours=false;
-  let operationsChargees=false;
-  let premierAppelCharger=true;
-  let navigationAvantDashboard=false;
-  const chargerGlobalOriginal=window.charger;
-  const ouvrirVueOriginal=window.ouvrirVue;
-
+  const VERSION='2026-08-28.3';
   function q(id){return document.getElementById(id)}
 
   function installerStyles(){
@@ -26,13 +19,11 @@
   }
 
   function ouvrirBanqueMode(mode){
-    const bouton=q('banking-integrity-button');
-    if(!bouton)return;
+    const bouton=q('banking-integrity-button');if(!bouton)return;
     bouton.click();
     setTimeout(()=>{
       const modal=q('banking-integrity-modal');if(!modal)return;
-      const tabs=[...modal.querySelectorAll('.bi-tab')];
-      tabs.forEach(t=>t.style.display='');
+      const tabs=[...modal.querySelectorAll('.bi-tab')];tabs.forEach(t=>t.style.display='');
       if(mode==='flux'){
         tabs.forEach(t=>{t.style.display=t.dataset.tab==='flux'?'':'none'});
         modal.querySelector('.bi-tab[data-tab="flux"]')?.click();
@@ -44,8 +35,7 @@
   }
 
   function installerActionsCourantes(){
-    const toolbar=document.querySelector('#operations .section-toolbar');if(!toolbar)return;
-    if(q('operations-current-actions'))return;
+    const toolbar=document.querySelector('#operations .section-toolbar');if(!toolbar||q('operations-current-actions'))return;
     const d=document.createElement('div');d.id='operations-current-actions';
     d.innerHTML=`<button type="button" class="primary-button" id="operations-manual-top">＋ Saisie manuelle</button><button type="button" class="secondary-button" id="operations-pdf-top">📄 Relevé PDF</button><button type="button" class="secondary-button" id="operations-hello-top">📋 Copier-coller Hello bank!</button>`;
     toolbar.appendChild(d);
@@ -55,68 +45,8 @@
     const maintenance=q('operations-maintenance-modern');if(maintenance)maintenance.onclick=()=>ouvrirBanqueMode('maintenance');
   }
 
-  function afficherAttente(){
-    ['operations-income','operations-expenses','operations-net','operations-uncategorized'].forEach(id=>{const el=q(id);if(el)el.textContent='…'});
-    const zone=q('operations-list');if(zone){zone.className='empty-state';zone.textContent='Chargement des opérations…'}
-  }
-
-  function chargerOperationsLeger(force){
-    if(chargementEnCours)return;
-    if(operationsChargees&&!force){if(typeof rendreOperationsPage==='function')rendreOperationsPage();return;}
-    chargementEnCours=true;afficherAttente();
-    try{if(typeof afficherChargement==='function')afficherChargement(true);}catch(e){}
-    const t0=performance.now();
-    google.script.run.withSuccessHandler(r=>{
-      chargementEnCours=false;operationsChargees=true;
-      if(!window.state)return;
-      state.data=state.data||{};
-      state.data.Operations=Array.isArray(r.Operations)?r.Operations:[];
-      state.data.Comptes=Array.isArray(r.Comptes)?r.Comptes:[];
-      state.data.Categories=Array.isArray(r.Categories)?r.Categories:[];
-      if(typeof afficherChargement==='function')afficherChargement(false);
-      if(typeof rendreOperationsPage==='function')rendreOperationsPage();
-      const allerRetour=Math.round(performance.now()-t0),zone=q('operations-list');
-      if(zone)zone.dataset.fastLoadMs=String(allerRetour);
-      console.log('[Operations lazy]',JSON.stringify({allerRetourMs:allerRetour,serveur:r._performance||{}}));
-    }).withFailureHandler(e=>{
-      chargementEnCours=false;
-      try{if(typeof afficherChargement==='function')afficherChargement(false);}catch(x){}
-      const zone=q('operations-list');if(zone){zone.className='empty-state';zone.textContent='Erreur de chargement : '+(e.message||String(e))}
-    }).chargerOperationsLeger20260828();
-  }
-
-  // Intercepte immédiatement le chargement historique : Scripts appelle charger() au DOMContentLoaded.
-  // Le premier appel global est différé ; si l'utilisateur ouvre Opérations, il n'est jamais lancé.
-  window.charger=function(){
-    if(premierAppelCharger){
-      premierAppelCharger=false;
-      try{if(typeof afficherChargement==='function')afficherChargement(false);}catch(e){}
-      setTimeout(()=>{
-        if(!navigationAvantDashboard&&window.state&&state.currentView==='dashboard'&&!state.data&&typeof chargerGlobalOriginal==='function')chargerGlobalOriginal();
-      },10000);
-      return;
-    }
-    if(window.state&&state.currentView==='operations'){chargerOperationsLeger(true);return;}
-    return typeof chargerGlobalOriginal==='function'?chargerGlobalOriginal.apply(this,arguments):undefined;
-  };
-
-  window.ouvrirVue=function(view){
-    if(view!=='dashboard')navigationAvantDashboard=true;
-    const r=typeof ouvrirVueOriginal==='function'?ouvrirVueOriginal.apply(this,arguments):undefined;
-    if(view==='operations')chargerOperationsLeger(false);
-    else if(!state.data&&typeof chargerGlobalOriginal==='function')chargerGlobalOriginal();
-    return r;
-  };
-
-  function installerChargementRapide(){
-    const nav=document.querySelector('.nav-item[data-view="operations"]');if(!nav||nav.dataset.fastOperations)return;
-    nav.dataset.fastOperations='1';
-    // Le wrapper ouvrirVue() lance déjà le chargement ; ce listener sert de filet de sécurité.
-    nav.addEventListener('click',()=>setTimeout(()=>chargerOperationsLeger(false),0));
-  }
-
-  function installer(){installerStyles();installerActionsCourantes();installerChargementRapide();const maintenance=q('operations-maintenance-modern');if(maintenance&&!maintenance.dataset.noFlux){maintenance.dataset.noFlux='1';maintenance.onclick=()=>ouvrirBanqueMode('maintenance')}}
-  document.addEventListener('DOMContentLoaded',()=>setTimeout(installer,1350));
-  setTimeout(installer,1700);
+  function installer(){installerStyles();installerActionsCourantes();const maintenance=q('operations-maintenance-modern');if(maintenance&&!maintenance.dataset.noFlux){maintenance.dataset.noFlux='1';maintenance.onclick=()=>ouvrirBanqueMode('maintenance')}}
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(installer,700));
+  setTimeout(installer,1000);
 })();
 </script>
