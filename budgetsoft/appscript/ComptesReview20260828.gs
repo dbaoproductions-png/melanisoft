@@ -1,14 +1,18 @@
-const COMPTES_REVIEW_20260828_VERSION='2026-08-28.1';
+const COMPTES_REVIEW_20260828_VERSION='2026-08-28.2';
 
 /**
- * Vue Comptes : source de vérité du solde bancaire = même doctrine que RealBankingUI.
- * Dernier solde de relevé certifié + mouvements réels postérieurs.
+ * Vue Comptes : source de vérité du solde bancaire = même doctrine que chargerDashboardReelV2().
+ * Pour les comptes bancaires : dernier solde de relevé certifié + mouvements réellement
+ * débités/crédités après la référence, selon date_comptable (et non date d'achat).
  * Le solde initial n'est utilisé qu'en absence de référence de relevé.
  */
 function chargerSyntheseComptes20260828(){
   verifierInitialisation_();
   const comptes=lireTable_('Comptes');
-  const operations=lireTable_('Operations');
+  const operations=lireTable_('Operations').map(function(o){
+    try{return typeof enrichirDepuisCommentaireBanque_==='function'?enrichirDepuisCommentaireBanque_(o):o;}
+    catch(e){return o;}
+  });
   const parametres=Object.fromEntries(lireTable_('Parametres').map(function(p){return[String(p.cle),p.valeur];}));
   const aujourdHuiFin=new Date();aujourdHuiFin.setHours(23,59,59,999);
 
@@ -38,14 +42,19 @@ function chargerSyntheseComptes20260828(){
     derniereDateReelle[id]=null;
   });
 
+  // IMPORTANT : même logique que DashboardData.chargerDashboardReel().
+  // Une carte différée compte au jour de débit bancaire (date_comptable), pas au jour d'achat.
   operations.forEach(function(o){
     if(/\[RECURRENCE:[^\]]+\]/.test(String(o&&o.commentaire||'')))return;
-    const d=new Date(o&&o.date);
+    const d=new Date((o&&o.date_comptable)|| (o&&o.date));
     if(isNaN(d)||d>aujourdHuiFin)return;
+    const type=String(o&&o.type||'').toLowerCase();
+    if(type!=='revenu'&&type!=='depense')return;
     const compte=comptesParCle[String(o.compte)];
     if(!compte)return;
-    const id=String(compte.id),montant=Number(o.montant||0);
-    if(!Number.isFinite(montant))return;
+    const id=String(compte.id),brut=Math.abs(Number(o.montant||0));
+    if(!Number.isFinite(brut)||brut<=0)return;
+    const montant=type==='depense'?-brut:brut;
     cumulReel[id]+=montant;
     if(!derniereDateReelle[id]||d>derniereDateReelle[id])derniereDateReelle[id]=d;
     const ref=refs[id];
@@ -72,18 +81,31 @@ function chargerSyntheseComptes20260828(){
   let pluxee=null;
   try{const p=chargerPluxee();pluxee=p&&p.ok?Number(p.solde):null;}catch(e){pluxee=null;}
 
-  const out={
-    ok:true,version:COMPTES_REVIEW_20260828_VERSION,
-    synthese:{
-      disponible:sommeTypes(['courant','especes']),
-      epargne:sommeTypes(['epargne']),
-      placements:sommeTypes(['placement']),
-      pluxee:Number.isFinite(pluxee)?arrondirComptes20260828_(pluxee):null
-    },
-    comptes:lignes,
-    archives:lignes.filter(function(c){return !actifComptes20260828_(c.actif);}).length
+  const synthese={
+    disponible:sommeTypes(['courant','especes']),
+    epargne:sommeTypes(['epargne']),
+    placements:sommeTypes(['placement']),
+    pluxee:Number.isFinite(pluxee)?arrondirComptes20260828_(pluxee):null
   };
-  return out;
+
+  // Garde-fou : pour le total bancaire courant, le chiffre Comptes doit rester identique
+  // au chiffre validé du Dashboard. On expose l'écart à l'audit sans refaire le rendu côté UI.
+  let dashboardSolde=null;
+  try{
+    const d=chargerDashboardReelV2();
+    dashboardSolde=d&&d.courtTerme&&Number.isFinite(Number(d.courtTerme.soldeBancaire))?Number(d.courtTerme.soldeBancaire):null;
+  }catch(e){dashboardSolde=null;}
+
+  return {
+    ok:true,version:COMPTES_REVIEW_20260828_VERSION,
+    synthese:synthese,
+    comptes:lignes,
+    archives:lignes.filter(function(c){return !actifComptes20260828_(c.actif);}).length,
+    controleDashboard:{
+      solde:Number.isFinite(dashboardSolde)?arrondirComptes20260828_(dashboardSolde):null,
+      ecart:Number.isFinite(dashboardSolde)?arrondirComptes20260828_(synthese.disponible-dashboardSolde):null
+    }
+  };
 }
 
 function auditerSyntheseComptes20260828(){
@@ -92,6 +114,7 @@ function auditerSyntheseComptes20260828(){
     ok:r.ok===true,
     version:r.version,
     synthese:r.synthese,
+    controleDashboard:r.controleDashboard,
     comptes:r.comptes.map(function(c){return{nom:c.nom,type:c.type,actif:actifComptes20260828_(c.actif),soldeReel:c.soldeReel,dateSolde:c.dateSolde,sourceSolde:c.sourceSolde};}),
     archives:r.archives
   };
