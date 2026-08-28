@@ -1,11 +1,11 @@
-const OPERATIONS_FAST_LOAD_20260828_VERSION='2026-08-28.1';
+const OPERATIONS_FAST_LOAD_20260828_VERSION='2026-08-28.2';
 
 /**
- * Charge uniquement ce dont l'écran Opérations a besoin.
- * Le chargement global de BudgetSoft peut continuer en arrière-plan sans bloquer
- * l'affichage des mouvements, comptes et catégories.
+ * Primitive de lecture dédiée à l'écran Opérations.
+ * La fonction publique chargerOperationsLeger20260828() est définie une seule fois
+ * dans OperationsLazy20260828.gs afin d'éviter les doubles définitions Apps Script.
  */
-function chargerOperationsLeger20260828(){
+function lireOperationsLeger20260828_(){
   const debut=Date.now();
   verifierInitialisation_();
   const operations=lireTable_('Operations');
