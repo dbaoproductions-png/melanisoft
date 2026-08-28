@@ -1,0 +1,78 @@
+<script>
+(function(){
+  if(window.__BUDGETSOFT_LAZY_20260828)return;
+  window.__BUDGETSOFT_LAZY_20260828=true;
+
+  const chargerGlobal=window.charger;
+  const ouvrirVueBase=window.ouvrirVue;
+  let premierAppel=true;
+  let chargementOperations=false;
+  let operationsChargees=false;
+
+  function masquerChargement(){
+    try{if(typeof afficherChargement==='function')afficherChargement(false);}catch(e){}
+  }
+
+  function etatMinimalOperations(data){
+    if(!window.state)return;
+    const ancien=state.data||{};
+    state.data=Object.assign({},ancien,data||{});
+  }
+
+  function chargerOperationsLegerUI(force){
+    if(chargementOperations)return;
+    if(operationsChargees&&!force){
+      if(typeof rendreOperationsPage==='function')rendreOperationsPage();
+      return;
+    }
+    chargementOperations=true;
+    try{if(typeof afficherChargement==='function')afficherChargement(true);}catch(e){}
+    const debut=performance.now();
+    google.script.run
+      .withSuccessHandler(data=>{
+        chargementOperations=false;
+        operationsChargees=true;
+        etatMinimalOperations(data);
+        masquerChargement();
+        if(typeof rendreOperationsPage==='function')rendreOperationsPage();
+        const ms=Math.round(performance.now()-debut);
+        const p=data&&data._performance||{};
+        console.log('[Operations lazy]',JSON.stringify({allerRetourMs:ms,serveur:p}));
+      })
+      .withFailureHandler(err=>{
+        chargementOperations=false;
+        masquerChargement();
+        if(typeof afficherErreur==='function')afficherErreur(err.message||String(err));
+      })
+      .chargerOperationsLeger20260828();
+  }
+
+  window.charger=function(){
+    // L'ancien Scripts appelle charger() automatiquement au DOMContentLoaded.
+    // On neutralise uniquement ce premier appel pour éviter la lecture de toutes les tables.
+    if(premierAppel){
+      premierAppel=false;
+      masquerChargement();
+      return;
+    }
+    if(window.state&&state.currentView==='operations'){
+      chargerOperationsLegerUI(true);
+      return;
+    }
+    return typeof chargerGlobal==='function'?chargerGlobal.apply(this,arguments):undefined;
+  };
+
+  window.ouvrirVue=function(view){
+    const r=typeof ouvrirVueBase==='function'?ouvrirVueBase.apply(this,arguments):undefined;
+    if(view==='operations'){
+      chargerOperationsLegerUI(false);
+    }else if(!state.data&&typeof chargerGlobal==='function'){
+      // Les autres écrans conservent pour l'instant leur chargement historique.
+      chargerGlobal();
+    }
+    return r;
+  };
+
+  window.chargerOperationsLeger20260828UI=chargerOperationsLegerUI;
+})();
+</script>
