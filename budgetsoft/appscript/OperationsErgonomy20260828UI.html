@@ -1,6 +1,6 @@
 <script>
 (function(){
-  const VERSION='2026-08-28.3';
+  const VERSION='2026-08-28.4';
   function q(id){return document.getElementById(id)}
 
   function installerStyles(){
@@ -48,5 +48,141 @@
   function installer(){installerStyles();installerActionsCourantes();const maintenance=q('operations-maintenance-modern');if(maintenance&&!maintenance.dataset.noFlux){maintenance.dataset.noFlux='1';maintenance.onclick=()=>ouvrirBanqueMode('maintenance')}}
   document.addEventListener('DOMContentLoaded',()=>setTimeout(installer,700));
   setTimeout(installer,1000);
+})();
+
+(function(){
+  if(window.__BUDGETSOFT_LAZY_20260828)return;
+  window.__BUDGETSOFT_LAZY_20260828=true;
+
+  const chargerGlobal=window.charger;
+  const ouvrirVueBase=window.ouvrirVue;
+  const LIMITE_INITIALE=200;
+  let premierAppel=true;
+  let chargementOperations=false;
+  let operationsChargees=false;
+  let snapshotCharge=false;
+  let snapshotEnCours=false;
+  let snapshotOperations=null;
+  let donneesCompletes=false;
+  let limiteRendu=LIMITE_INITIALE;
+
+  function q(id){return document.getElementById(id)}
+  function n(v){const x=Number(v||0);return Number.isFinite(x)?x:0}
+  function masquerChargement(){try{if(typeof afficherChargement==='function')afficherChargement(false)}catch(e){}}
+  function montrerChargement(){try{if(typeof afficherChargement==='function')afficherChargement(true)}catch(e){}}
+
+  function etatMinimalOperations(data){
+    if(!window.state)return;
+    const ancien=state.data||{};
+    state.data=Object.assign({},ancien,data||{});
+  }
+
+  function filtresActifs(){return ['operation-search','operation-account-filter','operation-type-filter','operation-category-filter','operation-month-filter'].some(id=>String(q(id)?.value||'').trim())}
+
+  function appliquerResumeSnapshot(){
+    if(donneesCompletes||!snapshotOperations?.resume||filtresActifs())return;
+    const r=snapshotOperations.resume;
+    if(q('operations-income'))q('operations-income').textContent=money.format(n(r.revenus));
+    if(q('operations-expenses'))q('operations-expenses').textContent=money.format(n(r.depenses));
+    if(q('operations-net'))q('operations-net').textContent=money.format(n(r.solde));
+    if(q('operations-uncategorized'))q('operations-uncategorized').textContent=String(Number(r.sansCategorie||0));
+  }
+
+  function mettreAJourBoutonPlus(total){
+    const zone=q('operations-list');if(!zone)return;
+    let b=q('operations-load-more');
+    if(total<=limiteRendu){if(b)b.remove();return;}
+    if(!b){b=document.createElement('button');b.id='operations-load-more';b.type='button';b.className='secondary-button';b.style.margin='12px auto 2px';b.style.display='block';zone.after(b);b.onclick=()=>{limiteRendu+=LIMITE_INITIALE;if(typeof rendreListeOperations==='function')rendreListeOperations()};}
+    b.textContent=`Afficher ${Math.min(LIMITE_INITIALE,total-limiteRendu)} de plus · ${total-limiteRendu} restante(s)`;
+  }
+
+  function installerLimiteur(){
+    const filtre=window.operationsFiltrees;
+    if(typeof filtre==='function'&&!filtre.__limiteOperations20260828){
+      const complet=filtre;
+      const limite=function(){return complet.apply(this,arguments).slice(0,limiteRendu)};
+      limite.__limiteOperations20260828=true;limite.__complet=complet;window.operationsFiltrees=limite;
+    }
+    const rendre=window.rendreListeOperations;
+    if(typeof rendre==='function'&&!rendre.__limiteOperations20260828){
+      const base=rendre;
+      const w=function(){
+        const r=base.apply(this,arguments);
+        setTimeout(()=>{
+          const f=window.operationsFiltrees,complet=f&&f.__limiteOperations20260828?f.__complet:null;
+          const toutes=typeof complet==='function'?complet():[];
+          if(donneesCompletes){
+            const rev=toutes.filter(o=>n(o.montant)>0).reduce((s,o)=>s+n(o.montant),0);
+            const dep=toutes.filter(o=>n(o.montant)<0).reduce((s,o)=>s+Math.abs(n(o.montant)),0);
+            if(q('operations-income'))q('operations-income').textContent=money.format(rev);
+            if(q('operations-expenses'))q('operations-expenses').textContent=money.format(dep);
+            if(q('operations-net'))q('operations-net').textContent=money.format(rev-dep);
+            if(q('operations-uncategorized'))q('operations-uncategorized').textContent=String(toutes.filter(o=>!String(o.categorie||'').trim()).length);
+          }else appliquerResumeSnapshot();
+          mettreAJourBoutonPlus(toutes.length);
+        },0);
+        return r;
+      };
+      w.__limiteOperations20260828=true;window.rendreListeOperations=w;
+    }
+  }
+
+  function brancherResetLimite(){
+    ['operation-search','operation-account-filter','operation-type-filter','operation-category-filter','operation-month-filter'].forEach(id=>{
+      const el=q(id);if(el&&!el.dataset.limitReset20260828){el.dataset.limitReset20260828='1';el.addEventListener('input',()=>{limiteRendu=LIMITE_INITIALE})}
+    });
+  }
+
+  function afficherSnapshot(s){
+    if(!s||!s.disponible||!Array.isArray(s.Operations))return false;
+    snapshotOperations=s;donneesCompletes=false;
+    etatMinimalOperations({Operations:s.Operations||[],Comptes:s.Comptes||[],Categories:s.Categories||[],Charges_fixes:[],meta:s.meta||{source:'operations_snapshot'}});
+    installerLimiteur();brancherResetLimite();
+    if(typeof rendreOperationsPage==='function')rendreOperationsPage();
+    appliquerResumeSnapshot();masquerChargement();
+    console.log('[Operations snapshot]',JSON.stringify({lectureMs:s.dureeLectureMs||0,genereLe:s.genereLe||'',total:s.totalOperations||0,embarquees:s.Operations.length}));
+    return true;
+  }
+
+  function prechargerSnapshot(callback){
+    if(snapshotCharge){if(callback)callback(snapshotOperations);return;}
+    if(snapshotEnCours)return;
+    snapshotEnCours=true;
+    google.script.run.withSuccessHandler(s=>{snapshotEnCours=false;snapshotCharge=true;snapshotOperations=s&&s.disponible?s:null;if(callback)callback(snapshotOperations)}).withFailureHandler(()=>{snapshotEnCours=false;snapshotCharge=true;if(callback)callback(null)}).chargerSnapshotOperations20260828();
+  }
+
+  function chargerOperations(force){
+    installerLimiteur();brancherResetLimite();
+    if(!force&&snapshotOperations)afficherSnapshot(snapshotOperations);
+    else if(!snapshotCharge)prechargerSnapshot(s=>{if(window.state&&state.currentView==='operations'&&!donneesCompletes&&s)afficherSnapshot(s)});
+
+    if(chargementOperations)return;
+    if(operationsChargees&&!force){if(typeof rendreOperationsPage==='function')rendreOperationsPage();return;}
+    chargementOperations=true;if(!snapshotOperations)montrerChargement();
+    const debut=performance.now();
+    google.script.run.withSuccessHandler(data=>{
+      chargementOperations=false;operationsChargees=true;donneesCompletes=true;
+      etatMinimalOperations(data);masquerChargement();installerLimiteur();brancherResetLimite();
+      if(typeof rendreOperationsPage==='function')rendreOperationsPage();
+      console.log('[Operations complet]',JSON.stringify({allerRetourMs:Math.round(performance.now()-debut),serveur:data&&data._performance||{},rendues:Math.min(limiteRendu,(data.Operations||[]).length)}));
+      snapshotCharge=false;snapshotOperations=null;setTimeout(()=>prechargerSnapshot(),250);
+    }).withFailureHandler(err=>{chargementOperations=false;masquerChargement();if(!snapshotOperations&&typeof afficherErreur==='function')afficherErreur(err.message||String(err))}).chargerOperationsLeger20260828();
+  }
+
+  window.charger=function(){
+    if(premierAppel){premierAppel=false;masquerChargement();return;}
+    if(window.state&&state.currentView==='operations'){chargerOperations(true);return;}
+    return typeof chargerGlobal==='function'?chargerGlobal.apply(this,arguments):undefined;
+  };
+
+  window.ouvrirVue=function(view){
+    const r=typeof ouvrirVueBase==='function'?ouvrirVueBase.apply(this,arguments):undefined;
+    if(view==='operations')chargerOperations(false);
+    else if(!state.data&&typeof chargerGlobal==='function')chargerGlobal();
+    return r;
+  };
+
+  window.chargerOperationsLeger20260828UI=chargerOperations;
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>{installerLimiteur();brancherResetLimite();prechargerSnapshot()},80));
 })();
 </script>
