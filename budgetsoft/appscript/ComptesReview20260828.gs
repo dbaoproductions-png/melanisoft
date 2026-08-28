@@ -104,6 +104,22 @@ function construireSyntheseComptes20260828_(){
   };
 }
 
+/** Mesure uniquement le chemin réellement utilisé par l'écran Comptes. */
+function auditerPerformanceComptesRapide20260828(){
+  const t0=Date.now();
+  const r=construireSyntheseComptes20260828_();
+  const out={
+    ok:r.ok===true,
+    version:r.version,
+    dureeMs:Date.now()-t0,
+    synthese:r.synthese,
+    comptes:r.comptes.length,
+    controleDashboardExecute:false
+  };
+  console.log(JSON.stringify(out));
+  return out;
+}
+
 /**
  * Audit volontairement plus lourd : mesure séparément la vue Comptes puis le Dashboard.
  * Le Dashboard ne doit jamais faire partie du temps d'ouverture normal de Comptes.
