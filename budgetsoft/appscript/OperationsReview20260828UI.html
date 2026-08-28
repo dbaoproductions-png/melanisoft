@@ -1,0 +1,88 @@
+<script>
+(function(){
+  const VERSION='2026-08-28.1';
+  const TECH=/\s*\[(?:RECURRENCE|AUDIT_[A-Z0-9_]*|VALIDATION_RAPPROCHEMENT|AUDIT_RETRO|PDF:HELLOBANK|CARTE_DIFFEREE|CORRESPONDANCE|RAPPROCHEMENT|RAPPROCHEMENT_MANUEL|EXCEPTIONNEL_PREVISION)(?::[^\]]*)?\]/g;
+
+  function q(id){return document.getElementById(id)}
+  function nettoyerCommentaire(v){return String(v||'').replace(TECH,' ').replace(/\s+/g,' ').trim()}
+  function extraireIdLigne(row){const b=row&&row.querySelector('button[onclick*="modifierOperation"]');if(!b)return'';const m=String(b.getAttribute('onclick')||'').match(/modifierOperation\(['"]([^'"]+)['"]\)/);return m?m[1]:''}
+  function idsCoches(){return [...document.querySelectorAll('#operations-list .operation-table-row:not(.header) .operation-batch-check:checked')].map(cb=>extraireIdLigne(cb.closest('.operation-table-row'))).filter(Boolean)}
+
+  function ajouterStyles(){if(q('operations-review-style'))return;const s=document.createElement('style');s.id='operations-review-style';s.textContent=`
+    #operations .section-toolbar{align-items:center;gap:12px;margin-bottom:12px}
+    #operations .section-intro{margin:0;max-width:760px}
+    #operations .operations-summary{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:10px!important;margin:10px 0 12px!important}
+    #operations .operations-summary .metric-card{min-width:0;padding:14px 16px!important}
+    #operations .operations-summary .metric-card strong{font-size:1.35rem!important}
+    #operations .filters{display:grid!important;grid-template-columns:minmax(250px,1.7fr) minmax(150px,.9fr) minmax(135px,.75fr) minmax(145px,.8fr) minmax(145px,.8fr) auto;gap:8px!important;align-items:center;margin-bottom:10px!important}
+    #operations .operations-page-panel{padding-top:14px!important}
+    #operations .operations-actions-main,#operations .operations-tools-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    #operations .operations-tools-row{justify-content:space-between;margin:8px 0 10px}
+    #operations .operations-classify{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    #operations .operations-control-details{position:relative}
+    #operations .operations-control-details summary{list-style:none;cursor:pointer}
+    #operations .operations-control-details summary::-webkit-details-marker{display:none}
+    #operations .operations-control-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:30;min-width:230px;padding:8px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.12);display:grid;gap:6px}
+    #operations .operations-control-menu button{text-align:left;width:100%}
+    #operations .operation-table-row{grid-template-columns:36px 96px minmax(320px,1fr) 140px 160px 112px 76px!important;column-gap:10px!important}
+    #operations .operation-label{min-width:0;overflow-wrap:anywhere}
+    #operations .operation-amount{text-align:right;white-space:nowrap}
+    #operation-batch-bar{margin:8px 0!important;padding:8px 10px!important;gap:8px!important}
+    #operation-to-fixed-batch{white-space:nowrap}
+    .operations-fixed-review-list{display:grid;gap:10px;max-height:58vh;overflow:auto;margin-top:12px}
+    .operations-fixed-review-item{border:1px solid var(--line);border-radius:12px;padding:12px;display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:12px;align-items:start}
+    .operations-fixed-review-item small{display:block;margin-top:4px}
+    @media(max-width:1100px){#operations .operations-summary{grid-template-columns:repeat(2,minmax(0,1fr))!important}#operations .filters{grid-template-columns:1fr 1fr 1fr}#operations .operation-table-row{grid-template-columns:34px 90px minmax(260px,1fr) 140px 110px 72px!important}.operation-table-row .operation-account.hide-medium{display:none!important}}
+    @media(max-width:760px){#operations .operations-summary{grid-template-columns:1fr 1fr!important}#operations .filters{grid-template-columns:1fr 1fr}#operations .operation-table-row{grid-template-columns:32px 82px minmax(0,1fr) 104px 64px!important}.operation-table-row .operation-category.hide-medium,.operation-table-row .operation-account.hide-medium{display:none!important}}
+  `;document.head.appendChild(s)}
+
+  function cacherAnciensBoutonsEtCreerActions(){
+    const toolbar=document.querySelector('#operations .toolbar-buttons');if(!toolbar)return;
+    [...toolbar.children].forEach(el=>{if(!el.classList.contains('operations-review-visible'))el.style.display='none'});
+    if(q('operations-actions-main'))return;
+    const wrap=document.createElement('div');wrap.id='operations-actions-main';wrap.className='operations-actions-main operations-review-visible';
+    wrap.innerHTML=`<button type="button" class="primary-button" id="operations-add-modern">＋ Ajouter une opération</button><button type="button" class="secondary-button" id="operations-hello-modern">📋 Importer Hello bank!</button><button type="button" class="secondary-button" id="operations-pdf-modern">📄 Importer un relevé PDF</button>`;
+    toolbar.appendChild(wrap);
+    q('operations-add-modern').onclick=()=>q('add-operation-button')?.click();
+    q('operations-pdf-modern').onclick=()=>q('import-pdf-button')?.click();
+    q('operations-hello-modern').onclick=()=>{q('banking-integrity-button')?.click();setTimeout(()=>document.querySelector('#banking-integrity-modal .bi-tab[data-tab="flux"]')?.click(),40)};
+  }
+
+  function garantir4eCarte(){const zone=document.querySelector('#operations .operations-summary');if(!zone)return;if(!q('operations-uncategorized')){const c=document.createElement('article');c.className='card metric-card';c.innerHTML='<span>Sans catégorie</span><strong id="operations-uncategorized">0</strong><small>Opérations restant à classer</small>';zone.appendChild(c)}}
+
+  function creerBarreOutils(){
+    const panel=document.querySelector('#operations .operations-page-panel');if(!panel||q('operations-tools-row'))return;
+    const filters=panel.querySelector('.filters');const row=document.createElement('div');row.id='operations-tools-row';row.className='operations-tools-row';
+    row.innerHTML=`<div class="operations-classify"><button type="button" class="secondary-button" id="operations-category-modern">🏷 Catégoriser</button><button type="button" class="secondary-button" id="operations-bulk-modern">🏷 Catégoriser en masse</button></div><details class="operations-control-details"><summary class="secondary-button">⚙ Outils de contrôle ▾</summary><div class="operations-control-menu"><button type="button" class="secondary-button" id="operations-match-modern">🔎 Rapprochements</button><button type="button" class="secondary-button" id="operations-retro-modern">🧹 Audit rétrospectif</button><button type="button" class="secondary-button" id="operations-balance-modern">✓ Vérifier le solde</button><button type="button" class="secondary-button" id="operations-maintenance-modern">Maintenance bancaire</button></div></details>`;
+    if(filters?.nextSibling)panel.insertBefore(row,filters.nextSibling);else panel.prepend(row);
+    q('operations-category-modern').onclick=()=>q('category-review-button')?.click();
+    q('operations-bulk-modern').onclick=()=>q('bulk-category-button')?.click();
+    q('operations-match-modern').onclick=()=>q('review-matches-button')?.click();
+    q('operations-retro-modern').onclick=()=>q('retro-audit-button')?.click();
+    q('operations-balance-modern').onclick=()=>{q('banking-integrity-button')?.click();setTimeout(()=>{document.querySelector('#banking-integrity-modal .bi-tab[data-tab="etat"]')?.click();setTimeout(()=>q('bi-observed-balance')?.focus(),80)},40)};
+    q('operations-maintenance-modern').onclick=()=>{q('banking-integrity-button')?.click();setTimeout(()=>document.querySelector('#banking-integrity-modal .bi-tab[data-tab="migration"]')?.click(),40)};
+  }
+
+  function nettoyerCommentairesAffiches(){document.querySelectorAll('#operations-list .operation-label small').forEach(el=>{el.textContent=nettoyerCommentaire(el.textContent);if(!el.textContent)el.style.display='none'})}
+
+  function reparerEffacerSelectionEtChargeFixe(){
+    const clear=q('operation-batch-clear');if(clear&&!clear.dataset.reviewFixed){clear.dataset.reviewFixed='1';clear.onclick=()=>{document.querySelectorAll('#operations-list .operation-batch-check').forEach(cb=>{if(cb.checked){cb.checked=false;cb.dispatchEvent(new Event('change',{bubbles:true}))}});const head=document.querySelector('#operations-list .header .operation-batch-check');if(head){head.checked=false;head.indeterminate=false}}}
+    const bar=q('operation-batch-bar');if(bar&&!q('operation-to-fixed-batch')){const b=document.createElement('button');b.type='button';b.id='operation-to-fixed-batch';b.className='secondary-button';b.textContent='＋ Charges fixes';b.disabled=true;b.onclick=ouvrirPrevisualisationCharges;const status=q('operation-batch-status');bar.insertBefore(b,status||null)}
+    mettreAJourBoutonCharges();
+  }
+
+  function mettreAJourBoutonCharges(){const b=q('operation-to-fixed-batch');if(b)b.disabled=!idsCoches().length}
+
+  function creerModalCharges(){if(q('operations-fixed-modal'))return;const m=document.createElement('div');m.id='operations-fixed-modal';m.className='modal hidden';m.innerHTML=`<div class="modal-card wide-modal"><div class="modal-heading"><div><p class="panel-kicker">À partir de la sélection</p><h2>Créer des charges fixes</h2></div><button class="modal-close" id="operations-fixed-close">×</button></div><p class="helper-text">BudgetSoft regroupe les opérations similaires pour éviter de créer plusieurs fois la même charge fixe.</p><div id="operations-fixed-status" class="helper-text"></div><div id="operations-fixed-list" class="operations-fixed-review-list"></div><div class="form-actions"><button type="button" class="secondary-button" id="operations-fixed-cancel">Annuler</button><button type="button" class="primary-button" id="operations-fixed-create" disabled>Créer les charges sélectionnées</button></div></div>`;document.body.appendChild(m);q('operations-fixed-close').onclick=q('operations-fixed-cancel').onclick=()=>m.classList.add('hidden');m.addEventListener('click',e=>{if(e.target===m)m.classList.add('hidden')});q('operations-fixed-create').onclick=creerChargesSelectionnees}
+
+  let previewCharges=null,idsPreview=[];
+  function ouvrirPrevisualisationCharges(){creerModalCharges();idsPreview=idsCoches();if(!idsPreview.length)return;const m=q('operations-fixed-modal'),st=q('operations-fixed-status'),list=q('operations-fixed-list'),create=q('operations-fixed-create');m.classList.remove('hidden');st.textContent='Analyse de la sélection…';list.innerHTML='';create.disabled=true;google.script.run.withSuccessHandler(r=>{previewCharges=r;st.textContent=`${r.operations} opération(s) regroupée(s) en ${r.nombreGroupes} charge(s) potentielle(s)${r.doublons?` · ${r.doublons} déjà connue(s)`:''}.`;list.innerHTML=(r.groupes||[]).map(g=>`<label class="operations-fixed-review-item"><input type="checkbox" class="operations-fixed-check" value="${typeof echapperAttribut==='function'?echapperAttribut(g.cle):g.cle}" ${g.doublonChargeId?'disabled':'checked'}><span><strong>${typeof echapper==='function'?echapper(g.libelle||g.libelle_bancaire):g.libelle||g.libelle_bancaire}</strong><small>${g.nombre} opération(s) · ${Number(g.montant||0).toLocaleString('fr-FR',{style:'currency',currency:'EUR'})} · ${g.frequence} · jour ${g.jour_execution}</small>${g.doublonChargeId?`<small>Déjà rapprochée de « ${typeof echapper==='function'?echapper(g.doublonLibelle):g.doublonLibelle} »</small>`:''}</span><span>${g.categorie||'Sans catégorie'}</span></label>`).join('')||'<div class="empty-state">Aucune dépense exploitable.</div>';list.querySelectorAll('.operations-fixed-check').forEach(c=>c.onchange=()=>create.disabled=!list.querySelector('.operations-fixed-check:checked'));create.disabled=!list.querySelector('.operations-fixed-check:checked')}).withFailureHandler(e=>st.textContent='Erreur : '+(e.message||String(e))).previsualiserChargesFixesDepuisOperations20260828(idsPreview)}
+  function creerChargesSelectionnees(){const st=q('operations-fixed-status'),b=q('operations-fixed-create'),cles=[...document.querySelectorAll('.operations-fixed-check:checked')].map(c=>c.value);if(!cles.length)return;b.disabled=true;b.textContent='Création…';google.script.run.withSuccessHandler(r=>{st.textContent=`✓ ${r.creees} charge(s) fixe(s) créée(s) · ${r.operationsLiees} opération(s) reliée(s).`;b.textContent='Créer les charges sélectionnées';setTimeout(()=>{q('operations-fixed-modal').classList.add('hidden');if(typeof charger==='function')charger()},900)}).withFailureHandler(e=>{b.disabled=false;b.textContent='Créer les charges sélectionnées';st.textContent='Erreur : '+(e.message||String(e))}).creerChargesFixesDepuisOperations20260828(idsPreview,cles)}
+
+  function masquerTechniqueDansEdition(){const base=window.ouvrirOperation;if(typeof base!=='function'||base.__review20260828)return;const w=function(){const r=base.apply(this,arguments);[120,350,700].forEach(ms=>setTimeout(()=>{const t=q('operation-comment');if(t)t.value=nettoyerCommentaire(t.value)},ms));return r};w.__review20260828=true;window.ouvrirOperation=w;const baseMod=window.modifierOperation;if(typeof baseMod==='function'&&!baseMod.__review20260828){const wm=function(){const r=baseMod.apply(this,arguments);[120,350,700].forEach(ms=>setTimeout(()=>{const t=q('operation-comment');if(t)t.value=nettoyerCommentaire(t.value)},ms));return r};wm.__review20260828=true;window.modifierOperation=wm}}
+
+  function decorerApresRendu(){garantir4eCarte();nettoyerCommentairesAffiches();reparerEffacerSelectionEtChargeFixe();mettreAJourBoutonCharges()}
+  function installer(){ajouterStyles();cacherAnciensBoutonsEtCreerActions();garantir4eCarte();creerBarreOutils();creerModalCharges();masquerTechniqueDansEdition();decorerApresRendu();document.addEventListener('change',e=>{if(e.target.matches?.('.operation-batch-check'))setTimeout(mettreAJourBoutonCharges,0)});const obs=new MutationObserver(()=>decorerApresRendu());const zone=q('operations-list');if(zone)obs.observe(zone,{childList:true,subtree:true});}
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(installer,1100));setTimeout(installer,1500);
+})();
+</script>
