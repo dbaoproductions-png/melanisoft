@@ -4,6 +4,13 @@ function enregistrerOperationManuelle(operation){
   const sourceExistante=String(existante&&existante.source_bancaire||'').trim().toLowerCase();
   const estLigneBancaire=!!existante&&sourceExistante&&sourceExistante!=='manuel';
 
+  if(existante){
+    // Les marqueurs techniques restent internes même si le commentaire métier est modifié.
+    const techniques=(String(existante.commentaire||'').match(/\[(?:RECURRENCE|AUDIT_[A-Z0-9_]*|VALIDATION_RAPPROCHEMENT|AUDIT_RETRO|PDF:HELLOBANK|CARTE_DIFFEREE|CORRESPONDANCE|RAPPROCHEMENT|RAPPROCHEMENT_MANUEL|EXCEPTIONNEL_PREVISION)(?::[^\]]*)?\]/g)||[]);
+    const commentaireMetier=String(o.commentaire||'').trim();
+    o.commentaire=[commentaireMetier,...techniques.filter((v,i,a)=>a.indexOf(v)===i)].filter(Boolean).join(' ');
+  }
+
   if(estLigneBancaire){
     // Une correction métier d'une ligne bancaire ne doit jamais dégrader la couche bancaire,
     // quelle que soit la source réelle actuelle (HELLOBANK_PDF, flux, pdf, etc.).
