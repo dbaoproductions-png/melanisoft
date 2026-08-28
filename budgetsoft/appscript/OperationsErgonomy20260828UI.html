@@ -1,0 +1,86 @@
+<script>
+(function(){
+  const VERSION='2026-08-28.1';
+  let chargementEnCours=false;
+
+  function q(id){return document.getElementById(id)}
+
+  function installerStyles(){
+    if(q('operations-ergonomy-style'))return;
+    const s=document.createElement('style');s.id='operations-ergonomy-style';s.textContent=`
+      #operations .section-toolbar{display:flex!important;justify-content:space-between!important;align-items:center!important;gap:14px!important;flex-wrap:wrap!important}
+      #operations-current-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-left:auto}
+      #operations-actions-main{display:none!important}
+      #operations .operation-table-row{grid-template-columns:34px 92px minmax(280px,1.55fr) minmax(145px,.72fr) minmax(165px,.82fr) 112px 72px!important;column-gap:12px!important}
+      #operations .operation-date{white-space:nowrap}
+      #operations .operation-account,#operations .operation-category{min-width:0;overflow-wrap:anywhere}
+      #operations .operation-label{min-width:0}
+      #operations .operation-actions{justify-content:flex-end}
+      @media(max-width:1200px){#operations .operation-table-row{grid-template-columns:32px 88px minmax(260px,1.45fr) minmax(135px,.7fr) minmax(145px,.75fr) 108px 68px!important}}
+    `;document.head.appendChild(s);
+  }
+
+  function ouvrirBanqueMode(mode){
+    const bouton=q('banking-integrity-button');
+    if(!bouton)return;
+    bouton.click();
+    setTimeout(()=>{
+      const modal=q('banking-integrity-modal');if(!modal)return;
+      const tabs=[...modal.querySelectorAll('.bi-tab')];
+      tabs.forEach(t=>t.style.display='');
+      if(mode==='flux'){
+        tabs.forEach(t=>{t.style.display=t.dataset.tab==='flux'?'':'none'});
+        modal.querySelector('.bi-tab[data-tab="flux"]')?.click();
+      }else{
+        tabs.forEach(t=>{if(t.dataset.tab==='flux')t.style.display='none'});
+        modal.querySelector('.bi-tab[data-tab="migration"]')?.click();
+      }
+    },50);
+  }
+
+  function installerActionsCourantes(){
+    const toolbar=document.querySelector('#operations .section-toolbar');if(!toolbar)return;
+    if(q('operations-current-actions'))return;
+    const d=document.createElement('div');d.id='operations-current-actions';
+    d.innerHTML=`<button type="button" class="primary-button" id="operations-manual-top">＋ Saisie manuelle</button><button type="button" class="secondary-button" id="operations-pdf-top">📄 Relevé PDF</button><button type="button" class="secondary-button" id="operations-hello-top">📋 Copier-coller Hello bank!</button>`;
+    toolbar.appendChild(d);
+    q('operations-manual-top').onclick=()=>q('add-operation-button')?.click();
+    q('operations-pdf-top').onclick=()=>q('import-pdf-button')?.click();
+    q('operations-hello-top').onclick=()=>ouvrirBanqueMode('flux');
+    const maintenance=q('operations-maintenance-modern');if(maintenance)maintenance.onclick=()=>ouvrirBanqueMode('maintenance');
+  }
+
+  function afficherAttente(){
+    ['operations-income','operations-expenses','operations-net','operations-uncategorized'].forEach(id=>{const el=q(id);if(el)el.textContent='…'});
+    const zone=q('operations-list');if(zone){zone.className='empty-state';zone.textContent='Chargement des opérations…'}
+  }
+
+  function chargerOperationsLeger(){
+    if(chargementEnCours)return;
+    chargementEnCours=true;afficherAttente();
+    const t0=performance.now();
+    google.script.run.withSuccessHandler(r=>{
+      chargementEnCours=false;
+      if(!window.state)return;
+      state.data=state.data||{};
+      state.data.Operations=Array.isArray(r.Operations)?r.Operations:[];
+      state.data.Comptes=Array.isArray(r.Comptes)?r.Comptes:[];
+      state.data.Categories=Array.isArray(r.Categories)?r.Categories:[];
+      if(typeof rendreOperationsPage==='function')rendreOperationsPage();
+      const zone=q('operations-list');if(zone)zone.dataset.fastLoadMs=String(Math.round(performance.now()-t0));
+    }).withFailureHandler(e=>{
+      chargementEnCours=false;
+      const zone=q('operations-list');if(zone){zone.className='empty-state';zone.textContent='Erreur de chargement : '+(e.message||String(e))}
+    }).chargerOperationsLeger20260828();
+  }
+
+  function installerChargementRapide(){
+    const nav=document.querySelector('.nav-item[data-view="operations"]');if(!nav||nav.dataset.fastOperations)return;
+    nav.dataset.fastOperations='1';nav.addEventListener('click',()=>setTimeout(chargerOperationsLeger,0));
+  }
+
+  function installer(){installerStyles();installerActionsCourantes();installerChargementRapide();const maintenance=q('operations-maintenance-modern');if(maintenance&&!maintenance.dataset.noFlux){maintenance.dataset.noFlux='1';maintenance.onclick=()=>ouvrirBanqueMode('maintenance')}}
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(installer,1350));
+  setTimeout(installer,1700);
+})();
+</script>
