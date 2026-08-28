@@ -16,9 +16,9 @@ function enregistrerOperationManuelle(operation){
     // quelle que soit la source réelle actuelle (HELLOBANK_PDF, flux, pdf, etc.).
     ['source_bancaire','date_comptable','date_achat','libelle_bancaire','marchand_normalise','carte_fin','cle_rapprochement','statut_bancaire','charge_fixe_id','cree_le'].forEach(k=>o[k]=existante[k]??'');
   }else{
-    // Une saisie réellement manuelle reste identifiable comme telle et pourra ensuite
-    // être rapprochée/certifiée par un import bancaire réel.
-    o.source_bancaire='manuel';
+    // Compatibilité avec le moteur de rapprochement PDF : une saisie manuelle garde
+    // source_bancaire vide tant qu'elle n'a pas été certifiée par un mouvement bancaire réel.
+    o.source_bancaire='';
     o.statut_bancaire='manuel';
     o.date_comptable=o.date||existante?.date_comptable||'';
     o.date_achat='';
