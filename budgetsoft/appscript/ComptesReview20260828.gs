@@ -1,15 +1,39 @@
-const COMPTES_REVIEW_20260828_VERSION='2026-08-28.3';
+const COMPTES_REVIEW_20260828_VERSION='2026-08-28.4';
 
 /**
  * Vue Comptes rapide.
  * Source de vérité bancaire : dernier solde de relevé certifié + mouvements réels
- * postérieurs selon date_comptable. Le Dashboard n'est JAMAIS recalculé dans le
- * chemin normal d'affichage ; sa comparaison reste réservée à l'audit explicite.
+ * postérieurs selon date_comptable.
+ * Le chemin normal privilégie un snapshot matérialisé ; aucun recalcul Dashboard.
  */
 function chargerSyntheseComptes20260828(){
   const t0=Date.now();
-  const r=construireSyntheseComptes20260828_();
-  r.performance={dureeMs:Date.now()-t0,controleDashboardExecute:false};
+  let s=null;
+  try{s=chargerSnapshotComptes20260828();}catch(e){s=null;}
+
+  if(s&&s.disponible&&s.vue){
+    const r=JSON.parse(JSON.stringify(s.vue));
+    r.performance={
+      dureeMs:Date.now()-t0,
+      controleDashboardExecute:false,
+      source:'snapshot',
+      snapshotPerime:!!s.perime,
+      snapshotGenereLe:s.genereLe||''
+    };
+    r.snapshotPerime=!!s.perime;
+    return r;
+  }
+
+  const refresh=rafraichirSnapshotComptes20260828();
+  const r=refresh&&refresh.vue?JSON.parse(JSON.stringify(refresh.vue)):construireSyntheseComptes20260828_();
+  r.performance={
+    dureeMs:Date.now()-t0,
+    controleDashboardExecute:false,
+    source:'recalcul',
+    snapshotPerime:false,
+    snapshotGenereLe:refresh&&refresh.genereLe||''
+  };
+  r.snapshotPerime=false;
   return r;
 }
 
@@ -104,14 +128,16 @@ function construireSyntheseComptes20260828_(){
   };
 }
 
-/** Mesure uniquement le chemin réellement utilisé par l'écran Comptes. */
+/** Mesure le chemin réellement utilisé par l'écran Comptes, snapshot compris. */
 function auditerPerformanceComptesRapide20260828(){
   const t0=Date.now();
-  const r=construireSyntheseComptes20260828_();
+  const r=chargerSyntheseComptes20260828();
   const out={
     ok:r.ok===true,
     version:r.version,
     dureeMs:Date.now()-t0,
+    source:r.performance&&r.performance.source||'',
+    snapshotPerime:!!r.snapshotPerime,
     synthese:r.synthese,
     comptes:r.comptes.length,
     controleDashboardExecute:false
