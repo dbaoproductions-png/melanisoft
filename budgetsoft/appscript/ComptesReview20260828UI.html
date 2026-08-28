@@ -1,0 +1,98 @@
+<style>
+#comptes .accounts-summary{grid-template-columns:repeat(4,minmax(0,1fr));}
+#comptes .accounts-panel .panel-heading{align-items:center;gap:16px;}
+#comptes .accounts-archive-button{white-space:nowrap;}
+#comptes .account-balance small{display:block;margin-top:4px;color:var(--muted,#73827d);font-weight:500;font-size:.78rem;}
+#comptes .metric-card small{line-height:1.35;}
+@media(max-width:1100px){#comptes .accounts-summary{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media(max-width:650px){#comptes .accounts-summary{grid-template-columns:1fr;}}
+</style>
+<script>
+(function(){
+  let afficherArchives=false;
+  let derniereSynthese=null;
+  let chargementEnCours=false;
+
+  function installerStructure(){
+    const cartes=document.querySelector('#comptes .accounts-summary');
+    if(cartes){
+      cartes.innerHTML=`
+        <article class="card metric-card"><span>Solde disponible</span><strong id="accounts-balance">0,00 €</strong><small>Comptes courants et espèces</small></article>
+        <article class="card metric-card"><span>Épargne liquide</span><strong id="savings-balance">0,00 €</strong><small>Comptes d’épargne</small></article>
+        <article class="card metric-card"><span>Placements</span><strong id="placements-balance">0,00 €</strong><small>Placements financiers</small></article>
+        <article class="card metric-card"><span>Pluxee</span><strong id="pluxee-account-balance">—</strong><small>Solde réel de la carte, hors banque</small></article>`;
+    }
+    const heading=document.querySelector('#comptes .accounts-panel .panel-heading');
+    if(heading){
+      const ancien=heading.querySelector('.toggle-label');if(ancien)ancien.remove();
+      let bouton=document.getElementById('accounts-archive-toggle');
+      if(!bouton){
+        bouton=document.createElement('button');
+        bouton.type='button';
+        bouton.id='accounts-archive-toggle';
+        bouton.className='secondary-button accounts-archive-button';
+        bouton.addEventListener('click',function(){afficherArchives=!afficherArchives;rendreSynthese(derniereSynthese);});
+        heading.appendChild(bouton);
+      }
+    }
+  }
+
+  function sourceLibelle(c){
+    if(c.sourceSolde==='releve_certifie')return c.dateSolde?'Solde réel au '+formaterDate(c.dateSolde):'Solde réel bancaire';
+    return c.dateSolde?'Calcul depuis le solde initial · '+formaterDate(c.dateSolde):'Calcul depuis le solde initial';
+  }
+
+  function rendreSynthese(r){
+    if(!r||!r.ok)return;
+    derniereSynthese=r;
+    const s=r.synthese||{};
+    const setMoney=function(id,v){const el=document.getElementById(id);if(el)el.textContent=Number.isFinite(Number(v))?money.format(Number(v)):'—';};
+    setMoney('accounts-balance',s.disponible);
+    setMoney('savings-balance',s.epargne);
+    setMoney('placements-balance',s.placements);
+    setMoney('pluxee-account-balance',s.pluxee);
+
+    const bouton=document.getElementById('accounts-archive-toggle'),nbArchives=Number(r.archives||0);
+    if(bouton){
+      bouton.disabled=nbArchives===0;
+      bouton.textContent=nbArchives===0?'Aucun compte archivé':(afficherArchives?'Masquer les comptes archivés':'Afficher les comptes archivés ('+nbArchives+')');
+    }
+
+    const comptes=(r.comptes||[]).filter(function(c){return afficherArchives||estActif(c.actif);});
+    const zone=document.getElementById('accounts-list');
+    if(!zone)return;
+    if(!comptes.length){zone.className='empty-state';zone.textContent='Aucun compte à afficher.';return;}
+    zone.className='';
+    zone.innerHTML=comptes.map(function(c){
+      const actif=estActif(c.actif),solde=Number(c.soldeReel||0);
+      return `<div class="account-row ${actif?'':'archived'}">
+        <div class="account-main"><div class="account-icon">${iconeCompte(c.type)}</div><div><strong>${echapper(c.nom)}</strong><small>${actif?'<span class="badge">Actif</span>':'<span class="badge archived-badge">Archivé</span>'}</small></div></div>
+        <div class="account-type">${libelleType(c.type)}</div>
+        <div class="account-balance ${solde<0?'amount-negative':''}">${money.format(solde)}<small>${echapper(sourceLibelle(c))}</small></div>
+        <div class="account-actions"><button class="small-button" onclick="modifierCompte('${echapperAttribut(c.id)}')" title="Modifier">✎</button><button class="small-button" onclick="basculerCompte('${echapperAttribut(c.id)}')" title="${actif?'Archiver':'Réactiver'}">${actif?'⌁':'↻'}</button></div>
+      </div>`;
+    }).join('');
+  }
+
+  function chargerSynthese(){
+    if(chargementEnCours)return;
+    chargementEnCours=true;
+    const zone=document.getElementById('accounts-list');
+    if(zone&&!derniereSynthese){zone.className='empty-state';zone.textContent='Chargement des soldes réels…';}
+    google.script.run
+      .withSuccessHandler(function(r){chargementEnCours=false;rendreSynthese(r);})
+      .withFailureHandler(function(e){chargementEnCours=false;const msg=e&&e.message?e.message:String(e||'Erreur inconnue');if(zone){zone.className='empty-state';zone.textContent='Impossible de charger les comptes : '+msg;}})
+      .chargerSyntheseComptes20260828();
+  }
+
+  // Remplace le rendu historique : on ne rescane plus toutes les opérations compte par compte côté navigateur.
+  window.rendreComptes=function(){
+    installerStructure();
+    chargerSynthese();
+  };
+
+  document.addEventListener('DOMContentLoaded',function(){
+    installerStructure();
+  });
+})();
+</script>
