@@ -13,6 +13,8 @@
   let derniereSynthese=null;
   let chargementEnCours=false;
   let structureInstallee=false;
+  let dernierChargementMs=0;
+  const REUTILISATION_MS=5000;
 
   function installerStructure(){
     if(structureInstallee&&document.getElementById('placements-balance')&&document.getElementById('accounts-archive-toggle'))return;
@@ -77,26 +79,39 @@
     }).join('');
   }
 
-  function chargerSynthese(){
+  function chargerSynthese(force){
     if(chargementEnCours)return;
+    const maintenant=Date.now();
+    if(!force&&derniereSynthese&&(maintenant-dernierChargementMs)<REUTILISATION_MS){rendreSynthese(derniereSynthese);return;}
     chargementEnCours=true;
     const zone=document.getElementById('accounts-list');
     if(zone&&!derniereSynthese){zone.className='empty-state';zone.textContent='Chargement des soldes réels…';}
     google.script.run
-      .withSuccessHandler(function(r){chargementEnCours=false;rendreSynthese(r);})
+      .withSuccessHandler(function(r){chargementEnCours=false;dernierChargementMs=Date.now();rendreSynthese(r);})
       .withFailureHandler(function(e){chargementEnCours=false;const msg=e&&e.message?e.message:String(e||'Erreur inconnue');if(zone){zone.className='empty-state';zone.textContent='Impossible de charger les comptes : '+msg;}})
       .chargerSyntheseComptes20260828();
   }
 
-  // Remplace le rendu historique : on ne rescane plus toutes les opérations compte par compte côté navigateur.
-  // La structure n'est créée qu'une fois : pendant les actualisations, les derniers montants restent visibles.
+  // API locale : les mutations de données peuvent forcer le prochain rechargement.
+  window.invaliderSyntheseComptes20260828=function(){dernierChargementMs=0;};
+
+  // Lazy loading : chargerToutesLesDonnees() appelle rendreComptes() même depuis le Dashboard.
+  // On ne déclenche plus de calcul Comptes tant que l'utilisateur n'ouvre pas réellement cet écran.
   window.rendreComptes=function(){
     installerStructure();
-    chargerSynthese();
+    if(typeof state!=='undefined'&&state.currentView!=='comptes'&&!derniereSynthese)return;
+    chargerSynthese(false);
   };
 
   document.addEventListener('DOMContentLoaded',function(){
     installerStructure();
+    const refresh=document.getElementById('refresh-button');
+    if(refresh)refresh.addEventListener('click',function(){
+      if(typeof state!=='undefined'&&state.currentView==='comptes'){
+        window.invaliderSyntheseComptes20260828();
+        setTimeout(function(){chargerSynthese(true);},0);
+      }
+    });
   });
 })();
 </script>
