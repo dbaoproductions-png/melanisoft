@@ -1,6 +1,6 @@
 <script>
 (function(){
-  const VERSION='2026-08-28.4';
+  const VERSION='2026-08-28.5';
   function q(id){return document.getElementById(id)}
 
   function installerStyles(){
@@ -69,7 +69,6 @@
   function q(id){return document.getElementById(id)}
   function n(v){const x=Number(v||0);return Number.isFinite(x)?x:0}
   function masquerChargement(){try{if(typeof afficherChargement==='function')afficherChargement(false)}catch(e){}}
-  function montrerChargement(){try{if(typeof afficherChargement==='function')afficherChargement(true)}catch(e){}}
 
   function etatMinimalOperations(data){
     if(!window.state)return;
@@ -153,12 +152,15 @@
 
   function chargerOperations(force){
     installerLimiteur();brancherResetLimite();
+    // L'écran Opérations possède déjà son indicateur local (« Chargement des opérations… »).
+    // On ne montre donc jamais le bandeau global « Chargement des données… » ici.
+    masquerChargement();
     if(!force&&snapshotOperations)afficherSnapshot(snapshotOperations);
     else if(!snapshotCharge)prechargerSnapshot(s=>{if(window.state&&state.currentView==='operations'&&!donneesCompletes&&s)afficherSnapshot(s)});
 
     if(chargementOperations)return;
     if(operationsChargees&&!force){if(typeof rendreOperationsPage==='function')rendreOperationsPage();return;}
-    chargementOperations=true;if(!snapshotOperations)montrerChargement();
+    chargementOperations=true;
     const debut=performance.now();
     google.script.run.withSuccessHandler(data=>{
       chargementOperations=false;operationsChargees=true;donneesCompletes=true;
@@ -176,11 +178,20 @@
   };
 
   window.ouvrirVue=function(view){
+    // Le routeur historique ne retirait pas la classe active de Charges fixes.
+    // Une fois cet onglet visité, son bloc pouvait donc rester visible sous Comptes ou Opérations.
+    if(view!=='charges_fixes')q('charges_fixes')?.classList.remove('active');
     const r=typeof ouvrirVueBase==='function'?ouvrirVueBase.apply(this,arguments):undefined;
     if(view==='operations')chargerOperations(false);
     else if(!state.data&&typeof chargerGlobal==='function')chargerGlobal();
     return r;
   };
+
+  // Filet de sécurité pour les vues qui interceptent elles-mêmes le clic de navigation.
+  document.addEventListener('click',e=>{
+    const b=e.target.closest?.('.nav-item[data-view]');
+    if(b&&b.dataset.view!=='charges_fixes')q('charges_fixes')?.classList.remove('active');
+  },true);
 
   window.chargerOperationsLeger20260828UI=chargerOperations;
   document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>{installerLimiteur();brancherResetLimite();prechargerSnapshot()},80));
