@@ -1,4 +1,4 @@
-const FIXED_CHARGES_QUALITY_20260829_VERSION='2026-08-29.3';
+const FIXED_CHARGES_QUALITY_20260829_VERSION='2026-08-29.4';
 const FIXED_CHARGES_QUALITY_MIGRATION_KEY_='FIXED_CHARGES_QUALITY_MIGRATION_20260829_1';
 
 function normaliserChargeFixeQualite20260829_(v){
@@ -69,11 +69,18 @@ function chargerChargesFixesReview20260829(){
   return chargerChargesFixesReview20260828();
 }
 
-function evaluerRapprochementChargeFixeSouple20260829_(charge,operation){
+function evaluerRapprochementChargeFixeSouple20260829_(charge,operation,contexte){
   if(String(operation.type||'').toLowerCase()!=='depense')return null;
   const opDate=dateRapprochementChargeFixe20260829_(operation),debut=charge.date_debut?new Date(charge.date_debut):null,fin=charge.date_fin?new Date(charge.date_fin):null;
   if(!opDate)return null;
-  if(debut&&!isNaN(debut)&&opDate<debut)return null;
+  const derniereDate=contexte&&contexte.derniereDate?new Date(contexte.derniereDate):null;
+  const avantDebut=!!(debut&&!isNaN(debut)&&opDate<debut);
+  // Beaucoup de charges historiques ont reçu comme date_debut la date technique
+  // de création du référentiel. Pour l'audit rétroactif, cette date ne doit pas
+  // masquer une opération antérieure dès lors que la charge était déjà censée
+  // exister à la dernière date bancaire connue. Une vraie date de début future
+  // (ex. crédit qui commence en octobre) reste en revanche bloquante.
+  if(avantDebut&&(!derniereDate||isNaN(derniereDate)||debut>derniereDate))return null;
   if(fin&&!isNaN(fin)&&opDate>fin)return null;
 
   const montantReel=Math.abs(Number(operation.montant||0)),montantAttendu=Math.abs(Number(charge.montant||0));
@@ -111,7 +118,7 @@ function evaluerRapprochementChargeFixeSouple20260829_(charge,operation){
   const scoreDate=carte?0:(ecartJours<=2?20:ecartJours<=4?16:ecartJours<=7?10:ecartJours<=12?5:0);
   const compteCharge=String(charge.compte||''),compteOperation=String(operation.compte||''),compteCompatible=!compteCharge||!compteOperation||compteCharge===compteOperation,scoreCompte=compteCompatible?5:0;
   const score=Math.round(Math.min(100,scoreLibelle+scoreMontant+scoreDate+scoreCompte));
-  return {score,date_operation:opDate.toISOString(),montant_reel:montantReel,montant_attendu:montantAttendu,ecart_montant:Math.round(ecartMontant*100)/100,ecart_jours:ecartJours,libelle_operation:String(operation.libelle||''),libelle_charge:String(charge.libelle||''),compte:compteOperation,compte_charge:compteCharge,compte_compatible:compteCompatible,score_libelle:Math.round(scoreLibelle),score_montant:Math.round(scoreMontant),score_date:scoreDate,similarite_crediteur:Math.round(simCrediteur*100)/100,carte_differee:carte};
+  return {score,date_operation:opDate.toISOString(),montant_reel:montantReel,montant_attendu:montantAttendu,ecart_montant:Math.round(ecartMontant*100)/100,ecart_jours:ecartJours,libelle_operation:String(operation.libelle||''),libelle_charge:String(charge.libelle||''),compte:compteOperation,compte_charge:compteCharge,compte_compatible:compteCompatible,score_libelle:Math.round(scoreLibelle),score_montant:Math.round(scoreMontant),score_date:scoreDate,similarite_crediteur:Math.round(simCrediteur*100)/100,carte_differee:carte,date_debut_ignoree:avantDebut};
 }
 
 function chargerPropositionsRapprochementChargesFixes20260829(){
@@ -123,7 +130,7 @@ function chargerPropositionsRapprochementChargesFixes20260829(){
   const candidats=[];
   charges.forEach(charge=>opsCandidates.forEach(operation=>{
     const cle=String(charge.id)+'|'+String(operation.id);if(traites.has(cle))return;
-    const r=evaluerRapprochementChargeFixeSouple20260829_(charge,operation);if(!r||r.score<65)return;
+    const r=evaluerRapprochementChargeFixeSouple20260829_(charge,operation,{derniereDate:derniere});if(!r||r.score<65)return;
     candidats.push(Object.assign({},r,{charge_fixe_id:String(charge.id),operation_id:String(operation.id),cycle_cle:cleCycleChargeFixe20260829_(new Date(r.date_operation))}));
   }));
 
@@ -147,7 +154,7 @@ function auditerChargesFixesCyclePrecedent20260829(){
   return charges.map(charge=>{
     const liees=opsPrev.filter(o=>chargeFixeLieeOperation20260828_(o)===String(charge.id));
     if(liees.length)return {charge_fixe_id:String(charge.id),libelle:String(charge.libelle||''),categorie:String(charge.categorie||''),statut:'rapprochee',operations:liees.length,reel:Math.round(liees.reduce((s,o)=>s+Math.abs(Number(o.montant||0)),0)*100)/100};
-    const meilleurs=opsPrev.map(o=>({o,r:evaluerRapprochementChargeFixeSouple20260829_(charge,o)})).filter(x=>x.r).sort((a,b)=>b.r.score-a.r.score).slice(0,3);
-    const best=meilleurs[0];return {charge_fixe_id:String(charge.id),libelle:String(charge.libelle||''),categorie:String(charge.categorie||''),statut:'non_rapprochee',meilleur_score:best?best.r.score:0,meilleur_operation:best?String(best.o.libelle||''):'',meilleur_montant:best?Math.abs(Number(best.o.montant||0)):null,compte_compatible:best?best.r.compte_compatible:null,score_libelle:best?best.r.score_libelle:0,score_montant:best?best.r.score_montant:0,score_date:best?best.r.score_date:0};
+    const meilleurs=opsPrev.map(o=>({o,r:evaluerRapprochementChargeFixeSouple20260829_(charge,o,{derniereDate:derniere})})).filter(x=>x.r).sort((a,b)=>b.r.score-a.r.score).slice(0,3);
+    const best=meilleurs[0];return {charge_fixe_id:String(charge.id),libelle:String(charge.libelle||''),categorie:String(charge.categorie||''),statut:'non_rapprochee',meilleur_score:best?best.r.score:0,meilleur_operation:best?String(best.o.libelle||''):'',meilleur_montant:best?Math.abs(Number(best.o.montant||0)):null,compte_compatible:best?best.r.compte_compatible:null,score_libelle:best?best.r.score_libelle:0,score_montant:best?best.r.score_montant:0,score_date:best?best.r.score_date:0,date_debut_ignoree:best?!!best.r.date_debut_ignoree:false};
   });
 }
