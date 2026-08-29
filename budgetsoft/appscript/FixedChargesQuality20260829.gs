@@ -1,6 +1,7 @@
-const FIXED_CHARGES_QUALITY_20260829_VERSION='2026-08-29.5';
+const FIXED_CHARGES_QUALITY_20260829_VERSION='2026-08-29.6';
 const FIXED_CHARGES_QUALITY_MIGRATION_KEY_='FIXED_CHARGES_QUALITY_MIGRATION_20260829_1';
 const FIXED_CHARGES_TELECOM_MIGRATION_KEY_='FIXED_CHARGES_TELECOM_MIGRATION_20260829_1';
+const FIXED_CHARGES_ACCESSIO_MIGRATION_KEY_='FIXED_CHARGES_ACCESSIO_MIGRATION_20260829_1';
 
 function normaliserChargeFixeQualite20260829_(v){
   return String(v||'')
@@ -109,9 +110,31 @@ function migrerDoublonTelecom20260829_(){
   return {ok:true,modifiees};
 }
 
+function migrerDebutAccessio20260829_(){
+  const props=PropertiesService.getDocumentProperties();
+  if(props.getProperty(FIXED_CHARGES_ACCESSIO_MIGRATION_KEY_)==='1')return {ok:true,modifiees:0,dejaFaite:true};
+  const ss=SpreadsheetApp.getActiveSpreadsheet(),feuille=ss.getSheetByName('Charges_fixes');
+  if(!feuille||feuille.getLastRow()<2){props.setProperty(FIXED_CHARGES_ACCESSIO_MIGRATION_KEY_,'1');return {ok:true,modifiees:0};}
+  const h=TABLES.Charges_fixes,idxLib=h.indexOf('libelle'),idxDebut=h.indexOf('date_debut');
+  if(idxLib<0||idxDebut<0)return {ok:false,modifiees:0};
+  const n=feuille.getLastRow()-1,valeurs=feuille.getRange(2,1,n,h.length).getValues();
+  const debutOctobre=new Date(2026,9,1,12);let modifiees=0;
+  valeurs.forEach((row,i)=>{
+    if(normaliserChargeFixeQualite20260829_(row[idxLib])!=='cofidis accessio')return;
+    const actuel=dateBudgetSoftQualite20260829_(row[idxDebut]);
+    if(!actuel||actuel<debutOctobre){
+      feuille.getRange(i+2,idxDebut+1).setValue('01/10/2026');modifiees++;
+    }
+  });
+  if(modifiees&&typeof supprimerSnapshotChargesFixes20260828_==='function')supprimerSnapshotChargesFixes20260828_();
+  props.setProperty(FIXED_CHARGES_ACCESSIO_MIGRATION_KEY_,'1');
+  return {ok:true,modifiees};
+}
+
 function preparerReferentielChargesFixes20260829_(){
   migrerCategoriesChargesFixes20260829_();
   migrerDoublonTelecom20260829_();
+  migrerDebutAccessio20260829_();
 }
 
 function chargerChargesFixesReview20260829(){
