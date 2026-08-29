@@ -1,5 +1,6 @@
-const CERBERE_EXPRESS_SMS_OVH_VERSION='2026-08-27.2';
+const CERBERE_EXPRESS_SMS_OVH_VERSION='2026-08-29.1';
 const CERBERE_EXPRESS_SMS_OVH_ENDPOINT='https://eu.api.ovh.com/1.0';
+const CERBERE_EXPRESS_SMS_OVH_SENDER='HERNEBRING';
 const CERBERE_EXPRESS_SMS_OVH_PROPS={
   applicationKey:'OVH_SMS_APPLICATION_KEY',
   applicationSecret:'OVH_SMS_APPLICATION_SECRET',
@@ -12,6 +13,7 @@ const CERBERE_EXPRESS_SMS_OVH_PROPS={
 /**
  * Transport SMS OVHcloud pour Cerbère Express.
  * Aucun secret ni numéro n'est conservé dans le dépôt : tout vient des ScriptProperties.
+ * L'expéditeur alphanumérique HERNEBRING est validé dans OVHcloud.
  * Droits OVH minimum recommandés : lecture des comptes SMS et création de jobs SMS.
  */
 function auditerConfigurationSmsCerbereExpress20260827(){
@@ -19,6 +21,7 @@ function auditerConfigurationSmsCerbereExpress20260827(){
   const etat={
     ok:!!(p.getProperty(CERBERE_EXPRESS_SMS_OVH_PROPS.applicationKey)&&p.getProperty(CERBERE_EXPRESS_SMS_OVH_PROPS.applicationSecret)&&p.getProperty(CERBERE_EXPRESS_SMS_OVH_PROPS.consumerKey)&&p.getProperty(CERBERE_EXPRESS_SMS_OVH_PROPS.principal)),
     version:CERBERE_EXPRESS_SMS_OVH_VERSION,
+    sender:CERBERE_EXPRESS_SMS_OVH_SENDER,
     applicationKey:!!p.getProperty(CERBERE_EXPRESS_SMS_OVH_PROPS.applicationKey),
     applicationSecret:!!p.getProperty(CERBERE_EXPRESS_SMS_OVH_PROPS.applicationSecret),
     consumerKey:!!p.getProperty(CERBERE_EXPRESS_SMS_OVH_PROPS.consumerKey),
@@ -42,7 +45,7 @@ function previsualiserSmsOvhCerbereExpress20260827(profil){
   profil=normaliserProfilCerbereExpress20260827_(profil||'principal');
   const brut=genererSmsCerbereExpress20260827(profil);
   const texte=normaliserTexteSmsGsmCerbereExpress20260827_(brut.texte);
-  const out={ok:true,version:CERBERE_EXPRESS_SMS_OVH_VERSION,profil,texte,longueur:texte.length,segmentsEstimes:estimerSegmentsSmsCerbereExpress20260827_(texte),destinataireConfigure:!!numeroSmsCerbereExpress20260827_(profil)};
+  const out={ok:true,version:CERBERE_EXPRESS_SMS_OVH_VERSION,profil,sender:CERBERE_EXPRESS_SMS_OVH_SENDER,texte,longueur:texte.length,segmentsEstimes:estimerSegmentsSmsCerbereExpress20260827_(texte),destinataireConfigure:!!numeroSmsCerbereExpress20260827_(profil)};
   console.log(JSON.stringify(out));
   return out;
 }
@@ -54,9 +57,9 @@ function envoyerSmsOvhCerbereExpress20260827(profil){
   const message=genererSmsCerbereExpress20260827(profil);
   const texte=normaliserTexteSmsGsmCerbereExpress20260827_(message.texte);
   const service=serviceSmsOvhCerbereExpress20260827_();
-  const payload={message:texte,receivers:[numero],senderForResponse:true,noStopClause:true};
+  const payload={message:texte,receivers:[numero],sender:CERBERE_EXPRESS_SMS_OVH_SENDER,noStopClause:true};
   const resultat=requeteOvhSmsCerbereExpress20260827_('POST','/sms/'+encodeURIComponent(service)+'/jobs',JSON.stringify(payload));
-  const out={ok:true,version:CERBERE_EXPRESS_SMS_OVH_VERSION,profil,serviceName:service,segmentsEstimes:estimerSegmentsSmsCerbereExpress20260827_(texte),creditsRetires:Number(resultat&&resultat.totalCreditsRemoved||0),ids:resultat&&resultat.ids||[],validReceivers:resultat&&resultat.validReceivers||[],invalidReceivers:resultat&&resultat.invalidReceivers||[]};
+  const out={ok:true,version:CERBERE_EXPRESS_SMS_OVH_VERSION,profil,sender:CERBERE_EXPRESS_SMS_OVH_SENDER,serviceName:service,segmentsEstimes:estimerSegmentsSmsCerbereExpress20260827_(texte),creditsRetires:Number(resultat&&resultat.totalCreditsRemoved||0),ids:resultat&&resultat.ids||[],validReceivers:resultat&&resultat.validReceivers||[],invalidReceivers:resultat&&resultat.invalidReceivers||[]};
   console.log(JSON.stringify(out));
   return out;
 }
