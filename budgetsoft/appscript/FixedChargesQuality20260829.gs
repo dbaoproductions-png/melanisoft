@@ -1,5 +1,6 @@
-const FIXED_CHARGES_QUALITY_20260829_VERSION='2026-08-29.4';
+const FIXED_CHARGES_QUALITY_20260829_VERSION='2026-08-29.5';
 const FIXED_CHARGES_QUALITY_MIGRATION_KEY_='FIXED_CHARGES_QUALITY_MIGRATION_20260829_1';
+const FIXED_CHARGES_TELECOM_MIGRATION_KEY_='FIXED_CHARGES_TELECOM_MIGRATION_20260829_1';
 
 function normaliserChargeFixeQualite20260829_(v){
   return String(v||'')
@@ -45,6 +46,27 @@ function cleCycleChargeFixe20260829_(d){
   return c?c.cle:'';
 }
 
+function dateBudgetSoftQualite20260829_(v){
+  if(v instanceof Date)return isNaN(v)?null:new Date(v);
+  const s=String(v||'').trim();if(!s)return null;
+  let m=s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);if(m)return new Date(Number(m[3]),Number(m[2])-1,Number(m[1]),12);
+  m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);if(m)return new Date(Number(m[1]),Number(m[2])-1,Number(m[3]),12);
+  const d=new Date(s);return isNaN(d)?null:d;
+}
+
+function chargeApplicableCycle20260829_(charge,cycle){
+  if(!convertirBooleen_(charge.actif)||!cycle)return false;
+  const debut=dateBudgetSoftQualite20260829_(charge.date_debut),fin=dateBudgetSoftQualite20260829_(charge.date_fin);
+  if(debut&&debut>cycle.fin)return false;
+  if(fin&&fin<cycle.debut)return false;
+  return true;
+}
+
+function categorieRevolving20260829_(charge){
+  const c=normaliserChargeFixeQualite20260829_(charge&&charge.categorie);
+  return c.includes('revolving')||c.includes('renouvelable');
+}
+
 function migrerCategoriesChargesFixes20260829_(){
   const props=PropertiesService.getDocumentProperties();
   if(props.getProperty(FIXED_CHARGES_QUALITY_MIGRATION_KEY_)==='1')return {ok:true,modifiees:0,dejaFaite:true};
@@ -64,9 +86,45 @@ function migrerCategoriesChargesFixes20260829_(){
   return {ok:true,modifiees};
 }
 
-function chargerChargesFixesReview20260829(){
+function migrerDoublonTelecom20260829_(){
+  const props=PropertiesService.getDocumentProperties();
+  if(props.getProperty(FIXED_CHARGES_TELECOM_MIGRATION_KEY_)==='1')return {ok:true,modifiees:0,dejaFaite:true};
+  const ss=SpreadsheetApp.getActiveSpreadsheet(),feuille=ss.getSheetByName('Charges_fixes');
+  if(!feuille||feuille.getLastRow()<2){props.setProperty(FIXED_CHARGES_TELECOM_MIGRATION_KEY_,'1');return {ok:true,modifiees:0};}
+  const h=TABLES.Charges_fixes,idxMontant=h.indexOf('montant'),idxBank=h.indexOf('libelle_bancaire'),idxActif=h.indexOf('actif');
+  if(idxMontant<0||idxBank<0||idxActif<0)return {ok:false,modifiees:0};
+  const n=feuille.getLastRow()-1,valeurs=feuille.getRange(2,1,n,h.length).getValues();
+  const memeReference=row=>normaliserChargeFixeQualite20260829_(row[idxBank]).includes('ref0018919719');
+  const existeCourante=valeurs.some(row=>memeReference(row)&&Math.abs(Number(row[idxMontant]||0)-16.96)<.01&&convertirBooleen_(row[idxActif]));
+  let modifiees=0;
+  if(existeCourante){
+    valeurs.forEach((row,i)=>{
+      if(memeReference(row)&&Math.abs(Number(row[idxMontant]||0)-13.99)<.01&&convertirBooleen_(row[idxActif])){
+        feuille.getRange(i+2,idxActif+1).setValue(false);modifiees++;
+      }
+    });
+  }
+  if(modifiees&&typeof supprimerSnapshotChargesFixes20260828_==='function')supprimerSnapshotChargesFixes20260828_();
+  props.setProperty(FIXED_CHARGES_TELECOM_MIGRATION_KEY_,'1');
+  return {ok:true,modifiees};
+}
+
+function preparerReferentielChargesFixes20260829_(){
   migrerCategoriesChargesFixes20260829_();
-  return chargerChargesFixesReview20260828();
+  migrerDoublonTelecom20260829_();
+}
+
+function chargerChargesFixesReview20260829(){
+  preparerReferentielChargesFixes20260829_();
+  const r=chargerChargesFixesReview20260828();if(!r||!r.ok)return r;
+  const dc=dateBudgetSoftQualite20260829_(r.cycles&&r.cycles.courant&&r.cycles.courant.debut),fc=dateBudgetSoftQualite20260829_(r.cycles&&r.cycles.courant&&r.cycles.courant.fin);
+  const dp=dateBudgetSoftQualite20260829_(r.cycles&&r.cycles.precedent&&r.cycles.precedent.debut),fp=dateBudgetSoftQualite20260829_(r.cycles&&r.cycles.precedent&&r.cycles.precedent.fin);
+  const courant=dc&&fc?{debut:dc,fin:fc}:null,precedent=dp&&fp?{debut:dp,fin:fp}:null;
+  r.Charges_fixes=(r.Charges_fixes||[]).map(c=>Object.assign({},c,{applicable_cycle_courant:chargeApplicableCycle20260829_(c,courant),applicable_cycle_precedent:chargeApplicableCycle20260829_(c,precedent)}));
+  const actives=r.Charges_fixes.filter(c=>convertirBooleen_(c.actif)),applicables=r.Charges_fixes.filter(c=>c.applicable_cycle_courant);
+  r.synthese=Object.assign({},r.synthese||{},{chargesActives:actives.length,chargesApplicables:applicables.length,montantMensuel:Math.round(applicables.reduce((s,c)=>s+equivalentMensuelChargeFixe20260828_(c),0)*100)/100});
+  r.versionQualite=FIXED_CHARGES_QUALITY_20260829_VERSION;
+  return r;
 }
 
 function evaluerRapprochementChargeFixeSouple20260829_(charge,operation,contexte){
@@ -75,11 +133,6 @@ function evaluerRapprochementChargeFixeSouple20260829_(charge,operation,contexte
   if(!opDate)return null;
   const derniereDate=contexte&&contexte.derniereDate?new Date(contexte.derniereDate):null;
   const avantDebut=!!(debut&&!isNaN(debut)&&opDate<debut);
-  // Beaucoup de charges historiques ont reçu comme date_debut la date technique
-  // de création du référentiel. Pour l'audit rétroactif, cette date ne doit pas
-  // masquer une opération antérieure dès lors que la charge était déjà censée
-  // exister à la dernière date bancaire connue. Une vraie date de début future
-  // (ex. crédit qui commence en octobre) reste en revanche bloquante.
   if(avantDebut&&(!derniereDate||isNaN(derniereDate)||debut>derniereDate))return null;
   if(fin&&!isNaN(fin)&&opDate>fin)return null;
 
@@ -101,28 +154,27 @@ function evaluerRapprochementChargeFixeSouple20260829_(charge,operation,contexte
   else if(simCrediteur>=.5)scoreLibelle=38;
   else if(simCrediteur>0)scoreLibelle=28;
   else if(texteCharge&&texteOperation&&(texteOperation.includes(texteCharge)||texteCharge.includes(texteOperation)))scoreLibelle=35;
-
-  // Doctrine : une proposition doit toujours reposer sur un signal de créancier.
-  // Un montant et une date proches ne suffisent jamais à eux seuls.
   if(scoreLibelle===0)return null;
 
+  const revolving=categorieRevolving20260829_(charge);
   let scoreMontant=0;
   const exactMontant=ecartMontant<=Math.max(.01,Math.min(tolerance,1));
-  if(exactMontant)scoreMontant=40;
+  if(revolving){
+    if(!exactMontant&&scoreLibelle<38)return null;
+    scoreMontant=exactMontant?30:(ecartMontant<=tolerance?24:8);
+  }else if(exactMontant)scoreMontant=40;
   else if(ecartMontant<=tolerance)scoreMontant=32;
   else scoreMontant=Math.max(0,25-(ecartMontant/Math.max(1,montantAttendu))*100);
 
   const carte=operationCarteDiffereeChargeFixe20260829_(operation);
-  // Pour les CB différées, le jour comptable de fin de mois n'est pas discriminant :
-  // il sert à rattacher l'opération au bon cycle, pas à augmenter artificiellement le score.
   const scoreDate=carte?0:(ecartJours<=2?20:ecartJours<=4?16:ecartJours<=7?10:ecartJours<=12?5:0);
   const compteCharge=String(charge.compte||''),compteOperation=String(operation.compte||''),compteCompatible=!compteCharge||!compteOperation||compteCharge===compteOperation,scoreCompte=compteCompatible?5:0;
   const score=Math.round(Math.min(100,scoreLibelle+scoreMontant+scoreDate+scoreCompte));
-  return {score,date_operation:opDate.toISOString(),montant_reel:montantReel,montant_attendu:montantAttendu,ecart_montant:Math.round(ecartMontant*100)/100,ecart_jours:ecartJours,libelle_operation:String(operation.libelle||''),libelle_charge:String(charge.libelle||''),compte:compteOperation,compte_charge:compteCharge,compte_compatible:compteCompatible,score_libelle:Math.round(scoreLibelle),score_montant:Math.round(scoreMontant),score_date:scoreDate,similarite_crediteur:Math.round(simCrediteur*100)/100,carte_differee:carte,date_debut_ignoree:avantDebut};
+  return {score,date_operation:opDate.toISOString(),montant_reel:montantReel,montant_attendu:montantAttendu,ecart_montant:Math.round(ecartMontant*100)/100,ecart_jours:ecartJours,libelle_operation:String(operation.libelle||''),libelle_charge:String(charge.libelle||''),compte:compteOperation,compte_charge:compteCharge,compte_compatible:compteCompatible,score_libelle:Math.round(scoreLibelle),score_montant:Math.round(scoreMontant),score_date:scoreDate,similarite_crediteur:Math.round(simCrediteur*100)/100,carte_differee:carte,date_debut_ignoree:avantDebut,revolving};
 }
 
 function chargerPropositionsRapprochementChargesFixes20260829(){
-  migrerCategoriesChargesFixes20260829_();verifierInitialisation_();const t0=Date.now();
+  preparerReferentielChargesFixes20260829_();verifierInitialisation_();const t0=Date.now();
   const charges=lireTable_('Charges_fixes').filter(c=>convertirBooleen_(c.actif)),operations=lireTable_('Operations').filter(operationReelleChargeFixe20260828_),dates=operations.map(dateRapprochementChargeFixe20260829_).filter(Boolean);
   const derniere=dates.length?new Date(Math.max.apply(null,dates.map(d=>d.getTime()))):new Date(),courant=cycle28DepuisDate20260828_(derniere),precedent=cyclePrecedent20260828_(courant),debutRecherche=precedent.debut;
   const historique=typeof lireRapprochementsChargesFixes==='function'?lireRapprochementsChargesFixes():[],traites=new Set(historique.filter(r=>['Validé','Ignoré'].includes(String(r.statut))).map(r=>String(r.charge_fixe_id)+'|'+String(r.operation_id)));
@@ -130,13 +182,12 @@ function chargerPropositionsRapprochementChargesFixes20260829(){
   const candidats=[];
   charges.forEach(charge=>opsCandidates.forEach(operation=>{
     const cle=String(charge.id)+'|'+String(operation.id);if(traites.has(cle))return;
-    const r=evaluerRapprochementChargeFixeSouple20260829_(charge,operation,{derniereDate:derniere});if(!r||r.score<65)return;
+    const r=evaluerRapprochementChargeFixeSouple20260829_(charge,operation,{derniereDate:derniere});
+    const seuil=categorieRevolving20260829_(charge)?60:65;
+    if(!r||r.score<seuil)return;
     candidats.push(Object.assign({},r,{charge_fixe_id:String(charge.id),operation_id:String(operation.id),cycle_cle:cleCycleChargeFixe20260829_(new Date(r.date_operation))}));
   }));
 
-  // Une opération ne peut servir qu'à une charge et, pour une charge mensuelle,
-  // une seule opération est proposée par cycle. Cela permet notamment aux deux
-  // charges Google One distinctes de recevoir chacune au plus une CB du mois.
   const operationPrise=new Set(),chargeCyclePris=new Set(),propositions=[];
   candidats.sort((a,b)=>Number(b.score)-Number(a.score)||Number(a.ecart_montant)-Number(b.ecart_montant)||Number(a.ecart_jours)-Number(b.ecart_jours)).forEach(c=>{
     const op=String(c.operation_id),cc=String(c.charge_fixe_id)+'|'+String(c.cycle_cle||'');
@@ -147,7 +198,7 @@ function chargerPropositionsRapprochementChargesFixes20260829(){
 }
 
 function auditerChargesFixesCyclePrecedent20260829(){
-  migrerCategoriesChargesFixes20260829_();verifierInitialisation_();
+  preparerReferentielChargesFixes20260829_();verifierInitialisation_();
   const charges=lireTable_('Charges_fixes').filter(c=>convertirBooleen_(c.actif)),operations=lireTable_('Operations').filter(operationReelleChargeFixe20260828_),dates=operations.map(dateRapprochementChargeFixe20260829_).filter(Boolean);
   const derniere=dates.length?new Date(Math.max.apply(null,dates.map(d=>d.getTime()))):new Date(),courant=cycle28DepuisDate20260828_(derniere),precedent=cyclePrecedent20260828_(courant);
   const opsPrev=operations.filter(o=>{const d=dateRapprochementChargeFixe20260829_(o);return d&&d>=precedent.debut&&d<=precedent.fin;});
@@ -155,6 +206,6 @@ function auditerChargesFixesCyclePrecedent20260829(){
     const liees=opsPrev.filter(o=>chargeFixeLieeOperation20260828_(o)===String(charge.id));
     if(liees.length)return {charge_fixe_id:String(charge.id),libelle:String(charge.libelle||''),categorie:String(charge.categorie||''),statut:'rapprochee',operations:liees.length,reel:Math.round(liees.reduce((s,o)=>s+Math.abs(Number(o.montant||0)),0)*100)/100};
     const meilleurs=opsPrev.map(o=>({o,r:evaluerRapprochementChargeFixeSouple20260829_(charge,o,{derniereDate:derniere})})).filter(x=>x.r).sort((a,b)=>b.r.score-a.r.score).slice(0,3);
-    const best=meilleurs[0];return {charge_fixe_id:String(charge.id),libelle:String(charge.libelle||''),categorie:String(charge.categorie||''),statut:'non_rapprochee',meilleur_score:best?best.r.score:0,meilleur_operation:best?String(best.o.libelle||''):'',meilleur_montant:best?Math.abs(Number(best.o.montant||0)):null,compte_compatible:best?best.r.compte_compatible:null,score_libelle:best?best.r.score_libelle:0,score_montant:best?best.r.score_montant:0,score_date:best?best.r.score_date:0,date_debut_ignoree:best?!!best.r.date_debut_ignoree:false};
+    const best=meilleurs[0];return {charge_fixe_id:String(charge.id),libelle:String(charge.libelle||''),categorie:String(charge.categorie||''),statut:'non_rapprochee',meilleur_score:best?best.r.score:0,meilleur_operation:best?String(best.o.libelle||''):'',meilleur_montant:best?Math.abs(Number(best.o.montant||0)):null,compte_compatible:best?best.r.compte_compatible:null,score_libelle:best?best.r.score_libelle:0,score_montant:best?best.r.score_montant:0,score_date:best?best.r.score_date:0,date_debut_ignoree:best?!!best.r.date_debut_ignoree:false,revolving:best?!!best.r.revolving:false};
   });
 }
