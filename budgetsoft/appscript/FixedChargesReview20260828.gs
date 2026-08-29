@@ -1,4 +1,4 @@
-const FIXED_CHARGES_REVIEW_20260828_VERSION='2026-08-28.2';
+const FIXED_CHARGES_REVIEW_20260828_VERSION='2026-08-29.1';
 const FIXED_CHARGES_SNAPSHOT_PREFIX_20260828='FIXED_CHARGES_SNAPSHOT_20260828_';
 const FIXED_CHARGES_SNAPSHOT_CHUNK_20260828=7800;
 
@@ -28,21 +28,9 @@ function equivalentMensuelChargeFixe20260828_(c){
   }
 }
 
-function operationReelleChargeFixe20260828_(o){
-  return !/\[RECURRENCE:/.test(String(o.commentaire||''));
-}
-
-function dateComptableOperation20260828_(o){
-  const d=new Date(o.date_comptable||o.date);
-  return isNaN(d)?null:d;
-}
-
-function chargeFixeLieeOperation20260828_(o){
-  const direct=String(o.charge_fixe_id||'').trim();
-  if(direct)return direct;
-  const m=String(o.commentaire||'').match(/\[CHARGE_FIXE:([^\]]+)\]/);
-  return m?String(m[1]):'';
-}
+function operationReelleChargeFixe20260828_(o){return !/\[RECURRENCE:/.test(String(o.commentaire||''));}
+function dateComptableOperation20260828_(o){const d=new Date(o.date_comptable||o.date);return isNaN(d)?null:d;}
+function chargeFixeLieeOperation20260828_(o){const direct=String(o.charge_fixe_id||'').trim();if(direct)return direct;const m=String(o.commentaire||'').match(/\[CHARGE_FIXE:([^\]]+)\]/);return m?String(m[1]):'';}
 
 function empreinteChargesFixes20260828_(){
   const ss=SpreadsheetApp.getActiveSpreadsheet();
@@ -50,16 +38,15 @@ function empreinteChargesFixes20260828_(){
   const opRows=fOps?Math.max(0,fOps.getLastRow()-1):0,cfRows=fCf?Math.max(0,fCf.getLastRow()-1):0;
   let derniereOp='';
   if(fOps&&opRows>0){
-    const h=TABLES.Operations,cols=['id','date','date_comptable','charge_fixe_id'].map(k=>h.indexOf(k)+1).filter(x=>x>0);
-    const row=fOps.getLastRow();
-    derniereOp=cols.map(c=>serialiserValeur_(fOps.getRange(row,c).getValue())).join('|');
+    const h=TABLES.Operations,row=fOps.getLastRow(),valeurs=fOps.getRange(row,1,1,h.length).getValues()[0];
+    derniereOp=['id','date','date_comptable','charge_fixe_id'].map(k=>{const i=h.indexOf(k);return i>=0?serialiserValeur_(valeurs[i]):'';}).join('|');
   }
   return [opRows,cfRows,derniereOp].join('§');
 }
 
 function supprimerSnapshotChargesFixes20260828_(){
-  const p=PropertiesService.getDocumentProperties();
-  const meta=JSON.parse(p.getProperty(FIXED_CHARGES_SNAPSHOT_PREFIX_20260828+'META')||'null');
+  const p=PropertiesService.getDocumentProperties();let meta=null;
+  try{meta=JSON.parse(p.getProperty(FIXED_CHARGES_SNAPSHOT_PREFIX_20260828+'META')||'null');}catch(e){}
   if(meta&&meta.chunks){for(let i=0;i<meta.chunks;i++)p.deleteProperty(FIXED_CHARGES_SNAPSHOT_PREFIX_20260828+i);}
   p.deleteProperty(FIXED_CHARGES_SNAPSHOT_PREFIX_20260828+'META');
 }
@@ -67,14 +54,12 @@ function supprimerSnapshotChargesFixes20260828_(){
 function enregistrerSnapshotChargesFixes20260828_(data,empreinte){
   const p=PropertiesService.getDocumentProperties(),texte=JSON.stringify(data),chunks=[];
   for(let i=0;i<texte.length;i+=FIXED_CHARGES_SNAPSHOT_CHUNK_20260828)chunks.push(texte.slice(i,i+FIXED_CHARGES_SNAPSHOT_CHUNK_20260828));
-  supprimerSnapshotChargesFixes20260828_();
-  chunks.forEach((c,i)=>p.setProperty(FIXED_CHARGES_SNAPSHOT_PREFIX_20260828+i,c));
+  supprimerSnapshotChargesFixes20260828_();chunks.forEach((c,i)=>p.setProperty(FIXED_CHARGES_SNAPSHOT_PREFIX_20260828+i,c));
   p.setProperty(FIXED_CHARGES_SNAPSHOT_PREFIX_20260828+'META',JSON.stringify({version:FIXED_CHARGES_REVIEW_20260828_VERSION,chunks:chunks.length,empreinte,genereLe:new Date().toISOString()}));
 }
 
 function lireSnapshotChargesFixes20260828_(empreinte){
-  const p=PropertiesService.getDocumentProperties();
-  let meta=null;
+  const p=PropertiesService.getDocumentProperties();let meta=null;
   try{meta=JSON.parse(p.getProperty(FIXED_CHARGES_SNAPSHOT_PREFIX_20260828+'META')||'null');}catch(e){return null;}
   if(!meta||meta.version!==FIXED_CHARGES_REVIEW_20260828_VERSION||meta.empreinte!==empreinte||!meta.chunks)return null;
   let texte='';for(let i=0;i<meta.chunks;i++){const c=p.getProperty(FIXED_CHARGES_SNAPSHOT_PREFIX_20260828+i);if(c==null)return null;texte+=c;}
@@ -82,69 +67,40 @@ function lireSnapshotChargesFixes20260828_(empreinte){
 }
 
 function construireChargesFixesReview20260828_(){
-  const t0=Date.now();
-  verifierInitialisation_();
-  const charges=lireTable_('Charges_fixes');
-  const comptes=lireTable_('Comptes');
-  const categories=lireTable_('Categories');
-  const operations=lireTable_('Operations').filter(operationReelleChargeFixe20260828_);
-  const dates=operations.map(dateComptableOperation20260828_).filter(Boolean);
-  const derniereDate=dates.length?new Date(Math.max.apply(null,dates.map(d=>d.getTime()))):new Date();
-  const cycleCourant=cycle28DepuisDate20260828_(derniereDate),cyclePrecedent=cyclePrecedent20260828_(cycleCourant);
-  const reelParCharge={};let reelCourant=0,reelPrecedent=0;
-  operations.forEach(o=>{
-    const id=chargeFixeLieeOperation20260828_(o);if(!id)return;
-    const d=dateComptableOperation20260828_(o);if(!d)return;
-    const m=Math.abs(Number(o.montant||0));if(!Number.isFinite(m))return;
-    if(!reelParCharge[id])reelParCharge[id]={courant:0,precedent:0};
-    if(d>=cycleCourant.debut&&d<=cycleCourant.fin){reelParCharge[id].courant+=m;reelCourant+=m;}
-    else if(d>=cyclePrecedent.debut&&d<=cyclePrecedent.fin){reelParCharge[id].precedent+=m;reelPrecedent+=m;}
-  });
+  const t0=Date.now();verifierInitialisation_();
+  const charges=lireTable_('Charges_fixes'),comptes=lireTable_('Comptes'),categories=lireTable_('Categories'),operations=lireTable_('Operations').filter(operationReelleChargeFixe20260828_);
+  const dates=operations.map(dateComptableOperation20260828_).filter(Boolean),derniereDate=dates.length?new Date(Math.max.apply(null,dates.map(d=>d.getTime()))):new Date();
+  const cycleCourant=cycle28DepuisDate20260828_(derniereDate),cyclePrecedent=cyclePrecedent20260828_(cycleCourant),reelParCharge={};let reelCourant=0,reelPrecedent=0;
+  operations.forEach(o=>{const id=chargeFixeLieeOperation20260828_(o);if(!id)return;const d=dateComptableOperation20260828_(o);if(!d)return;const m=Math.abs(Number(o.montant||0));if(!Number.isFinite(m))return;if(!reelParCharge[id])reelParCharge[id]={courant:0,precedent:0};if(d>=cycleCourant.debut&&d<=cycleCourant.fin){reelParCharge[id].courant+=m;reelCourant+=m;}else if(d>=cyclePrecedent.debut&&d<=cyclePrecedent.fin){reelParCharge[id].precedent+=m;reelPrecedent+=m;}});
   const actives=charges.filter(c=>convertirBooleen_(c.actif));
-  const lignes=charges.map(c=>{
-    const r=reelParCharge[String(c.id)]||{},precedent=Number(r.precedent||0),courant=Number(r.courant||0),reference=Math.abs(Number(c.montant||0));
-    const tolerance=Math.max(Number(c.tolerance||.5),Math.max(1,reference*.05));
-    return Object.assign({},c,{reel_cycle_precedent:precedent?Math.round(precedent*100)/100:null,reel_cycle_courant:courant?Math.round(courant*100)/100:null,ecart_precedent:precedent?Math.round((precedent-reference)*100)/100:null,alerte_precedent:!!precedent&&Math.abs(precedent-reference)>tolerance});
-  });
+  const lignes=charges.map(c=>{const r=reelParCharge[String(c.id)]||{},precedent=Number(r.precedent||0),courant=Number(r.courant||0),reference=Math.abs(Number(c.montant||0)),tolerance=Math.max(Number(c.tolerance||.5),Math.max(1,reference*.05));return Object.assign({},c,{reel_cycle_precedent:precedent?Math.round(precedent*100)/100:null,reel_cycle_courant:courant?Math.round(courant*100)/100:null,ecart_precedent:precedent?Math.round((precedent-reference)*100)/100:null,alerte_precedent:!!precedent&&Math.abs(precedent-reference)>tolerance});});
   return {ok:true,version:FIXED_CHARGES_REVIEW_20260828_VERSION,Charges_fixes:lignes,Comptes:comptes,Categories:categories,synthese:{chargesActives:actives.length,montantMensuel:Math.round(actives.reduce((s,c)=>s+equivalentMensuelChargeFixe20260828_(c),0)*100)/100,reelCyclePrecedent:Math.round(reelPrecedent*100)/100,reelCycleCourant:Math.round(reelCourant*100)/100},cycles:{courant:{debut:formatDateLocaleBudgetSoft_(cycleCourant.debut),fin:formatDateLocaleBudgetSoft_(cycleCourant.fin)},precedent:{debut:formatDateLocaleBudgetSoft_(cyclePrecedent.debut),fin:formatDateLocaleBudgetSoft_(cyclePrecedent.fin)},derniereDateBanque:formatDateLocaleBudgetSoft_(derniereDate)},_performance:{serveurMs:Date.now()-t0,source:'complet',charges:charges.length,operations:operations.length}};
 }
 
 function chargerChargesFixesReview20260828(){
   const t0=Date.now();
-  verifierInitialisation_();
-  const empreinte=empreinteChargesFixes20260828_();
-  const snapshot=lireSnapshotChargesFixes20260828_(empreinte);
+  // Fast path: ne pas lancer verifierInitialisation_ avant de tester le snapshot.
+  // En cas de classeur incomplet, la reconstruction complète l'appellera elle-même.
+  const empreinte=empreinteChargesFixes20260828_(),snapshot=lireSnapshotChargesFixes20260828_(empreinte);
   if(snapshot){snapshot._performance=Object.assign({},snapshot._performance||{},{serveurMs:Date.now()-t0,source:'snapshot'});return snapshot;}
-  const data=construireChargesFixesReview20260828_();
-  enregistrerSnapshotChargesFixes20260828_(data,empreinte);
-  return data;
+  const data=construireChargesFixesReview20260828_();enregistrerSnapshotChargesFixes20260828_(data,empreinte);return data;
 }
 
 function sauvegarderChargeFixeReview20260828(charge){
   if(!charge||typeof charge!=='object')throw new Error('Charge fixe invalide.');
-  const existante=charge.id?lireTable_('Charges_fixes').find(c=>String(c.id)===String(charge.id)):null;
-  const fusion=Object.assign({},existante||{},charge);
+  const existante=charge.id?lireTable_('Charges_fixes').find(c=>String(c.id)===String(charge.id)):null,fusion=Object.assign({},existante||{},charge);
   ['dernier_rapprochement_id','dernier_rapprochement_date','dernier_montant_reel','statut_rapprochement'].forEach(k=>{if(existante&&charge[k]===undefined)fusion[k]=existante[k];});
-  enregistrerLigne('Charges_fixes',fusion);supprimerSnapshotChargesFixes20260828_();
-  return chargerChargesFixesReview20260828();
+  enregistrerLigne('Charges_fixes',fusion);supprimerSnapshotChargesFixes20260828_();return chargerChargesFixesReview20260828();
 }
-
-function supprimerChargeFixeReview20260828(id){
-  const ok=supprimerLigne('Charges_fixes',id);supprimerSnapshotChargesFixes20260828_();
-  return Object.assign({supprimee:ok},chargerChargesFixesReview20260828());
-}
+function supprimerChargeFixeReview20260828(id){const ok=supprimerLigne('Charges_fixes',id);supprimerSnapshotChargesFixes20260828_();return Object.assign({supprimee:ok},chargerChargesFixesReview20260828());}
 
 function chargerPropositionsRapprochementChargesFixes20260828(){
   const t0=Date.now();verifierInitialisation_();
-  const charges=lireTable_('Charges_fixes').filter(c=>convertirBooleen_(c.actif));
-  const operations=lireTable_('Operations').filter(operationReelleChargeFixe20260828_);
-  const dates=operations.map(dateComptableOperation20260828_).filter(Boolean);
-  const derniere=dates.length?new Date(Math.max.apply(null,dates.map(d=>d.getTime()))):new Date();
-  const courant=cycle28DepuisDate20260828_(derniere),precedent=cyclePrecedent20260828_(courant),debutRecherche=precedent.debut;
-  const historique=typeof lireRapprochementsChargesFixes==='function'?lireRapprochementsChargesFixes():[];
-  const traites=new Set(historique.filter(r=>String(r.statut)!=='À valider').map(r=>String(r.charge_fixe_id)+'|'+String(r.operation_id))),candidats=[];
+  const charges=lireTable_('Charges_fixes').filter(c=>convertirBooleen_(c.actif)),operations=lireTable_('Operations').filter(operationReelleChargeFixe20260828_),dates=operations.map(dateComptableOperation20260828_).filter(Boolean);
+  const derniere=dates.length?new Date(Math.max.apply(null,dates.map(d=>d.getTime()))):new Date(),courant=cycle28DepuisDate20260828_(derniere),precedent=cyclePrecedent20260828_(courant),debutRecherche=precedent.debut;
+  const historique=typeof lireRapprochementsChargesFixes==='function'?lireRapprochementsChargesFixes():[],traites=new Set(historique.filter(r=>String(r.statut)!=='À valider').map(r=>String(r.charge_fixe_id)+'|'+String(r.operation_id))),candidats=[];
   const opsCandidates=operations.filter(o=>{if(chargeFixeLieeOperation20260828_(o))return false;const d=dateComptableOperation20260828_(o);return d&&d>=debutRecherche&&d<=courant.fin;});
-  charges.forEach(charge=>opsCandidates.forEach(operation=>{const cle=String(charge.id)+'|'+String(operation.id);if(traites.has(cle))return;const clone=Object.assign({},operation,{date:operation.date_comptable||operation.date});const r=evaluerRapprochementChargeFixe_(charge,clone);if(!r||r.score<55)return;candidats.push(Object.assign({},r,{charge_fixe_id:String(charge.id),operation_id:String(operation.id)}));}));
+  charges.forEach(charge=>opsCandidates.forEach(operation=>{const cle=String(charge.id)+'|'+String(operation.id);if(traites.has(cle))return;const clone=Object.assign({},operation,{date:operation.date_comptable||operation.date}),r=evaluerRapprochementChargeFixe_(charge,clone);if(!r||r.score<55)return;candidats.push(Object.assign({},r,{charge_fixe_id:String(charge.id),operation_id:String(operation.id)}));}));
   const meilleure=new Map();candidats.sort((a,b)=>Number(b.score)-Number(a.score)).forEach(c=>{if(!meilleure.has(c.operation_id))meilleure.set(c.operation_id,c)});
   const propositions=[...meilleure.values()];return {ok:true,propositions,nombre:propositions.length,_performance:{serveurMs:Date.now()-t0,operationsCandidates:opsCandidates.length,comparaisons:charges.length*opsCandidates.length}};
 }
