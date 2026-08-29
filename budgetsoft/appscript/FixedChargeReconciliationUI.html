@@ -1,6 +1,6 @@
 <script>
 (function(){
-  const VERSION='2026-08-29.1';
+  const VERSION='2026-08-29.2';
   let vue=null,chargementVue=false,chargeeLe=0,propositions=[],propositionsChargees=false;
   const q=id=>document.getElementById(id);
   const n=v=>{const x=Number(v||0);return Number.isFinite(x)?x:0};
@@ -97,9 +97,21 @@
   function installerOverrides(){
     installerStyles();installerStructure();installerGardeCompteur();
     const baseRendre=window.rendreOperationsPage;if(typeof baseRendre==='function'&&!baseRendre.__fixedCharges20260828){const w=function(){if(window.state&&state.currentView==='charges_fixes'){preparerSelects();chargerVue(false);return;}return baseRendre.apply(this,arguments)};w.__fixedCharges20260828=true;window.rendreOperationsPage=w;}
+    const baseRendreCharges=window.rendreChargesFixes;
+    if(typeof baseRendreCharges==='function'&&!baseRendreCharges.__fixedChargesGrouped20260829){
+      const wCharges=function(){
+        if(window.state&&state.currentView==='charges_fixes'){
+          installerStructure();
+          if(vue){renduCartes();renduCharges();}else chargerVue(false);
+          return;
+        }
+        return baseRendreCharges.apply(this,arguments);
+      };
+      wCharges.__fixedChargesGrouped20260829=true;
+      window.rendreChargesFixes=wCharges;
+    }
     window.sauvegarderChargeFixe=function(charge){const b=q('save-fixed-charge');if(b)b.disabled=true;google.script.run.withSuccessHandler(r=>{if(b)b.disabled=false;if(typeof fermerChargeFixe==='function')fermerChargeFixe();appliquerVue(r)}).withFailureHandler(e=>{if(b)b.disabled=false;afficherErreur(e.message||String(e))}).sauvegarderChargeFixeReview20260828(charge);};
     window.supprimerChargeFixe=function(id){if(!confirm('Supprimer cette charge fixe du référentiel ? Les opérations bancaires réelles ne seront pas modifiées.'))return;google.script.run.withSuccessHandler(r=>appliquerVue(r)).withFailureHandler(e=>afficherErreur(e.message||String(e))).supprimerChargeFixeReview20260828(id);};
-    // Précharge silencieuse : quand l'utilisateur ouvre l'onglet, le référentiel est souvent déjà en mémoire côté navigateur.
     setTimeout(()=>chargerVue(false),250);
   }
 
