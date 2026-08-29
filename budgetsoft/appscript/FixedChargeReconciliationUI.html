@@ -1,9 +1,10 @@
 <script>
 (function(){
-  const VERSION='2026-08-29.3';
+  const VERSION='2026-08-29.4';
   let vue=null,chargementVue=false,chargeeLe=0,propositions=[],propositionsChargees=false,restaurationEnCours=false;
   const q=id=>document.getElementById(id);
   const n=v=>{const x=Number(v||0);return Number.isFinite(x)?x:0};
+  const vueChargesFixesVisible=()=>!!q('charges_fixes')?.classList.contains('active');
 
   function installerStyles(){
     if(q('fixed-charges-review-style'))return;
@@ -53,7 +54,7 @@
   }
 
   function appliquerVue(r){if(!r||!r.ok)return;vue=r;chargeeLe=Date.now();state.data=Object.assign({},state.data||{},{Charges_fixes:r.Charges_fixes||[],Comptes:r.Comptes||[],Categories:r.Categories||[]});preparerSelects();renduCartes();renduCharges();try{if(typeof afficherChargement==='function')afficherChargement(false)}catch(e){}}
-  function chargerVue(force){installerStructure();if(vue&&!force){appliquerVue(vue);if(Date.now()-chargeeLe<5000)return;}if(chargementVue)return;chargementVue=true;google.script.run.withSuccessHandler(r=>{chargementVue=false;appliquerVue(r)}).withFailureHandler(e=>{chargementVue=false;if(window.state&&state.currentView==='charges_fixes')afficherErreur(e.message||String(e))}).chargerChargesFixesReview20260828();}
+  function chargerVue(force){installerStructure();if(vue&&!force){appliquerVue(vue);if(Date.now()-chargeeLe<5000)return;}if(chargementVue)return;chargementVue=true;google.script.run.withSuccessHandler(r=>{chargementVue=false;appliquerVue(r)}).withFailureHandler(e=>{chargementVue=false;if(vueChargesFixesVisible())afficherErreur(e.message||String(e))}).chargerChargesFixesReview20260828();}
 
   function majCompteur(){const x=q('fixed-charge-match-count');if(x&&propositionsChargees)x.textContent=String(propositions.length);}
   function rendrePropositions(){const z=q('fixed-charge-matches-list');if(!z)return;if(!propositions.length){z.innerHTML='<div class="empty-state">Aucun rapprochement de charge fixe à valider sur les deux cycles suivis.</div>';return;}z.innerHTML=propositions.map(r=>`<article class="reconciliation-item"><div class="reconciliation-head"><strong>${echapper(r.libelle_charge||'Charge fixe')}</strong><span class="reconciliation-score">${Number(r.score)||0}/100</span></div><div class="reconciliation-compare"><div class="reconciliation-side"><small>Référentiel</small><strong>${money.format(Math.abs(n(r.montant_attendu)))}</strong></div><div class="reconciliation-side bank"><small>Opération réelle</small><strong>${money.format(Math.abs(n(r.montant_reel)))}</strong><span>${echapper(r.libelle_operation||'')} · ${formaterDate(r.date_operation)}</span></div></div><div class="reconciliation-actions"><button class="primary-button" onclick="deciderChargeFixeRapide20260828('${echapperAttribut(r.charge_fixe_id)}','${echapperAttribut(r.operation_id)}','valider',this)">Valider</button><button class="secondary-button" onclick="deciderChargeFixeRapide20260828('${echapperAttribut(r.charge_fixe_id)}','${echapperAttribut(r.operation_id)}','ignorer',this)">Ignorer</button></div></article>`).join('');}
@@ -63,15 +64,15 @@
   function installerGardienTableau(){
     const z=q('fixed-charges-list');if(!z||z.dataset.modernGuard)return;z.dataset.modernGuard='1';
     new MutationObserver(()=>{
-      if(restaurationEnCours||!vue||!window.state||state.currentView!=='charges_fixes')return;
-      if(!z.querySelector('.fixed-category')){console.warn('[Charges fixes] rendu historique intercepté');renduCharges();renduCartes();}
+      if(restaurationEnCours||!vue||!vueChargesFixesVisible())return;
+      if(!z.querySelector('.fixed-category')){console.warn('[Charges fixes] rendu historique intercepté',{state:window.state?.currentView,active:true});renduCharges();renduCartes();}
     }).observe(z,{childList:true,subtree:true,characterData:true});
   }
 
   function installerOverrides(){
     installerStyles();installerStructure();installerGardienTableau();
-    const baseOps=window.rendreOperationsPage;if(typeof baseOps==='function'&&!baseOps.__fixedModern20260829){const w=function(){if(window.state&&state.currentView==='charges_fixes'){chargerVue(false);return;}return baseOps.apply(this,arguments)};w.__fixedModern20260829=true;window.rendreOperationsPage=w;}
-    const baseCF=window.rendreChargesFixes;if(typeof baseCF==='function'&&!baseCF.__fixedModern20260829){const w=function(){if(window.state&&state.currentView==='charges_fixes'){if(vue){renduCartes();renduCharges()}else chargerVue(false);return;}return baseCF.apply(this,arguments)};w.__fixedModern20260829=true;window.rendreChargesFixes=w;}
+    const baseOps=window.rendreOperationsPage;if(typeof baseOps==='function'&&!baseOps.__fixedModern20260829){const w=function(){if(vueChargesFixesVisible()){chargerVue(false);return;}return baseOps.apply(this,arguments)};w.__fixedModern20260829=true;window.rendreOperationsPage=w;}
+    const baseCF=window.rendreChargesFixes;if(typeof baseCF==='function'&&!baseCF.__fixedModern20260829){const w=function(){if(vueChargesFixesVisible()){if(vue){renduCartes();renduCharges()}else chargerVue(false);return;}return baseCF.apply(this,arguments)};w.__fixedModern20260829=true;window.rendreChargesFixes=w;}
     window.sauvegarderChargeFixe=function(charge){const b=q('save-fixed-charge');if(b)b.disabled=true;google.script.run.withSuccessHandler(r=>{if(b)b.disabled=false;if(typeof fermerChargeFixe==='function')fermerChargeFixe();appliquerVue(r)}).withFailureHandler(e=>{if(b)b.disabled=false;afficherErreur(e.message||String(e))}).sauvegarderChargeFixeReview20260828(charge);};
     window.supprimerChargeFixe=function(id){if(!confirm('Supprimer cette charge fixe du référentiel ? Les opérations bancaires réelles ne seront pas modifiées.'))return;google.script.run.withSuccessHandler(r=>appliquerVue(r)).withFailureHandler(e=>afficherErreur(e.message||String(e))).supprimerChargeFixeReview20260828(id);};
     setTimeout(()=>chargerVue(false),250);
