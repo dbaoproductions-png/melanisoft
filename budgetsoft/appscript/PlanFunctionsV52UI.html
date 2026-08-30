@@ -1,0 +1,62 @@
+<script>
+(function(){
+'use strict';
+const E=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
+const M=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));
+const Y=v=>v===true||String(v)==='true';
+
+function renderSources(z,items,onPick){
+  const groups=[['charge_fixe','Charges fixes récurrentes'],['operation','Opérations réelles'],['credit','Crédits'],['dette','Dettes']];
+  let html='';
+  groups.forEach(([type,label])=>{const xs=(items||[]).filter(x=>x.type===type);if(!xs.length)return;html+=`<div class="pv52-group"><small>${E(label)}</small>${xs.map((x,i)=>`<button class="source-hit" data-pv52-id="${E(x.id)}" data-pv52-type="${E(type)}"><b>${E(x.libelle)}</b><span>${E(x.detail||'')}${x.date?' · '+E(String(x.date).slice(0,10)):''} · ${M(x.capital_restant||x.montant||0)}</span></button>`).join('')}</div>`;});
+  z.innerHTML=html||'<small>Aucune correspondance.</small>';
+  z.querySelectorAll('[data-pv52-id]').forEach(b=>b.onclick=()=>onPick((items||[]).find(x=>String(x.id)===String(b.dataset.pv52Id)&&x.type===b.dataset.pv52Type)||{}));
+}
+
+function searchInto(modal,buttonId,inputId,resultId,role,onPick){
+  const b=modal.querySelector('#'+buttonId);if(!b)return;
+  b.onclick=()=>{const z=modal.querySelector('#'+resultId),q=modal.querySelector('#'+inputId).value,fn=modal.querySelector('#pv5-f').value;z.innerHTML='<div class="loading">Recherche…</div>';google.script.run.withSuccessHandler(r=>renderSources(z,r,x=>onPick(x,z))).withFailureHandler(e=>z.textContent=e.message||e).rechercherRapprochementsPlanV52(q,fn,role);};
+}
+
+function enhanceModal(m){
+  if(m.dataset.pv52==='1')return;m.dataset.pv52='1';
+  const confirm=m.querySelector('#pv5-confirm-wrap');
+  if(confirm){const lab=document.createElement('label');lab.className='checkbox-line';lab.id='pv52-reeval-wrap';lab.innerHTML=`<input type="checkbox" id="pv52-reeval"> Réévaluer les charges fixes si l’action devient effective`;confirm.insertAdjacentElement('afterend',lab);}
+
+  const fn=m.querySelector('#pv5-f');
+  function updateReeval(){const w=m.querySelector('#pv52-reeval-wrap');if(w)w.style.display=['REDUIRE','SUPPRIMER','REMPLACER'].includes(fn.value)?'flex':'none';}
+  if(fn)fn.addEventListener('change',updateReeval);updateReeval();
+
+  searchInto(m,'pv5-search','pv5-q','pv5-results','source',(x,z)=>{m._source=x;m.querySelector('#pv5-q').value=x.libelle||'';if(x.categorie&&m.querySelector('#pv5-cat'))m.querySelector('#pv5-cat').value=x.categorie;if(fn.value==='REMBOURSER'&&x.capital_restant&&!Number(m.querySelector('#pv5-target').value||0))m.querySelector('#pv5-target').value=x.capital_restant;z.innerHTML=`<small>Rattaché à <b>${E(x.libelle)}</b> · ${E(x.detail||'')}</small>`;});
+  searchInto(m,'pv5-rsearch','pv5-rq','pv5-rresults','remplacement',(x,z)=>{m._replacement=x;m.querySelector('#pv5-rq').value=x.libelle||'';if(x.montant&&!Number(m.querySelector('#pv5-rvalue').value||0))m.querySelector('#pv5-rvalue').value=x.montant;z.innerHTML=`<small>Nouveau contrat rattaché à <b>${E(x.libelle)}</b> · ${E(x.detail||'')}</small>`;});
+
+  const save=m.querySelector('#pv5-save');if(!save)return;
+  save.onclick=()=>{
+    const source=m._source||{},replacement=m._replacement||{},f=fn.value,condition=m.querySelector('#pv5-condition').value.trim(),conditionStatut=m.querySelector('#pv5-condition-status').value;
+    const dto={
+      id:m._pv52ActionId||'',libelle:m.querySelector('#pv5-lib').value.trim(),objectif_id:m.querySelector('#pv5-obj').value,fonction_plan:f,categorie:m.querySelector('#pv5-cat').value,statut:m.querySelector('#pv5-st').value,cible_valeur:Math.abs(Number(m.querySelector('#pv5-target').value||0)),date_effet:m.querySelector('#pv5-start').value,date_cible:m.querySelector('#pv5-end').value,tolerance_mesure:Math.abs(Number(m.querySelector('#pv5-tol').value||0)),source_type:source.type||'',source_id:source.id||'',source_libelle:source.libelle||m.querySelector('#pv5-q').value||'',source_remplacement_id:replacement.type==='charge_fixe'?replacement.id||'':'',source_remplacement_libelle:replacement.libelle||m.querySelector('#pv5-rq').value||'',valeur_remplacement:Math.abs(Number(m.querySelector('#pv5-rvalue').value||0)),compte_source_id:m.querySelector('#pv5-from').value,compte_destination_id:m.querySelector('#pv5-to').value,enquete_auto:m.querySelector('#pv5-auto').checked,impact_confirme:m.querySelector('#pv5-confirm').checked,impact_frequence:m.querySelector('#pv5-frequency').value,condition_libelle:condition,condition_statut:condition?conditionStatut:'',condition_date:m.querySelector('#pv5-condition-date').value,reevaluer_charges_fixes:!!(m.querySelector('#pv52-reeval')&&m.querySelector('#pv52-reeval').checked),commentaire:m.querySelector('#pv5-com').value,nature_action:String(f).toLowerCase(),mode_paiement:'Virement',processus:false
+    };
+    if(!dto.libelle)return alert("Le libellé de l'action est obligatoire.");
+    if(!dto.cible_valeur&&f!=='SUPPRIMER'&&f!=='REMPLACER')return alert('La cible doit être supérieure à zéro.');
+    if(f==='TRANSFERER'&&(!dto.compte_source_id||!dto.compte_destination_id))return alert('Choisissez le compte source et le compte destination.');
+    google.script.run.withSuccessHandler(()=>{m.remove();if(window.budgetsoftModules&&typeof window.budgetsoftModules.plan==='function')window.budgetsoftModules.plan();}).withFailureHandler(e=>alert(e.message||e)).enregistrerActionPlanV5(dto);
+  };
+}
+
+const obs=new MutationObserver(()=>{
+  const m=document.getElementById('pv5-modal');
+  if(m){
+    const edit=document.querySelector('.pa-row button[data-edit-action]:focus');
+    if(edit&&!m._pv52ActionId)m._pv52ActionId=edit.dataset.editAction||'';
+    enhanceModal(m);
+  }
+  const plan=document.querySelector('#generic-view .plan-v4');
+  if(plan&&!plan.dataset.pv52){plan.dataset.pv52='1';plan.classList.add('pv52-pending');}
+  if(plan&&plan.querySelector('.pa-metrics[data-plan-v5="1"]'))plan.classList.remove('pv52-pending');
+});
+obs.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['data-plan-v5']});
+
+const st=document.createElement('style');st.textContent=`
+.plan-v4.pv52-pending{visibility:hidden;min-height:220px;position:relative}.plan-v4.pv52-pending:before{content:'Chargement du plan…';visibility:visible;position:absolute;inset:20px;display:flex;align-items:center;justify-content:center}.pv52-group{margin:8px 0;padding-top:5px;border-top:1px solid #e6ece9}.pv52-group>small{display:block;margin-bottom:5px;font-weight:700;opacity:.65}`;document.head.appendChild(st);
+})();
+</script>
