@@ -1,4 +1,4 @@
-const PLAN_FUNCTIONS_V54_VERSION='5.4.2';
+const PLAN_FUNCTIONS_V54_VERSION='5.4.3';
 const PLAN_V54_CACHE_TTL=45;
 
 function cachePlanV54_(){return CacheService.getScriptCache();}
@@ -18,7 +18,7 @@ function gainEquivalentPlanV54_(a,montant){
 
 function chargerPlanStructureV54(){
   const cached=lireCachePlanV54_('plan_v54_structure');
-  if(cached)return cached;
+  if(cached){cached.performance=Object.assign({},cached.performance||{},{cache:true});return cached;}
   const t0=Date.now();
   const actions=lireFeuilleDynamiquePlan_('Plan_Actions');
   const objectifs=lireTablePlanCerbere_('Plan_Objectifs');
@@ -32,12 +32,12 @@ function chargerPlanStructureV54(){
 
 function chargerMesuresPlanV54(){
   const cached=lireCachePlanV54_('plan_v54_mesures');
-  if(cached)return cached;
+  if(cached){cached.performance=Object.assign({},cached.performance||{},{cache:true});return cached;}
   const t0=Date.now();
   const actions=lireFeuilleDynamiquePlan_('Plan_Actions');
-  // Évite assurerPlanFunctionsV5_ à chaque simple affichage : le schéma est déjà assuré lors des écritures.
-  const mesures=serialiserCerberePourClient_(actions.map(a=>({id:a.id,libelle:a.libelle,mesure:evaluerActionPlanV5_(a)})));
-  const mm=Object.fromEntries((mesures||[]).map(x=>[String(x.id),x.mesure||{}]));
+  const paquet=typeof evaluerToutesActionsPlanV56_==='function'?evaluerToutesActionsPlanV56_(actions):{mesures:actions.map(a=>({id:a.id,libelle:a.libelle,mesure:evaluerActionPlanV5_(a)})),performance:{fallback:true}};
+  const mesures=paquet.mesures||[];
+  const mm=Object.fromEntries(mesures.map(x=>[String(x.id),x.mesure||{}]));
   let em=0,ea=0;
   actions.forEach(a=>{
     const m=mm[String(a.id)]||{};
@@ -53,7 +53,7 @@ function chargerMesuresPlanV54(){
     }
     const g=gainEquivalentPlanV54_(a,effectif);em+=g.mensuel;ea+=g.annuel;
   });
-  return ecrireCachePlanV54_('plan_v54_mesures',serialiserCerberePourClient_({version:PLAN_FUNCTIONS_V54_VERSION,mesures:mm,gains_effectifs:{mensuel:arrondirPlanV5_(em),annuel:arrondirPlanV5_(ea)},performance:{duree_ms:Date.now()-t0,cache:false}}));
+  return ecrireCachePlanV54_('plan_v54_mesures',serialiserCerberePourClient_({version:PLAN_FUNCTIONS_V54_VERSION,mesures:mm,gains_effectifs:{mensuel:arrondirPlanV5_(em),annuel:arrondirPlanV5_(ea)},performance:Object.assign({duree_ms:Date.now()-t0,cache:false},paquet.performance||{})}));
 }
 
 function normaliserStatutPlanV54_(s){
@@ -130,5 +130,5 @@ function auditerPerformancePlanV54(){
   invaliderCachePlanV54_();
   const t0=Date.now();const s1=chargerPlanStructureV54();const t1=Date.now();const m1=chargerMesuresPlanV54();const t2=Date.now();
   const s2=chargerPlanStructureV54();const t3=Date.now();const m2=chargerMesuresPlanV54();const t4=Date.now();
-  return {version:PLAN_FUNCTIONS_V54_VERSION,structure_froid_ms:t1-t0,mesures_froid_ms:t2-t1,structure_cache_ms:t3-t2,mesures_cache_ms:t4-t3,actions:(s1.actions||[]).length,evenements:(s1.evenements||[]).length};
+  return {version:PLAN_FUNCTIONS_V54_VERSION,structure_froid_ms:t1-t0,mesures_froid_ms:t2-t1,structure_cache_ms:t3-t2,mesures_cache_ms:t4-t3,actions:(s1.actions||[]).length,evenements:(s1.evenements||[]).length,details_mesures:m1.performance||{}};
 }
