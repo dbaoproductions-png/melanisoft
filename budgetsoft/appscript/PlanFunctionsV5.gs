@@ -1,4 +1,4 @@
-const PLAN_FUNCTIONS_V5_VERSION='5.0.0';
+const PLAN_FUNCTIONS_V5_VERSION='5.1.0';
 
 /**
  * PLAN V5 — actions mesurables.
@@ -7,7 +7,8 @@ const PLAN_FUNCTIONS_V5_VERSION='5.0.0';
  * - un objectif décrit un résultat opérationnel ;
  * - une action possède une fonction de mesure ;
  * - l'enquête lit les faits BudgetSoft, sans fabriquer d'opération ;
- * - chaque résultat expose les preuves utilisées et un niveau de confiance.
+ * - chaque résultat expose les preuves utilisées et un niveau de confiance ;
+ * - une condition non remplie bloque l'effet prévisionnel sans supprimer l'action.
  */
 const PLAN_FUNCTIONS_V5={
   REMBOURSER:{libelle:'Rembourser',unite:'€'},
@@ -15,6 +16,7 @@ const PLAN_FUNCTIONS_V5={
   RECEVOIR:{libelle:'Recevoir',unite:'€'},
   REDUIRE:{libelle:'Réduire',unite:'€/mois'},
   SUPPRIMER:{libelle:'Supprimer',unite:'€/mois'},
+  REMPLACER:{libelle:'Remplacer',unite:'€/mois'},
   PLAFONNER:{libelle:'Plafonner',unite:'€'},
   ATTEINDRE:{libelle:'Atteindre / maintenir un stock',unite:'€'}
 };
@@ -23,7 +25,8 @@ function assurerPlanFunctionsV5_(){
   assurerPlanActionsV4_();
   assurerColonnesPlanV4_('Plan_Actions',[
     'fonction_plan','cible_valeur','date_cible','compte_source_id','compte_destination_id',
-    'valeur_depart','enquete_auto','tolerance_mesure','dernier_resultat_mesure','derniere_enquete'
+    'valeur_depart','valeur_remplacement','enquete_auto','tolerance_mesure','dernier_resultat_mesure','derniere_enquete',
+    'condition_libelle','condition_statut','condition_date','source_remplacement_id','source_remplacement_libelle'
   ]);
 }
 
@@ -60,21 +63,30 @@ function enregistrerActionPlanV5(d){
   d.date_cible=d.date_cible||'';
   d.compte_source_id=String(d.compte_source_id||'');
   d.compte_destination_id=String(d.compte_destination_id||'');
+  d.source_remplacement_id=String(d.source_remplacement_id||'');
+  d.source_remplacement_libelle=String(d.source_remplacement_libelle||'').trim();
+  d.valeur_remplacement=Math.max(0,Number(d.valeur_remplacement||0));
   d.enquete_auto=d.enquete_auto!==false&&String(d.enquete_auto)!=='false';
   d.tolerance_mesure=Math.max(0,Number(d.tolerance_mesure||0));
+  d.condition_libelle=String(d.condition_libelle||'').trim();
+  d.condition_statut=String(d.condition_statut||'').trim();
+  d.condition_date=d.condition_date||'';
 
   const ancienne=lireFeuilleDynamiquePlan_('Plan_Actions').find(x=>String(x.id)===String(d.id||''))||{};
   if(!d.valeur_depart)d.valeur_depart=ancienne.valeur_depart||valeurDepartPlanV5_(d);
 
+  // Une condition non remplie interdit de présenter l'effet comme acquis dans Cerbère.
+  if(d.condition_libelle&&d.condition_statut!=='Remplie')d.impact_confirme=false;
+
   // Compatibilité Cerbère V4 : on conserve un impact financier seulement quand il a un sens économique.
-  if(f==='REDUIRE'||f==='SUPPRIMER'){
+  if(f==='REDUIRE'||f==='SUPPRIMER'||f==='REMPLACER'){
     d.impact_type='baisse_charge';
     d.impact_montant=d.cible_valeur;
     d.impact_frequence='mensuel';
   }else if(f==='RECEVOIR'){
     d.impact_type='hausse_revenu';
     d.impact_montant=d.cible_valeur;
-    d.impact_frequence='ponctuel';
+    d.impact_frequence=String(d.impact_frequence||'ponctuel')==='mensuel'?'mensuel':'ponctuel';
   }else if(f==='TRANSFERER'||f==='REMBOURSER'||f==='PLAFONNER'||f==='ATTEINDRE'){
     // Ces fonctions ne sont pas un « gain » additionnable.
     d.impact_type='aucun';
@@ -103,6 +115,9 @@ function evaluerActionPlanV5_(a){
   const cible=Math.max(0,Number(a.cible_valeur||a.impact_montant||0));
   const base={fonction:f,cible,realise:0,attendu_a_date:null,progression:0,ecart:null,statut:'À instruire',confiance:'à_valider',preuves:[],unite:(PLAN_FUNCTIONS_V5[f]||{}).unite||'€'};
   if(!PLAN_FUNCTIONS_V5[f])return base;
+  if(a.condition_libelle&&String(a.condition_statut||'')!=='Remplie'){
+    return Object.assign(base,{statut:'En attente : '+String(a.condition_libelle),condition:{libelle:a.condition_libelle,statut:a.condition_statut||'En attente',date:a.condition_date||''}});
+  }
   if(a.enquete_auto===false||String(a.enquete_auto)==='false')return Object.assign(base,{statut:'Enquête manuelle'});
   try{
     let r;
@@ -111,6 +126,7 @@ function evaluerActionPlanV5_(a){
     else if(f==='RECEVOIR')r=evaluerReceptionPlanV5_(a,cible);
     else if(f==='REDUIRE')r=evaluerReductionPlanV5_(a,cible);
     else if(f==='SUPPRIMER')r=evaluerSuppressionPlanV5_(a,cible);
+    else if(f==='REMPLACER')r=evaluerRemplacementPlanV5_(a,cible);
     else if(f==='PLAFONNER')r=evaluerPlafondPlanV5_(a,cible);
     else if(f==='ATTEINDRE')r=evaluerStockPlanV5_(a,cible);
     return finaliserMesurePlanV5_(Object.assign(base,r||{}),a);
@@ -143,7 +159,7 @@ function valeurDepartPlanV5_(a){
     const c=trouverCompteMesurePlanV5_(a.compte_destination_id||a.compte_source_id||a.source_id);
     return c?Number(c.soldeReel||0):0;
   }
-  if((f==='REDUIRE'||f==='SUPPRIMER')&&a.source_type==='charge_fixe'){
+  if((f==='REDUIRE'||f==='SUPPRIMER'||f==='REMPLACER')&&a.source_type==='charge_fixe'){
     const c=lireTable_('Charges_fixes').find(x=>String(x.id)===String(a.source_id));
     return c?Math.abs(Number(c.montant||0)):0;
   }
@@ -177,7 +193,8 @@ function evaluerReceptionPlanV5_(a,cible){
   let ops=operationsDansFenetrePlanV5_(a).filter(o=>String(o.type||'').toLowerCase()==='revenu');
   ops=filtrerOperationsSourcePlanV5_(ops,a);
   const realise=ops.reduce((s,o)=>s+Math.abs(Number(o.montant||0)),0);
-  return {realise,attendu_a_date:attenduLineairePlanV5_(a,cible),confiance:ops.length?'certaine':'à_valider',preuves:ops.slice(0,20).map(preuveOperationPlanV5_)};
+  const attendu=String(a.impact_frequence||'ponctuel')==='mensuel'?attenduMensuelCumulePlanV5_(a,cible):attenduLineairePlanV5_(a,cible);
+  return {realise,attendu_a_date:attendu,confiance:ops.length?'certaine':'à_valider',preuves:ops.slice(0,20).map(preuveOperationPlanV5_)};
 }
 
 function evaluerReductionPlanV5_(a,cible){
@@ -199,6 +216,49 @@ function evaluerSuppressionPlanV5_(a,cible){
   if(ops.length)return {realise:0,attendu_a_date:cible,statut:'Toujours débitée',confiance:'certaine',preuves:ops.slice(-5).map(preuveOperationPlanV5_)};
   if(jours<28)return {realise:0,attendu_a_date:cible,statut:'À vérifier après un cycle',confiance:'à_valider',preuves:[]};
   return {realise:cible,attendu_a_date:cible,progression:100,statut:'Suppression probable',confiance:'probable',preuves:[{type:'absence_debit',depuis:a.date_effet||'',jours}]};
+}
+
+function evaluerRemplacementPlanV5_(a,cible){
+  if(a.source_type!=='charge_fixe'||!a.source_id)return {statut:'Ancienne charge fixe requise'};
+  const cfs=lireTable_('Charges_fixes');
+  const ancienne=cfs.find(x=>String(x.id)===String(a.source_id));
+  if(!ancienne)return {statut:'Ancienne charge fixe introuvable'};
+  const debut=dateDebutActionPlanV5_(a);if(!debut)return {statut:'Date d’effet requise'};
+  const maintenant=new Date();
+  if(maintenant<debut)return {realise:0,progression:0,attendu_a_date:0,statut:'Programmé',confiance:'certaine',preuves:[{type:'date_effet',date:a.date_effet||''}]};
+
+  const ops=lireTable_('Operations').filter(o=>{const d=dateMesurePlanV5_(o);return !isNaN(d)&&d>=debut&&d<=maintenant;});
+  const anciennesOps=ops.filter(o=>String(o.charge_fixe_id||'')===String(a.source_id));
+  let nouvelle=cfs.find(x=>String(x.id)===String(a.source_remplacement_id||''))||null;
+  if(!nouvelle&&a.source_remplacement_libelle){
+    const q=normaliserRechercheAction_(a.source_remplacement_libelle);
+    nouvelle=cfs.find(x=>normaliserRechercheAction_((x.libelle||'')+' '+(x.libelle_bancaire||'')).includes(q))||null;
+  }
+  let nouvellesOps=[];
+  if(nouvelle)nouvellesOps=ops.filter(o=>String(o.charge_fixe_id||'')===String(nouvelle.id));
+  if(!nouvellesOps.length&&a.source_remplacement_libelle){
+    const q=normaliserRechercheAction_(a.source_remplacement_libelle),mots=q.split(' ').filter(x=>x.length>=3);
+    nouvellesOps=ops.filter(o=>{const t=normaliserRechercheAction_((o.libelle_bancaire||'')+' '+(o.libelle||''));return mots.length&&mots.some(m=>t.includes(m));});
+  }
+
+  const jours=Math.floor((maintenant-debut)/86400000);
+  const ancienneDisparue=anciennesOps.length===0&&jours>=28;
+  const nouvelleVue=nouvellesOps.length>0;
+  const progression=(ancienneDisparue?50:0)+(nouvelleVue?50:0);
+  const reference=Math.max(0,Number(a.valeur_depart||ancienne.montant||0));
+  const nouveauMontant=nouvelleVue?Math.abs(Number(nouvellesOps.sort((x,y)=>dateMesurePlanV5_(y)-dateMesurePlanV5_(x))[0].montant||0)):Math.max(0,Number(a.valeur_remplacement||(nouvelle&&nouvelle.montant)||0));
+  const economie=Math.max(0,reference-nouveauMontant);
+  const preuves=[];
+  if(ancienneDisparue)preuves.push({type:'absence_debit',source_id:a.source_id,depuis:a.date_effet||'',jours});
+  else anciennesOps.slice(-3).forEach(o=>preuves.push(preuveOperationPlanV5_(o)));
+  nouvellesOps.slice(-3).forEach(o=>preuves.push(preuveOperationPlanV5_(o)));
+
+  let statut='Transition en cours',confiance='à_valider';
+  if(ancienneDisparue&&nouvelleVue){statut='Remplacement vérifié';confiance='certaine';}
+  else if(nouvelleVue&&anciennesOps.length){statut='Double couverture à contrôler';confiance='certaine';}
+  else if(ancienneDisparue&&!nouvelleVue){statut='Ancien contrat arrêté · nouveau à vérifier';confiance='probable';}
+  else if(jours<28&&!nouvelleVue){statut='À vérifier après prise d’effet';}
+  return {realise:ancienneDisparue&&nouvelleVue?economie:0,attendu_a_date:cible,progression,statut,confiance,preuves,reference,nouveau_montant:nouveauMontant,economie_constatee:economie};
 }
 
 function evaluerPlafondPlanV5_(a,cible){
@@ -253,6 +313,13 @@ function attenduLineairePlanV5_(a,cible){
   return arrondirPlanV5_(cible*((now-d0)/(d1-d0)));
 }
 
+function attenduMensuelCumulePlanV5_(a,montantMensuel){
+  const d0=dateDebutActionPlanV5_(a),now=new Date();if(!d0||now<d0)return 0;
+  const fin=a.date_cible?new Date(a.date_cible):now,limite=!isNaN(fin)&&fin<now?fin:now;
+  const mois=Math.max(1,(limite.getFullYear()-d0.getFullYear())*12+(limite.getMonth()-d0.getMonth())+1);
+  return arrondirPlanV5_(Math.max(0,Number(montantMensuel||0))*mois);
+}
+
 function agregerProgressionPlanV5_(actions){
   const ms=(actions||[]).map(a=>a.mesure||evaluerActionPlanV5_(a)).filter(m=>m&&PLAN_FUNCTIONS_V5[m.fonction]);
   if(!ms.length)return {actions_mesurables:0,progression:null,atteintes:0,en_retard:0,a_valider:0};
@@ -260,7 +327,7 @@ function agregerProgressionPlanV5_(actions){
     actions_mesurables:ms.length,
     progression:Math.round(ms.reduce((s,m)=>s+Number(m.progression||0),0)/ms.length*10)/10,
     atteintes:ms.filter(m=>Number(m.progression||0)>=100).length,
-    en_retard:ms.filter(m=>/retard|dépassé|toujours débitée/i.test(String(m.statut||''))).length,
+    en_retard:ms.filter(m=>/retard|dépassé|toujours débitée|double couverture/i.test(String(m.statut||''))).length,
     a_valider:ms.filter(m=>String(m.confiance||'')==='à_valider').length
   };
 }
