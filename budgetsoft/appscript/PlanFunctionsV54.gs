@@ -1,4 +1,4 @@
-const PLAN_FUNCTIONS_V54_VERSION='5.4.0';
+const PLAN_FUNCTIONS_V54_VERSION='5.4.1';
 
 function gainEquivalentPlanV54_(a,montant){
   const f=String(a.fonction_plan||'').toUpperCase();
@@ -95,6 +95,13 @@ function enregistrerEvenementPlanV54(d){
   normaliserFractionPlanV46_(d);d.recurrence=d.fractionne?d.periodicite_fractionnement:'ponctuel';d.dernier_recalcul=new Date().toISOString();
   upsertDynamiquePlanV4_('Plan_Evenements',d);try{recalculerPlanBudgetSoft_('evenement_v54');}catch(e){}
   return {ok:true,id:d.id,libelle:d.libelle};
+}
+
+function rechercherOperationsEvenementV54(d){
+  d=d||{};const type=String(d.type||'depense').toLowerCase(),montant=Math.abs(Number(d.montant||0)),date=d.date_effet?new Date(d.date_effet):null,cat=String(d.categorie||'');
+  let ops=lireTable_('Operations').filter(o=>type==='recette'?Number(o.montant||0)>0:Number(o.montant||0)<0);
+  ops=ops.map(o=>{const om=Math.abs(Number(o.montant||0)),od=new Date(o.date_comptable||o.date||o.date_operation||0),jours=date&&!isNaN(date)&&!isNaN(od)?Math.abs(od-date)/86400000:99,score=Math.abs(om-montant)+(jours*2)+(cat&&String(o.categorie||'')!==cat?50:0);return {id:o.id||'',libelle:o.libelle||o.libelle_bancaire||'',montant:om,date:o.date_comptable||o.date||o.date_operation||'',categorie:o.categorie||'',score};}).sort((a,b)=>a.score-b.score).slice(0,12);
+  return serialiserCerberePourClient_(ops);
 }
 
 function supprimerElementPlanV54(type,id){
