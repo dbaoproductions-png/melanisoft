@@ -58,8 +58,40 @@ function appliquer_(){
     rendreFormulairesPraticables_();
   },20);
 }
-new MutationObserver(appliquer_).observe(document.documentElement,{childList:true,subtree:true});
+
+/*
+ * Ne plus observer tout le document en profondeur : Plan pouvait retraiter le DOM
+ * à chaque mutation d'un autre module. On limite maintenant l'observation au rendu
+ * du Plan et à l'ajout direct des modales.
+ */
+function installerObservateursPlan_(){
+  const gv=document.getElementById('generic-view');
+  if(gv)new MutationObserver(appliquer_).observe(gv,{childList:true,subtree:true});
+  if(document.body)new MutationObserver(muts=>{
+    if(muts.some(m=>[...m.addedNodes].some(n=>n&&n.nodeType===1&&((n.matches&&n.matches('.p54-modal'))||(n.querySelector&&n.querySelector('.p54-modal'))))))appliquer_();
+  }).observe(document.body,{childList:true,subtree:false});
+}
+installerObservateursPlan_();
 setTimeout(appliquer_,30);
+
+/*
+ * Pré-chauffe très courte du cache serveur après stabilisation de l'application.
+ * Les deux appels sont indépendants et remplissent les caches utilisés ensuite par
+ * PlanFunctionsV54UI. Aucun rendu n'est déclenché ici.
+ */
+let prechauffeLancee=false;
+function prechaufferPlan_(){
+  if(prechauffeLancee||!window.google||!google.script||!google.script.run)return;
+  prechauffeLancee=true;
+  try{google.script.run.withFailureHandler(()=>{}).chargerPlanStructureV54();}catch(e){}
+  try{google.script.run.withFailureHandler(()=>{}).chargerMesuresPlanV54();}catch(e){}
+}
+const navPlan=document.querySelector('.nav-item[data-view="plan"]');
+if(navPlan){
+  navPlan.addEventListener('pointerenter',prechaufferPlan_,{once:true,passive:true});
+  navPlan.addEventListener('focus',prechaufferPlan_,{once:true,passive:true});
+}
+setTimeout(prechaufferPlan_,1800);
 
 const st=document.createElement('style');
 st.id='plan-v55-direct-style';
