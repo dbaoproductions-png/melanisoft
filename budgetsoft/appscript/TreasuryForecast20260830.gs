@@ -1,4 +1,4 @@
-const TREASURY_FORECAST_20260830_VERSION='2026-08-30.1';
+const TREASURY_FORECAST_20260830_VERSION='2026-08-30.2';
 
 /**
  * Prévision de trésorerie bancaire commune à Comptes / Opérations / Cerbère.
@@ -7,7 +7,8 @@ const TREASURY_FORECAST_20260830_VERSION='2026-08-30.1';
  * - une opération future déjà connue remplace toute prévision moins concrète ;
  * - Charges fixes / Plan restent virtuels, jamais écrits dans Operations ;
  * - les dépenses pilotables sont une estimation de trésorerie, distincte du réalisé économique ;
- * - les transferts sont neutres globalement mais affectent chaque compte séparément.
+ * - les transferts sont neutres globalement mais affectent chaque compte séparément ;
+ * - une action / un événement sans jour exact reçoit une date conventionnelle au 15 du mois pertinent.
  */
 function chargerTresoreriePrevisionnelle20260830(dateCible){
   const t0=Date.now();
@@ -90,16 +91,34 @@ function dateOpTresorerie_(o){const d=new Date(o.date_comptable||o.date||o.date_
 function signeOpTresorerie_(o){const n=Math.abs(Number(o.montant||0)),t=String(o.type||'').toLowerCase();if(t==='depense'||t==='tresorerie_sortie')return -n;if(t==='revenu'||t==='tresorerie_entree')return n;return Number(o.montant||0);}
 function rangCertitudeTresorerie_(c){return {certain:0,tres_probable:1,prevu:2,estime:3}[c]??9;}
 
+/** Résout une date Plan sans fabriquer une fausse précision : le 15 est explicitement conventionnel. */
+function datePlanTresorerie_(o,now,prefererCible){
+  o=o||{};
+  const exacte=o.date_effet||o.date||'';
+  if(exacte){const d=new Date(exacte);if(!isNaN(d))return {date:d,conventionnelle:false};}
+
+  const cible=o.date_cible||'';
+  if(cible){const d=new Date(cible);if(!isNaN(d))return {date:new Date(d.getFullYear(),d.getMonth(),15),conventionnelle:true,origine:'mois_date_cible'};}
+
+  const mois=String(o.mois_cible||o.mois||o.periode||'').match(/(20\d{2})[-\/]?(0?[1-9]|1[0-2])/);
+  if(mois)return {date:new Date(Number(mois[1]),Number(mois[2])-1,15),conventionnelle:true,origine:'mois_plan'};
+
+  const r=new Date(now.getFullYear(),now.getMonth(),15);
+  if(r<=now)r.setMonth(r.getMonth()+1);
+  return {date:r,conventionnelle:true,origine:prefererCible?'mois_suivant':'prochaine_mi_mois'};
+}
+function preuveDatePlanTresorerie_(libelle,resolution){return libelle+(resolution&&resolution.conventionnelle?' · date conventionnelle au 15':'');}
+
 function operationsFuturesTresorerie_(ops,now,cible,comptes){
   return (ops||[]).filter(o=>{
     if(/\[RECURRENCE:[^\]]+\]/.test(String(o.commentaire||'')))return false;
     const d=dateOpTresorerie_(o);return d&&d>now&&d<=cible&&compteDansPerimetreTresorerie_(o.compte,comptes)&&Math.abs(Number(o.montant||0))>.0001;
-  }).map(o=>({id:'op:'+String(o.id||''),source:'operation_future',sourceId:o.id||'',date:(dateOpTresorerie_(o)).toISOString(),libelle:o.libelle||o.libelle_bancaire||'Opération future',categorie:o.categorie||'',compte:o.compte||'',montantSigne:arrondiTresorerie_(signeOpTresorerie_(o)),certitude:'certain',preuve:'Date comptable déjà connue',charge_fixe_id:o.charge_fixe_id||''}));
+  }).map(o=>({id:'op:'+String(o.id||''),source:'operation_future',sourceId:o.id||'',date:(dateOpTresorerie_(o)).toISOString(),libelle:o.libelle||o.libelle_bancaire||'Opération future',categorie:o.categorie||'',compte:o.compte||'',montantSigne:arrondiTresorerie_(signeOpTresorerie_(o)),certitude:'certain',preuve:'Date comptable déjà connue',dateConventionnelle:false,charge_fixe_id:o.charge_fixe_id||''}));
 }
 
 function occurrencesChargesTresorerie_(charges,hard,actions,now,cible,comptes){
   const out=[],hardCf=new Set((hard||[]).map(x=>String(x.charge_fixe_id||'')).filter(Boolean));
-  const remplacements=indexActionsChargesTresorerie_(actions);
+  const remplacements=indexActionsChargesTresorerie_(actions,now);
   (charges||[]).forEach(c=>{
     if(!actifTresorerie_(c.actif)||hardCf.has(String(c.id)))return;
     const compte=c.compte||'';if(compte&&!compteDansPerimetreTresorerie_(compte,comptes))return;
@@ -111,20 +130,21 @@ function occurrencesChargesTresorerie_(charges,hard,actions,now,cible,comptes){
       if(mod&&mod.date&&d>=mod.date){if(mod.type==='remplacer'&&Number.isFinite(mod.nouveauMontant)){montant=Math.max(0,mod.nouveauMontant);lib=mod.nouveauLibelle||lib;}if(mod.type==='reduire'&&Number.isFinite(mod.cible))montant=Math.max(0,montant-mod.cible);}
       if(montant<=0)return;
       if(operationCouvrePrevisionTresorerie_(hard,d,-montant,c.libelle_bancaire||c.libelle||''))return;
-      out.push({id:'cf:'+String(c.id)+':'+d.getTime(),source:'charge_fixe',sourceId:c.id||'',date:d.toISOString(),libelle:lib,categorie:c.categorie||'',compte:compte,montantSigne:-arrondiTresorerie_(montant),certitude:'tres_probable',preuve:'Charge fixe récurrente'});
+      out.push({id:'cf:'+String(c.id)+':'+d.getTime(),source:'charge_fixe',sourceId:c.id||'',date:d.toISOString(),libelle:lib,categorie:c.categorie||'',compte:compte,montantSigne:-arrondiTresorerie_(montant),certitude:'tres_probable',preuve:'Charge fixe récurrente',dateConventionnelle:false});
     });
   });return out;
 }
 
-function indexActionsChargesTresorerie_(actions){
+function indexActionsChargesTresorerie_(actions,now){
   const m={};(actions||[]).forEach(a=>{
-    if(a.source_type!=='charge_fixe'||!a.source_id||['Abandonnée','Abandonnée','Annulée'].includes(String(a.statut||'')))return;
+    if(a.source_type!=='charge_fixe'||!a.source_id||['Abandonnée','Annulée'].includes(String(a.statut||'')))return;
     if(a.condition_libelle&&String(a.condition_statut||'')!=='Remplie')return;
     if(!(a.impact_confirme===true||String(a.impact_confirme)==='true'))return;
-    const f=String(a.fonction_plan||'').toUpperCase(),date=a.date_effet?new Date(a.date_effet):null;if(!date||isNaN(date))return;
-    if(f==='SUPPRIMER')m[String(a.source_id)]={type:'supprimer',date};
-    else if(f==='REMPLACER')m[String(a.source_id)]={type:'remplacer',date,nouveauMontant:Number(a.valeur_remplacement||0),nouveauLibelle:a.source_remplacement_libelle||''};
-    else if(f==='REDUIRE')m[String(a.source_id)]={type:'reduire',date,cible:Math.max(0,Number(a.cible_valeur||a.impact_montant||0))};
+    const f=String(a.fonction_plan||'').toUpperCase(),dr=datePlanTresorerie_(a,now,true),date=dr.date;
+    if(!date||isNaN(date))return;
+    if(f==='SUPPRIMER')m[String(a.source_id)]={type:'supprimer',date,dateConventionnelle:dr.conventionnelle};
+    else if(f==='REMPLACER')m[String(a.source_id)]={type:'remplacer',date,dateConventionnelle:dr.conventionnelle,nouveauMontant:Number(a.valeur_remplacement||0),nouveauLibelle:a.source_remplacement_libelle||''};
+    else if(f==='REDUIRE')m[String(a.source_id)]={type:'reduire',date,dateConventionnelle:dr.conventionnelle,cible:Math.max(0,Number(a.cible_valeur||a.impact_montant||0))};
   });return m;
 }
 function actifTresorerie_(v){return v!==false&&String(v).toLowerCase()!=='false'&&String(v)!=='0';}
@@ -149,13 +169,13 @@ function occurrencesEvenementsTresorerie_(events,hard,now,cible,comptes){
   const out=[];(events||[]).forEach(e=>{
     if(['Réalisé','Rapproché','Annulé','Annulée'].includes(String(e.statut||'')))return;
     const cert=String(e.certitude||'certaine').toLowerCase(),niveau=cert==='certaine'?'tres_probable':cert==='probable'?'prevu':'estime';
-    const base=e.date_effet?new Date(e.date_effet):null;if(!base||isNaN(base))return;
+    const dr=datePlanTresorerie_(e,now,false),base=dr.date;if(!base||isNaN(base))return;
     const n=(e.fractionne===true||String(e.fractionne)==='true')?Math.max(1,Number(e.nombre_fois||1)):1,per=String(e.periodicite_fractionnement||'mensuel').toLowerCase(),total=Math.abs(Number(e.montant||0));
     for(let i=0;i<n;i++){
       const d=new Date(base);if(i){if(per==='annuel')d.setFullYear(d.getFullYear()+i);else d.setMonth(d.getMonth()+i);}if(d<=now||d>cible)continue;
       const m=(String(e.type||'depense').toLowerCase()==='recette'?1:-1)*(total/n);
       if(operationCouvrePrevisionTresorerie_(hard,d,m,e.libelle||''))continue;
-      out.push({id:'event:'+String(e.id||'')+':'+i,source:'evenement',sourceId:e.id||'',date:d.toISOString(),libelle:e.libelle||'Événement',categorie:e.categorie||'',compte:e.compte||'',montantSigne:arrondiTresorerie_(m),certitude:niveau,preuve:'Événement du Plan'});
+      out.push({id:'event:'+String(e.id||'')+':'+i,source:'evenement',sourceId:e.id||'',date:d.toISOString(),libelle:e.libelle||'Événement',categorie:e.categorie||'',compte:e.compte||'',montantSigne:arrondiTresorerie_(m),certitude:niveau,preuve:preuveDatePlanTresorerie_('Événement du Plan',dr),dateConventionnelle:!!dr.conventionnelle});
     }
   });return out;
 }
@@ -167,11 +187,26 @@ function occurrencesActionsTresorerie_(actions,hard,now,cible,comptes){
     if(!(a.impact_confirme===true||String(a.impact_confirme)==='true'))return;
     const f=String(a.fonction_plan||'').toUpperCase();
     if(!['REMBOURSER','TRANSFERER','RECEVOIR'].includes(f))return;
-    const d0=a.date_effet?new Date(a.date_effet):now,d1=a.date_cible?new Date(a.date_cible):d0;if(isNaN(d0)||isNaN(d1))return;
+    const dr=datePlanTresorerie_(a,now,true),d0=dr.date,d1=a.date_cible?new Date(a.date_cible):d0;if(isNaN(d0)||isNaN(d1))return;
     const freq=String(a.impact_frequence||'ponctuel').toLowerCase(),cibleMont=Math.abs(Number(a.cible_valeur||a.impact_montant||0));
-    let dates=[];if(freq==='mensuel'){let d=new Date(d0);let guard=0;while(d<=d1&&guard++<24){dates.push(new Date(d));d.setMonth(d.getMonth()+1);}}else dates=[new Date(d1)];
+    let dates=[];
+    if(freq==='mensuel'){
+      let d=new Date(d0),guard=0;
+      let limite=d1;
+      if(dr.conventionnelle&&(!a.date_cible||isNaN(d1)))limite=new Date(d.getFullYear(),d.getMonth()+11,15);
+      while(d<=limite&&guard++<24){dates.push(new Date(d));d.setMonth(d.getMonth()+1);}
+    }else dates=[new Date(dr.conventionnelle?d0:d1)];
     const montantPar=dates.length?cibleMont/dates.length:cibleMont;
-    dates.forEach((d,i)=>{if(d<=now||d>cible)return;let signe=0,compte='';if(f==='RECEVOIR')signe=montantPar;else if(f==='REMBOURSER')signe=-montantPar;else if(f==='TRANSFERER'){compte=a.compte_source_id||'';signe=-montantPar;}if(!signe)return;if(operationCouvrePrevisionTresorerie_(hard,d,signe,a.source_libelle||a.libelle||''))return;out.push({id:'action:'+String(a.id||'')+':'+i,source:'action',sourceId:a.id||'',date:d.toISOString(),libelle:a.libelle||'Action du Plan',categorie:a.categorie||'',compte,montantSigne:arrondiTresorerie_(signe),certitude:String(a.statut)==='Effective'?'tres_probable':'prevu',preuve:'Action financière du Plan'});});
+    dates.forEach((d,i)=>{
+      if(d<=now||d>cible)return;
+      let signe=0,compte='';
+      if(f==='RECEVOIR')signe=montantPar;
+      else if(f==='REMBOURSER')signe=-montantPar;
+      else if(f==='TRANSFERER'){compte=a.compte_source_id||'';signe=-montantPar;}
+      if(!signe)return;
+      if(operationCouvrePrevisionTresorerie_(hard,d,signe,a.source_libelle||a.libelle||''))return;
+      out.push({id:'action:'+String(a.id||'')+':'+i,source:'action',sourceId:a.id||'',date:d.toISOString(),libelle:a.libelle||'Action du Plan',categorie:a.categorie||'',compte,montantSigne:arrondiTresorerie_(signe),certitude:String(a.statut)==='Effective'?'tres_probable':'prevu',preuve:preuveDatePlanTresorerie_('Action financière du Plan',dr),dateConventionnelle:!!dr.conventionnelle});
+    });
   });return out;
 }
 
@@ -191,14 +226,14 @@ function estimationPilotableTresorerie_(now,cible){
     env.forEach(x=>{const r=x.resteV37!=null?Number(x.resteV37):Number(x.reste!=null?x.reste:(Number(x.prevu||0)-Number(x.reel||0)-Number(x.planifie||0)));restant+=Math.max(0,r||0);});
     const fin=p.periode&&p.periode.fin?new Date(p.periode.fin):(p.fin?new Date(p.fin):null);if(!fin||isNaN(fin)||restant<=0)return null;
     const joursRest=Math.max(1,(fin-now)/86400000),joursCible=Math.max(0,Math.min(joursRest,(cible-now)/86400000)),fraction=Math.max(0,Math.min(1,joursCible/joursRest)),montant=-arrondiTresorerie_(restant*fraction);
-    return {id:'pilotable',source:'pilotable',sourceId:'cerbere',date:new Date(Math.min(cible.getTime(),fin.getTime())).toISOString(),libelle:'Dépenses pilotables estimées',categorie:'Pilotable',compte:'',montantSigne:montant,certitude:'estime',preuve:'Allocation Cerbère restante, proratisée dans le temps',allocationRestante:arrondiTresorerie_(restant),fractionTemps:arrondiTresorerie_(fraction),joker:!!(p.v37&&p.v37.joker&&p.v37.joker.actif)};
+    return {id:'pilotable',source:'pilotable',sourceId:'cerbere',date:new Date(Math.min(cible.getTime(),fin.getTime())).toISOString(),libelle:'Dépenses pilotables estimées',categorie:'Pilotable',compte:'',montantSigne:montant,certitude:'estime',preuve:'Allocation Cerbère restante, proratisée dans le temps',dateConventionnelle:false,allocationRestante:arrondiTresorerie_(restant),fractionTemps:arrondiTresorerie_(fraction),joker:!!(p.v37&&p.v37.joker&&p.v37.joker.actif)};
   }catch(e){return null;}
 }
 
 function confianceTresorerie_(now,cible,lignes){
-  const jours=Math.max(0,(cible-now)/86400000),est=(lignes||[]).some(x=>x.certitude==='estime'),prev=(lignes||[]).some(x=>x.certitude==='prevu');
-  if(jours<=3&&!est)return {niveau:'elevee',libelle:'Élevée'};
-  if(jours<=10&&!prev&&!est)return {niveau:'elevee',libelle:'Élevée'};
+  const jours=Math.max(0,(cible-now)/86400000),est=(lignes||[]).some(x=>x.certitude==='estime'),prev=(lignes||[]).some(x=>x.certitude==='prevu'),conv=(lignes||[]).some(x=>x.dateConventionnelle);
+  if(jours<=3&&!est&&!conv)return {niveau:'elevee',libelle:'Élevée'};
+  if(jours<=10&&!prev&&!est&&!conv)return {niveau:'elevee',libelle:'Élevée'};
   if(jours<=35)return {niveau:'moyenne',libelle:'Moyenne'};
   return {niveau:'indicative',libelle:'Indicative'};
 }
