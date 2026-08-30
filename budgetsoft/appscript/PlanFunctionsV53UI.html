@@ -2,73 +2,95 @@
 (function(){
 'use strict';
 const M=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));
-let goalBusy=false;
 
-function fullWidth(){
-  const g=document.getElementById('generic-view');
-  if(!g)return;
-  const p=g.querySelector('.p54,.plan-v4');
-  if(p)p.classList.add('plan-v55-wide');
+function nombreFr_(s){
+  const m=String(s||'').replace(/\u202f|\u00a0/g,' ').match(/(-?[\d\s]+(?:[,.]\d+)?)\s*€/);
+  if(!m)return 0;
+  return Number(m[1].replace(/\s/g,'').replace(',','.'))||0;
 }
 
-function compactModals(){
-  document.querySelectorAll('.p54-modal .modal-card,.modal#pv5-modal .modal-card,.modal#pa-action-modal .modal-card').forEach(card=>{
-    card.classList.add('plan-v55-modal-card');
-    const heading=card.querySelector('.modal-heading');
-    const actions=card.querySelector('.form-actions');
-    if(heading)heading.classList.add('plan-v55-sticky-head');
-    if(actions)actions.classList.add('plan-v55-sticky-actions');
+function resultatObjectifDepuisDom_(goal){
+  let mensuel=0,annuel=0,actions=0;
+  goal.querySelectorAll('.p54-actionrow').forEach(row=>{
+    const statut=String(row.querySelector('.p54-status')?.textContent||'').trim();
+    if(statut==='Abandonnée')return;
+    const attendu=[...row.querySelectorAll('.p54-gains span')].find(x=>/^Attendu\b/i.test(String(x.textContent||'').trim()));
+    if(!attendu)return;
+    const txt=String(attendu.textContent||'');
+    const mm=txt.match(/(-?[\d\s.,]+)\s*€\s*\/\s*mois/i);
+    const aa=txt.match(/(-?[\d\s.,]+)\s*€\s*\/\s*an/i);
+    const parse=x=>Number(String(x||'').replace(/\u202f|\u00a0|\s/g,'').replace(',','.'))||0;
+    const m=mm?parse(mm[1]):0,a=aa?parse(aa[1]):0;
+    if(m||a){mensuel+=m;annuel+=a;actions++;}
+  });
+  return {mensuel,annuel,actions};
+}
+
+function decorerObjectifs_(){
+  document.querySelectorAll('#generic-view .p54-goal').forEach(goal=>{
+    const header=goal.querySelector(':scope > header');
+    if(!header||!header.querySelector('[data-edit-goal]'))return;
+    const r=resultatObjectifDepuisDom_(goal);
+    let box=header.querySelector('.p55-goal-result');
+    if(!box){
+      box=document.createElement('div');
+      box.className='p55-goal-result';
+      const tools=header.querySelector('.p54-tools');
+      if(tools)header.insertBefore(box,tools);else header.appendChild(box);
+    }
+    box.innerHTML=`<small>RÉSULTAT ATTENDU</small><b>${r.mensuel?M(r.mensuel)+'/mois · ':''}${M(r.annuel)}/an</b><span>${r.actions} action(s) contributive(s)</span>`;
   });
 }
 
-function horizontalEvents(){
-  document.querySelectorAll('.p54-eventgrid').forEach(g=>g.classList.add('plan-v55-eventlist'));
-  document.querySelectorAll('.p54-eventgrid>article').forEach(a=>a.classList.add('plan-v55-eventrow'));
+function rendreFormulairesPraticables_(){
+  document.querySelectorAll('.p54-modal .modal-card').forEach(card=>{
+    const head=card.querySelector('.modal-heading'),foot=card.querySelector('.form-actions');
+    if(head)head.classList.add('p55-sticky-head');
+    if(foot)foot.classList.add('p55-sticky-foot');
+  });
 }
 
-function decorateGoalResults(){
-  const root=document.getElementById('generic-view');
-  if(!root||!root.querySelector('.p54-goal')||goalBusy)return;
-  const headers=[...root.querySelectorAll('.p54-goal>header')].filter(h=>h.querySelector('[data-edit-goal]'));
-  const ids=headers.map(h=>h.querySelector('[data-edit-goal]').dataset.editGoal).filter(Boolean);
-  if(!ids.length)return;
-  goalBusy=true;
-  google.script.run.withSuccessHandler(r=>{
-    goalBusy=false;
-    const map=r&&r.objectifs||{};
-    headers.forEach(h=>{
-      const id=h.querySelector('[data-edit-goal]')?.dataset.editGoal;
-      if(!id)return;
-      const x=map[String(id)]||{mensuel:0,annuel:0,actions:0};
-      let box=h.querySelector('.plan-v55-goal-result');
-      if(!box){box=document.createElement('div');box.className='plan-v55-goal-result';const tools=h.querySelector('.p54-tools');if(tools)h.insertBefore(box,tools);else h.appendChild(box);}
-      box.innerHTML=`<small>RÉSULTAT ATTENDU</small><b>${x.mensuel?M(x.mensuel)+'/mois · ':''}${M(x.annuel)}/an</b><span>${x.actions} action(s) active(s)</span>`;
-    });
-  }).withFailureHandler(()=>{goalBusy=false;}).chargerResultatsObjectifsPlanV55();
+let timer=null;
+function appliquer_(){
+  clearTimeout(timer);
+  timer=setTimeout(()=>{
+    decorerObjectifs_();
+    rendreFormulairesPraticables_();
+  },20);
 }
+new MutationObserver(appliquer_).observe(document.documentElement,{childList:true,subtree:true});
+setTimeout(appliquer_,30);
 
-let t=null;
-function apply(){clearTimeout(t);t=setTimeout(()=>{fullWidth();compactModals();horizontalEvents();decorateGoalResults();},30);}
-const obs=new MutationObserver(apply);obs.observe(document.documentElement,{childList:true,subtree:true});
-window.addEventListener('resize',apply,{passive:true});
-setTimeout(apply,50);
+const st=document.createElement('style');
+st.id='plan-v55-direct-style';
+st.textContent=`
+/* Plan : même largeur utile que les autres grands modules. */
+#generic-view>.p54,#generic-view .p54{max-width:none!important;width:100%!important;margin-left:0!important;margin-right:0!important;box-sizing:border-box!important}
+#generic-view .p54-head,#generic-view .p54-metrics,#generic-view .p54-goals,#generic-view .p54-events{width:100%!important;max-width:none!important;box-sizing:border-box!important}
 
-const st=document.createElement('style');st.id='plan-v55-style';st.textContent=`
-#generic-view .plan-v55-wide{width:100%!important;max-width:none!important;margin:0!important;box-sizing:border-box}
-#generic-view .plan-v55-wide .p54-head,#generic-view .plan-v55-wide .pa-metrics,#generic-view .plan-v55-wide .p54-metrics,#generic-view .plan-v55-wide .p54-goals,#generic-view .plan-v55-wide .p54-events{width:100%;max-width:none;box-sizing:border-box}
-.plan-v55-modal-card{max-height:calc(100vh - 28px)!important;height:auto!important;overflow:auto!important;margin:14px auto!important;overscroll-behavior:contain}
-.plan-v55-modal-card.wide-modal{width:min(980px,calc(100vw - 32px))!important;max-width:min(980px,calc(100vw - 32px))!important}
-.plan-v55-sticky-head{position:sticky;top:0;z-index:4;background:white;padding-top:4px;padding-bottom:8px;border-bottom:1px solid #edf1ef}
-.plan-v55-sticky-actions{position:sticky;bottom:-1px;z-index:4;background:white;padding-top:10px;padding-bottom:4px;border-top:1px solid #edf1ef}
-.p54-eventgrid.plan-v55-eventlist{display:block!important;width:100%}
-.p54-eventgrid>.plan-v55-eventrow{display:grid!important;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:12px;width:100%;margin:0;border:0!important;border-top:1px solid #e7efec!important;border-radius:0!important;padding:10px 12px!important;box-sizing:border-box;background:#fff}
-.p54-eventgrid>.plan-v55-eventrow:first-child{border-top:0!important}
-.p54-eventgrid>.plan-v55-eventrow>button{display:grid;grid-template-columns:minmax(120px,.35fr) minmax(180px,1fr) minmax(160px,.7fr);align-items:center;gap:12px;text-align:left;border:0;background:transparent;padding:0;min-width:0}
-.p54-eventgrid>.plan-v55-eventrow>button small,.p54-eventgrid>.plan-v55-eventrow>button b,.p54-eventgrid>.plan-v55-eventrow>button span{margin:0;white-space:normal}
-.plan-v55-goal-result{margin-left:auto;margin-right:14px;text-align:right;min-width:190px}
-.plan-v55-goal-result small,.plan-v55-goal-result b,.plan-v55-goal-result span{display:block}
-.plan-v55-goal-result small{font-size:10px;letter-spacing:.04em;opacity:.6}.plan-v55-goal-result b{font-size:13px}.plan-v55-goal-result span{font-size:11px;opacity:.65}
-@media(max-width:800px){.p54-eventgrid>.plan-v55-eventrow>button{grid-template-columns:1fr}.plan-v55-goal-result{text-align:left;margin:6px 0 0;min-width:0}.plan-v55-modal-card.wide-modal{width:calc(100vw - 16px)!important;max-width:calc(100vw - 16px)!important;margin:8px auto!important}}
+/* Événements : une bande horizontale pleine largeur par événement. */
+#generic-view .p54-eventgrid{display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:0!important;width:100%!important}
+#generic-view .p54-eventgrid>article{width:100%!important;box-sizing:border-box!important;border:0!important;border-top:1px solid #e7efec!important;border-radius:0!important;padding:10px 12px!important;display:grid!important;grid-template-columns:minmax(0,1fr) auto auto!important;gap:12px!important;align-items:center!important}
+#generic-view .p54-eventgrid>article:first-child{border-top:0!important}
+#generic-view .p54-eventgrid>article>button{min-width:0!important;display:grid!important;grid-template-columns:minmax(150px,.35fr) minmax(220px,1fr) minmax(180px,.55fr)!important;gap:14px!important;align-items:center!important;padding:0!important}
+#generic-view .p54-eventgrid>article>button small,#generic-view .p54-eventgrid>article>button b,#generic-view .p54-eventgrid>article>button span{margin:0!important;min-width:0!important}
+
+/* Formulaires : ne dépassent jamais la fenêtre, scroll interne. */
+.p54-modal{align-items:flex-start!important;padding:10px!important;overflow:hidden!important;box-sizing:border-box!important}
+.p54-modal .modal-card{max-height:calc(100vh - 20px)!important;height:auto!important;overflow-y:auto!important;overflow-x:hidden!important;margin:0 auto!important;overscroll-behavior:contain!important}
+.p54-modal .modal-card.wide-modal{width:min(980px,calc(100vw - 24px))!important;max-width:min(980px,calc(100vw - 24px))!important}
+.p54-modal .p55-sticky-head{position:sticky!important;top:0!important;z-index:8!important;background:#fff!important;padding-top:6px!important;padding-bottom:8px!important;border-bottom:1px solid #edf1ef!important}
+.p54-modal .p55-sticky-foot{position:sticky!important;bottom:-1px!important;z-index:8!important;background:#fff!important;padding-top:10px!important;padding-bottom:6px!important;border-top:1px solid #edf1ef!important}
+
+/* Résultat attendu de l'objectif. */
+.p55-goal-result{margin-left:auto!important;margin-right:14px!important;text-align:right!important;min-width:210px!important}
+.p55-goal-result small,.p55-goal-result b,.p55-goal-result span{display:block!important}.p55-goal-result small{font-size:10px!important;letter-spacing:.04em!important;opacity:.58!important}.p55-goal-result b{font-size:13px!important;margin:2px 0!important}.p55-goal-result span{font-size:11px!important;opacity:.62!important}
+
+@media(max-width:800px){
+  #generic-view .p54-eventgrid>article>button{grid-template-columns:1fr!important;gap:2px!important}
+  .p55-goal-result{text-align:left!important;margin:6px 0 0!important;min-width:0!important}
+  .p54-modal{padding:4px!important}.p54-modal .modal-card{max-height:calc(100vh - 8px)!important}.p54-modal .modal-card.wide-modal{width:calc(100vw - 8px)!important;max-width:calc(100vw - 8px)!important}
+}
 `;
 document.head.appendChild(st);
 })();
