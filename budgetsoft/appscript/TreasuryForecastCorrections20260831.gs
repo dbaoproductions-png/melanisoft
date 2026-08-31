@@ -1,4 +1,4 @@
-const TREASURY_FORECAST_CORRECTIONS_20260831_VERSION='2026-08-31.4';
+const TREASURY_FORECAST_CORRECTIONS_20260831_VERSION='2026-08-31.5';
 
 /**
  * Consolidation du prévisionnel bancaire.
@@ -90,8 +90,19 @@ function appliquerSuppressionsTemporairesTresorerie20260831_(lignes,evenements){
   });return out;
 }
 
+function lireCanonRecettesTresorerie20260831_(){
+  const lecteurs=[
+    ()=>typeof lireTablePlanCerbere_==='function'?lireTablePlanCerbere_('Cerbere_Recettes_Canon_V1'):null,
+    ()=>typeof lireFeuilleDynamiquePlan_==='function'?lireFeuilleDynamiquePlan_('Cerbere_Recettes_Canon_V1'):null,
+    ()=>typeof lireTable_==='function'?lireTable_('Cerbere_Recettes_Canon_V1'):null
+  ];
+  for(let i=0;i<lecteurs.length;i++){
+    try{const x=lecteurs[i]();if(Array.isArray(x)&&x.length)return x;}catch(e){}
+  }
+  return [];
+}
 function revenusCanoniquesTresorerie20260831_(ops,lignesExistantes,now,cible){
-  let canon=[];try{canon=lireTable_('Cerbere_Recettes_Canon_V1');}catch(e){canon=[];}const out=[];
+  const canon=lireCanonRecettesTresorerie20260831_(),out=[];
   (canon||[]).forEach(c=>{if(!actifTresorerie_(c.actif)||String(c.nature||'').toLowerCase()!=='structurelle')return;const cat=String(c.categorie||'').trim();if(!cat)return;const baseMont=Math.abs(Number(c.montant||0));
     const hist=(ops||[]).map(o=>({o,d:dateOpTresorerie_(o),m:Math.abs(Number(o.montant||0))})).filter(x=>x.d&&x.d<=now&&x.d>=new Date(now.getFullYear(),now.getMonth()-6,1)&&(String(x.o.type||'').toLowerCase()==='revenu'||Number(x.o.montant||0)>0)&&String(x.o.categorie||'').trim()===cat),histSignif=hist.filter(x=>x.m>=Math.max(20,baseMont*.35)),jours=(histSignif.length?histSignif:hist).map(x=>x.d.getDate()).sort((a,b)=>a-b),jour=Math.max(1,Math.min(28,jours.length?jours[Math.floor(jours.length/2)]:15));
     let d=new Date(now.getFullYear(),now.getMonth(),jour);if(d<=now)d=new Date(now.getFullYear(),now.getMonth()+1,jour);let guard=0;
