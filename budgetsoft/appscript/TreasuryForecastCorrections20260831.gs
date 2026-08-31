@@ -1,7 +1,8 @@
-const TREASURY_FORECAST_CORRECTIONS_20260831_VERSION='2026-08-31.7';
+const TREASURY_FORECAST_CORRECTIONS_20260831_VERSION='2026-08-31.8';
 
 /**
  * Consolidation du prévisionnel bancaire.
+ * Doctrine bancaire :
  * - les opérations futures réelles restent prioritaires ;
  * - les charges fixes distinctes ne sont jamais fusionnées entre elles ;
  * - les revenus structurels viennent du canon Cerbère, le réel ne sert qu'à dater ;
@@ -9,7 +10,9 @@ const TREASURY_FORECAST_CORRECTIONS_20260831_VERSION='2026-08-31.7';
  * - seuls les événements Effectif/Effective alimentent la trésorerie ;
  * - une suspension temporaire effective retire l'échéance, elle ne crée pas une recette fictive ;
  * - un événement effectif dû aujourd'hui reste prévisionnel tant qu'il n'est pas Réalisé/Rapproché ;
- * - le reste des enveloppes Cerbère est projeté comme dépense bancaire future, proratisée jusqu'à la cible.
+ * - les dépenses Cerbère ne sont PAS une sortie bancaire progressive du cycle courant ;
+ * - elles deviennent une estimation du prochain débit CB différé, au dernier jour du mois civil ;
+ * - les CB déjà connues pour cette date remplacent à due concurrence l'estimation Cerbère.
  */
 function chargerTresoreriePrevisionnelle20260831(dateCible){
   return avecContexteLectureBudgetSoft20260827_('tresorerie_previsionnelle_20260831',function(){
@@ -30,10 +33,10 @@ function chargerTresoreriePrevisionnelle20260831(dateCible){
     const revenusCanon=revenusCanoniquesTresorerie20260831_(ops,lignes,now,cible);
     lignes=dedoublonnerPrevisionsTresorerie20260831_(lignes.concat(revenusCanon));
 
-    // Toute ancienne estimation pilotable est retirée puis reconstruite depuis le
-    // Cerbère final réellement affiché (V3.7.23), pas depuis le socle V3.7 brut.
+    // Toute ancienne estimation pilotable du moteur 30/08 est retirée. Cerbère ne
+    // pèse sur la banque qu'au prochain débit CB différé, pas au fil du cycle.
     lignes=lignes.filter(x=>x.source!=='pilotable');
-    const pilotable=estimationPilotableTresorerie20260831_(now,cible);
+    const pilotable=estimationPilotableTresorerie20260831_(now,cible,ops);
     if(pilotable)lignes.push(pilotable);
 
     lignes.sort((a,b)=>new Date(a.date)-new Date(b.date)||rangCertitudeTresorerie_(a.certitude)-rangCertitudeTresorerie_(b.certitude));
@@ -49,7 +52,18 @@ function chargerTresoreriePrevisionnelle20260831(dateCible){
     r.resume=resumeTresorerie20260831_(lignes);
     r.confiance=confianceTresorerie_(now,cible,lignes);
     r.pilotable=pilotable||null;
-    r.diagnostic20260831={revenusCanoniquesAjoutes:revenusCanon.length,lignesFinales:lignes.length,evenementsEffectifs:(evenements||[]).filter(e=>statutEffectifTresorerie20260831_(e.statut)).length,suspensionsEffectives:(evenements||[]).filter(e=>statutEffectifTresorerie20260831_(e.statut)&&estSuspensionTemporaireTresorerie20260831_(e)).length,pilotableAjoute:!!pilotable,pilotableRestant:pilotable?pilotable.allocationRestante:0,pilotableFraction:pilotable?pilotable.fractionTemps:0};
+    r.diagnostic20260831={
+      doctrineCbDiffere:'Cerbère courant -> débit CB au dernier jour du mois civil, donc cycle bancaire suivant',
+      revenusCanoniquesAjoutes:revenusCanon.length,
+      lignesFinales:lignes.length,
+      evenementsEffectifs:(evenements||[]).filter(e=>statutEffectifTresorerie20260831_(e.statut)).length,
+      suspensionsEffectives:(evenements||[]).filter(e=>statutEffectifTresorerie20260831_(e.statut)&&estSuspensionTemporaireTresorerie20260831_(e)).length,
+      debitCbCerbereAjoute:!!pilotable,
+      debitCbCerbereTotal:pilotable?pilotable.totalCerbere:0,
+      debitCbDejaConnu:pilotable?pilotable.dejaConnuCb:0,
+      debitCbCerbereResiduel:pilotable?Math.abs(Number(pilotable.montantSigne||0)):0,
+      dateDebitCb:pilotable?pilotable.date:null
+    };
     return r;
   });
 }
@@ -94,9 +108,6 @@ function estSuspensionTemporaireTresorerie20260831_(e){
   if(!e)return false;
   const t=String(e.type||'').trim().toLowerCase();
   if(t==='charge_supprimee_temporairement')return true;
-  // Compatibilité avec les lignes historiques déjà éditées avant la correction UI :
-  // elles ont pu être réenregistrées comme « depense » alors que leur provenance et
-  // leur libellé montrent sans ambiguïté une suspension d'échéance.
   const legacy=String(e.source_legacy||'').trim().toLowerCase();
   const lib=normaliserLibelleTresorerie20260831_(e.libelle||'');
   return legacy==='ajustements_charges_fixes'&&/(suspension|suspend|report|reporte|suppression|supprime)/.test(lib);
@@ -129,37 +140,68 @@ function revenusCanoniquesTresorerie20260831_(ops,lignesExistantes,now,cible){
   });return out;
 }
 
+function dernierJourMoisTresorerie20260831_(d){return finJourTresorerie_(new Date(d.getFullYear(),d.getMonth()+1,0));}
+function memeJourTresorerie20260831_(a,b){return a&&b&&!isNaN(a)&&!isNaN(b)&&a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();}
+
 /**
- * Dépense pilotable future : utilise le REt1 du Cerbère final réellement affiché,
- * c.-à-d. P1 moins le pilotable déjà consommé ou réservé selon la doctrine et les
- * dates d'imputation Cerbère. Les molettes modifient donc directement la projection.
+ * Cerbère est une autorisation/estimation d'engagement économique, pas une sortie
+ * bancaire immédiate. Avec la CB à débit différé, le cycle courant n'affecte le
+ * compte qu'au dernier jour du mois civil qui contient la fin du cycle.
+ *
+ * Exemple : cycle 28/08 -> 27/09 => débit estimé le 30/09. Les molettes du cycle
+ * ne changent donc PAS les soldes prévus au 03/09, 17/09 ou 27/09.
+ *
+ * Si des achats CB du cycle sont déjà importés avec date_comptable = date de débit,
+ * ils sont certains et remplacent la même part de l'estimation Cerbère : on ajoute
+ * seulement le reliquat nécessaire pour atteindre la dépense pilotable projetée.
  */
-function estimationPilotableTresorerie20260831_(now,cible){
+function estimationPilotableTresorerie20260831_(now,cible,ops){
   try{
     const chargeur=typeof chargerCerbereV374==='function'?chargerCerbereV374:(typeof chargerCerbereV37==='function'?chargerCerbereV37:null);
     if(!chargeur)return null;
     const c=chargeur(),p=c&&Array.isArray(c.periodes)?c.periodes[0]:null;if(!p)return null;
+    const periode=p.periode||p,finCycle=periode&&periode.fin?new Date(periode.fin):null;if(!finCycle||isNaN(finCycle))return null;
+    const dateDebit=dernierJourMoisTresorerie20260831_(finCycle);
+    if(dateDebit<=now||dateDebit>cible)return null;
+
     const env=Array.isArray(p.enveloppes)?p.enveloppes:[];
-    let restant=0;
-    if(env.length){
-      env.forEach(x=>{
-        const allocation=Math.max(0,Number(x&&x.prevu||0));
-        const reel=Math.max(0,Number(x&&x.reelNetPrevisionnel!=null?x.reelNetPrevisionnel:(x&&x.reelImpute||0)));
-        const plan=Math.max(0,Number(x&&x.planifie||0));
-        const r=x&&x.resteV37!=null?Number(x.resteV37):allocation-reel-plan;
-        restant+=Math.max(0,Number(r)||0);
-      });
-    }else{
-      const candidats=[p.v37&&p.v37.ret1,p.resteBudgetPilotable,p.resteBudgetAlloue,p.v37&&p.v37.disponibleEnveloppes];
-      const trouve=candidats.find(v=>Number.isFinite(Number(v)));
-      restant=Math.max(0,Number(trouve||0));
+    const catsPilotables=new Set(env.map(x=>String(x&&x.categorie||'').trim()).filter(Boolean));
+    let totalCerbere=0;
+    env.forEach(x=>{
+      const allocation=Math.max(0,Number(x&&x.prevu||0));
+      const engage=Math.max(0,Number(x&&x.engageV37!=null?x.engageV37:((x&&x.reelNetPrevisionnel||0)+(x&&x.planifie||0))));
+      const projete=x&&x.dpt1!=null?Math.max(0,Number(x.dpt1)):Math.max(allocation,engage);
+      totalCerbere+=projete;
+    });
+    if(!env.length){
+      const v=p.v37||{};
+      totalCerbere=Math.max(0,Number(v.dpt1||p.budgetReparti||0));
     }
-    restant=arrondiTresorerie_(restant);if(restant<=0)return null;
-    const periode=p.periode||p,finBrute=periode&&periode.fin?new Date(periode.fin):null;if(!finBrute||isNaN(finBrute))return null;
-    const fin=finJourTresorerie_(finBrute);
-    const joursRest=Math.max(1,(fin-now)/86400000),joursCible=Math.max(0,Math.min(joursRest,(cible-now)/86400000)),fraction=Math.max(0,Math.min(1,joursCible/joursRest));
-    const montant=-arrondiTresorerie_(restant*fraction);if(Math.abs(montant)<.009)return null;
-    return {id:'pilotable',source:'pilotable',sourceId:'cerbere',date:new Date(Math.min(cible.getTime(),fin.getTime())).toISOString(),libelle:'Dépenses pilotables estimées',categorie:'Pilotable',compte:'',montantSigne:montant,certitude:'estime',preuve:'REt1 Cerbère final restant, proratisé dans le temps',dateConventionnelle:false,allocationRestante:restant,fractionTemps:Math.round(fraction*10000)/10000,joker:!!(p.v37&&p.v37.joker&&p.v37.joker.actif),moteurCerbere:String(c.version||'')};
+    totalCerbere=arrondiTresorerie_(totalCerbere);if(totalCerbere<=0)return null;
+
+    let dejaConnuCb=0;
+    (ops||[]).forEach(o=>{
+      const d=dateOpTresorerie_(o),m=Number(o&&o.montant||0),cat=String(o&&o.categorie||'').trim();
+      if(!d||!memeJourTresorerie20260831_(d,dateDebit)||m>=0)return;
+      if(!String(o&&o.carte_fin||'').trim())return;
+      if(catsPilotables.size&&!catsPilotables.has(cat))return;
+      if(String(o&&o.charge_fixe_id||'').trim())return;
+      dejaConnuCb+=Math.abs(m);
+    });
+    dejaConnuCb=arrondiTresorerie_(dejaConnuCb);
+
+    const residuel=arrondiTresorerie_(Math.max(0,totalCerbere-dejaConnuCb));
+    if(residuel<=0)return null;
+    return {
+      id:'pilotable:debit-cb:'+Utilities.formatDate(dateDebit,Session.getScriptTimeZone(),'yyyyMMdd'),
+      source:'pilotable',sourceId:'cerbere',date:dateDebit.toISOString(),
+      libelle:'Débit CB différé estimé (Cerbère)',categorie:'Pilotable',compte:'',
+      montantSigne:-residuel,certitude:'estime',
+      preuve:'Projection Cerbère du cycle, débit bancaire différé en fin de mois · CB déjà connues déduites',
+      dateConventionnelle:false,totalCerbere:totalCerbere,dejaConnuCb:dejaConnuCb,
+      allocationRestante:residuel,fractionTemps:1,
+      joker:!!(p.v37&&p.v37.joker&&p.v37.joker.actif),moteurCerbere:String(c.version||'')
+    };
   }catch(e){return null;}
 }
 
