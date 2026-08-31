@@ -1,9 +1,11 @@
-const TREASURY_FORECAST_CORRECTIONS_20260831_VERSION='2026-08-31.1';
+const TREASURY_FORECAST_CORRECTIONS_20260831_VERSION='2026-08-31.2';
 
 /**
  * Couche de consolidation du prévisionnel bancaire.
  * - dédoublonne les prévisions entre Opérations / Plan / Charges fixes ;
  * - ajoute les revenus mensuels réellement récurrents détectés dans l'historique ;
+ * - une cible mensuelle d'action est un montant PAR MOIS, jamais un total à répartir ;
+ * - seuls les événements au statut Effectif/Effective alimentent la trésorerie ;
  * - ne crée jamais d'opération réelle.
  */
 function chargerTresoreriePrevisionnelle20260831(dateCible){
@@ -12,7 +14,19 @@ function chargerTresoreriePrevisionnelle20260831(dateCible){
     if(!r||!r.ok)return r;
     const now=new Date(r.dateReference||new Date());
     const cible=new Date(r.dateCible||new Date());
-    let lignes=dedoublonnerPrevisionsTresorerie20260831_(r.lignes||[]);
+
+    const evenements=lireFeuilleDynamiquePlan_('Plan_Evenements');
+    const actions=lireFeuilleDynamiquePlan_('Plan_Actions');
+
+    // Doctrine : un événement n'entre dans la trésorerie que lorsqu'il est réellement
+    // retenu/validé comme effectif. Prévu, probable, rapproché, etc. ne suffisent pas.
+    let lignes=(r.lignes||[]).filter(x=>x.source!=='evenement'||evenementEffectifTresorerie20260831_(x.sourceId,evenements));
+
+    // Corrige l'ancienne interprétation qui divisait une cible mensuelle par le nombre
+    // d'occurrences. Ex. participation employeur 15 €/mois => +15 € chaque mois, pas 1,25 €.
+    lignes=normaliserMontantsActionsTresorerie20260831_(lignes,actions);
+    lignes=dedoublonnerPrevisionsTresorerie20260831_(lignes);
+
     const ops=lireTable_('Operations');
     const revenus=revenusRecurrentsTresorerie20260831_(ops,lignes,now,cible);
     lignes=dedoublonnerPrevisionsTresorerie20260831_(lignes.concat(revenus));
@@ -32,7 +46,11 @@ function chargerTresoreriePrevisionnelle20260831(dateCible){
     };
     r.resume=resumeTresorerie20260831_(lignes);
     r.confiance=confianceTresorerie_(now,cible,lignes);
-    r.diagnostic20260831={revenusRecurrentsAjoutes:revenus.length,lignesFinales:lignes.length};
+    r.diagnostic20260831={
+      revenusRecurrentsAjoutes:revenus.length,
+      lignesFinales:lignes.length,
+      evenementsEffectifs:(evenements||[]).filter(e=>statutEffectifTresorerie20260831_(e.statut)).length
+    };
     return r;
   });
 }
@@ -40,6 +58,29 @@ function chargerTresoreriePrevisionnelle20260831(dateCible){
 function listerMouvementsFutursTresorerie20260831(dateCible){
   const r=chargerTresoreriePrevisionnelle20260831(dateCible||dateDansJoursTresorerie_(45));
   return {ok:r.ok,version:r.version,dateCible:r.dateCible,lignes:r.lignes||[],confiance:r.confiance,diagnostic20260831:r.diagnostic20260831||{}};
+}
+
+function statutEffectifTresorerie20260831_(statut){
+  const s=String(statut||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  return ['effectif','effective','effectifs','effectives'].includes(s);
+}
+function evenementEffectifTresorerie20260831_(id,evenements){
+  const e=(evenements||[]).find(x=>String(x.id||'')===String(id||''));
+  return !!e&&statutEffectifTresorerie20260831_(e.statut);
+}
+
+function normaliserMontantsActionsTresorerie20260831_(lignes,actions){
+  const index=Object.fromEntries((actions||[]).map(a=>[String(a.id||''),a]));
+  return (lignes||[]).map(x=>{
+    if(x.source!=='action')return x;
+    const a=index[String(x.sourceId||'')];if(!a)return x;
+    const f=String(a.fonction_plan||'').toUpperCase();
+    if(!['RECEVOIR','REMBOURSER','TRANSFERER'].includes(f))return x;
+    const cible=Math.abs(Number(a.cible_valeur||a.impact_montant||0));
+    if(!Number.isFinite(cible)||cible<=0)return x;
+    const signe=f==='RECEVOIR'?1:-1;
+    return Object.assign({},x,{montantSigne:arrondiTresorerie_(signe*cible),preuve:String(x.preuve||'Action financière du Plan')+' · cible '+String(a.impact_frequence||'ponctuel')+' appliquée par occurrence'});
+  });
 }
 
 function prioriteSourceTresorerie20260831_(s){
