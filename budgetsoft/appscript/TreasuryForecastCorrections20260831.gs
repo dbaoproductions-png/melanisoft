@@ -1,4 +1,4 @@
-const TREASURY_FORECAST_CORRECTIONS_20260831_VERSION='2026-08-31.3';
+const TREASURY_FORECAST_CORRECTIONS_20260831_VERSION='2026-08-31.4';
 
 /**
  * Consolidation du prévisionnel bancaire.
@@ -7,7 +7,8 @@ const TREASURY_FORECAST_CORRECTIONS_20260831_VERSION='2026-08-31.3';
  * - les revenus structurels viennent du canon Cerbère, le réel ne sert qu'à dater ;
  * - une cible mensuelle d'action est appliquée par occurrence ;
  * - seuls les événements Effectif/Effective alimentent la trésorerie ;
- * - une suspension temporaire effective retire l'échéance, elle ne crée pas une recette fictive.
+ * - une suspension temporaire effective retire l'échéance, elle ne crée pas une recette fictive ;
+ * - un événement effectif dû aujourd'hui reste prévisionnel tant qu'il n'est pas Réalisé/Rapproché.
  */
 function chargerTresoreriePrevisionnelle20260831(dateCible){
   return avecContexteLectureBudgetSoft20260827_('tresorerie_previsionnelle_20260831',function(){
@@ -20,12 +21,11 @@ function chargerTresoreriePrevisionnelle20260831(dateCible){
     const ops=lireTable_('Operations');
 
     let lignes=(r.lignes||[]).filter(x=>x.source!=='evenement'||evenementEffectifTresorerie20260831_(x.sourceId,evenements));
+    lignes=completerEvenementsEffectifsTresorerie20260831_(lignes,evenements,now,cible);
     lignes=normaliserMontantsActionsTresorerie20260831_(lignes,actions);
     lignes=appliquerSuppressionsTemporairesTresorerie20260831_(lignes,evenements);
     lignes=dedoublonnerPrevisionsTresorerie20260831_(lignes);
 
-    // Source de vérité des revenus attendus : canon Cerbère. L'historique sert uniquement
-    // à déterminer le jour bancaire habituel. Les revenus variables restent hors prévision.
     const revenusCanon=revenusCanoniquesTresorerie20260831_(ops,lignes,now,cible);
     lignes=dedoublonnerPrevisionsTresorerie20260831_(lignes.concat(revenusCanon));
     lignes.sort((a,b)=>new Date(a.date)-new Date(b.date)||rangCertitudeTresorerie_(a.certitude)-rangCertitudeTresorerie_(b.certitude));
@@ -48,6 +48,24 @@ function chargerTresoreriePrevisionnelle20260831(dateCible){
 function listerMouvementsFutursTresorerie20260831(dateCible){const r=chargerTresoreriePrevisionnelle20260831(dateCible||dateDansJoursTresorerie_(45));return {ok:r.ok,version:r.version,dateCible:r.dateCible,lignes:r.lignes||[],confiance:r.confiance,diagnostic20260831:r.diagnostic20260831||{}};}
 function statutEffectifTresorerie20260831_(statut){const s=String(statut||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');return ['effectif','effective','effectifs','effectives'].includes(s);}
 function evenementEffectifTresorerie20260831_(id,evenements){const e=(evenements||[]).find(x=>String(x.id||'')===String(id||''));return !!e&&statutEffectifTresorerie20260831_(e.statut);}
+function debutJourTresorerie20260831_(d){return new Date(d.getFullYear(),d.getMonth(),d.getDate(),0,0,0,0);}
+
+function completerEvenementsEffectifsTresorerie20260831_(lignes,evenements,now,cible){
+  const out=(lignes||[]).slice(),debut=debutJourTresorerie20260831_(now);
+  (evenements||[]).forEach(e=>{
+    if(!statutEffectifTresorerie20260831_(e.statut)||estSuspensionTemporaireTresorerie20260831_(e))return;
+    const dr=datePlanTresorerie_(e,now,false),base=dr.date;if(!base||isNaN(base))return;
+    const n=(e.fractionne===true||String(e.fractionne)==='true')?Math.max(1,Number(e.nombre_fois||1)):1,per=String(e.periodicite_fractionnement||'mensuel').toLowerCase(),total=Math.abs(Number(e.montant||0));
+    for(let i=0;i<n;i++){
+      const d=new Date(base);if(i){if(per==='annuel')d.setFullYear(d.getFullYear()+i);else d.setMonth(d.getMonth()+i);}
+      if(d<debut||d>cible)continue;
+      if(out.some(x=>x.source==='evenement'&&String(x.sourceId||'')===String(e.id||'')&&Math.abs(new Date(x.date)-d)<43200000))continue;
+      const type=String(e.type||'depense').toLowerCase();if(!['depense','recette'].includes(type))continue;
+      const m=(type==='recette'?1:-1)*(total/n);
+      out.push({id:'event:'+String(e.id||'')+':'+i,source:'evenement',sourceId:e.id||'',date:d.toISOString(),libelle:e.libelle||'Événement',categorie:e.categorie||'',compte:e.compte||'',montantSigne:arrondiTresorerie_(m),certitude:'tres_probable',preuve:preuveDatePlanTresorerie_('Événement effectif du Plan',dr),dateConventionnelle:!!dr.conventionnelle});
+    }
+  });return out;
+}
 
 function normaliserMontantsActionsTresorerie20260831_(lignes,actions){
   const index=Object.fromEntries((actions||[]).map(a=>[String(a.id||''),a]));
@@ -56,13 +74,10 @@ function normaliserMontantsActionsTresorerie20260831_(lignes,actions){
 function prioriteSourceTresorerie20260831_(s){return {operation_future:0,evenement:1,action:2,revenu_recurrent:3,charge_fixe:5,pilotable:8}[String(s||'')]??9;}
 function normaliserLibelleTresorerie20260831_(s){try{return normaliserRechercheAction_(String(s||'')).replace(/\b\d+\b/g,' ').replace(/\s+/g,' ').trim();}catch(e){return String(s||'').toLowerCase().replace(/[^a-zà-ÿ]+/g,' ').replace(/\b\d+\b/g,' ').replace(/\s+/g,' ').trim();}}
 function ressemblentTresorerie20260831_(a,b){
-  if(!a||!b)return false;
-  if(a.source===b.source&&a.sourceId&&b.sourceId&&String(a.sourceId)!==String(b.sourceId))return false;
+  if(!a||!b)return false;if(a.source===b.source&&a.sourceId&&b.sourceId&&String(a.sourceId)!==String(b.sourceId))return false;
   const ma=Number(a.montantSigne||0),mb=Number(b.montantSigne||0);if(ma*mb<0)return false;if(Math.abs(ma-mb)>Math.max(1,Math.max(Math.abs(ma),Math.abs(mb))*.08))return false;
-  const da=new Date(a.date),db=new Date(b.date);if(isNaN(da)||isNaN(db)||Math.abs(da-db)>5*86400000)return false;
-  if(a.sourceId&&b.sourceId&&String(a.sourceId)===String(b.sourceId)&&a.source===b.source)return true;
-  const ca=String(a.categorie||'').trim(),cb=String(b.categorie||'').trim(),la=normaliserLibelleTresorerie20260831_(a.libelle),lb=normaliserLibelleTresorerie20260831_(b.libelle),motsA=la.split(' ').filter(x=>x.length>=4),motsB=lb.split(' ').filter(x=>x.length>=4);
-  return motsA.some(x=>motsB.includes(x))||(ca&&cb&&ca===cb&&Math.abs(ma-mb)<.01);
+  const da=new Date(a.date),db=new Date(b.date);if(isNaN(da)||isNaN(db)||Math.abs(da-db)>5*86400000)return false;if(a.sourceId&&b.sourceId&&String(a.sourceId)===String(b.sourceId)&&a.source===b.source)return true;
+  const ca=String(a.categorie||'').trim(),cb=String(b.categorie||'').trim(),la=normaliserLibelleTresorerie20260831_(a.libelle),lb=normaliserLibelleTresorerie20260831_(b.libelle),motsA=la.split(' ').filter(x=>x.length>=4),motsB=lb.split(' ').filter(x=>x.length>=4);return motsA.some(x=>motsB.includes(x))||(ca&&cb&&ca===cb&&Math.abs(ma-mb)<.01);
 }
 function dedoublonnerPrevisionsTresorerie20260831_(lignes){const trie=(lignes||[]).slice().sort((a,b)=>prioriteSourceTresorerie20260831_(a.source)-prioriteSourceTresorerie20260831_(b.source)),gardees=[];trie.forEach(x=>{if(x.source==='pilotable'){gardees.push(x);return;}if(gardees.some(y=>y.source!=='pilotable'&&ressemblentTresorerie20260831_(x,y)))return;gardees.push(x);});return gardees;}
 
