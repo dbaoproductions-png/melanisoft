@@ -2,7 +2,7 @@
 (function(){
 'use strict';
 const M=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));
-let dernierStatutEvenement=null;
+let dernierStatutEvenement=null,dernierTypeEvenement=null;
 
 function resultatObjectifDepuisDom_(goal){
   let mensuel=0,annuel=0,actions=0;
@@ -28,9 +28,6 @@ function decorerObjectifs_(){
 function rendreFormulairesPraticables_(){document.querySelectorAll('.p54-modal .modal-card').forEach(card=>{const head=card.querySelector('.modal-heading'),foot=card.querySelector('.form-actions');if(head)head.classList.add('p55-sticky-head');if(foot)foot.classList.add('p55-sticky-foot');});}
 function lendemainIso_(iso){const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return iso;const d=new Date(Date.UTC(Number(m[1]),Number(m[2])-1,Number(m[3])+1));return d.toISOString().slice(0,10);}
 
-/* Les dates provenant de cellules Sheets sont sérialisées en UTC. Minuit Europe/Paris
- * devient 22:00Z la veille ; le vieux slice(0,10) de V5.4 affichait donc J-1.
- * Corriger au niveau de l'UI préserve la date civile sans toucher aux données source. */
 function corrigerDatesPlan_(){
   document.querySelectorAll('#generic-view .p54-eventgrid article button small').forEach(el=>{
     if(el.dataset.p55DateCorrigee)return;const txt=String(el.textContent||''),m=txt.match(/^(.*?·\s*)(\d{4}-\d{2}-\d{2})(.*)$/);if(m)el.textContent=m[1]+lendemainIso_(m[2])+m[3];el.dataset.p55DateCorrigee='1';
@@ -45,9 +42,24 @@ function corrigerStatutEvenement_(){
     sel.innerHTML=valeurs.map(v=>`<option value="${v}">${v}</option>`).join('');sel.value=valeurs.includes(courant)?courant:'Prévu';sel.dataset.p55StatutCorrige='1';dernierStatutEvenement=null;
   });
 }
-document.addEventListener('click',e=>{const b=e.target.closest?.('[data-edit-event]');if(!b)return;const article=b.closest('.p54-eventgrid article'),t=String(article?.querySelector('button>span')?.textContent||''),m=t.match(/·\s*([^·]+)\s*$/);dernierStatutEvenement=m?m[1].trim():null;},true);
+function corrigerNatureEvenement_(){
+  document.querySelectorAll('.p54-modal #ev-t').forEach(sel=>{
+    if(sel.dataset.p55NatureCorrigee)return;
+    const courant=dernierTypeEvenement||sel.value||'depense';
+    const valeurs=[['depense','Dépense'],['recette','Recette'],['charge_supprimee_temporairement','Suspension temporaire de charge']];
+    sel.innerHTML=valeurs.map(v=>`<option value="${v[0]}">${v[1]}</option>`).join('');
+    sel.value=valeurs.some(v=>v[0]===courant)?courant:'depense';
+    sel.dataset.p55NatureCorrigee='1';dernierTypeEvenement=null;
+  });
+}
+document.addEventListener('click',e=>{
+  const b=e.target.closest?.('[data-edit-event]');if(!b)return;
+  const article=b.closest('.p54-eventgrid article');
+  const statutTxt=String(article?.querySelector('button>span')?.textContent||''),sm=statutTxt.match(/·\s*([^·]+)\s*$/);dernierStatutEvenement=sm?sm[1].trim():null;
+  const dateTxt=String(article?.querySelector('button>small')?.textContent||''),tm=dateTxt.match(/^\s*([^·]+?)\s*·/);dernierTypeEvenement=tm?tm[1].trim():null;
+},true);
 
-let timer=null;function appliquer_(){clearTimeout(timer);timer=setTimeout(()=>{decorerObjectifs_();rendreFormulairesPraticables_();corrigerDatesPlan_();corrigerStatutEvenement_();},20);}
+let timer=null;function appliquer_(){clearTimeout(timer);timer=setTimeout(()=>{decorerObjectifs_();rendreFormulairesPraticables_();corrigerDatesPlan_();corrigerStatutEvenement_();corrigerNatureEvenement_();},20);}
 function installerObservateursPlan_(){const gv=document.getElementById('generic-view');if(gv)new MutationObserver(appliquer_).observe(gv,{childList:true,subtree:true});if(document.body)new MutationObserver(muts=>{if(muts.some(m=>[...m.addedNodes].some(n=>n&&n.nodeType===1&&((n.matches&&n.matches('.p54-modal'))||(n.querySelector&&n.querySelector('.p54-modal'))))))appliquer_();}).observe(document.body,{childList:true,subtree:false});}
 installerObservateursPlan_();setTimeout(appliquer_,30);
 
