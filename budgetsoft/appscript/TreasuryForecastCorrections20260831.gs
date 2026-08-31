@@ -1,4 +1,4 @@
-const TREASURY_FORECAST_CORRECTIONS_20260831_VERSION='2026-08-31.5';
+const TREASURY_FORECAST_CORRECTIONS_20260831_VERSION='2026-08-31.6';
 
 /**
  * Consolidation du prévisionnel bancaire.
@@ -8,7 +8,8 @@ const TREASURY_FORECAST_CORRECTIONS_20260831_VERSION='2026-08-31.5';
  * - une cible mensuelle d'action est appliquée par occurrence ;
  * - seuls les événements Effectif/Effective alimentent la trésorerie ;
  * - une suspension temporaire effective retire l'échéance, elle ne crée pas une recette fictive ;
- * - un événement effectif dû aujourd'hui reste prévisionnel tant qu'il n'est pas Réalisé/Rapproché.
+ * - un événement effectif dû aujourd'hui reste prévisionnel tant qu'il n'est pas Réalisé/Rapproché ;
+ * - le reste des enveloppes Cerbère est projeté comme dépense bancaire future, proratisée jusqu'à la cible.
  */
 function chargerTresoreriePrevisionnelle20260831(dateCible){
   return avecContexteLectureBudgetSoft20260827_('tresorerie_previsionnelle_20260831',function(){
@@ -28,6 +29,14 @@ function chargerTresoreriePrevisionnelle20260831(dateCible){
 
     const revenusCanon=revenusCanoniquesTresorerie20260831_(ops,lignes,now,cible);
     lignes=dedoublonnerPrevisionsTresorerie20260831_(lignes.concat(revenusCanon));
+
+    // Le moteur 30/08 essayait déjà d'ajouter le pilotable mais pouvait l'omettre
+    // silencieusement. On retire toute ancienne ligne puis on la reconstruit depuis
+    // le Cerbère courant, source de vérité des molettes P1 / REt1.
+    lignes=lignes.filter(x=>x.source!=='pilotable');
+    const pilotable=estimationPilotableTresorerie20260831_(now,cible);
+    if(pilotable)lignes.push(pilotable);
+
     lignes.sort((a,b)=>new Date(a.date)-new Date(b.date)||rangCertitudeTresorerie_(a.certitude)-rangCertitudeTresorerie_(b.certitude));
 
     const variation=arrondiTresorerie_(lignes.reduce((s,x)=>s+Number(x.montantSigne||0),0));
@@ -40,7 +49,8 @@ function chargerTresoreriePrevisionnelle20260831(dateCible){
     r.fourchette={certain:arrondiTresorerie_(Number(r.soldeReel||0)+certain),tresProbable:arrondiTresorerie_(Number(r.soldeReel||0)+tresProbable),toutesHypotheses:r.soldePrevisionnel};
     r.resume=resumeTresorerie20260831_(lignes);
     r.confiance=confianceTresorerie_(now,cible,lignes);
-    r.diagnostic20260831={revenusCanoniquesAjoutes:revenusCanon.length,lignesFinales:lignes.length,evenementsEffectifs:(evenements||[]).filter(e=>statutEffectifTresorerie20260831_(e.statut)).length,suspensionsEffectives:(evenements||[]).filter(e=>statutEffectifTresorerie20260831_(e.statut)&&estSuspensionTemporaireTresorerie20260831_(e)).length};
+    r.pilotable=pilotable||null;
+    r.diagnostic20260831={revenusCanoniquesAjoutes:revenusCanon.length,lignesFinales:lignes.length,evenementsEffectifs:(evenements||[]).filter(e=>statutEffectifTresorerie20260831_(e.statut)).length,suspensionsEffectives:(evenements||[]).filter(e=>statutEffectifTresorerie20260831_(e.statut)&&estSuspensionTemporaireTresorerie20260831_(e)).length,pilotableAjoute:!!pilotable,pilotableRestant:pilotable?pilotable.allocationRestante:0,pilotableFraction:pilotable?pilotable.fractionTemps:0};
     return r;
   });
 }
@@ -109,4 +119,38 @@ function revenusCanoniquesTresorerie20260831_(ops,lignesExistantes,now,cible){
     while(d<=cible&&guard++<6){let montant=baseMont;const de=c.date_effet?new Date(c.date_effet):null;if(de&&!isNaN(de)&&d<de&&Number(c.montant_precedent)>0)montant=Math.abs(Number(c.montant_precedent));if(montant>0){const cand={id:'revcanon:'+cat+':'+d.getTime(),source:'revenu_recurrent',sourceId:'canon:'+cat,date:d.toISOString(),libelle:cat,categorie:cat,compte:histSignif.length?histSignif[histSignif.length-1].o.compte||'':'',montantSigne:arrondiTresorerie_(montant),certitude:histSignif.length>=3?'tres_probable':'prevu',preuve:'Revenu structurel du canon Cerbère · date habituelle estimée',dateConventionnelle:true};if(!(lignesExistantes||[]).some(x=>ressemblentTresorerie20260831_(cand,x)))out.push(cand);}d=new Date(d.getFullYear(),d.getMonth()+1,jour);}
   });return out;
 }
+
+/**
+ * Dépense pilotable future : utilise le REt1 des enveloppes courantes, c.-à-d.
+ * P1 moins le pilotable déjà consommé ou réservé. Les molettes modifient donc
+ * directement cette projection. Le montant est proratisé jusqu'à la date cible.
+ */
+function estimationPilotableTresorerie20260831_(now,cible){
+  try{
+    if(typeof chargerCerbereV37!=='function')return null;
+    const c=chargerCerbereV37(),p=c&&Array.isArray(c.periodes)?c.periodes[0]:null;if(!p)return null;
+    const env=Array.isArray(p.enveloppes)?p.enveloppes:[];
+    let restant=0;
+    if(env.length){
+      env.forEach(x=>{
+        const allocation=Math.max(0,Number(x&&x.prevu||0));
+        const reel=Math.max(0,Number(x&&x.reelNetPrevisionnel!=null?x.reelNetPrevisionnel:(x&&x.reelImpute||0)));
+        const plan=Math.max(0,Number(x&&x.planifie||0));
+        const r=x&&x.resteV37!=null?Number(x.resteV37):allocation-reel-plan;
+        restant+=Math.max(0,Number(r)||0);
+      });
+    }else{
+      const candidats=[p.resteBudgetPilotable,p.resteBudgetAlloue,p.v37&&p.v37.disponibleEnveloppes];
+      const trouve=candidats.find(v=>Number.isFinite(Number(v)));
+      restant=Math.max(0,Number(trouve||0));
+    }
+    restant=arrondiTresorerie_(restant);if(restant<=0)return null;
+    const periode=p.periode||p,finBrute=periode&&periode.fin?new Date(periode.fin):null;if(!finBrute||isNaN(finBrute))return null;
+    const fin=finJourTresorerie_(finBrute);
+    const joursRest=Math.max(1,(fin-now)/86400000),joursCible=Math.max(0,Math.min(joursRest,(cible-now)/86400000)),fraction=Math.max(0,Math.min(1,joursCible/joursRest));
+    const montant=-arrondiTresorerie_(restant*fraction);if(Math.abs(montant)<.009)return null;
+    return {id:'pilotable',source:'pilotable',sourceId:'cerbere',date:new Date(Math.min(cible.getTime(),fin.getTime())).toISOString(),libelle:'Dépenses pilotables estimées',categorie:'Pilotable',compte:'',montantSigne:montant,certitude:'estime',preuve:'REt1 Cerbère restant, proratisé dans le temps',dateConventionnelle:false,allocationRestante:restant,fractionTemps:Math.round(fraction*10000)/10000,joker:!!(p.v37&&p.v37.joker&&p.v37.joker.actif)};
+  }catch(e){return null;}
+}
+
 function resumeTresorerie20260831_(lignes){const r={operations_futures:0,charges_fixes:0,evenements:0,actions:0,revenus_recurrents:0,pilotable:0,recettes:0,depenses:0};(lignes||[]).forEach(x=>{const m=Number(x.montantSigne||0);if(m>=0)r.recettes+=m;else r.depenses+=Math.abs(m);if(x.source==='operation_future')r.operations_futures+=m;else if(x.source==='charge_fixe')r.charges_fixes+=m;else if(x.source==='evenement')r.evenements+=m;else if(x.source==='action')r.actions+=m;else if(x.source==='revenu_recurrent')r.revenus_recurrents+=m;else if(x.source==='pilotable')r.pilotable+=m;});Object.keys(r).forEach(k=>r[k]=arrondiTresorerie_(r[k]));return r;}
