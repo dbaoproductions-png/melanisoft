@@ -21,7 +21,7 @@
 (function(){'use strict';
 const money=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let comptesReq=0,opsReq=0,cerbereReq=0,cerbereBase=null,cerbereTimer=null;
+let comptesReq=0,opsReq=0,cerbereReq=0,cerbereBase=null;
 const q=id=>document.getElementById(id);
 function isoLocal(d){const x=new Date(d.getTime()-d.getTimezoneOffset()*60000);return x.toISOString().slice(0,10)}
 function plusJ(n){const d=new Date();d.setDate(d.getDate()+n);return isoLocal(d)}
@@ -36,7 +36,7 @@ function installerCarteComptes(){
 }
 function chargerPrevisionComptes(){
  installerCarteComptes();const input=q('tf-account-date');if(!input)return;const id=++comptesReq;q('tf-account-value').textContent='Calcul…';
- google.script.run.withSuccessHandler(r=>{if(id!==comptesReq||!r||!r.ok)return;q('tf-account-value').textContent=money(r.soldePrevisionnel);q('tf-account-value').classList.toggle('amount-negative',Number(r.soldePrevisionnel)<0);q('tf-account-detail').textContent=`Réel ${money(r.soldeReel)} · variation ${Number(r.variationPrevue)>=0?'+':''}${money(r.variationPrevue)}`;q('tf-account-confidence').textContent=`Référence réelle ${dateFr(r.dateReference)} · fiabilité ${r.confiance?.libelle||'—'} · cible ${dateFr(r.dateCible)}`;}).withFailureHandler(()=>{if(id===comptesReq)q('tf-account-value').textContent='Indisponible';}).chargerTresoreriePrevisionnelle20260901(input.value);
+ google.script.run.withSuccessHandler(r=>{if(id!==comptesReq||!r||!r.ok)return;q('tf-account-value').textContent=money(r.soldePrevisionnel);q('tf-account-value').classList.toggle('amount-negative',Number(r.soldePrevisionnel)<0);q('tf-account-detail').textContent=`Réel ${money(r.soldeReel)} · variation ${Number(r.variationPrevue)>=0?'+':''}${money(r.variationPrevue)}`;q('tf-account-confidence').textContent=`Référence réelle ${dateFr(r.dateReference)} · fiabilité ${r.confiance?.libelle||'—'} · cible ${dateFr(r.dateCible)}`;}).withFailureHandler(()=>{if(id===comptesReq)q('tf-account-value').textContent='Indisponible';}).chargerTresoreriePrevisionnelleRapide20260901(input.value);
 }
 
 function installerOperations(){
@@ -45,7 +45,7 @@ function installerOperations(){
 }
 function chargerFuturesOperations(){
  installerOperations();const panel=q('operations-future-panel'),date=q('tf-ops-date');if(!panel||!date)return;panel.classList.remove('hidden');const z=q('tf-ops-list'),id=++opsReq;z.innerHTML='<div class="empty-state">Calcul des mouvements futurs…</div>';
- google.script.run.withSuccessHandler(r=>{if(id!==opsReq)return;const xs=(r&&r.lignes||[]).filter(x=>x.source!=='pilotable');if(!xs.length){z.innerHTML='<div class="empty-state">Aucun mouvement futur identifié.</div>';return;}z.innerHTML=xs.map(x=>`<div class="tf-future-row"><span>${dateFr(x.date)}${x.dateConventionnelle?' *':''}</span><div class="tf-lib"><b>${esc(x.libelle)}</b><small>${esc(x.categorie||'Sans catégorie')}${x.dateConventionnelle?' · date estimée':''}</small></div><span class="tf-source">${esc(sourceLabel(x.source))}</span><div><span class="tf-badge ${esc(x.certitude)}">${esc(certLabel(x.certitude))}</span><div class="tf-amount ${Number(x.montantSigne)<0?'neg':''}">${Number(x.montantSigne)>0?'+':''}${money(x.montantSigne)}</div></div></div>`).join('');}).withFailureHandler(()=>{z.innerHTML='<div class="empty-state">Impossible de calculer les opérations futures.</div>';}).listerMouvementsFutursTresorerie20260901(date.value);
+ google.script.run.withSuccessHandler(r=>{if(id!==opsReq)return;const xs=(r&&r.lignes||[]).filter(x=>x.source!=='pilotable');if(!xs.length){z.innerHTML='<div class="empty-state">Aucun mouvement futur identifié.</div>';return;}z.innerHTML=xs.map(x=>`<div class="tf-future-row"><span>${dateFr(x.date)}${x.dateConventionnelle?' *':''}</span><div class="tf-lib"><b>${esc(x.libelle)}</b><small>${esc(x.categorie||'Sans catégorie')}${x.dateConventionnelle?' · date estimée':''}</small></div><span class="tf-source">${esc(sourceLabel(x.source))}</span><div><span class="tf-badge ${esc(x.certitude)}">${esc(certLabel(x.certitude))}</span><div class="tf-amount ${Number(x.montantSigne)<0?'neg':''}">${Number(x.montantSigne)>0?'+':''}${money(x.montantSigne)}</div></div></div>`).join('');}).withFailureHandler(()=>{z.innerHTML='<div class="empty-state">Impossible de calculer les opérations futures.</div>';}).listerMouvementsFutursTresorerieRapide20260901(date.value);
 }
 
 function cibleFinCycleDepuisDom(){const root=document.querySelector('.c37-month');if(!root)return null;const t=root.querySelector('header>span')?.textContent||'';const m=t.match(/→\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(!m)return null;return `${m[3]}-${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;}
@@ -54,19 +54,22 @@ function installerCerbereCard(){
 }
 function chargerCerbereForecast(){
  if(!document.querySelector('.c37-month'))return;installerCerbereCard();const id=++cerbereReq,target=cibleFinCycleDepuisDom();if(!target)return;
- google.script.run.withSuccessHandler(r=>{if(id!==cerbereReq||!r||!r.ok)return;cerbereBase=r;majCerbereLocal();}).withFailureHandler(()=>{}).chargerTresoreriePrevisionnelle20260901(target);
+ google.script.run.withSuccessHandler(r=>{if(id!==cerbereReq||!r||!r.ok)return;cerbereBase=r;majCerbereLocal();}).withFailureHandler(()=>{}).chargerTresoreriePrevisionnelleRapide20260901(target);
 }
 function majCerbereLocal(){
  if(!cerbereBase||!q('tf-cerbere-value'))return;const solde=Number(cerbereBase.soldePrevisionnel||0);q('tf-cerbere-value').textContent=money(solde);q('tf-cerbere-value').style.color=solde<0?'#9b3535':'';q('tf-cerbere-detail').textContent=`Référence ${dateFr(cerbereBase.dateReference)} · ${cerbereBase.confiance?.libelle||'—'} · réel + flux bancaires restant à passer`;const joker=document.querySelector('.c37-month [data-joker]');q('tf-cerbere-delta').textContent='Les molettes'+(joker?.checked?' et le Joker':'')+' agissent sur l’estimation du prochain débit CB, pas sur le solde avant ce débit.';
 }
 function brancherCerbere(){
- const root=document.querySelector('.c37-month');if(!root)return;installerCerbereCard();root.querySelectorAll('.c37-range,.c37-amount,[data-joker]').forEach(el=>{if(el.dataset.tfBound)return;el.dataset.tfBound='1';el.addEventListener('change',()=>{clearTimeout(cerbereTimer);cerbereTimer=setTimeout(()=>chargerCerbereForecast(),700);});});if(!cerbereBase)chargerCerbereForecast();
+ const root=document.querySelector('.c37-month');if(!root)return;installerCerbereCard();
+ // Doctrine 01/09 : les molettes ne peuvent pas modifier le solde bancaire au 27.
+ // On ne relance donc plus un calcul serveur coûteux à chaque mouvement de tirette.
+ if(!cerbereBase)chargerCerbereForecast();else majCerbereLocal();
 }
 
 function activeView(){return window.state&&state.currentView||document.querySelector('.nav-item.active')?.dataset.view||'';}
 function tick(){const v=activeView();if(v==='comptes'){installerCarteComptes();if(!q('tf-account-value')?.dataset.loaded){q('tf-account-value')&&(q('tf-account-value').dataset.loaded='1');chargerPrevisionComptes();}}else if(v==='operations')installerOperations();else if(v==='cerbere'||document.querySelector('.c37-month'))brancherCerbere();}
 document.addEventListener('click',e=>{const b=e.target.closest?.('.nav-item[data-view]');if(!b)return;setTimeout(()=>{if(b.dataset.view==='comptes'){installerCarteComptes();chargerPrevisionComptes();}else if(b.dataset.view==='operations')installerOperations();else if(b.dataset.view==='cerbere'){cerbereBase=null;setTimeout(brancherCerbere,180);}},80);},true);
-const obs=new MutationObserver(()=>{clearTimeout(cerbereTimer);cerbereTimer=setTimeout(tick,120)});obs.observe(document.body,{childList:true,subtree:true});
+const obs=new MutationObserver(()=>setTimeout(tick,120));obs.observe(document.body,{childList:true,subtree:true});
 document.addEventListener('DOMContentLoaded',()=>setTimeout(tick,700));setTimeout(tick,1200);
 })();
 </script>
