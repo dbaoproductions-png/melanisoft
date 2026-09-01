@@ -1,84 +1,140 @@
-const TREASURY_FORECAST_CORRECTIONS_20260831_VERSION='2026-08-31.8';
+const TREASURY_FORECAST_CORRECTIONS_20260831_VERSION='2026-09-01.1';
 
 /**
- * Consolidation du prévisionnel bancaire.
- * Doctrine bancaire :
- * - les opérations futures réelles restent prioritaires ;
- * - les charges fixes distinctes ne sont jamais fusionnées entre elles ;
- * - les revenus structurels viennent du canon Cerbère, le réel ne sert qu'à dater ;
- * - une cible mensuelle d'action est appliquée par occurrence ;
- * - seuls les événements Effectif/Effective alimentent la trésorerie ;
- * - une suspension temporaire effective retire l'échéance, elle ne crée pas une recette fictive ;
- * - un événement effectif dû aujourd'hui reste prévisionnel tant qu'il n'est pas Réalisé/Rapproché ;
- * - les dépenses Cerbère ne sont PAS une sortie bancaire progressive du cycle courant ;
- * - elles deviennent une estimation du prochain débit CB différé, au dernier jour du mois civil ;
- * - les CB déjà connues pour cette date remplacent à due concurrence l'estimation Cerbère.
+ * Prévision bancaire BudgetSoft.
+ *
+ * Grandeur maîtresse : solde prévisionnel du compte courant.
+ * Le moteur part du dernier solde bancaire fiable et n'ajoute que les flux qui ne
+ * sont pas encore incorporés à ce solde.
+ *
+ * Hiérarchie de remplacement : estimation -> engagement connu -> opération réelle -> solde réel.
+ * Jamais Prévision + Réel pour un même mouvement.
+ *
+ * Cerbère n'est pas un second moteur de trésorerie. Il fournit uniquement une
+ * hypothèse pour la partie encore inconnue du prochain débit CB différé.
  */
 function chargerTresoreriePrevisionnelle20260831(dateCible){
-  return avecContexteLectureBudgetSoft20260827_('tresorerie_previsionnelle_20260831',function(){
-    const r=chargerTresoreriePrevisionnelle20260830(dateCible);
-    if(!r||!r.ok)return r;
-    const now=new Date(r.dateReference||new Date());
-    const cible=new Date(r.dateCible||new Date());
+  return avecContexteLectureBudgetSoft20260827_('tresorerie_previsionnelle_20260901',function(){
+    const socle=chargerTresoreriePrevisionnelle20260830(dateCible);
+    if(!socle||!socle.ok)return socle;
+
+    const ops=lireTable_('Operations');
+    const charges=lireTable_('Charges_fixes');
     const evenements=lireFeuilleDynamiquePlan_('Plan_Evenements');
     const actions=lireFeuilleDynamiquePlan_('Plan_Actions');
-    const ops=lireTable_('Operations');
+    const comptes=Array.isArray(socle.comptes)?socle.comptes:[];
 
-    let lignes=(r.lignes||[]).filter(x=>x.source!=='evenement'||evenementEffectifTresorerie20260831_(x.sourceId,evenements));
-    lignes=completerEvenementsEffectifsTresorerie20260831_(lignes,evenements,now,cible);
-    lignes=normaliserMontantsActionsTresorerie20260831_(lignes,actions);
+    const reference=dateReferenceBancaireTresorerie20260901_(socle,ops);
+    const cible=normaliserDateCibleTresorerie_(dateCible,reference);
+
+    // Reconstruction complète depuis le solde réel : on ne réutilise pas les lignes
+    // produites par l'ancien moteur, afin de ne pas conserver une ancienne doctrine.
+    const hard=operationsFuturesTresorerie_(ops,reference,cible,comptes);
+    let lignes=hard.slice();
+
+    let cfs=occurrencesChargesTresorerie_(charges,hard,actions,reference,cible,comptes);
+    cfs=recalerChargesFixesCarteTresorerie20260901_(cfs,charges,ops,hard,reference,cible);
+    lignes=lignes.concat(cfs);
+
+    const evs=occurrencesEvenementsTresorerie_(evenements,hard,reference,cible,comptes)
+      .filter(x=>evenementEffectifTresorerie20260831_(x.sourceId,evenements));
+    lignes=lignes.concat(evs);
+    lignes=completerEvenementsEffectifsTresorerie20260831_(lignes,evenements,reference,cible);
+
+    const acts=normaliserMontantsActionsTresorerie20260831_(
+      occurrencesActionsTresorerie_(actions,hard,reference,cible,comptes),actions
+    );
+    lignes=lignes.concat(acts);
+
     lignes=appliquerSuppressionsTemporairesTresorerie20260831_(lignes,evenements);
     lignes=dedoublonnerPrevisionsTresorerie20260831_(lignes);
 
-    const revenusCanon=revenusCanoniquesTresorerie20260831_(ops,lignes,now,cible);
+    const revenusCanon=revenusCanoniquesTresorerie20260831_(ops,lignes,reference,cible);
     lignes=dedoublonnerPrevisionsTresorerie20260831_(lignes.concat(revenusCanon));
 
-    // Toute ancienne estimation pilotable du moteur 30/08 est retirée. Cerbère ne
-    // pèse sur la banque qu'au prochain débit CB différé, pas au fil du cycle.
+    // Ancienne source supprimée : aucune dépense Cerbère progressive avant le débit CB.
     lignes=lignes.filter(x=>x.source!=='pilotable');
-    const pilotable=estimationPilotableTresorerie20260831_(now,cible,ops);
-    if(pilotable)lignes.push(pilotable);
+    const debitCb=estimationDebitCbDiffereTresorerie20260901_(ops,reference,cible);
+    if(debitCb)lignes.push(debitCb);
 
+    lignes=dedoublonnerPrevisionsTresorerie20260831_(lignes);
     lignes.sort((a,b)=>new Date(a.date)-new Date(b.date)||rangCertitudeTresorerie_(a.certitude)-rangCertitudeTresorerie_(b.certitude));
 
     const variation=arrondiTresorerie_(lignes.reduce((s,x)=>s+Number(x.montantSigne||0),0));
     const certain=arrondiTresorerie_(lignes.filter(x=>x.certitude==='certain').reduce((s,x)=>s+Number(x.montantSigne||0),0));
     const tresProbable=arrondiTresorerie_(lignes.filter(x=>['certain','tres_probable'].includes(x.certitude)).reduce((s,x)=>s+Number(x.montantSigne||0),0));
-    r.version=TREASURY_FORECAST_CORRECTIONS_20260831_VERSION;
-    r.lignes=lignes;
-    r.variationPrevue=variation;
-    r.soldePrevisionnel=arrondiTresorerie_(Number(r.soldeReel||0)+variation);
-    r.fourchette={certain:arrondiTresorerie_(Number(r.soldeReel||0)+certain),tresProbable:arrondiTresorerie_(Number(r.soldeReel||0)+tresProbable),toutesHypotheses:r.soldePrevisionnel};
-    r.resume=resumeTresorerie20260831_(lignes);
-    r.confiance=confianceTresorerie_(now,cible,lignes);
-    r.pilotable=pilotable||null;
-    r.diagnostic20260831={
-      doctrineCbDiffere:'Cerbère courant -> débit CB au dernier jour du mois civil, donc cycle bancaire suivant',
+
+    socle.version=TREASURY_FORECAST_CORRECTIONS_20260831_VERSION;
+    socle.dateReference=reference.toISOString();
+    socle.dateCible=cible.toISOString();
+    socle.lignes=lignes;
+    socle.variationPrevue=variation;
+    socle.soldePrevisionnel=arrondiTresorerie_(Number(socle.soldeReel||0)+variation);
+    socle.fourchette={
+      certain:arrondiTresorerie_(Number(socle.soldeReel||0)+certain),
+      tresProbable:arrondiTresorerie_(Number(socle.soldeReel||0)+tresProbable),
+      toutesHypotheses:socle.soldePrevisionnel
+    };
+    socle.resume=resumeTresorerie20260831_(lignes);
+    socle.confiance=confianceTresorerie_(reference,cible,lignes);
+    socle.pilotable=null;
+    socle.debitCbEstime=debitCb||null;
+    socle.diagnostic20260831={
+      doctrine:'solde bancaire réel + seuls flux non encore incorporés',
+      hierarchie:'estimation -> engagement connu -> opération réelle -> solde réel',
+      dateReferenceBancaire:reference.toISOString(),
       revenusCanoniquesAjoutes:revenusCanon.length,
       lignesFinales:lignes.length,
       evenementsEffectifs:(evenements||[]).filter(e=>statutEffectifTresorerie20260831_(e.statut)).length,
       suspensionsEffectives:(evenements||[]).filter(e=>statutEffectifTresorerie20260831_(e.statut)&&estSuspensionTemporaireTresorerie20260831_(e)).length,
-      debitCbCerbereAjoute:!!pilotable,
-      debitCbCerbereTotal:pilotable?pilotable.totalCerbere:0,
-      debitCbDejaConnu:pilotable?pilotable.dejaConnuCb:0,
-      debitCbCerbereResiduel:pilotable?Math.abs(Number(pilotable.montantSigne||0)):0,
-      dateDebitCb:pilotable?pilotable.date:null
+      debitCbEstimeAjoute:!!debitCb,
+      debitCbDate:debitCb?debitCb.date:null,
+      debitCbPartCerbere:debitCb?debitCb.partCerbere:0,
+      debitCbPartFinMois:debitCb?debitCb.partFinMois:0
     };
-    return r;
+    return socle;
   });
 }
 
-function listerMouvementsFutursTresorerie20260831(dateCible){const r=chargerTresoreriePrevisionnelle20260831(dateCible||dateDansJoursTresorerie_(45));return {ok:r.ok,version:r.version,dateCible:r.dateCible,lignes:r.lignes||[],confiance:r.confiance,diagnostic20260831:r.diagnostic20260831||{}};}
-function statutEffectifTresorerie20260831_(statut){const s=String(statut||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');return ['effectif','effective','effectifs','effectives'].includes(s);}
-function evenementEffectifTresorerie20260831_(id,evenements){const e=(evenements||[]).find(x=>String(x.id||'')===String(id||''));return !!e&&statutEffectifTresorerie20260831_(e.statut);}
+function listerMouvementsFutursTresorerie20260831(dateCible){
+  const r=chargerTresoreriePrevisionnelle20260831(dateCible||dateDansJoursTresorerie_(45));
+  return {ok:r.ok,version:r.version,dateReference:r.dateReference,dateCible:r.dateCible,lignes:r.lignes||[],confiance:r.confiance,diagnostic20260831:r.diagnostic20260831||{}};
+}
+
+/** Le solde affiché par Comptes reste maître. Sa date, si disponible, devient la frontière du Réel. */
+function dateReferenceBancaireTresorerie20260901_(socle,ops){
+  const ds=(socle&&socle.comptes||[]).map(c=>new Date(c&&c.dateSolde||0)).filter(d=>!isNaN(d));
+  let d=null;
+  if(ds.length){
+    // En présence de plusieurs comptes courants datés différemment, on prend la date
+    // la plus récente mais le diagnostic de confiance pourra être abaissé par la suite.
+    d=new Date(Math.max.apply(null,ds.map(x=>x.getTime())));
+  }
+  if(!d){
+    const od=(ops||[]).map(o=>dateOpTresorerie_(o)).filter(Boolean);
+    if(od.length)d=new Date(Math.max.apply(null,od.map(x=>x.getTime())));
+  }
+  if(!d||isNaN(d))d=new Date(socle&&socle.dateReference||new Date());
+  return finJourTresorerie_(d);
+}
+
+function statutEffectifTresorerie20260831_(statut){
+  const s=String(statut||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  return ['effectif','effective','effectifs','effectives'].includes(s);
+}
+function evenementEffectifTresorerie20260831_(id,evenements){
+  const e=(evenements||[]).find(x=>String(x.id||'')===String(id||''));
+  return !!e&&statutEffectifTresorerie20260831_(e.statut);
+}
 function debutJourTresorerie20260831_(d){return new Date(d.getFullYear(),d.getMonth(),d.getDate(),0,0,0,0);}
 
-function completerEvenementsEffectifsTresorerie20260831_(lignes,evenements,now,cible){
-  const out=(lignes||[]).slice(),debut=debutJourTresorerie20260831_(now);
+function completerEvenementsEffectifsTresorerie20260831_(lignes,evenements,reference,cible){
+  const out=(lignes||[]).slice(),debut=debutJourTresorerie20260831_(reference);
   (evenements||[]).forEach(e=>{
     if(!statutEffectifTresorerie20260831_(e.statut)||estSuspensionTemporaireTresorerie20260831_(e))return;
-    const dr=datePlanTresorerie_(e,now,false),base=dr.date;if(!base||isNaN(base))return;
-    const n=(e.fractionne===true||String(e.fractionne)==='true')?Math.max(1,Number(e.nombre_fois||1)):1,per=String(e.periodicite_fractionnement||'mensuel').toLowerCase(),total=Math.abs(Number(e.montant||0));
+    const dr=datePlanTresorerie_(e,reference,false),base=dr.date;if(!base||isNaN(base))return;
+    const n=(e.fractionne===true||String(e.fractionne)==='true')?Math.max(1,Number(e.nombre_fois||1)):1;
+    const per=String(e.periodicite_fractionnement||'mensuel').toLowerCase(),total=Math.abs(Number(e.montant||0));
     for(let i=0;i<n;i++){
       const d=new Date(base);if(i){if(per==='annuel')d.setFullYear(d.getFullYear()+i);else d.setMonth(d.getMonth()+i);}
       if(d<debut||d>cible)continue;
@@ -87,37 +143,67 @@ function completerEvenementsEffectifsTresorerie20260831_(lignes,evenements,now,c
       const m=(type==='recette'?1:-1)*(total/n);
       out.push({id:'event:'+String(e.id||'')+':'+i,source:'evenement',sourceId:e.id||'',date:d.toISOString(),libelle:e.libelle||'Événement',categorie:e.categorie||'',compte:e.compte||'',montantSigne:arrondiTresorerie_(m),certitude:'tres_probable',preuve:preuveDatePlanTresorerie_('Événement effectif du Plan',dr),dateConventionnelle:!!dr.conventionnelle});
     }
-  });return out;
+  });
+  return out;
 }
 
 function normaliserMontantsActionsTresorerie20260831_(lignes,actions){
   const index=Object.fromEntries((actions||[]).map(a=>[String(a.id||''),a]));
-  return (lignes||[]).map(x=>{if(x.source!=='action')return x;const a=index[String(x.sourceId||'')];if(!a)return x;const f=String(a.fonction_plan||'').toUpperCase();if(!['RECEVOIR','REMBOURSER','TRANSFERER'].includes(f))return x;const cible=Math.abs(Number(a.cible_valeur||a.impact_montant||0));if(!Number.isFinite(cible)||cible<=0)return x;const signe=f==='RECEVOIR'?1:-1;return Object.assign({},x,{montantSigne:arrondiTresorerie_(signe*cible),preuve:String(x.preuve||'Action financière du Plan')+' · cible '+String(a.impact_frequence||'ponctuel')+' appliquée par occurrence'});});
+  return (lignes||[]).map(x=>{
+    if(x.source!=='action')return x;
+    const a=index[String(x.sourceId||'')];if(!a)return x;
+    const f=String(a.fonction_plan||'').toUpperCase();if(!['RECEVOIR','REMBOURSER','TRANSFERER'].includes(f))return x;
+    const cible=Math.abs(Number(a.cible_valeur||a.impact_montant||0));if(!Number.isFinite(cible)||cible<=0)return x;
+    const signe=f==='RECEVOIR'?1:-1;
+    return Object.assign({},x,{montantSigne:arrondiTresorerie_(signe*cible),preuve:String(x.preuve||'Action financière du Plan')+' · cible '+String(a.impact_frequence||'ponctuel')+' appliquée par occurrence'});
+  });
 }
-function prioriteSourceTresorerie20260831_(s){return {operation_future:0,evenement:1,action:2,revenu_recurrent:3,charge_fixe:5,pilotable:8}[String(s||'')]??9;}
-function normaliserLibelleTresorerie20260831_(s){try{return normaliserRechercheAction_(String(s||'')).replace(/\b\d+\b/g,' ').replace(/\s+/g,' ').trim();}catch(e){return String(s||'').toLowerCase().replace(/[^a-zà-ÿ]+/g,' ').replace(/\b\d+\b/g,' ').replace(/\s+/g,' ').trim();}}
+
+function prioriteSourceTresorerie20260831_(s){return {operation_future:0,evenement:1,action:2,revenu_recurrent:3,charge_fixe:5,debit_cb_estime:8,pilotable:9}[String(s||'')]??10;}
+function normaliserLibelleTresorerie20260831_(s){
+  try{return normaliserRechercheAction_(String(s||'')).replace(/\b\d+\b/g,' ').replace(/\s+/g,' ').trim();}
+  catch(e){return String(s||'').toLowerCase().replace(/[^a-zà-ÿ]+/g,' ').replace(/\b\d+\b/g,' ').replace(/\s+/g,' ').trim();}
+}
 function ressemblentTresorerie20260831_(a,b){
-  if(!a||!b)return false;if(a.source===b.source&&a.sourceId&&b.sourceId&&String(a.sourceId)!==String(b.sourceId))return false;
-  const ma=Number(a.montantSigne||0),mb=Number(b.montantSigne||0);if(ma*mb<0)return false;if(Math.abs(ma-mb)>Math.max(1,Math.max(Math.abs(ma),Math.abs(mb))*.08))return false;
-  const da=new Date(a.date),db=new Date(b.date);if(isNaN(da)||isNaN(db)||Math.abs(da-db)>5*86400000)return false;if(a.sourceId&&b.sourceId&&String(a.sourceId)===String(b.sourceId)&&a.source===b.source)return true;
-  const ca=String(a.categorie||'').trim(),cb=String(b.categorie||'').trim(),la=normaliserLibelleTresorerie20260831_(a.libelle),lb=normaliserLibelleTresorerie20260831_(b.libelle),motsA=la.split(' ').filter(x=>x.length>=4),motsB=lb.split(' ').filter(x=>x.length>=4);return motsA.some(x=>motsB.includes(x))||(ca&&cb&&ca===cb&&Math.abs(ma-mb)<.01);
+  if(!a||!b)return false;
+  if(a.source===b.source&&a.sourceId&&b.sourceId&&String(a.sourceId)!==String(b.sourceId))return false;
+  if(a.source==='debit_cb_estime'||b.source==='debit_cb_estime')return false;
+  const ma=Number(a.montantSigne||0),mb=Number(b.montantSigne||0);if(ma*mb<0)return false;
+  if(Math.abs(ma-mb)>Math.max(1,Math.max(Math.abs(ma),Math.abs(mb))*.08))return false;
+  const da=new Date(a.date),db=new Date(b.date);if(isNaN(da)||isNaN(db)||Math.abs(da-db)>5*86400000)return false;
+  if(a.sourceId&&b.sourceId&&String(a.sourceId)===String(b.sourceId)&&a.source===b.source)return true;
+  const ca=String(a.categorie||'').trim(),cb=String(b.categorie||'').trim();
+  const la=normaliserLibelleTresorerie20260831_(a.libelle),lb=normaliserLibelleTresorerie20260831_(b.libelle);
+  const motsA=la.split(' ').filter(x=>x.length>=4),motsB=lb.split(' ').filter(x=>x.length>=4);
+  return motsA.some(x=>motsB.includes(x))||(ca&&cb&&ca===cb&&Math.abs(ma-mb)<.01);
 }
-function dedoublonnerPrevisionsTresorerie20260831_(lignes){const trie=(lignes||[]).slice().sort((a,b)=>prioriteSourceTresorerie20260831_(a.source)-prioriteSourceTresorerie20260831_(b.source)),gardees=[];trie.forEach(x=>{if(x.source==='pilotable'){gardees.push(x);return;}if(gardees.some(y=>y.source!=='pilotable'&&ressemblentTresorerie20260831_(x,y)))return;gardees.push(x);});return gardees;}
+function dedoublonnerPrevisionsTresorerie20260831_(lignes){
+  const trie=(lignes||[]).slice().sort((a,b)=>prioriteSourceTresorerie20260831_(a.source)-prioriteSourceTresorerie20260831_(b.source)),gardees=[];
+  trie.forEach(x=>{if(x.source==='debit_cb_estime'){gardees.push(x);return;}if(gardees.some(y=>y.source!=='debit_cb_estime'&&ressemblentTresorerie20260831_(x,y)))return;gardees.push(x);});
+  return gardees;
+}
 
 function estSuspensionTemporaireTresorerie20260831_(e){
   if(!e)return false;
-  const t=String(e.type||'').trim().toLowerCase();
-  if(t==='charge_supprimee_temporairement')return true;
-  const legacy=String(e.source_legacy||'').trim().toLowerCase();
-  const lib=normaliserLibelleTresorerie20260831_(e.libelle||'');
+  const t=String(e.type||'').trim().toLowerCase();if(t==='charge_supprimee_temporairement')return true;
+  const legacy=String(e.source_legacy||'').trim().toLowerCase(),lib=normaliserLibelleTresorerie20260831_(e.libelle||'');
   return legacy==='ajustements_charges_fixes'&&/(suspension|suspend|report|reporte|suppression|supprime)/.test(lib);
 }
 function appliquerSuppressionsTemporairesTresorerie20260831_(lignes,evenements){
   let out=(lignes||[]).slice();
   (evenements||[]).filter(e=>statutEffectifTresorerie20260831_(e.statut)&&estSuspensionTemporaireTresorerie20260831_(e)).forEach(e=>{
-    const eid=String(e.id||''),m=Math.abs(Number(e.montant||0)),ed=datePlanTresorerie_(e,new Date(),false).date,cat=String(e.categorie||'').trim();out=out.filter(x=>!(x.source==='evenement'&&String(x.sourceId||'')===eid));let meilleur=-1,score=Infinity;
-    out.forEach((x,i)=>{if(x.source!=='charge_fixe'||Number(x.montantSigne||0)>=0)return;const xd=new Date(x.date),ecartJ=isNaN(xd)||!ed?99:Math.abs(xd-ed)/86400000,ecartM=Math.abs(Math.abs(Number(x.montantSigne||0))-m);if(ecartJ>5||ecartM>Math.max(1,m*.03))return;const memeCat=cat&&String(x.categorie||'').trim()===cat,le=normaliserLibelleTresorerie20260831_(e.libelle),lx=normaliserLibelleTresorerie20260831_(x.libelle),commun=le.split(' ').filter(w=>w.length>=4).some(w=>lx.includes(w)),s=ecartJ*10+ecartM+(memeCat?0:20)+(commun?0:10);if(s<score){score=s;meilleur=i;}});if(meilleur>=0)out.splice(meilleur,1);
-  });return out;
+    const eid=String(e.id||''),m=Math.abs(Number(e.montant||0)),ed=datePlanTresorerie_(e,new Date(),false).date,cat=String(e.categorie||'').trim();
+    out=out.filter(x=>!(x.source==='evenement'&&String(x.sourceId||'')===eid));let meilleur=-1,score=Infinity;
+    out.forEach((x,i)=>{
+      if(x.source!=='charge_fixe'||Number(x.montantSigne||0)>=0)return;
+      const xd=new Date(x.date),ecartJ=isNaN(xd)||!ed?99:Math.abs(xd-ed)/86400000,ecartM=Math.abs(Math.abs(Number(x.montantSigne||0))-m);
+      if(ecartJ>5||ecartM>Math.max(1,m*.03))return;
+      const memeCat=cat&&String(x.categorie||'').trim()===cat,le=normaliserLibelleTresorerie20260831_(e.libelle),lx=normaliserLibelleTresorerie20260831_(x.libelle),commun=le.split(' ').filter(w=>w.length>=4).some(w=>lx.includes(w));
+      const s=ecartJ*10+ecartM+(memeCat?0:20)+(commun?0:10);if(s<score){score=s;meilleur=i;}
+    });
+    if(meilleur>=0)out.splice(meilleur,1);
+  });
+  return out;
 }
 
 function lireCanonRecettesTresorerie20260831_(){
@@ -126,83 +212,143 @@ function lireCanonRecettesTresorerie20260831_(){
     ()=>typeof lireFeuilleDynamiquePlan_==='function'?lireFeuilleDynamiquePlan_('Cerbere_Recettes_Canon_V1'):null,
     ()=>typeof lireTable_==='function'?lireTable_('Cerbere_Recettes_Canon_V1'):null
   ];
-  for(let i=0;i<lecteurs.length;i++){
-    try{const x=lecteurs[i]();if(Array.isArray(x)&&x.length)return x;}catch(e){}
-  }
+  for(let i=0;i<lecteurs.length;i++){try{const x=lecteurs[i]();if(Array.isArray(x)&&x.length)return x;}catch(e){}}
   return [];
 }
-function revenusCanoniquesTresorerie20260831_(ops,lignesExistantes,now,cible){
+function revenusCanoniquesTresorerie20260831_(ops,lignesExistantes,reference,cible){
   const canon=lireCanonRecettesTresorerie20260831_(),out=[];
-  (canon||[]).forEach(c=>{if(!actifTresorerie_(c.actif)||String(c.nature||'').toLowerCase()!=='structurelle')return;const cat=String(c.categorie||'').trim();if(!cat)return;const baseMont=Math.abs(Number(c.montant||0));
-    const hist=(ops||[]).map(o=>({o,d:dateOpTresorerie_(o),m:Math.abs(Number(o.montant||0))})).filter(x=>x.d&&x.d<=now&&x.d>=new Date(now.getFullYear(),now.getMonth()-6,1)&&(String(x.o.type||'').toLowerCase()==='revenu'||Number(x.o.montant||0)>0)&&String(x.o.categorie||'').trim()===cat),histSignif=hist.filter(x=>x.m>=Math.max(20,baseMont*.35)),jours=(histSignif.length?histSignif:hist).map(x=>x.d.getDate()).sort((a,b)=>a-b),jour=Math.max(1,Math.min(28,jours.length?jours[Math.floor(jours.length/2)]:15));
-    let d=new Date(now.getFullYear(),now.getMonth(),jour);if(d<=now)d=new Date(now.getFullYear(),now.getMonth()+1,jour);let guard=0;
-    while(d<=cible&&guard++<6){let montant=baseMont;const de=c.date_effet?new Date(c.date_effet):null;if(de&&!isNaN(de)&&d<de&&Number(c.montant_precedent)>0)montant=Math.abs(Number(c.montant_precedent));if(montant>0){const cand={id:'revcanon:'+cat+':'+d.getTime(),source:'revenu_recurrent',sourceId:'canon:'+cat,date:d.toISOString(),libelle:cat,categorie:cat,compte:histSignif.length?histSignif[histSignif.length-1].o.compte||'':'',montantSigne:arrondiTresorerie_(montant),certitude:histSignif.length>=3?'tres_probable':'prevu',preuve:'Revenu structurel du canon Cerbère · date habituelle estimée',dateConventionnelle:true};if(!(lignesExistantes||[]).some(x=>ressemblentTresorerie20260831_(cand,x)))out.push(cand);}d=new Date(d.getFullYear(),d.getMonth()+1,jour);}
-  });return out;
+  (canon||[]).forEach(c=>{
+    if(!actifTresorerie_(c.actif)||String(c.nature||'').toLowerCase()!=='structurelle')return;
+    const cat=String(c.categorie||'').trim();if(!cat)return;const baseMont=Math.abs(Number(c.montant||0));
+    const hist=(ops||[]).map(o=>({o,d:dateOpTresorerie_(o),m:Math.abs(Number(o.montant||0))}))
+      .filter(x=>x.d&&x.d<=reference&&x.d>=new Date(reference.getFullYear(),reference.getMonth()-6,1)&&(String(x.o.type||'').toLowerCase()==='revenu'||Number(x.o.montant||0)>0)&&String(x.o.categorie||'').trim()===cat);
+    const histSignif=hist.filter(x=>x.m>=Math.max(20,baseMont*.35));
+    const jours=(histSignif.length?histSignif:hist).map(x=>x.d.getDate()).sort((a,b)=>a-b);
+    const jour=Math.max(1,Math.min(28,jours.length?jours[Math.floor(jours.length/2)]:15));
+    let d=new Date(reference.getFullYear(),reference.getMonth(),jour);if(d<=reference)d=new Date(reference.getFullYear(),reference.getMonth()+1,jour);let guard=0;
+    while(d<=cible&&guard++<6){
+      let montant=baseMont;const de=c.date_effet?new Date(c.date_effet):null;
+      if(de&&!isNaN(de)&&d<de&&Number(c.montant_precedent)>0)montant=Math.abs(Number(c.montant_precedent));
+      if(montant>0){
+        const cand={id:'revcanon:'+cat+':'+d.getTime(),source:'revenu_recurrent',sourceId:'canon:'+cat,date:d.toISOString(),libelle:cat,categorie:cat,compte:histSignif.length?histSignif[histSignif.length-1].o.compte||'':'',montantSigne:arrondiTresorerie_(montant),certitude:histSignif.length>=3?'tres_probable':'prevu',preuve:'Revenu structurel du canon Cerbère · date habituelle estimée',dateConventionnelle:true};
+        if(!(lignesExistantes||[]).some(x=>ressemblentTresorerie20260831_(cand,x)))out.push(cand);
+      }
+      d=new Date(d.getFullYear(),d.getMonth()+1,jour);
+    }
+  });
+  return out;
 }
 
-function dernierJourMoisTresorerie20260831_(d){return finJourTresorerie_(new Date(d.getFullYear(),d.getMonth()+1,0));}
-function memeJourTresorerie20260831_(a,b){return a&&b&&!isNaN(a)&&!isNaN(b)&&a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();}
+function estOperationCarteTresorerie20260901_(o){
+  if(!o)return false;
+  if(String(o.carte_fin||'').trim())return true;
+  const mode=String(o.mode_paiement||o.moyen_paiement||'').toLowerCase();
+  return /carte|cb/.test(mode);
+}
+function dateAchatCarteTresorerie20260901_(o){
+  const d=new Date(o&&o.date_achat||o&&o.date_operation||o&&o.date||0);return isNaN(d)?null:d;
+}
+function dernierJourMoisTresorerie20260901_(y,m){return finJourTresorerie_(new Date(y,m+1,0));}
+function prochaineDateDebitCbTresorerie20260901_(reference){
+  let d=dernierJourMoisTresorerie20260901_(reference.getFullYear(),reference.getMonth());
+  if(d<=reference)d=dernierJourMoisTresorerie20260901_(reference.getFullYear(),reference.getMonth()+1);
+  return d;
+}
 
 /**
- * Cerbère est une autorisation/estimation d'engagement économique, pas une sortie
- * bancaire immédiate. Avec la CB à débit différé, le cycle courant n'affecte le
- * compte qu'au dernier jour du mois civil qui contient la fin du cycle.
- *
- * Exemple : cycle 28/08 -> 27/09 => débit estimé le 30/09. Les molettes du cycle
- * ne changent donc PAS les soldes prévus au 03/09, 17/09 ou 27/09.
- *
- * Si des achats CB du cycle sont déjà importés avec date_comptable = date de débit,
- * ils sont certains et remplacent la même part de l'estimation Cerbère : on ajoute
- * seulement le reliquat nécessaire pour atteindre la dépense pilotable projetée.
+ * Les charges fixes réglées par carte restent des charges fixes métier, mais leur
+ * sortie bancaire est recadrée au débit différé. Le Réel carte futur, s'il existe,
+ * garde la priorité et remplace la prévision de charge.
  */
-function estimationPilotableTresorerie20260831_(now,cible,ops){
-  try{
-    const chargeur=typeof chargerCerbereV374==='function'?chargerCerbereV374:(typeof chargerCerbereV37==='function'?chargerCerbereV37:null);
-    if(!chargeur)return null;
-    const c=chargeur(),p=c&&Array.isArray(c.periodes)?c.periodes[0]:null;if(!p)return null;
-    const periode=p.periode||p,finCycle=periode&&periode.fin?new Date(periode.fin):null;if(!finCycle||isNaN(finCycle))return null;
-    const dateDebit=dernierJourMoisTresorerie20260831_(finCycle);
-    if(dateDebit<=now||dateDebit>cible)return null;
-
-    const env=Array.isArray(p.enveloppes)?p.enveloppes:[];
-    const catsPilotables=new Set(env.map(x=>String(x&&x.categorie||'').trim()).filter(Boolean));
-    let totalCerbere=0;
-    env.forEach(x=>{
-      const allocation=Math.max(0,Number(x&&x.prevu||0));
-      const engage=Math.max(0,Number(x&&x.engageV37!=null?x.engageV37:((x&&x.reelNetPrevisionnel||0)+(x&&x.planifie||0))));
-      const projete=x&&x.dpt1!=null?Math.max(0,Number(x.dpt1)):Math.max(allocation,engage);
-      totalCerbere+=projete;
-    });
-    if(!env.length){
-      const v=p.v37||{};
-      totalCerbere=Math.max(0,Number(v.dpt1||p.budgetReparti||0));
-    }
-    totalCerbere=arrondiTresorerie_(totalCerbere);if(totalCerbere<=0)return null;
-
-    let dejaConnuCb=0;
-    (ops||[]).forEach(o=>{
-      const d=dateOpTresorerie_(o),m=Number(o&&o.montant||0),cat=String(o&&o.categorie||'').trim();
-      if(!d||!memeJourTresorerie20260831_(d,dateDebit)||m>=0)return;
-      if(!String(o&&o.carte_fin||'').trim())return;
-      if(catsPilotables.size&&!catsPilotables.has(cat))return;
-      if(String(o&&o.charge_fixe_id||'').trim())return;
-      dejaConnuCb+=Math.abs(m);
-    });
-    dejaConnuCb=arrondiTresorerie_(dejaConnuCb);
-
-    const residuel=arrondiTresorerie_(Math.max(0,totalCerbere-dejaConnuCb));
-    if(residuel<=0)return null;
-    return {
-      id:'pilotable:debit-cb:'+Utilities.formatDate(dateDebit,Session.getScriptTimeZone(),'yyyyMMdd'),
-      source:'pilotable',sourceId:'cerbere',date:dateDebit.toISOString(),
-      libelle:'Débit CB différé estimé (Cerbère)',categorie:'Pilotable',compte:'',
-      montantSigne:-residuel,certitude:'estime',
-      preuve:'Projection Cerbère du cycle, débit bancaire différé en fin de mois · CB déjà connues déduites',
-      dateConventionnelle:false,totalCerbere:totalCerbere,dejaConnuCb:dejaConnuCb,
-      allocationRestante:residuel,fractionTemps:1,
-      joker:!!(p.v37&&p.v37.joker&&p.v37.joker.actif),moteurCerbere:String(c.version||'')
-    };
-  }catch(e){return null;}
+function recalerChargesFixesCarteTresorerie20260901_(lignes,charges,ops,hard,reference,cible){
+  const idsCarte=new Set();
+  (ops||[]).forEach(o=>{if(estOperationCarteTresorerie20260901_(o)&&o.charge_fixe_id)idsCarte.add(String(o.charge_fixe_id));});
+  (charges||[]).forEach(c=>{const mode=String(c.mode_paiement||c.moyen_paiement||'').toLowerCase();if(/carte|cb/.test(mode))idsCarte.add(String(c.id||''));});
+  return (lignes||[]).map(x=>{
+    if(x.source!=='charge_fixe'||!idsCarte.has(String(x.sourceId||'')))return x;
+    const achat=new Date(x.date);if(isNaN(achat))return x;
+    const debit=dernierJourMoisTresorerie20260901_(achat.getFullYear(),achat.getMonth());
+    return Object.assign({},x,{date:debit.toISOString(),preuve:'Charge fixe réglée par CB · débit bancaire différé fin de mois'});
+  }).filter(x=>{
+    const d=new Date(x.date);if(isNaN(d)||d<=reference||d>cible)return false;
+    if(x.source!=='charge_fixe'||!idsCarte.has(String(x.sourceId||'')))return true;
+    return !operationCouvrePrevisionTresorerie_(hard,d,Number(x.montantSigne||0),x.libelle||'');
+  });
 }
 
-function resumeTresorerie20260831_(lignes){const r={operations_futures:0,charges_fixes:0,evenements:0,actions:0,revenus_recurrents:0,pilotable:0,recettes:0,depenses:0};(lignes||[]).forEach(x=>{const m=Number(x.montantSigne||0);if(m>=0)r.recettes+=m;else r.depenses+=Math.abs(m);if(x.source==='operation_future')r.operations_futures+=m;else if(x.source==='charge_fixe')r.charges_fixes+=m;else if(x.source==='evenement')r.evenements+=m;else if(x.source==='action')r.actions+=m;else if(x.source==='revenu_recurrent')r.revenus_recurrents+=m;else if(x.source==='pilotable')r.pilotable+=m;});Object.keys(r).forEach(k=>r[k]=arrondiTresorerie_(r[k]));return r;}
+/** Estimation marginale des achats CB des jours 28 -> fin de mois, à partir du Réel historique. */
+function estimationQueueCbFinMoisTresorerie20260901_(ops,reference,debit){
+  const debutJour=Math.max(28,reference.getMonth()===debit.getMonth()&&reference.getFullYear()===debit.getFullYear()?reference.getDate()+1:28);
+  const finJour=debit.getDate();if(debutJour>finJour)return 0;
+  const historiques=[];
+  for(let k=1;k<=4;k++){
+    const d0=new Date(debit.getFullYear(),debit.getMonth()-k,1),y=d0.getFullYear(),m=d0.getMonth();
+    let total=0,jours=0;
+    for(let j=28;j<=new Date(y,m+1,0).getDate();j++)jours++;
+    (ops||[]).forEach(o=>{
+      if(!estOperationCarteTresorerie20260901_(o)||o.charge_fixe_id||Number(o.montant||0)>=0)return;
+      const da=dateAchatCarteTresorerie20260901_(o);if(!da||da.getFullYear()!==y||da.getMonth()!==m||da.getDate()<28)return;
+      total+=Math.abs(Number(o.montant||0));
+    });
+    if(jours)historiques.push(total/jours);
+  }
+  const positifs=historiques.filter(x=>x>0).sort((a,b)=>a-b);if(!positifs.length)return 0;
+  const journalier=positifs[Math.floor(positifs.length/2)];
+  return arrondiTresorerie_(journalier*(finJour-debutJour+1));
+}
+
+/**
+ * Complément inconnu du prochain débit CB différé.
+ *
+ * - Jusqu'au 27 : REt1 Cerbère estime ce qui peut encore être engagé sur la partie
+ *   pilotable du cycle ; les molettes agissent donc sur le prochain débit, jamais
+ *   sur un solde antérieur à ce débit.
+ * - Du 28 à la fin du mois : le nouveau cycle Cerbère ne doit pas réécrire le débit
+ *   presque achevé du mois précédent ; seule une petite queue statistique historique
+ *   est utilisée pour les jours restant à courir.
+ * - Les opérations CB déjà importées ont déjà leur date comptable future et sont
+ *   comptées comme opérations certaines ; elles ne sont jamais ajoutées une seconde fois.
+ */
+function estimationDebitCbDiffereTresorerie20260901_(ops,reference,cible){
+  const debit=prochaineDateDebitCbTresorerie20260901_(reference);if(debit>cible)return null;
+  let partCerbere=0,moteurCerbere='';
+  if(reference.getDate()<=27){
+    try{
+      const chargeur=typeof chargerCerbereV374==='function'?chargerCerbereV374:(typeof chargerCerbereV37==='function'?chargerCerbereV37:null);
+      if(chargeur){
+        const c=chargeur(),p=c&&Array.isArray(c.periodes)?c.periodes[0]:null;
+        if(p){
+          const finCycle=new Date((p.periode||p).fin||0);
+          if(!isNaN(finCycle)&&finCycle.getFullYear()===debit.getFullYear()&&finCycle.getMonth()===debit.getMonth()){
+            const env=Array.isArray(p.enveloppes)?p.enveloppes:[];
+            partCerbere=arrondiTresorerie_(env.reduce((s,x)=>s+Math.max(0,Number(x&&x.resteV37!=null?x.resteV37:(Number(x&&x.prevu||0)-Number(x&&x.reelNetPrevisionnel||x&&x.reelImpute||0)-Number(x&&x.planifie||0)))||0),0));
+            moteurCerbere=String(c.version||'');
+          }
+        }
+      }
+    }catch(e){}
+  }
+  const partFinMois=estimationQueueCbFinMoisTresorerie20260901_(ops,reference,debit);
+  const residuel=arrondiTresorerie_(Math.max(0,partCerbere+partFinMois));if(residuel<=0)return null;
+  return {
+    id:'debit_cb_estime:'+debit.getTime(),source:'debit_cb_estime',sourceId:'cb:'+debit.getFullYear()+'-'+(debit.getMonth()+1),date:debit.toISOString(),
+    libelle:'Complément estimé du débit CB différé',categorie:'Carte à débit différé',compte:'',montantSigne:-residuel,certitude:'estime',
+    preuve:'Complément non encore connu : reste Cerbère jusqu’au 27 + estimation marginale des jours 28-fin de mois',dateConventionnelle:false,
+    partCerbere:partCerbere,partFinMois:partFinMois,moteurCerbere:moteurCerbere
+  };
+}
+
+function resumeTresorerie20260831_(lignes){
+  const r={operations_futures:0,charges_fixes:0,evenements:0,actions:0,revenus_recurrents:0,debit_cb_estime:0,pilotable:0,recettes:0,depenses:0};
+  (lignes||[]).forEach(x=>{
+    const m=Number(x.montantSigne||0);if(m>=0)r.recettes+=m;else r.depenses+=Math.abs(m);
+    if(x.source==='operation_future')r.operations_futures+=m;
+    else if(x.source==='charge_fixe')r.charges_fixes+=m;
+    else if(x.source==='evenement')r.evenements+=m;
+    else if(x.source==='action')r.actions+=m;
+    else if(x.source==='revenu_recurrent')r.revenus_recurrents+=m;
+    else if(x.source==='debit_cb_estime')r.debit_cb_estime+=m;
+    else if(x.source==='pilotable')r.pilotable+=m;
+  });
+  Object.keys(r).forEach(k=>r[k]=arrondiTresorerie_(r[k]));return r;
+}
