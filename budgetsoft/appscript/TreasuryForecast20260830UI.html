@@ -12,6 +12,7 @@
 .tf-future-row .tf-lib b,.tf-future-row .tf-lib small{display:block}.tf-future-row .tf-lib small{opacity:.62;margin-top:2px}
 .tf-badge{justify-self:start;font-size:10px;font-weight:700;letter-spacing:.03em;padding:3px 7px;border-radius:999px;background:#edf2ef}.tf-badge.certain{background:#e4f5e8}.tf-badge.tres_probable{background:#edf5e8}.tf-badge.prevu{background:#fff5d9}.tf-badge.estime{background:#f1f1f1}.tf-amount{text-align:right;font-weight:700}.tf-amount.neg{color:#9b3535}
 .tf-ops-toggle.on{background:#e6f1eb!important}
+.tf-refining{padding:8px 14px;font-size:11px;opacity:.58;border-top:1px solid #edf1ef;background:#fbfcfb}
 #tf-cerbere-card{border:1px solid #dce9e2;background:#f5faf7;border-radius:14px;padding:14px;min-height:92px;display:flex;flex-direction:column;justify-content:center}
 #tf-cerbere-card span,#tf-cerbere-card b,#tf-cerbere-card small{display:block}#tf-cerbere-card b{font-size:21px;margin:4px 0}.tf-cerbere-delta{font-size:11px;opacity:.7}
 @media(max-width:1250px){#comptes .accounts-summary{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
@@ -43,9 +44,22 @@ function installerOperations(){
  const actions=q('operations-current-actions');if(actions&&!q('tf-ops-toggle')){const b=document.createElement('button');b.id='tf-ops-toggle';b.type='button';b.className='secondary-button tf-ops-toggle';b.textContent='◷ Futures';b.onclick=()=>{const on=b.classList.toggle('on');b.textContent=on?'✓ Futures':'◷ Futures';if(on)chargerFuturesOperations();else q('operations-future-panel')?.classList.add('hidden')};actions.appendChild(b);}
  const panel=q('operations-future-panel');if(!panel){const target=document.querySelector('#operations .operations-page-panel');if(target){const p=document.createElement('section');p.id='operations-future-panel';p.className='hidden';p.innerHTML='<header><div><h3>Opérations futures probables</h3><small>Projection bancaire virtuelle : chaque prévision disparaît lorsqu’elle est remplacée par le Réel</small></div><input type="date" id="tf-ops-date" value="'+plusJ(45)+'"></header><div id="tf-ops-list"></div>';target.parentNode.insertBefore(p,target);q('tf-ops-date').onchange=chargerFuturesOperations;}}
 }
+function htmlFutures(xs,refining){
+ const rows=(xs||[]).filter(x=>x.source!=='pilotable').map(x=>`<div class="tf-future-row"><span>${dateFr(x.date)}${x.dateConventionnelle?' *':''}</span><div class="tf-lib"><b>${esc(x.libelle)}</b><small>${esc(x.categorie||'Sans catégorie')}${x.dateConventionnelle?' · date estimée':''}</small></div><span class="tf-source">${esc(sourceLabel(x.source))}</span><div><span class="tf-badge ${esc(x.certitude)}">${esc(certLabel(x.certitude))}</span><div class="tf-amount ${Number(x.montantSigne)<0?'neg':''}">${Number(x.montantSigne)>0?'+':''}${money(x.montantSigne)}</div></div></div>`).join('');
+ return (rows||'<div class="empty-state">Aucun mouvement futur identifié.</div>')+(refining?'<div class="tf-refining">Affichage des flux explicites terminé · estimation du prochain débit CB en cours…</div>':'');
+}
 function chargerFuturesOperations(){
  installerOperations();const panel=q('operations-future-panel'),date=q('tf-ops-date');if(!panel||!date)return;panel.classList.remove('hidden');const z=q('tf-ops-list'),id=++opsReq;z.innerHTML='<div class="empty-state">Calcul des mouvements futurs…</div>';
- google.script.run.withSuccessHandler(r=>{if(id!==opsReq)return;const xs=(r&&r.lignes||[]).filter(x=>x.source!=='pilotable');if(!xs.length){z.innerHTML='<div class="empty-state">Aucun mouvement futur identifié.</div>';return;}z.innerHTML=xs.map(x=>`<div class="tf-future-row"><span>${dateFr(x.date)}${x.dateConventionnelle?' *':''}</span><div class="tf-lib"><b>${esc(x.libelle)}</b><small>${esc(x.categorie||'Sans catégorie')}${x.dateConventionnelle?' · date estimée':''}</small></div><span class="tf-source">${esc(sourceLabel(x.source))}</span><div><span class="tf-badge ${esc(x.certitude)}">${esc(certLabel(x.certitude))}</span><div class="tf-amount ${Number(x.montantSigne)<0?'neg':''}">${Number(x.montantSigne)>0?'+':''}${money(x.montantSigne)}</div></div></div>`).join('');}).withFailureHandler(()=>{z.innerHTML='<div class="empty-state">Impossible de calculer les opérations futures.</div>';}).listerMouvementsFutursTresorerieRapide20260901(date.value);
+ // 1) chemin ultra-rapide sans Cerbère : la liste utile s'affiche immédiatement.
+ google.script.run.withSuccessHandler(r=>{
+   if(id!==opsReq)return;
+   z.innerHTML=htmlFutures(r&&r.lignes||[],true);
+   // 2) enrichissement différé : seul le débit CB estimé nécessite Cerbère.
+   setTimeout(()=>google.script.run.withSuccessHandler(full=>{
+     if(id!==opsReq||!full||!full.ok)return;
+     z.innerHTML=htmlFutures(full.lignes||[],false);
+   }).withFailureHandler(()=>{if(id===opsReq){const n=z.querySelector('.tf-refining');if(n)n.textContent='Flux explicites affichés · estimation CB indisponible.';}}).listerMouvementsFutursTresorerieRapide20260901(date.value),40);
+ }).withFailureHandler(()=>{z.innerHTML='<div class="empty-state">Impossible de calculer les opérations futures.</div>';}).listerMouvementsFutursTresorerieSansCerbere20260902(date.value);
 }
 
 function cibleFinCycleDepuisDom(){const root=document.querySelector('.c37-month');if(!root)return null;const t=root.querySelector('header>span')?.textContent||'';const m=t.match(/→\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(!m)return null;return `${m[3]}-${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;}
@@ -61,8 +75,6 @@ function majCerbereLocal(){
 }
 function brancherCerbere(){
  const root=document.querySelector('.c37-month');if(!root)return;installerCerbereCard();
- // Doctrine 01/09 : les molettes ne peuvent pas modifier le solde bancaire au 27.
- // On ne relance donc plus un calcul serveur coûteux à chaque mouvement de tirette.
  if(!cerbereBase)chargerCerbereForecast();else majCerbereLocal();
 }
 
