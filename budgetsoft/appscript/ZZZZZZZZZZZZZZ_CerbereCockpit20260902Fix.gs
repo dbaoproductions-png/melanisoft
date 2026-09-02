@@ -1,4 +1,4 @@
-const CERBERE_COCKPIT_20260902_FIX_VERSION='2026-09-02.pilotable-date-achat-1';
+const CERBERE_COCKPIT_20260902_FIX_VERSION='2026-09-02.pilotable-date-achat-2';
 
 /**
  * Correctif terminal du cockpit Cerbère du 02/09/2026.
@@ -11,6 +11,10 @@ const CERBERE_COCKPIT_20260902_FIX_VERSION='2026-09-02.pilotable-date-achat-1';
  * P1 - Réel depuis le début du cycle. Le Plan reste visible mais ne diminue pas
  * cette valeur. Il continue en revanche à participer à DPt1 lorsqu'il crée un
  * dépassement déjà engagé au-delà de l'allocation.
+ *
+ * Joker : le montant P1 retenu est conservé ; seule sa répartition revient à la
+ * forme de P0. Ainsi un P1 retenu à 1 633,36 € ne retombe pas au total canonique
+ * si P0 vaut moins : les poids de P0 sont appliqués au montant P1 retenu.
  */
 function chargerCerbereCockpitCorrige20260902(){
   const base=chargerCerbereCockpit20260902();
@@ -28,6 +32,27 @@ function corrigerCockpitPilotableDateAchat20260902_(base){
   periodes.forEach((p,pos)=>{
     if(!p||typeof p!=='object')return;
     const env=Array.isArray(p.enveloppes)?p.enveloppes:[];
+    const v=p.v37||(p.v37={});
+    const c=v.cockpit20260902||(v.cockpit20260902={});
+
+    // Le Joker restaure la FORME P0 sans perdre le montant P1 retenu.
+    if(v.joker&&v.joker.actif){
+      const canonTotal=env.reduce((s,x)=>s+Math.max(0,Number(x&&x.canon||0)),0);
+      const cible=Math.max(0,Number(c.capacitePilotable||c.p1Total||0));
+      if(canonTotal>0&&cible>0){
+        let distribue=0,dernier=-1;
+        env.forEach((x,i)=>{if(Math.max(0,Number(x&&x.canon||0))>0)dernier=i;});
+        env.forEach((x,i)=>{
+          const canon=Math.max(0,Number(x&&x.canon||0));
+          if(!canon){x.prevu=0;return;}
+          let montant=arrCerberePilotable20260902_(cible*canon/canonTotal);
+          if(i===dernier)montant=arrCerberePilotable20260902_(cible-distribue);
+          x.prevu=montant;distribue+=montant;
+        });
+        c.jokerP0={actif:true,cible:arrCerberePilotable20260902_(cible),canonTotal:arrCerberePilotable20260902_(canonTotal),mode:'P1 conservé · répartition P0'};
+      }
+    }
+
     const cats=new Set(env.map(x=>String(x&&x.categorie||'').trim()).filter(Boolean));
     const debut=dateCerberePilotable20260902_(p.periode&&p.periode.debut);
     const fin=dateCerberePilotable20260902_(p.periode&&p.periode.fin);
@@ -62,8 +87,6 @@ function corrigerCockpitPilotableDateAchat20260902_(base){
       depassements+=Math.max(0,engage-allocation);
     });
 
-    const v=p.v37||(p.v37={});
-    const c=v.cockpit20260902||(v.cockpit20260902={});
     c.p1Total=arrCerberePilotable20260902_(p1);
     c.consommePilotable=arrCerberePilotable20260902_(reelTotal);
     c.reservePlan=arrCerberePilotable20260902_(planTotal);
@@ -99,5 +122,5 @@ function arrCerberePilotable20260902_(n){return Math.round((Number(n)||0)*100)/1
 /** Lecture seule : contrôle des montants affichés dans le cockpit corrigé. */
 function auditerCockpitPilotable20260902(){
   const b=chargerCerbereCockpitCorrige20260902(),p=b&&b.periodes&&b.periodes[0],c=p&&p.v37&&p.v37.cockpit20260902;
-  return {ok:!!p,periode:p&&p.periode,p1:c&&c.p1Total,reel:c&&c.consommePilotable,encoreDisponible:c&&c.ret1,plan:c&&c.reservePlan,dpt1:c&&c.dpt1,capacite:c&&c.capacitePilotable,marge:c&&c.margeARepartir,courses:(p&&p.enveloppes||[]).filter(x=>String(x.categorie||'')==='Courses').map(x=>({allocation:x.prevu,reel:x.reelNetPrevisionnel,reste:x.resteV37}))};
+  return {ok:!!p,periode:p&&p.periode,p1:c&&c.p1Total,reel:c&&c.consommePilotable,encoreDisponible:c&&c.ret1,plan:c&&c.reservePlan,dpt1:c&&c.dpt1,capacite:c&&c.capacitePilotable,marge:c&&c.margeARepartir,joker:c&&c.jokerP0,courses:(p&&p.enveloppes||[]).filter(x=>String(x.categorie||'')==='Courses').map(x=>({allocation:x.prevu,reel:x.reelNetPrevisionnel,reste:x.resteV37}))};
 }
