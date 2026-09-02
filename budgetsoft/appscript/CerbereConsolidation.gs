@@ -1,4 +1,4 @@
-const CERBERE_CONSOLIDATION_VERSION='1.0.1';
+const CERBERE_CONSOLIDATION_VERSION='1.0.2';
 
 /**
  * Couche de cohérence Cerbère ↔ Planification.
@@ -29,7 +29,7 @@ function etatProjectionBudgetSoft(){
     dirty:p.getProperty('BUDGETSOFT_PROJECTION_DIRTY')==='true',
     dirty_le:p.getProperty('BUDGETSOFT_PROJECTION_DIRTY_LE')||'',
     origine:p.getProperty('BUDGETSOFT_PROJECTION_DIRTY_ORIGINE')||'',
-    dernier_calcul:p.getProperty('CERBERE_DERNIERE_RECALCUL')||'',
+    dernier_calcul:p.getProperty('CERBERE_DERNIER_RECALCUL')||'',
     version:p.getProperty('CERBERE_DERNIERE_VERSION')||''
   };
 }
@@ -87,23 +87,25 @@ function diagnostiquerConsolidationCerbere(){
   });
 }
 
-const CERBERE_COCKPIT_20260902_VERSION='2026-09-02.1';
+const CERBERE_COCKPIT_20260902_VERSION='2026-09-02.2';
 
 /**
  * Couche d'orchestration du cockpit Cerbère.
- * Elle ne remplace aucun moteur métier : elle annote le résultat 3.7.23 avec
- * des dérivés simples destinés à l'UI.
+ * Le Réel pilotable est rattaché au jour de l'achat ; la trésorerie reste, elle,
+ * rattachée à la date bancaire/comptable. Le Plan reste visible et participe à
+ * DPt1, mais il ne diminue pas « Encore disponible ».
  */
 function chargerCerbereCockpit20260902(){
   const executer=function(){
     const base=chargerCerbereV374();
     if(!base||base.ok===false)return base;
+    corrigerReelPilotableDateAchat20260902_(base);
     const periodes=Array.isArray(base.periodes)?base.periodes:[];
     periodes.forEach(enrichirCycleCockpitCerbere20260902_);
     base.cockpit20260902={
       version:CERBERE_COCKPIT_20260902_VERSION,
       appreciation:appreciationCockpitCerbere20260902_(base),
-      doctrine:'P0 est la référence. P1 est le budget pilotable décidé pour le cycle. REt1 = P1 - consommé/réservé du cycle. La capacité pilotable économique exclut le solde bancaire d’ouverture et les CB héritées ; la trajectoire bancaire reste l’autorité du moteur de trésorerie.'
+      doctrine:'P0 est la référence maître. P1 est le budget pilotable décidé pour le cycle. Encore disponible = P1 - Réel pilotable depuis le début du cycle. Le Plan est une réserve informative et n’est déduit que dans la projection DPt1 lorsqu’il crée un engagement. La capacité économique exclut le solde bancaire d’ouverture ; la trajectoire bancaire reste l’autorité de trésorerie.'
     };
     return serialiserCerberePourClient_(base);
   };
@@ -111,6 +113,63 @@ function chargerCerbereCockpit20260902(){
     ?avecContexteLectureBudgetSoft20260827_('cerbere-cockpit-20260902',executer)
     :executer();
 }
+
+/**
+ * Recalcule le consommé des enveloppes selon la date d'achat réelle.
+ * Les débits CB différés restent comptés à leur date bancaire dans le moteur de
+ * trésorerie, mais ne doivent pas déplacer un achat ancien dans le cycle pilotable.
+ */
+function corrigerReelPilotableDateAchat20260902_(base){
+  const ops0=lireTable_('Operations')||[];
+  const operations=typeof dedoublonnerOperationsCartesBudgetSoft_==='function'
+    ?dedoublonnerOperationsCartesBudgetSoft_(ops0):ops0;
+  const charges=lireTable_('Charges_fixes')||[];
+  const rapprochements=typeof lireRapprochementsChargesFixes==='function'?lireRapprochementsChargesFixes():[];
+  const liensCf=typeof construireLiensCfCertainsV377_==='function'
+    ?construireLiensCfCertainsV377_(operations,charges,rapprochements):{};
+  const maintenant=new Date();
+
+  (Array.isArray(base.periodes)?base.periodes:[]).forEach(p=>{
+    if(!p||typeof p!=='object')return;
+    const env=Array.isArray(p.enveloppes)?p.enveloppes:[];
+    const v=p.v37||(p.v37={});
+    const debut=dateCockpit20260902_(p.periode&&p.periode.debut);
+    const fin=dateCockpit20260902_(p.periode&&p.periode.fin);
+    if(!debut||!fin)return;
+
+    // Joker = retour strict aux allocations P0 du cycle.
+    if(v.joker&&v.joker.actif)env.forEach(x=>x.prevu=Math.max(0,Number(x&&x.canon||0)));
+
+    const cats=new Set(env.map(x=>String(x&&x.categorie||'').trim()).filter(Boolean));
+    const reelParCat={};
+    operations.forEach(o=>{
+      const montant=Number(o&&o.montant||0),cat=String(o&&o.categorie||'').trim(),id=String(o&&o.id||'').trim();
+      if(!Number.isFinite(montant)||montant>=0||!cats.has(cat))return;
+      if((id&&liensCf[id])||String(o&&o.charge_fixe_id||'').trim())return;
+      if(typeof estReglementCbTechniqueV377_==='function'&&estReglementCbTechniqueV377_(o))return;
+      const d=dateAchatCockpit20260902_(o);
+      if(!d||d<debut||d>fin||d>maintenant)return;
+      reelParCat[cat]=Number(reelParCat[cat]||0)+Math.abs(montant);
+    });
+
+    env.forEach(x=>{
+      const cat=String(x&&x.categorie||'').trim();
+      x.reelNetPrevisionnel=arrCockpit20260902_(Number(reelParCat[cat]||0));
+      x.reelPilotableDepuisDebutCycle=x.reelNetPrevisionnel;
+    });
+  });
+}
+
+function dateAchatCockpit20260902_(o){
+  let d=null;
+  if(typeof dateAchatMetierBudgetSoft_==='function')d=dateAchatMetierBudgetSoft_(o);
+  if(!d)d=dateCockpit20260902_(o&&o.date_achat);
+  if(!d&&typeof dateOperationCouranteBudgetSoft_==='function')d=dateOperationCouranteBudgetSoft_(o);
+  if(!d)d=dateCockpit20260902_(o&&(o.date||o.date_comptable));
+  return d;
+}
+function dateCockpit20260902_(v){if(!v)return null;const d=v instanceof Date?new Date(v):new Date(v);return isNaN(d)?null:d;}
+function arrCockpit20260902_(n){return Math.round((Number(n)||0)*100)/100;}
 
 function enrichirCycleCockpitCerbere20260902_(p){
   if(!p||typeof p!=='object')return;
@@ -123,22 +182,29 @@ function enrichirCycleCockpitCerbere20260902_(p){
     const reserve=Math.max(0,Number(x&&x.planifie||0));
     const engage=reel+reserve;
     p0+=canon;p1+=allocation;consomme+=reel;plan+=reserve;
-    ret+=allocation-engage;
+    ret+=allocation-reel;
     dpt+=Math.max(allocation,engage);
     depassements+=Math.max(0,engage-allocation);
+    x.engageV37=arrCockpit20260902_(engage);
+    x.resteV37=arrCockpit20260902_(allocation-reel);
+    x.dpt1=arrCockpit20260902_(Math.max(allocation,engage));
   });
   const het=Math.max(0,Number(v.het1!=null?v.het1:(v.horsPilotableAControler||0)));
   const capacite=Math.max(0,Number(v.rt1||0)-Number(v.cft1||0)-het);
   const marge=capacite-dpt;
-  const arr=n=>Math.round((Number(n)||0)*100)/100;
+  const arr=arrCockpit20260902_;
   v.cockpit20260902={
     p0Total:arr(p0),p1Total:arr(p1),consommePilotable:arr(consomme),reservePlan:arr(plan),
     ret1:arr(ret),dpt1:arr(dpt),depassements:arr(depassements),het1:arr(het),
     capacitePilotable:arr(capacite),margeARepartir:arr(marge),surplusVsP0:arr(capacite-p0),
     formuleCapacite:'Capacité pilotable = Rt1 - CFt1 - HEt1',
-    formuleRet1:'REt1 = P1 - réel pilotable - Plan réservé',
-    propositionProjetPossible:capacite>p0+.009
+    formuleRet1:'Encore disponible = P1 - Réel pilotable depuis le début du cycle',
+    propositionProjetPossible:capacite>p0+.009,
+    datePilotable:'date d’achat prioritaire ; date métier réelle en repli',
+    jokerP0:!!(v.joker&&v.joker.actif)
   };
+  v.ret1=arr(ret);v.dpt1=arr(dpt);v.disponibleEnveloppes=arr(ret);
+  p.resteBudgetPilotable=arr(ret);p.budgetReparti=arr(p1);
 }
 
 function appreciationCockpitCerbere20260902_(base){
@@ -158,13 +224,18 @@ function appreciationCockpitCerbere20260902_(base){
     else if(ecart>25)alertes.push({niveau:2,texte:String(x.categorie||'Poste')+' très rapide'});
     else if(ecart>10)alertes.push({niveau:1,texte:String(x.categorie||'Poste')+' un peu rapide'});
   });
-  if(Number(c.margeARepartir||0)<-.009)alertes.push({niveau:2,texte:'P1 à réduire de '+formatEuroCockpit20260902_(Math.abs(c.margeARepartir))});
+  if(Number(c.margeARepartir||0)<-.009)alertes.push({niveau:2,texte:'Économies à trouver : '+formatEuroCockpit20260902_(Math.abs(c.margeARepartir))});
   const niveau=Math.max(0,...alertes.map(x=>x.niveau));
   const info=alertes.sort((a,b)=>b.niveau-a.niveau)[0];
   if(niveau>=2)return{niveau:'rouge',emoji:'⛈️',titre:'Arbitrage nécessaire',resume:'Le cycle demande un ajustement du pilotable.',consigne:info?info.texte:''};
   if(niveau===1)return{niveau:'orange',emoji:'🌧️',titre:'Cap à surveiller',resume:'La situation reste récupérable, mais un poste mérite l’attention.',consigne:info?info.texte:''};
   const marge=Number(c.margeARepartir||0);
-  return{niveau:'vert',emoji:'🌤️',titre:'Cap tenu',resume:'Le rythme du pilotable reste compatible avec le cycle.',consigne:marge>0?'Marge encore affectable : '+formatEuroCockpit20260902_(marge):'Aucun arbitrage particulier à ce stade.'};
+  return{niveau:'vert',emoji:'🌤️',titre:'Cap tenu',resume:'Le rythme du pilotable reste compatible avec le cycle.',consigne:marge>0?'Surplus à ventiler : '+formatEuroCockpit20260902_(marge):'Aucun arbitrage particulier à ce stade.'};
+}
+
+function auditerCockpitPilotable20260902(){
+  const b=chargerCerbereCockpit20260902(),p=b&&b.periodes&&b.periodes[0],c=p&&p.v37&&p.v37.cockpit20260902;
+  return {ok:!!p,periode:p&&p.periode,p0:c&&c.p0Total,p1:c&&c.p1Total,reel:c&&c.consommePilotable,encoreDisponible:c&&c.ret1,plan:c&&c.reservePlan,dpt1:c&&c.dpt1,capacite:c&&c.capacitePilotable,marge:c&&c.margeARepartir,joker:c&&c.jokerP0,courses:(p&&p.enveloppes||[]).filter(x=>String(x.categorie||'')==='Courses').map(x=>({allocation:x.prevu,reel:x.reelNetPrevisionnel,reste:x.resteV37}))};
 }
 
 function formatEuroCockpit20260902_(n){return Utilities.formatString('%.2f €',Math.round((Number(n)||0)*100)/100);}
