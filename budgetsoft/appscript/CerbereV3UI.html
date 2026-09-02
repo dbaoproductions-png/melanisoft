@@ -30,7 +30,7 @@ function proposerSurplusProjet(p){
 
 function appreciation(){
  const a=data?.cockpit20260902?.appreciation||{},cls=a.niveau||'vert';
- return `<section class="c4-app c4-${esc(cls)}"><div class="c4-weather"><span>${esc(a.emoji||'🌤️')}</span><div><small>APPRÉCIATION GÉNÉRALE</small><h2>${esc(a.titre||'Situation')}</h2><p>${esc(a.resume||'')}</p></div></div><div class="c4-consigne"><small>À RETENIR</small><b>${esc(c.texte||a.consigne||'Aucun arbitrage particulier à ce stade.')}</b></div></section>`;
+ return `<section class="c4-app c4-${esc(cls)}"><div class="c4-weather"><span>${esc(a.emoji||'🌤️')}</span><div><small>APPRÉCIATION GÉNÉRALE</small><h2>${esc(a.titre||'Situation')}</h2><p>${esc(a.resume||'')}</p></div></div><div class="c4-consigne"><small>À RETENIR</small><b>${esc(a.consigne||'Aucun arbitrage particulier à ce stade.')}</b></div></section>`;
 }
 function miniCard(label,val,txt,cls,attr){return `<div class="c4-card ${cls||''}" ${attr||''}><span>${esc(label)}</span><b>${val}</b>${txt?`<small>${txt}</small>`:''}</div>`;}
 function topoPilotage(p,pos){
