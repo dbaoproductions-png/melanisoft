@@ -34,11 +34,7 @@ function previsionsEvenementsV371_(events,periode,p0Cats,catType){
     const nature=normaliserV37_(x.nature_action||'');
     const estRecette=typeExplicite==='recette'||impactType==='hausse revenu'||nature==='encaisser'||nature==='recouvrer';
     const estDepense=typeExplicite==='depense'||['acheter','rembourser','reserver','investir','payer'].includes(nature);
-
-    // Une Action de baisse/suppression de charge n'est pas une nouvelle recette :
-    // son effet relève de CF1/CFt1 via la logique de charge fixe existante.
     if(source==='Action'&&!estRecette&&!estDepense)return;
-
     if(!estRecette&&normaliserV37_(x.mode_paiement)==='cb')impact=dateImpactCbPlanV37_(o.date);
     if(!dateDansPeriodeV37_(impact,periode))return;
     const dateImpact=dateValideVentilationBudgetSoft_(impact);
@@ -46,7 +42,6 @@ function previsionsEvenementsV371_(events,periode,p0Cats,catType){
     const m=Math.abs(Number(o.montant||0));
     const cat=String(x.categorie||'').trim();
     if(!m)return;
-
     if(estRecette){
       out.recettesInitiales+=m;
       if(futur)out.recettesFutures+=m;
@@ -54,7 +49,6 @@ function previsionsEvenementsV371_(events,periode,p0Cats,catType){
       if(/sante|remboursement/.test(normaliserV37_(cat+' '+(x.libelle||''))))out.remboursementsSante+=m;
       return;
     }
-
     if(p0Cats.has(cat)){
       out.depensesPilotablesParCategorie[cat]=(out.depensesPilotablesParCategorie[cat]||0)+m;
       if(futur)out.depensesFutures+=m;
@@ -97,8 +91,6 @@ function previsionsEvenementsV371_(events,periode,p0Cats,catType){
   return out;
 }
 
-/** Rapproche explicitement une Action à une opération réelle : le prévisionnel
- * est alors neutralisé et le Réel devient seul compté par Cerbère. */
 function rapprocherActionV474(actionId,operationId){
   if(typeof assurerPlanActionsV4_==='function')assurerPlanActionsV4_();
   if(typeof assurerColonnesPlanV4_==='function')assurerColonnesPlanV4_('Plan_Actions',['montant_reel','date_realisation','rapprochement_statut','operation_reelle_id']);
@@ -115,4 +107,39 @@ function rapprocherActionV474(actionId,operationId){
   else enregistrerActionPlanV3(a);
   if(typeof recalculerPlanBudgetSoft_==='function')recalculerPlanBudgetSoft_('rapprochement_action');
   return typeof chargerPlanActionsV4==='function'?chargerPlanActionsV4():{ok:true};
+}
+
+/**
+ * Surcharge performance 2026-09-03.
+ * L'ancien contrôleur d'imprévus rappelait chargerCerbereV374(), donc chaque carte
+ * C1/C2 relançait toutes les passes Cerbère après le chargement principal.
+ * Ici on relit uniquement les référentiels nécessaires et le registre Operations.
+ */
+function listerImprevusCerbere20260903(clePilotage){
+  const executer=function(){
+    const periodes=typeof construirePeriodesCerbereV2_==='function'?construirePeriodesCerbereV2_():[];
+    const candidats=(periodes||[]).map(p=>({periode:p,cle:typeof clePeriodeCerbereV33_==='function'?String(clePeriodeCerbereV33_(p)):String(p&&p.debut||'')}));
+    const trouve=candidats.find(x=>x.cle===String(clePilotage||''))||candidats[0];
+    if(!trouve)return{ok:false,lignes:[],depenses:0,recettes:0,net:0};
+    const p0=typeof chargerCanonCerbereV1==='function'?chargerCanonCerbereV1():{postes:[]};
+    const r0=typeof chargerCanonRecettesCerbereV1==='function'?chargerCanonRecettesCerbereV1():{postes:[]};
+    const operations=lireTable_('Operations')||[],charges=lireTable_('Charges_fixes')||[],categories=lireTable_('Categories')||[];
+    const rap=typeof lireRapprochementsChargesFixes==='function'?lireRapprochementsChargesFixes():[];
+    const liens=typeof construireLiensChargesFixesCommuns_==='function'?construireLiensChargesFixesCommuns_(operations,charges,rap):{};
+    const periode=trouve.periode,p0Cats=new Set((p0.postes||[]).map(x=>String(x&&x.categorie||'').trim()).filter(Boolean)),r0Cats=new Set((r0.postes||[]).map(x=>String(x&&x.categorie||'').trim()).filter(Boolean)),types={};
+    const events=typeof lireFeuilleDynamiquePlan_==='function'?lireFeuilleDynamiquePlan_('Plan_Evenements'):[];
+    const opsEvents=new Set(events.map(e=>String(e&&e.operation_reelle_id||'').trim()).filter(Boolean));
+    p0Cats.add('Divers');
+    categories.forEach(c=>types[String(c&&c.nom||'').trim()]=typeof normaliserV377_==='function'?normaliserV377_(c&&c.type):String(c&&c.type||'').toLowerCase());
+    const lignes=[];let depenses=0,recettes=0;
+    operations.forEach(o=>{
+      const d=typeof dateImputationCerbereV377_==='function'?dateImputationCerbereV377_(o):dateValideVentilationBudgetSoft_(o&&o.date),m=Number(o&&o.montant||0),cat=String(o&&o.categorie||'').trim(),id=String(o&&o.id||'').trim();
+      if(!d||!(typeof dateDansCycleV377_==='function'?dateDansCycleV377_(d,periode):true)||!m||opsEvents.has(id)||liens[id]||types[cat]==='tresorerie'||(typeof estReglementCbTechniqueV377_==='function'&&estReglementCbTechniqueV377_(o)))return;
+      if(m<0&&p0Cats.has(cat))return;if(m>0&&r0Cats.has(cat))return;
+      if(m<0)depenses+=Math.abs(m);else recettes+=m;
+      lignes.push({id:id,date:Utilities.formatDate(d,Session.getScriptTimeZone()||'Europe/Paris','yyyy-MM-dd'),montant:Math.round(m*100)/100,categorie:cat,libelle:String(o&&o.libelle||o&&o.libelle_bancaire||'')});
+    });
+    return{ok:true,clePilotage:trouve.cle,lignes:lignes,depenses:Math.round(depenses*100)/100,recettes:Math.round(recettes*100)/100,net:Math.round((recettes-depenses)*100)/100,categories:categories.map(c=>String(c&&c.nom||'').trim()).filter(Boolean).sort(),performance:{moteurCerbereRelance:false}};
+  };
+  return typeof avecContexteLectureBudgetSoft20260827_==='function'?avecContexteLectureBudgetSoft20260827_('cerbere-imprevus-legers',executer):executer();
 }
