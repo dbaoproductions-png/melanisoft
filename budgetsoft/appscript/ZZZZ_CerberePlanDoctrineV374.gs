@@ -71,9 +71,8 @@ function previsionsEvenementsV371_(events,periode,p0Cats,catType){
 
   let actions=[];
   try{
-    if(typeof assurerColonnesPlanV4_==='function'){
-      assurerColonnesPlanV4_('Plan_Actions',['montant_reel','date_realisation','rapprochement_statut','operation_reelle_id']);
-    }
+    // Lecture pure : le schéma Plan_Actions est assuré à l'initialisation/écriture,
+    // jamais dans la boucle prévisionnelle exécutée pour chaque période Cerbère.
     actions=typeof lireFeuilleDynamiquePlan_==='function'?lireFeuilleDynamiquePlan_('Plan_Actions'):[];
   }catch(e){actions=[];}
 
