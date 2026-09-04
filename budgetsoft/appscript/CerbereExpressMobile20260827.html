@@ -4,12 +4,85 @@
   <base target="_top">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#eef4f0">
+  <meta name="theme-color" content="#edf4f0">
   <style>
-    :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#102c24;background:#eef4f0;font-size:16px}
-    *{box-sizing:border-box}html,body{margin:0;min-height:100%;background:#eef4f0}body{-webkit-font-smoothing:antialiased}.app{width:min(100%,640px);margin:0 auto;padding:max(12px,env(safe-area-inset-top)) 12px max(24px,env(safe-area-inset-bottom));overflow:hidden}.top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 2px 12px}.brand{font-size:1.18rem;font-weight:850;letter-spacing:-.02em}.sub,.fresh{font-size:.75rem;color:#6d8079;margin-top:2px}.refresh{min-height:44px;border:0;border-radius:14px;background:#123d31;color:#fff;font:inherit;font-size:.82rem;font-weight:800;padding:0 14px;cursor:pointer;white-space:nowrap}.refresh:disabled{opacity:.55}.panel{background:#fff;border:1px solid rgba(16,44,36,.06);border-radius:20px;box-shadow:0 8px 26px rgba(21,58,47,.07);margin-bottom:10px;overflow:hidden}.hero{display:grid;grid-template-columns:auto 1fr;gap:13px;align-items:center;padding:15px}.emoji{font-size:2.5rem;line-height:1}.hero h1{margin:0;font-size:1.15rem;letter-spacing:-.02em}.hero p{margin:3px 0 0;font-size:.85rem;line-height:1.35;color:#566a63}.keep{padding:14px 15px}.eyebrow{font-size:.7rem;font-weight:850;letter-spacing:.08em;text-transform:uppercase;color:#587068;margin-bottom:5px}.keep strong{font-size:.98rem;line-height:1.4}.metrics{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px}.metric{min-width:0;background:#f2f6f3;border-radius:14px;padding:11px}.metric span{display:block;font-size:.65rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#71837d}.metric b{display:block;margin-top:3px;font-size:1.18rem;letter-spacing:-.025em;white-space:nowrap}.metric.attn{background:#fff5df}.metric.good{background:#e9f6ef}.section{padding:14px}.section-title{font-size:.72rem;font-weight:900;letter-spacing:.075em;text-transform:uppercase;color:#4d675e;margin-bottom:6px}.row{padding:12px 0;border-top:1px solid #edf1ef}.row:first-of-type{border-top:0}.row-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.row-name{font-size:.91rem;font-weight:800;min-width:0}.row-rest{font-size:.91rem;font-weight:850;text-align:right;white-space:nowrap}.row.orange .row-rest{color:#996b0b}.row.rouge .row-rest{color:#a8423a}.numbers{display:flex;justify-content:space-between;gap:8px;margin-top:4px;color:#71817b;font-size:.7rem}.track{height:12px;border-radius:999px;background:#e8eeea;position:relative;margin-top:8px;overflow:visible}.fill{position:absolute;inset:0 auto 0 0;width:0;border-radius:999px;background:#497568}.row.orange .fill{background:#c18a25}.row.rouge .fill{background:#ba5148}.time{position:absolute;top:-4px;width:3px;height:20px;border-radius:2px;background:#172f28;transform:translateX(-1px);opacity:.75}.legend{display:flex;gap:12px;align-items:center;margin-top:7px;color:#74847e;font-size:.66rem}.legend i{display:inline-block;width:12px;height:5px;border-radius:4px;background:#497568;margin-right:4px}.legend i.time-key{width:3px;height:11px;background:#172f28;border-radius:2px}.pluxee-total{font-size:1.55rem;font-weight:850;letter-spacing:-.03em}.context-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.context-item{background:#f4f7f5;border-radius:12px;padding:10px}.context-item span{display:block;color:#72817c;font-size:.67rem}.context-item b{display:block;margin-top:2px;font-size:.95rem}.footer{text-align:center;color:#7e8d87;font-size:.66rem;line-height:1.4;padding:6px 10px 0}.error,.loading{padding:50px 18px;text-align:center;color:#65766f}.error{color:#a23f38}
-    @media(max-width:390px){.app{padding-left:8px;padding-right:8px}.top{align-items:flex-start}.brand{font-size:1.05rem}.refresh{min-height:40px;padding:0 10px}.metric b{font-size:1.06rem}.row-name,.row-rest{font-size:.86rem}.hero{padding:13px}.section{padding:12px}.context-grid{grid-template-columns:1fr}}
-    @media(min-width:700px){.app{padding-top:20px}.panel{border-radius:22px}.metrics{grid-template-columns:repeat(4,1fr)}.hero{padding:18px}.section{padding:16px}}
+    :root{
+      font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      color:#102c24;background:#edf4f0;font-size:18px;
+      --ink:#102c24;--muted:#647a72;--line:rgba(16,44,36,.09);--brand:#123d31;
+      --card:#fff;--soft:#f2f6f3;--good:#e9f6ef;--warn:#fff3da;
+      --shadow:0 14px 38px rgba(21,58,47,.08)
+    }
+    *{box-sizing:border-box}
+    html{min-height:100%;background:#edf4f0;scroll-behavior:smooth}
+    body{margin:0;min-height:100%;background:linear-gradient(180deg,#edf4f0 0,#f5f8f6 42%,#edf4f0 100%);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+    button,input{font:inherit}
+    button{touch-action:manipulation}
+    .app{width:min(100%,1480px);margin:0 auto;padding:max(18px,env(safe-area-inset-top)) clamp(14px,2.5vw,34px) max(36px,env(safe-area-inset-bottom));}
+    .top{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:4px 2px 20px}
+    .brand{font-size:clamp(1.25rem,2.1vw,1.65rem);font-weight:900;letter-spacing:-.035em}
+    .sub,.fresh{font-size:.82rem;color:var(--muted);margin-top:4px;line-height:1.35}
+    .refresh,.fullscreen-btn{min-height:48px;border:0;border-radius:15px;background:var(--brand);color:#fff;font-weight:850;padding:0 17px;cursor:pointer;white-space:nowrap;box-shadow:0 6px 18px rgba(18,61,49,.12)}
+    .refresh:disabled{opacity:.55;cursor:wait}
+    .fullscreen-btn{background:#e8f0ec;color:#183d32;box-shadow:none;border:1px solid rgba(18,61,49,.08);font-size:.84rem}
+    .panel{background:var(--card);border:1px solid var(--line);border-radius:26px;box-shadow:var(--shadow);margin-bottom:16px;overflow:hidden}
+    .hero{display:grid;grid-template-columns:auto minmax(0,1fr);gap:20px;align-items:center;padding:clamp(20px,3vw,32px)}
+    .emoji{font-size:clamp(3rem,6vw,5.2rem);line-height:1}
+    .hero h1{margin:0;font-size:clamp(1.35rem,3vw,2.25rem);line-height:1.08;letter-spacing:-.035em}
+    .hero p{margin:8px 0 0;font-size:clamp(.95rem,1.7vw,1.15rem);line-height:1.5;color:#536a61;max-width:72ch}
+    .keep{padding:clamp(20px,2.7vw,28px)}
+    .eyebrow,.section-title{font-size:.74rem;font-weight:900;letter-spacing:.09em;text-transform:uppercase;color:#526d63}
+    .keep strong{display:block;margin-top:7px;font-size:clamp(1rem,1.8vw,1.25rem);line-height:1.5}
+    .pilot-panel{position:relative}
+    .pilot-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:clamp(20px,2.8vw,28px) clamp(20px,3vw,32px) 6px}
+    .pilot-head .section-title{margin:0;font-size:.8rem}
+    .metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:14px clamp(20px,3vw,32px) 10px}
+    .metric{min-width:0;background:var(--soft);border-radius:18px;padding:16px 17px}
+    .metric span{display:block;font-size:.7rem;font-weight:850;letter-spacing:.065em;text-transform:uppercase;color:#6e827a;line-height:1.25}
+    .metric b{display:block;margin-top:6px;font-size:clamp(1.25rem,2.5vw,1.8rem);letter-spacing:-.035em;line-height:1.1;white-space:nowrap}
+    .metric.attn{background:var(--warn)}.metric.good{background:var(--good)}
+    .section{padding:clamp(20px,3vw,32px)}
+    .pilot-section{padding-top:14px}
+    .rows-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:clamp(28px,4vw,60px);row-gap:0}
+    .row{padding:20px 0 22px;border-top:1px solid #e8efeb;min-width:0}
+    .rows-grid .row:nth-child(-n+2){border-top:0}
+    .row-top{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+    .row-name{font-size:clamp(1rem,1.7vw,1.18rem);font-weight:850;min-width:0;line-height:1.25}
+    .row-rest{font-size:clamp(1rem,1.8vw,1.22rem);font-weight:900;text-align:right;white-space:nowrap;letter-spacing:-.02em}
+    .row.orange .row-rest{color:#926509}.row.rouge .row-rest{color:#a73f38}
+    .numbers{display:flex;justify-content:space-between;gap:10px;margin-top:7px;color:#6c8078;font-size:.78rem;line-height:1.3}
+    .track{height:14px;border-radius:999px;background:#e4ece7;position:relative;margin-top:13px;overflow:visible}
+    .fill{position:absolute;inset:0 auto 0 0;width:0;border-radius:999px;background:#497568}
+    .row.orange .fill{background:#c18a25}.row.rouge .fill{background:#ba5148}
+    .time{position:absolute;top:-5px;width:4px;height:24px;border-radius:3px;background:#172f28;transform:translateX(-2px);opacity:.8}
+    .legend{display:flex;flex-wrap:wrap;gap:16px 22px;align-items:center;margin-top:14px;color:#71837c;font-size:.74rem}
+    .legend i{display:inline-block;width:16px;height:7px;border-radius:5px;background:#497568;margin-right:6px}.legend i.time-key{width:4px;height:14px;background:#172f28;border-radius:2px}
+    .pluxee-total{font-size:clamp(1.7rem,3.5vw,2.6rem);font-weight:900;letter-spacing:-.04em;margin-top:6px}
+    .context-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}
+    .context-item{background:#f2f6f3;border-radius:16px;padding:16px}
+    .context-item span{display:block;color:#71837c;font-size:.75rem}.context-item b{display:block;margin-top:5px;font-size:clamp(1.05rem,2vw,1.35rem)}
+    .footer{text-align:center;color:#71837c;font-size:.72rem;line-height:1.55;padding:8px 12px 2px}
+    .error,.loading{padding:70px 20px;text-align:center;color:#65766f;font-size:1rem}.error{color:#a23f38}
+
+    .pilot-panel:fullscreen{width:100vw;height:100dvh;max-width:none;margin:0;border:0;border-radius:0;box-shadow:none;background:#f5f8f6;overflow-y:auto;padding:max(12px,env(safe-area-inset-top)) clamp(18px,3vw,48px) max(28px,env(safe-area-inset-bottom))}
+    .pilot-panel:fullscreen .pilot-head{position:sticky;top:0;z-index:5;background:rgba(245,248,246,.94);backdrop-filter:blur(12px);padding-top:16px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+    .pilot-panel:fullscreen .metrics{padding-top:22px}
+    .pilot-panel:fullscreen .pilot-section{padding-top:18px}
+    .pilot-panel:fullscreen .rows-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:0 clamp(36px,5vw,80px)}
+    .pilot-panel:fullscreen .row{padding:25px 0 27px}
+    .pilot-panel:fullscreen .row-name,.pilot-panel:fullscreen .row-rest{font-size:clamp(1.12rem,2vw,1.45rem)}
+    .pilot-panel:fullscreen .numbers{font-size:.86rem}.pilot-panel:fullscreen .track{height:17px}.pilot-panel:fullscreen .time{height:27px}
+
+    @media(max-width:900px){
+      :root{font-size:17px}.app{padding-left:14px;padding-right:14px}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.rows-grid,.pilot-panel:fullscreen .rows-grid{grid-template-columns:1fr}.rows-grid .row:nth-child(2){border-top:1px solid #e8efeb}.pilot-panel:fullscreen .row{padding:22px 0}.pilot-panel:fullscreen .pilot-head{padding-left:2px;padding-right:2px}
+    }
+    @media(max-width:620px){
+      :root{font-size:17px}.app{padding-left:10px;padding-right:10px}.top{align-items:flex-start;padding-bottom:15px}.refresh{min-height:46px;padding:0 13px;font-size:.8rem}.hero{gap:14px}.emoji{font-size:2.9rem}.panel{border-radius:21px;margin-bottom:12px}.pilot-head{padding-left:16px;padding-right:16px;align-items:flex-start}.fullscreen-btn{min-height:44px;padding:0 12px}.metrics{padding-left:12px;padding-right:12px;gap:8px}.metric{padding:14px 12px}.section{padding:18px 16px}.numbers{font-size:.76rem}.context-grid{grid-template-columns:1fr}.pilot-panel:fullscreen{padding-left:14px;padding-right:14px}.pilot-panel:fullscreen .metrics{padding-left:0;padding-right:0}.pilot-panel:fullscreen .pilot-section{padding-left:0;padding-right:0}
+    }
+    @media(max-width:400px){
+      .brand{font-size:1.15rem}.sub,.fresh{font-size:.75rem}.metrics{grid-template-columns:1fr}.metric b{font-size:1.45rem}.hero{grid-template-columns:1fr}.emoji{font-size:2.6rem}.pilot-head{flex-direction:column;gap:10px}.fullscreen-btn{width:100%}.row-top{gap:8px}.row-name,.row-rest{font-size:.98rem}.numbers{flex-direction:column;gap:2px}.track{margin-top:10px}
+    }
+    @media(orientation:landscape) and (max-height:650px){.pilot-panel:fullscreen .pilot-head{padding-top:10px;padding-bottom:10px}.pilot-panel:fullscreen .metrics{grid-template-columns:repeat(4,minmax(0,1fr))}.pilot-panel:fullscreen .row{padding:18px 0}}
   </style>
 </head>
 <body>
@@ -24,9 +97,12 @@
   const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   function line(x,cyclePct){const used=pct(x.partConsommee),time=pct(x.partTempsPct!=null?x.partTempsPct:cyclePct),reste=Number(x.reste||0);return `<div class="row ${esc(x.niveau||'vert')}"><div class="row-top"><div class="row-name">${esc(x.categorie)}</div><div class="row-rest">${money(reste)}</div></div><div class="numbers"><span>${money(x.consomme)} consommés</span><span>sur ${money(x.allocation)}</span></div><div class="track"><div class="fill" style="width:${used}%"></div><i class="time" style="left:${time}%"></i></div></div>`;}
   function metric(label,value,cls){return `<div class="metric ${cls||''}"><span>${esc(label)}</span><b>${money(value)}</b></div>`;}
-  function render(v,meta){if(!v||v.ok===false){document.getElementById('app').innerHTML='<div class="error">Cerbère Express indisponible'+(v&&v.erreur?': '+esc(v.erreur):'.')+'</div>';return;}const p=v.pilotable||{},pl=v.pluxee||{},m=v.meteo||{},c=v.consigneSaillante||{},ctx=v.contexte||{},cyclePct=Number(v.cycle&&v.cycle.progressionPct||0),av=Number(p.aVentiler||0);const date=v.cycle&&v.cycle.fin?'Cycle '+esc(v.cycle.debut.split('-').reverse().join('/'))+' → '+esc(v.cycle.fin.split('-').reverse().join('/')):'';const fresh=meta&&meta.perime?'Mise à jour disponible':(meta&&meta.genereLe?'Actualisé '+esc(meta.genereLe.replace('T',' ')):'');document.getElementById('app').innerHTML=`<header class="top"><div><div class="brand">🐺 Cerbère Express</div><div class="sub">${date}</div><div class="fresh" id="fresh-state">${fresh}</div></div><button class="refresh" id="refresh">↻ Actualiser</button></header><section class="panel hero"><div class="emoji">${esc(m.emoji||'🌤️')}</div><div><h1>${esc(m.libelle||'Situation')}</h1><p>${esc(m.resume||'')}</p></div></section><section class="panel keep"><div class="eyebrow">À retenir</div><strong>${esc(c.texte||'Cap tenu.')}</strong></section><section class="panel"><div class="metrics">${metric('P1 retenu',p.allocation)}${metric('Consommé',p.consomme)}${metric('Encore disponible',p.reste,Number(p.reste)<0?'attn':'good')}${metric(av<0?'À économiser':'À ventiler',Math.abs(av),av<0?'attn':(av>0?'good':''))}</div><div class="section"><div class="section-title">Pilotable quotidien</div>${(p.lignes||[]).map(x=>line(x,cyclePct)).join('')}<div class="legend"><span><i></i>consommé</span><span><i class="time-key"></i>avancement du cycle</span></div></div></section>${pl.disponible?`<section class="panel section"><div class="section-title">Pluxee</div><div class="pluxee-total">${money(pl.soldeReel)}</div><div class="sub">Solde réel · théorique ${money(pl.soldeTheorique)}</div>${(pl.lignes||[]).map(x=>line(x,pl.progressionPct)).join('')}</section>`:''}<section class="panel section"><div class="section-title">Cycle suivant</div><div class="context-grid"><div class="context-item"><span>Enveloppe globale</span><b>${money(ctx.prochainCycle)}</b></div><div class="context-item"><span>Impact CB reporté</span><b>${money(ctx.reportCbCycleSuivant)}</b></div></div></section><div class="footer">Lecture seule · mêmes valeurs que le cockpit Cerbère · les achats CB suivent leur date d’achat dans le pilotable.</div>`;document.getElementById('refresh').onclick=refresh;}
+  function fullscreenLabel(){const b=document.getElementById('pilot-fullscreen');if(b)b.textContent=document.fullscreenElement?'↙ Quitter le plein écran':'⛶ Plein écran';}
+  function toggleFullscreen(){const panel=document.getElementById('pilot-panel');if(!panel)return;if(document.fullscreenElement){document.exitFullscreen&&document.exitFullscreen();return;}if(panel.requestFullscreen)panel.requestFullscreen().catch(()=>{});}
+  function render(v,meta){if(!v||v.ok===false){document.getElementById('app').innerHTML='<div class="error">Cerbère Express indisponible'+(v&&v.erreur?': '+esc(v.erreur):'.')+'</div>';return;}const p=v.pilotable||{},pl=v.pluxee||{},m=v.meteo||{},c=v.consigneSaillante||{},ctx=v.contexte||{},cyclePct=Number(v.cycle&&v.cycle.progressionPct||0),av=Number(p.aVentiler||0);const date=v.cycle&&v.cycle.fin?'Cycle '+esc(v.cycle.debut.split('-').reverse().join('/'))+' → '+esc(v.cycle.fin.split('-').reverse().join('/')):'';const fresh=meta&&meta.perime?'Mise à jour disponible':(meta&&meta.genereLe?'Actualisé '+esc(meta.genereLe.replace('T',' ')):'');document.getElementById('app').innerHTML=`<header class="top"><div><div class="brand">🐺 Cerbère Express</div><div class="sub">${date}</div><div class="fresh" id="fresh-state">${fresh}</div></div><button class="refresh" id="refresh">↻ Actualiser</button></header><section class="panel hero"><div class="emoji">${esc(m.emoji||'🌤️')}</div><div><h1>${esc(m.libelle||'Situation')}</h1><p>${esc(m.resume||'')}</p></div></section><section class="panel keep"><div class="eyebrow">À retenir</div><strong>${esc(c.texte||'Cap tenu.')}</strong></section><section class="panel pilot-panel" id="pilot-panel"><div class="pilot-head"><div class="section-title">Pilotable quotidien</div><button type="button" class="fullscreen-btn" id="pilot-fullscreen">⛶ Plein écran</button></div><div class="metrics">${metric('P1 retenu',p.allocation)}${metric('Consommé',p.consomme)}${metric('Encore disponible',p.reste,Number(p.reste)<0?'attn':'good')}${metric(av<0?'À économiser':'À ventiler',Math.abs(av),av<0?'attn':(av>0?'good':''))}</div><div class="section pilot-section"><div class="rows-grid">${(p.lignes||[]).map(x=>line(x,cyclePct)).join('')}</div><div class="legend"><span><i></i>consommé</span><span><i class="time-key"></i>avancement du cycle</span></div></div></section>${pl.disponible?`<section class="panel section"><div class="section-title">Pluxee</div><div class="pluxee-total">${money(pl.soldeReel)}</div><div class="sub">Solde réel · théorique ${money(pl.soldeTheorique)}</div><div class="rows-grid">${(pl.lignes||[]).map(x=>line(x,pl.progressionPct)).join('')}</div></section>`:''}<section class="panel section"><div class="section-title">Cycle suivant</div><div class="context-grid"><div class="context-item"><span>Enveloppe globale</span><b>${money(ctx.prochainCycle)}</b></div><div class="context-item"><span>Impact CB reporté</span><b>${money(ctx.reportCbCycleSuivant)}</b></div></div></section><div class="footer">Lecture seule · mêmes valeurs que le cockpit Cerbère · les achats CB suivent leur date d’achat dans le pilotable.</div>`;document.getElementById('refresh').onclick=refresh;const fs=document.getElementById('pilot-fullscreen');if(fs)fs.onclick=toggleFullscreen;fullscreenLabel();}
   function refresh(){const b=document.getElementById('refresh');if(b){b.disabled=true;b.textContent='Actualisation…';}const ok=r=>{if(r&&r.vue)render(r.vue,{perime:false,genereLe:r.genereLe||''});else if(r&&r.snapshot&&r.snapshot.vue)render(r.snapshot.vue,{perime:!!r.snapshot.perime,genereLe:r.snapshot.genereLe||''});else if(b){b.disabled=false;b.textContent='↻ Actualiser';}};const fail=e=>{const x=document.getElementById('refresh');if(x){x.disabled=false;x.textContent='↻ Actualiser';}const s=document.getElementById('fresh-state');if(s)s.textContent='Actualisation impossible';console.error(e);};if(typeof google==='undefined'||!google.script||!google.script.run)return fail('Pont Apps Script indisponible');let run=google.script.run.withSuccessHandler(ok).withFailureHandler(fail);if(TOKEN)run.rafraichirSnapshotCerbereExpressPrive20260827(TOKEN);else run.rafraichirSnapshotCerbereExpress20260827();}
   const failure=e=>{document.getElementById('app').innerHTML='<div class="error">'+esc(e&&e.message||e)+'</div>';};
+  document.addEventListener('fullscreenchange',fullscreenLabel);
   if(PRELOAD){render(PRELOAD,META);return;}
   if(typeof google==='undefined'||!google.script||!google.script.run)return failure('Pont Apps Script indisponible.');
   if(TOKEN)google.script.run.withSuccessHandler(v=>render(v,null)).withFailureHandler(failure).chargerVueCerbereExpressPrive20260827(TOKEN);else google.script.run.withSuccessHandler(v=>render(v,null)).withFailureHandler(failure).chargerVueCerbereExpress20260827();
