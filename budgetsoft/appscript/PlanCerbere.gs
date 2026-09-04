@@ -1,4 +1,5 @@
-const PLAN_CERBERE_VERSION = '2.0.1';
+const PLAN_CERBERE_VERSION = '2.0.2';
+const PLAN_CERBERE_SCHEMA_KEY = 'PLAN_CERBERE_SCHEMA_2_0_2';
 
 /**
  * Couche PLAN de BudgetSoft.
@@ -160,8 +161,12 @@ function supprimerLignePlanCerbere_(nom,id){const sh=SpreadsheetApp.getActive().
 
 function assurerTablesPlanCerbere_() {
   const ss = SpreadsheetApp.getActive();
+  const props=PropertiesService.getDocumentProperties();
+  const noms=['Plan_Objectifs','Plan_Actions','Plan_Evenements'];
+  if(props.getProperty(PLAN_CERBERE_SCHEMA_KEY)==='ok'&&noms.every(n=>!!ss.getSheetByName(n)))return;
   const schemas=schemasPlanCerbere_();
-  ['Plan_Objectifs','Plan_Actions','Plan_Evenements'].forEach(n=>assurerFeuillePlan_(ss,n,schemas[n]));
+  noms.forEach(n=>assurerFeuillePlan_(ss,n,schemas[n]));
+  props.setProperty(PLAN_CERBERE_SCHEMA_KEY,'ok');
 }
 function assurerFeuillePlan_(ss, nom, entetes) {
   let sh = ss.getSheetByName(nom);
