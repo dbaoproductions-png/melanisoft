@@ -6,94 +6,16 @@ let dernierAuditGeneral_=null;
 const qAudit_=id=>document.getElementById(id);
 const escAudit_=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const moneyAudit_=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));
-
-function formatValeurAudit_(controle,v){
-  if(v===null||v===undefined||v==='')return '—';
-  if(typeof v!=='number')return escAudit_(v);
-  const t=String(controle||'').toLowerCase();
-  if(/capital|solde|endettement|mensualit|revenu|santé|courses|restaurant|alimentation|charge|placement|livret|actif|p1|p0|dpt|marge|surplus|allocation|théorique/.test(t)&&!/nombre|actives|ids|doublon|date/.test(t))return moneyAudit_(v);
-  return Number(v).toLocaleString('fr-FR',{maximumFractionDigits:2});
-}
-function periodeCouranteAudit_(){
-  const p=window.sprint0809&&sprint0809.configuration&&sprint0809.configuration.periodeCourante;
-  if(!p)return 'Cycle canonique : du 28 inclus au 27 inclus.';
-  const d=new Date(p.debut),f=new Date(p.fin);
-  if(isNaN(d)||isNaN(f))return 'Cycle canonique : du 28 inclus au 27 inclus.';
-  return `Cycle courant : ${d.toLocaleDateString('fr-FR')} → ${f.toLocaleDateString('fr-FR')}`;
-}
-function rendreParametresAuditGeneral_(){
-  const zone=qAudit_('generic-view');if(!zone)return;
-  zone.innerHTML=`
-    <article class="card panel audit-settings-card">
-      <div class="panel-heading"><div><span class="panel-kicker">Doctrine maître</span><h2>Calendrier BudgetSoft</h2></div></div>
-      <div class="audit-doctrine"><strong>28 inclus → 27 inclus</strong><span>${escAudit_(periodeCouranteAudit_())}</span><p>Cette frontière n'est pas paramétrable. Le salaire d'ouverture appartient au nouveau cycle et est conventionnellement rattaché au 28 dans Cerbère, même si sa date bancaire est le 27, le 28 ou le 29.</p></div>
-    </article>
-    <article class="card panel audit-general-card">
-      <div class="panel-heading"><div><span class="panel-kicker">Contrôle transversal</span><h2>Audit général BudgetSoft</h2></div><button class="primary-button" id="audit-general-run">🛡️ Lancer l’audit général</button></div>
-      <p class="helper-text">Lecture seule. L’audit recalcule les grandeurs essentielles depuis le tableur puis les compare aux moteurs de Comptes, Charges fixes, Crédits, Patrimoine, Analyses, Pluxee et Cerbère. Aucune donnée n’est modifiée.</p>
-      <div id="audit-general-status" class="audit-general-status">Aucun audit lancé pendant cette session.</div>
-      <div id="audit-general-result"></div>
-    </article>`;
-  installerStylesAuditGeneral_();
-  qAudit_('audit-general-run').onclick=lancerAuditGeneral_;
-  if(dernierAuditGeneral_)rendreRapportAuditGeneral_(dernierAuditGeneral_);
-}
-function lancerAuditGeneral_(){
-  const btn=qAudit_('audit-general-run'),st=qAudit_('audit-general-status'),res=qAudit_('audit-general-result');
-  if(!btn||!st||!res)return;
-  btn.disabled=true;btn.textContent='Audit en cours…';st.className='audit-general-status running';
-  st.textContent='Lecture des tables et contrôle croisé des moteurs. Cerbère peut prendre plusieurs secondes…';res.innerHTML='';
-  const debut=Date.now();
-  google.script.run.withSuccessHandler(r=>{
-    btn.disabled=false;btn.textContent='🛡️ Relancer l’audit général';
-    dernierAuditGeneral_=r;rendreRapportAuditGeneral_(r);
-  }).withFailureHandler(e=>{
-    btn.disabled=false;btn.textContent='🛡️ Relancer l’audit général';
-    st.className='audit-general-status error';st.textContent='Audit interrompu : '+(e.message||e);
-  }).auditerBudgetSoftGeneral();
-}
-function rendreRapportAuditGeneral_(r){
-  const st=qAudit_('audit-general-status'),res=qAudit_('audit-general-result');if(!st||!res||!r)return;
-  const s=r.synthese||{},niveau=r.statut||'attention';
-  st.className='audit-general-status '+niveau;
-  st.innerHTML=`<strong>${niveau==='ok'?'✅ Audit conforme':niveau==='erreur'?'⛔ Anomalies importantes détectées':'⚠️ Audit à examiner'}</strong> · ${escAudit_(r.genereLe||'')} · ${Number(r.dureeMs||0).toLocaleString('fr-FR')} ms`;
-  const groupes={};(r.controles||[]).forEach(c=>{(groupes[c.domaine]||(groupes[c.domaine]=[])).push(c);});
-  const perfs=(r.performances||[]).map(p=>`<span><b>${escAudit_(p.module)}</b> ${Number(p.ms||0).toLocaleString('fr-FR')} ms${p.erreur?' · erreur':''}</span>`).join('');
-  res.innerHTML=`
-    <div class="audit-summary-grid">
-      <div class="audit-score ${niveau}"><small>Score</small><b>${Number(r.score||0)}/100</b><span>${s.controles||0} contrôles</span></div>
-      <div><small>Conformes</small><b>${s.oks||0}</b></div><div><small>Attentions</small><b>${s.attentions||0}</b></div><div><small>Erreurs</small><b>${s.erreurs||0}</b></div><div><small>Bloquants</small><b>${s.bloquants||0}</b></div>
-    </div>
-    <div class="audit-toolbar"><label><input type="checkbox" id="audit-only-problems"> Afficher seulement les anomalies</label><button class="secondary-button" id="audit-copy-report">Copier le rapport</button></div>
-    <div class="audit-perfs"><strong>Temps des moteurs</strong>${perfs||'<span>—</span>'}</div>
-    <div id="audit-control-groups">${Object.entries(groupes).map(([d,l])=>rendreGroupeAudit_(d,l)).join('')}</div>`;
-  qAudit_('audit-only-problems').onchange=e=>filtrerAuditGeneral_(e.target.checked);
-  qAudit_('audit-copy-report').onclick=copierRapportAuditGeneral_;
-}
-function rendreGroupeAudit_(domaine,lignes){
-  const nErr=lignes.filter(x=>x.niveau==='erreur').length,nAtt=lignes.filter(x=>x.niveau==='attention').length;
-  return `<details class="audit-group" ${nErr||nAtt?'open':''}><summary><strong>${escAudit_(domaine)}</strong><span>${nErr?`⛔ ${nErr}`:''}${nErr&&nAtt?' · ':''}${nAtt?`⚠️ ${nAtt}`:(!nErr?'✅':'')}</span></summary><div>${lignes.map(rendreControleAudit_).join('')}</div></details>`;
-}
-function rendreControleAudit_(c){
-  const source=formatValeurAudit_(c.controle,c.source),module=formatValeurAudit_(c.controle,c.module),comparaison=c.module!==null&&c.module!==undefined?`<div class="audit-values"><span>Source <b>${source}</b></span><span>BudgetSoft <b>${module}</b></span>${c.ecart!==null&&c.ecart!==undefined?`<span>Écart <b>${formatValeurAudit_(c.controle,c.ecart)}</b></span>`:''}</div>`:`<div class="audit-values"><span>Valeur <b>${source}</b></span></div>`;
-  return `<div class="audit-check ${escAudit_(c.niveau||'info')}" data-audit-level="${escAudit_(c.niveau||'info')}"><div class="audit-check-main"><span class="audit-dot"></span><div><strong>${escAudit_(c.controle)}</strong><small>${escAudit_(c.message||'')}</small></div>${c.bloquant?'<em>bloquant</em>':''}</div>${comparaison}</div>`;
-}
+function formatValeurAudit_(controle,v){if(v===null||v===undefined||v==='')return '—';if(typeof v!=='number')return escAudit_(v);const t=String(controle||'').toLowerCase();if(/capital|solde|endettement|mensualit|revenu|santé|courses|restaurant|alimentation|charge|placement|livret|actif|p1|p0|dpt|marge|surplus|allocation|théorique/.test(t)&&!/nombre|actives|ids|doublon|date/.test(t))return moneyAudit_(v);return Number(v).toLocaleString('fr-FR',{maximumFractionDigits:2});}
+function periodeCouranteAudit_(){const cfg=typeof sprint0809!=='undefined'&&sprint0809?sprint0809.configuration:null,p=cfg&&cfg.periodeCourante;if(!p)return 'Cycle canonique : du 28 inclus au 27 inclus.';const d=new Date(p.debut),f=new Date(p.fin);if(isNaN(d)||isNaN(f))return 'Cycle canonique : du 28 inclus au 27 inclus.';return `Cycle courant : ${d.toLocaleDateString('fr-FR')} → ${f.toLocaleDateString('fr-FR')}`;}
+function rendreParametresAuditGeneral_(){const zone=qAudit_('generic-view');if(!zone)return;zone.innerHTML=`<article class="card panel audit-settings-card"><div class="panel-heading"><div><span class="panel-kicker">Doctrine maître</span><h2>Calendrier BudgetSoft</h2></div></div><div class="audit-doctrine"><strong>28 inclus → 27 inclus</strong><span>${escAudit_(periodeCouranteAudit_())}</span><p>Cette frontière n'est pas paramétrable. Le salaire d'ouverture appartient au nouveau cycle et est conventionnellement rattaché au 28 dans Cerbère, même si sa date bancaire est le 27, le 28 ou le 29.</p></div></article><article class="card panel audit-general-card"><div class="panel-heading"><div><span class="panel-kicker">Contrôle transversal</span><h2>Audit général BudgetSoft</h2></div><button class="primary-button" id="audit-general-run">🛡️ Lancer l’audit général</button></div><p class="helper-text">Lecture seule. L’audit recalcule les grandeurs essentielles depuis le tableur puis les compare aux moteurs de Comptes, Charges fixes, Crédits, Patrimoine, Analyses, Pluxee et Cerbère. Aucune donnée n’est modifiée.</p><div id="audit-general-status" class="audit-general-status">Aucun audit lancé pendant cette session.</div><div id="audit-general-result"></div></article>`;installerStylesAuditGeneral_();qAudit_('audit-general-run').onclick=lancerAuditGeneral_;if(dernierAuditGeneral_)rendreRapportAuditGeneral_(dernierAuditGeneral_);}
+function lancerAuditGeneral_(){const btn=qAudit_('audit-general-run'),st=qAudit_('audit-general-status'),res=qAudit_('audit-general-result');if(!btn||!st||!res)return;btn.disabled=true;btn.textContent='Audit en cours…';st.className='audit-general-status running';st.textContent='Lecture des tables et contrôle croisé des moteurs. Cerbère peut prendre plusieurs secondes…';res.innerHTML='';google.script.run.withSuccessHandler(r=>{btn.disabled=false;btn.textContent='🛡️ Relancer l’audit général';dernierAuditGeneral_=r;rendreRapportAuditGeneral_(r);}).withFailureHandler(e=>{btn.disabled=false;btn.textContent='🛡️ Relancer l’audit général';st.className='audit-general-status error';st.textContent='Audit interrompu : '+(e.message||e);}).auditerBudgetSoftGeneral();}
+function rendreRapportAuditGeneral_(r){const st=qAudit_('audit-general-status'),res=qAudit_('audit-general-result');if(!st||!res||!r)return;const s=r.synthese||{},niveau=r.statut||'attention';st.className='audit-general-status '+niveau;st.innerHTML=`<strong>${niveau==='ok'?'✅ Audit conforme':niveau==='erreur'?'⛔ Anomalies importantes détectées':'⚠️ Audit à examiner'}</strong> · ${escAudit_(r.genereLe||'')} · ${Number(r.dureeMs||0).toLocaleString('fr-FR')} ms`;const groupes={};(r.controles||[]).forEach(c=>{(groupes[c.domaine]||(groupes[c.domaine]=[])).push(c);});const perfs=(r.performances||[]).map(p=>`<span><b>${escAudit_(p.module)}</b> ${Number(p.ms||0).toLocaleString('fr-FR')} ms${p.erreur?' · erreur':''}</span>`).join('');res.innerHTML=`<div class="audit-summary-grid"><div class="audit-score ${niveau}"><small>Score</small><b>${Number(r.score||0)}/100</b><span>${s.controles||0} contrôles</span></div><div><small>Conformes</small><b>${s.oks||0}</b></div><div><small>Attentions</small><b>${s.attentions||0}</b></div><div><small>Erreurs</small><b>${s.erreurs||0}</b></div><div><small>Bloquants</small><b>${s.bloquants||0}</b></div></div><div class="audit-toolbar"><label><input type="checkbox" id="audit-only-problems"> Afficher seulement les anomalies</label><button class="secondary-button" id="audit-copy-report">Copier le rapport</button></div><div class="audit-perfs"><strong>Temps des moteurs</strong>${perfs||'<span>—</span>'}</div><div id="audit-control-groups">${Object.entries(groupes).map(([d,l])=>rendreGroupeAudit_(d,l)).join('')}</div>`;qAudit_('audit-only-problems').onchange=e=>filtrerAuditGeneral_(e.target.checked);qAudit_('audit-copy-report').onclick=copierRapportAuditGeneral_;}
+function rendreGroupeAudit_(domaine,lignes){const nErr=lignes.filter(x=>x.niveau==='erreur').length,nAtt=lignes.filter(x=>x.niveau==='attention').length;return `<details class="audit-group" ${nErr||nAtt?'open':''}><summary><strong>${escAudit_(domaine)}</strong><span>${nErr?`⛔ ${nErr}`:''}${nErr&&nAtt?' · ':''}${nAtt?`⚠️ ${nAtt}`:(!nErr?'✅':'')}</span></summary><div>${lignes.map(rendreControleAudit_).join('')}</div></details>`;}
+function rendreControleAudit_(c){const source=formatValeurAudit_(c.controle,c.source),module=formatValeurAudit_(c.controle,c.module),comparaison=c.module!==null&&c.module!==undefined?`<div class="audit-values"><span>Source <b>${source}</b></span><span>BudgetSoft <b>${module}</b></span>${c.ecart!==null&&c.ecart!==undefined?`<span>Écart <b>${formatValeurAudit_(c.controle,c.ecart)}</b></span>`:''}</div>`:`<div class="audit-values"><span>Valeur <b>${source}</b></span></div>`;return `<div class="audit-check ${escAudit_(c.niveau||'info')}" data-audit-level="${escAudit_(c.niveau||'info')}"><div class="audit-check-main"><span class="audit-dot"></span><div><strong>${escAudit_(c.controle)}</strong><small>${escAudit_(c.message||'')}</small></div>${c.bloquant?'<em>bloquant</em>':''}</div>${comparaison}</div>`;}
 function filtrerAuditGeneral_(seulement){qAudit_('audit-control-groups')?.querySelectorAll('.audit-check').forEach(x=>{x.style.display=seulement&&['ok','info'].includes(x.dataset.auditLevel)?'none':'';});qAudit_('audit-control-groups')?.querySelectorAll('.audit-group').forEach(g=>{if(!seulement){g.style.display='';return;}g.style.display=[...g.querySelectorAll('.audit-check')].some(x=>x.style.display!=='none')?'':'none';});}
-function copierRapportAuditGeneral_(){
-  if(!dernierAuditGeneral_)return;
-  const r=dernierAuditGeneral_,s=r.synthese||{};
-  const lignes=[`Audit général BudgetSoft ${r.version||''}`,`Généré : ${r.genereLe||''}`,`Score : ${r.score}/100 · ${s.erreurs||0} erreur(s) · ${s.attentions||0} attention(s) · ${s.bloquants||0} bloquant(s)`,''];
-  (r.controles||[]).forEach(c=>{lignes.push(`[${String(c.niveau||'').toUpperCase()}] ${c.domaine} — ${c.controle} | source=${c.source??'—'} | BudgetSoft=${c.module??'—'}${c.ecart!=null?' | écart='+c.ecart:''}${c.message?' | '+c.message:''}`);});
-  const texte=lignes.join('\n');
-  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(texte).then(()=>{const b=qAudit_('audit-copy-report');if(b){b.textContent='Rapport copié ✓';setTimeout(()=>b.textContent='Copier le rapport',1300);}});else prompt('Copiez le rapport :',texte);
-}
-function installerStylesAuditGeneral_(){
-  if(qAudit_('audit-general-styles'))return;const s=document.createElement('style');s.id='audit-general-styles';s.textContent=`
-  .audit-settings-card,.audit-general-card{margin-bottom:18px}.audit-doctrine{background:#edf7f3;border-radius:14px;padding:16px}.audit-doctrine>strong{font-size:24px;display:block}.audit-doctrine>span{display:block;font-weight:700;margin:4px 0 8px}.audit-doctrine p{margin:0;color:#56645f}.audit-general-status{margin:14px 0;padding:11px 13px;border-radius:10px;background:#f5f7f6}.audit-general-status.running{background:#eef4fa}.audit-general-status.ok{background:#eaf8f2}.audit-general-status.attention{background:#fff4dd}.audit-general-status.erreur,.audit-general-status.error{background:#fdecea}.audit-summary-grid{display:grid;grid-template-columns:1.4fr repeat(4,1fr);gap:9px;margin:12px 0}.audit-summary-grid>div{border:1px solid #e2e9e6;border-radius:12px;padding:11px;background:#fff}.audit-summary-grid small,.audit-summary-grid span{display:block}.audit-summary-grid b{font-size:21px}.audit-score.ok{background:#eaf8f2}.audit-score.attention{background:#fff4dd}.audit-score.erreur{background:#fdecea}.audit-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:14px 0}.audit-perfs{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 14px}.audit-perfs span{background:#f5f7f6;border-radius:999px;padding:5px 9px;font-size:12px}.audit-group{border:1px solid #e2e9e6;border-radius:12px;margin:9px 0;background:#fff}.audit-group summary{cursor:pointer;display:flex;justify-content:space-between;padding:11px 13px}.audit-group>div{padding:0 11px 9px}.audit-check{border-top:1px solid #edf1ef;padding:10px 2px}.audit-check-main{display:grid;grid-template-columns:10px 1fr auto;gap:9px;align-items:start}.audit-check-main small{display:block;color:#67736f;margin-top:2px}.audit-check-main em{font-size:10px;text-transform:uppercase;background:#fdecea;border-radius:999px;padding:3px 7px;font-style:normal}.audit-dot{width:9px;height:9px;border-radius:50%;margin-top:5px;background:#87938f}.audit-check.ok .audit-dot{background:#1f8b63}.audit-check.attention .audit-dot{background:#c8881a}.audit-check.erreur .audit-dot{background:#c43d32}.audit-check.info .audit-dot{background:#5681a8}.audit-values{display:flex;gap:14px;flex-wrap:wrap;margin:6px 0 0 19px;font-size:12px}.audit-values span{color:#65716d}.audit-values b{color:#26332f}@media(max-width:800px){.audit-summary-grid{grid-template-columns:1fr 1fr}.audit-toolbar{align-items:flex-start;flex-direction:column}.audit-general-card .panel-heading{align-items:flex-start;gap:10px;flex-direction:column}}`;
-  document.head.appendChild(s);
-}
-
-document.addEventListener('click',function(e){const b=e.target.closest&&e.target.closest('.nav-item[data-view="parametres"]');if(!b)return;setTimeout(rendreParametresAuditGeneral_,40);},false);
-window.rendreParametresAuditGeneral_=rendreParametresAuditGeneral_;
+function copierRapportAuditGeneral_(){if(!dernierAuditGeneral_)return;const r=dernierAuditGeneral_,s=r.synthese||{},lignes=[`Audit général BudgetSoft ${r.version||''}`,`Généré : ${r.genereLe||''}`,`Score : ${r.score}/100 · ${s.erreurs||0} erreur(s) · ${s.attentions||0} attention(s) · ${s.bloquants||0} bloquant(s)`,''];(r.controles||[]).forEach(c=>lignes.push(`[${String(c.niveau||'').toUpperCase()}] ${c.domaine} — ${c.controle} | source=${c.source??'—'} | BudgetSoft=${c.module??'—'}${c.ecart!=null?' | écart='+c.ecart:''}${c.message?' | '+c.message:''}`));const texte=lignes.join('\n');if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(texte).then(()=>{const b=qAudit_('audit-copy-report');if(b){b.textContent='Rapport copié ✓';setTimeout(()=>b.textContent='Copier le rapport',1300);}});else prompt('Copiez le rapport :',texte);}
+function installerStylesAuditGeneral_(){if(qAudit_('audit-general-styles'))return;const s=document.createElement('style');s.id='audit-general-styles';s.textContent=`.audit-settings-card,.audit-general-card{margin-bottom:18px}.audit-doctrine{background:#edf7f3;border-radius:14px;padding:16px}.audit-doctrine>strong{font-size:24px;display:block}.audit-doctrine>span{display:block;font-weight:700;margin:4px 0 8px}.audit-doctrine p{margin:0;color:#56645f}.audit-general-status{margin:14px 0;padding:11px 13px;border-radius:10px;background:#f5f7f6}.audit-general-status.running{background:#eef4fa}.audit-general-status.ok{background:#eaf8f2}.audit-general-status.attention{background:#fff4dd}.audit-general-status.erreur,.audit-general-status.error{background:#fdecea}.audit-summary-grid{display:grid;grid-template-columns:1.4fr repeat(4,1fr);gap:9px;margin:12px 0}.audit-summary-grid>div{border:1px solid #e2e9e6;border-radius:12px;padding:11px;background:#fff}.audit-summary-grid small,.audit-summary-grid span{display:block}.audit-summary-grid b{font-size:21px}.audit-score.ok{background:#eaf8f2}.audit-score.attention{background:#fff4dd}.audit-score.erreur{background:#fdecea}.audit-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:14px 0}.audit-perfs{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 14px}.audit-perfs span{background:#f5f7f6;border-radius:999px;padding:5px 9px;font-size:12px}.audit-group{border:1px solid #e2e9e6;border-radius:12px;margin:9px 0;background:#fff}.audit-group summary{cursor:pointer;display:flex;justify-content:space-between;padding:11px 13px}.audit-group>div{padding:0 11px 9px}.audit-check{border-top:1px solid #edf1ef;padding:10px 2px}.audit-check-main{display:grid;grid-template-columns:10px 1fr auto;gap:9px;align-items:start}.audit-check-main small{display:block;color:#67736f;margin-top:2px}.audit-check-main em{font-size:10px;text-transform:uppercase;background:#fdecea;border-radius:999px;padding:3px 7px;font-style:normal}.audit-dot{width:9px;height:9px;border-radius:50%;margin-top:5px;background:#87938f}.audit-check.ok .audit-dot{background:#1f8b63}.audit-check.attention .audit-dot{background:#c8881a}.audit-check.erreur .audit-dot{background:#c43d32}.audit-check.info .audit-dot{background:#5681a8}.audit-values{display:flex;gap:14px;flex-wrap:wrap;margin:6px 0 0 19px;font-size:12px}.audit-values span{color:#65716d}.audit-values b{color:#26332f}@media(max-width:800px){.audit-summary-grid{grid-template-columns:1fr 1fr}.audit-toolbar{align-items:flex-start;flex-direction:column}.audit-general-card .panel-heading{align-items:flex-start;gap:10px;flex-direction:column}}`;document.head.appendChild(s);}
+document.addEventListener('click',function(e){const b=e.target.closest&&e.target.closest('.nav-item[data-view="parametres"]');if(!b)return;setTimeout(rendreParametresAuditGeneral_,40);},false);window.rendreParametresAuditGeneral_=rendreParametresAuditGeneral_;
 })();
 </script>
