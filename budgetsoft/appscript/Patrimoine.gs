@@ -1,12 +1,41 @@
 function chargerPatrimoine() {
   verifierInitialisation_();
   const actifs = lireTable_('Actifs');
-  const dettes = lireTable_('Dettes');
-  const credits = lireTable_('Credits');
-  const totalActifs = actifs.reduce((s, a) => s + Math.max(0, convertirNombre_(a.valeur || 0)), 0);
-  const totalDettes = dettes.reduce((s, d) => s + Math.max(0, convertirNombre_(d.capital_restant || 0)), 0)
-    + credits.reduce((s, c) => s + Math.max(0, convertirNombre_(c.capital_restant || 0)), 0);
-  return { actifs, dettes, credits, totalActifs, totalDettes, patrimoineNet: totalActifs - totalDettes };
+  const comptes = lireTable_('Comptes').filter(c => convertirBooleen_(c.actif));
+  const operations = lireTable_('Operations');
+
+  const soldeCompte = c => {
+    const id = String(c.id || '');
+    const nom = String(c.nom || '');
+    return Math.round((convertirNombre_(c.solde_initial || 0) + operations
+      .filter(o => String(o.compte || '') === id || String(o.compte || '') === nom)
+      .reduce((s,o) => s + convertirNombre_(o.montant || 0), 0)) * 100) / 100;
+  };
+
+  const financiers = comptes.map(c => ({
+    id: c.id,
+    nom: c.nom,
+    type: String(c.type || '').toLowerCase(),
+    solde: soldeCompte(c)
+  }));
+  const livrets = financiers.filter(c => c.type === 'epargne');
+  const placements = financiers.filter(c => c.type === 'placement');
+
+  const totalActifsPatrimoniaux = actifs.reduce((s,a) => s + Math.max(0, convertirNombre_(a.valeur || 0)), 0);
+  const totalLivrets = livrets.reduce((s,c) => s + Math.max(0, Number(c.solde || 0)), 0);
+  const totalPlacements = placements.reduce((s,c) => s + Math.max(0, Number(c.solde || 0)), 0);
+  const totalFinancier = totalLivrets + totalPlacements;
+
+  return {
+    actifs,
+    livrets,
+    placements,
+    totalActifsPatrimoniaux: Math.round(totalActifsPatrimoniaux * 100) / 100,
+    totalLivrets: Math.round(totalLivrets * 100) / 100,
+    totalPlacements: Math.round(totalPlacements * 100) / 100,
+    totalFinancier: Math.round(totalFinancier * 100) / 100,
+    totalActifs: Math.round((totalActifsPatrimoniaux + totalFinancier) * 100) / 100
+  };
 }
 
 function enregistrerActifPatrimonial(donnee) {
