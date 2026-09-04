@@ -1,4 +1,4 @@
-const ANALYSES_CORRECTIONS_19082026_VERSION = '2.6';
+const ANALYSES_CORRECTIONS_19082026_VERSION = '2.6.1';
 
 function famillesAnalytiquesAnalyse2026_(categoriesRef){
   const map={};
@@ -18,13 +18,6 @@ function producteurAnalyse20260904_(cat){return typeof producteurRevenu2026_==='
 function structurelAnalyse20260904_(cat){return typeof estRevenuStructurel2026_==='function'?estRevenuStructurel2026_(cat):['Salaires','France Travail','Cours','Concerts','Congés spectacles','SACEM','Droits artistiques','Revenus fonciers'].includes(cat);}
 function variableAnalyse20260904_(cat){return typeof estRevenuVariable2026_==='function'?estRevenuVariable2026_(cat):['France Travail','Cours','Concerts','Congés spectacles','SACEM','Droits artistiques','Revenus divers','Autres revenus','Avantages employeur'].includes(cat);}
 
-/**
- * Moteur Analyses consolidé 2.6.
- * Une seule passe de lecture et une seule construction analytique par requête UI.
- * Doctrine : cycles 28 inclus -> 27 inclus ; fenêtre courante arrêtée à la dernière
- * date bancaire connue ; Pluxee séparé de la trésorerie mais intégré aux dépenses
- * de consommation détaillées ; flux de trésorerie exclus du résultat économique.
- */
 function chargerAnalysesBudgetairesV23(nombrePeriodes){
   verifierInitialisation_();
   const t0=Date.now();
@@ -65,6 +58,8 @@ function chargerAnalysesBudgetairesV23(nombrePeriodes){
   }
 
   const courante=periodes[periodes.length-1];
+  const periodesCompletes=periodes.filter(p=>p&&p.periodeComplete!==false);
+  const moyenneRevenusCyclesComplets=periodesCompletes.length?periodesCompletes.reduce((s,p)=>s+Number(p.revenus||0),0)/periodesCompletes.length:0;
   const debutFenetre=new Date(periodes[0].debut),finFenetre=new Date(periodes[periodes.length-1].fin),borneFenetre=finFenetre<finReference?finFenetre:finReference;
   const opsFenetre=operations.filter(o=>{const d=dateAnalyse20260904_(o.date_analyse);return d&&d>=debutFenetre&&d<=borneFenetre;});
   const opsCourantes=operations.filter(o=>{const d=dateAnalyse20260904_(o.date_analyse);return d&&d>=new Date(courante.debut)&&d<=borneFenetre;});
@@ -97,8 +92,8 @@ function chargerAnalysesBudgetairesV23(nombrePeriodes){
   });
 
   const dernierSalaire=operations.filter(o=>Number(o.montant||0)>0&&String(o.categorie||'').trim()==='Salaires'&&dateAnalyse20260904_(o.date_analyse)<=finReference).sort((a,b)=>dateAnalyse20260904_(b.date_analyse)-dateAnalyse20260904_(a.date_analyse))[0];
-  const recettes={version:'2026-09-04.1',fenetres:{},references:{salairePatrick:dernierSalaire?Number(dernierSalaire.montant||0):0,loyerAppartement:Number(params.loyer_reference_mensuel||750),garage:Number(params.garage_reference_mensuel||30),pluxeeMensuel:Number(params.pluxee_montant_mensuel||154),pluxeeMoisCarence:Number(params.pluxee_mois_carence||5),moisPrimesSalaire:String(params.salaire_mois_primes||'6,11,12')}};
-  recettes.fenetres[nb]={mois:nb,debut:debutFenetre,fin:borneFenetre,revenusEconomiques,moyenneMensuelle:revenusEconomiques/nb,revenusStructurels,revenusVariables,partVariable:revenusEconomiques>0?revenusVariables/revenusEconomiques*100:0,producteurs,sources:Object.entries(sources).map(([nom,montant])=>({nom,montant})).sort((a,b)=>b.montant-a.montant),remboursementsProfessionnelsNeutralises:0,creditsTresorerie,moisAvecSauvetage:periodesSauvetage.size,dependanceCredit:revenusEconomiques>0?creditsTresorerie/revenusEconomiques*100:0,alignementPeriodes:'2026-09-04.1'};
+  const recettes={version:'2026-09-04.2',fenetres:{},references:{salairePatrick:dernierSalaire?Number(dernierSalaire.montant||0):0,loyerAppartement:Number(params.loyer_reference_mensuel||750),garage:Number(params.garage_reference_mensuel||30),pluxeeMensuel:Number(params.pluxee_montant_mensuel||154),pluxeeMoisCarence:Number(params.pluxee_mois_carence||5),moisPrimesSalaire:String(params.salaire_mois_primes||'6,11,12')}};
+  recettes.fenetres[nb]={mois:nb,debut:debutFenetre,fin:borneFenetre,revenusEconomiques,moyenneMensuelle:moyenneRevenusCyclesComplets,baseMoyenneMensuelle:periodesCompletes.length,revenusStructurels,revenusVariables,partVariable:revenusEconomiques>0?revenusVariables/revenusEconomiques*100:0,producteurs,sources:Object.entries(sources).map(([nom,montant])=>({nom,montant})).sort((a,b)=>b.montant-a.montant),remboursementsProfessionnelsNeutralises:0,creditsTresorerie,moisAvecSauvetage:periodesSauvetage.size,dependanceCredit:revenusEconomiques>0?creditsTresorerie/revenusEconomiques*100:0,alignementPeriodes:'2026-09-04.2'};
 
   const pluxeeValides=pluxeeOps.filter(o=>String(o.statut||'valide').toLowerCase()!=='refuse'&&Number(o.montant||0)<0).filter(o=>{const d=dateAnalyse20260904_(o.date);return d&&d>=debutFenetre&&d<=borneFenetre;});
   let pluxeeCourses=0,pluxeeRestaurants=0,pluxeeAClasser=0;
@@ -128,17 +123,17 @@ function chargerAnalysesBudgetairesV23(nombrePeriodes){
   if(idxFin>=0)themesListe.splice(idxFin+1,0,...ajoutsFin);else themesListe.unshift({nom:'Crédits / financement',montant:sortiesFinancement},...ajoutsFin);
 
   const fixesActives=chargesFixes.filter(c=>actifAnalyse20260904_(c.actif));
-  const depensesDetail={version:'2026-09-04.1',fenetres:{},fixes:{montantMensuelReference:fixesActives.reduce((s,c)=>s+montantMensuelChargeAnalyse20260904_(c),0),nombre:fixesActives.length,couvertureSanteActuelle:0},financement:{version:'2026-09-04.1',estimation:true,calibration:{ratioCapital}},nomenclature:{dimensions:['catégorie','thème','fixe/variable','contraint/arbitrable','brut/net'],note:'Analyse consolidée sur les cycles BudgetSoft.'}};
+  const depensesDetail={version:'2026-09-04.2',fenetres:{},fixes:{montantMensuelReference:fixesActives.reduce((s,c)=>s+montantMensuelChargeAnalyse20260904_(c),0),nombre:fixesActives.length,couvertureSanteActuelle:0},financement:{version:'2026-09-04.2',estimation:true,calibration:{ratioCapital}},nomenclature:{dimensions:['catégorie','thème','fixe/variable','contraint/arbitrable','brut/net'],note:'Analyse consolidée sur les cycles BudgetSoft.'}};
   const dernierMontant=motif=>{const l=operations.filter(o=>Number(o.montant||0)<0&&motif.test(texteAnalyse20260904_(o))&&dateAnalyse20260904_(o.date_analyse)<=finReference).sort((a,b)=>dateAnalyse20260904_(b.date_analyse)-dateAnalyse20260904_(a.date_analyse));return l.length?Math.abs(Number(l[0].montant||0)):0;};
   depensesDetail.fixes.couvertureSanteActuelle=dernierMontant(/MNT/)+dernierMontant(/AUDIENS/);
-  depensesDetail.fenetres[nb]={mois:nb,debut:debutFenetre,fin:borneFenetre,alimentation:{coursesBanque,restaurantsBanque,pluxeeCourses,pluxeeRestaurants,pluxeeTotal:pluxeeCourses+pluxeeRestaurants,pluxeeMode:'observé dans le registre Pluxee',pluxeeAClasser,coursesReelles:coursesBanque+pluxeeCourses,restaurantsReels:restaurantsBanque+pluxeeRestaurants,totalReel:coursesBanque+restaurantsBanque+pluxeeCourses+pluxeeRestaurants},sante:{soinsEtCouvertureBruts:santeBrute,couvertureMntAudiens:couverture,soinsBruts:Math.max(0,santeBrute-couverture),remboursements:rembSante,coutNet:Math.max(0,santeBrute-rembSante)},energie:{brut:energieBrute,remboursements:rembEnergie,coutNet:energieNette},financement:{version:'2026-09-04.1',debut:debutFenetre,fin:borneFenetre,sortiesFinancement,capitalRembourseEstime,coutFinancementEstime,reinjectionsTresorerie:creditsTresorerie,desendettementNetEstime,ratioCapitalEstime:ratioCapital,estimation:true,methode:'Fenêtre alignée sur les cycles affichés ; part de capital conservée comme estimation faute de ventilation historique capital/intérêts fiable.'},themes:themesListe,alignementPeriodes:'2026-09-04.1'};
+  depensesDetail.fenetres[nb]={mois:nb,debut:debutFenetre,fin:borneFenetre,alimentation:{coursesBanque,restaurantsBanque,pluxeeCourses,pluxeeRestaurants,pluxeeTotal:pluxeeCourses+pluxeeRestaurants,pluxeeMode:'observé dans le registre Pluxee',pluxeeAClasser,coursesReelles:coursesBanque+pluxeeCourses,restaurantsReels:restaurantsBanque+pluxeeRestaurants,totalReel:coursesBanque+restaurantsBanque+pluxeeCourses+pluxeeRestaurants},sante:{soinsEtCouvertureBruts:santeBrute,couvertureMntAudiens:couverture,soinsBruts:Math.max(0,santeBrute-couverture),remboursements:rembSante,coutNet:Math.max(0,santeBrute-rembSante)},energie:{brut:energieBrute,remboursements:rembEnergie,coutNet:energieNette},financement:{version:'2026-09-04.2',debut:debutFenetre,fin:borneFenetre,sortiesFinancement,capitalRembourseEstime,coutFinancementEstime,reinjectionsTresorerie:creditsTresorerie,desendettementNetEstime,ratioCapitalEstime:ratioCapital,estimation:true,methode:'Fenêtre alignée sur les cycles affichés ; part de capital conservée comme estimation faute de ventilation historique capital/intérêts fiable.'},themes:themesListe,alignementPeriodes:'2026-09-04.2'};
 
-  const moyenne=cle=>periodes.length?periodes.reduce((s,p)=>s+Number(p[cle]||0),0)/periodes.length:0,precedente=periodes.length>1?periodes[periodes.length-2]:null;
-  const indicateurs={revenusMoyens:moyenne('revenus'),depensesMoyennes:moyenne('depenses'),epargneMoyenne:moyenne('solde'),tauxEpargneMoyen:moyenne('revenus')>0?Math.round((moyenne('solde')/moyenne('revenus'))*1000)/10:0,evolutionDepenses:precedente&&precedente.depenses>0?Math.round(((courante.depenses-precedente.depenses)/precedente.depenses)*1000)/10:0,mouvementTresorerieMoyen:moyenne('tresorerie')};
+  const baseIndicateurs=periodesCompletes.length?periodesCompletes:periodes;
+  const moyenne=cle=>baseIndicateurs.length?baseIndicateurs.reduce((s,p)=>s+Number(p[cle]||0),0)/baseIndicateurs.length:0,precedente=periodes.length>1?periodes[periodes.length-2]:null;
+  const indicateurs={revenusMoyens:moyenne('revenus'),depensesMoyennes:moyenne('depenses'),epargneMoyenne:moyenne('solde'),tauxEpargneMoyen:moyenne('revenus')>0?Math.round((moyenne('solde')/moyenne('revenus'))*1000)/10:0,evolutionDepenses:courante.periodeComplete&&precedente&&precedente.depenses>0?Math.round(((courante.depenses-precedente.depenses)/precedente.depenses)*1000)/10:null,mouvementTresorerieMoyen:moyenne('tresorerie')};
 
-  const resultat={version:ANALYSES_CORRECTIONS_19082026_VERSION,periodes,courante,categories,alertes,recettes,depensesDetail,indicateurs,dateReference:reference.toISOString(),diagnostic:{sourceOperations:'Operations',dateFlux:'date_comptable puis date',periodeAnalyse:'cycle budgétaire 28 inclus -> 27 inclus',periodeCourante:'cycle contenant la dernière date bancaire connue',datesBancairesCompareesAuJourCivil:true,operationsFuturesExclues:true,tresorerieExclueDuResultatEconomique:true,pluxee:'registre réel séparé de la banque ; Courses/Restaurants intégrés à la consommation détaillée',pluxeeAClasser,chargesFixesActives:fixesActives.length,regroupementAnalytique:'Gaz + Électricité → Énergies',coutsNets:'Santé et Énergies',financement:'capital remboursé encore estimé',dettesHorsCredit:'encours exclu des dépenses ; seuls les paiements réels apparaissent via leur catégorie'},performance:{lectureMs:tLecture-t0,calculMs:Date.now()-tLecture,totalMs:Date.now()-t0,lecturesPrincipales:6,ancienMoteurRelance:false}};
+  const resultat={version:ANALYSES_CORRECTIONS_19082026_VERSION,periodes,courante,categories,alertes,recettes,depensesDetail,indicateurs,dateReference:reference.toISOString(),diagnostic:{sourceOperations:'Operations',dateFlux:'date_comptable puis date',periodeAnalyse:'cycle budgétaire 28 inclus -> 27 inclus',periodeCourante:'cycle contenant la dernière date bancaire connue',datesBancairesCompareesAuJourCivil:true,operationsFuturesExclues:true,tresorerieExclueDuResultatEconomique:true,pluxee:'registre réel séparé de la banque ; Courses/Restaurants intégrés à la consommation détaillée',pluxeeAClasser,chargesFixesActives:fixesActives.length,regroupementAnalytique:'Gaz + Électricité → Énergies',coutsNets:'Santé et Énergies',financement:'capital remboursé encore estimé',dettesHorsCredit:'encours exclu des dépenses ; seuls les paiements réels apparaissent via leur catégorie',moyennes:'cycles complets uniquement lorsque le cycle courant est incomplet'},performance:{lectureMs:tLecture-t0,calculMs:Date.now()-tLecture,totalMs:Date.now()-t0,lecturesPrincipales:6,ancienMoteurRelance:false}};
   return JSON.parse(JSON.stringify(resultat));
 }
 
-/** Compatibilité : ancien enrichisseur conservé pour les appels externes éventuels. */
 function enrichirCoutsNetsAnalyseFinale2026_(resultat){return resultat;}
