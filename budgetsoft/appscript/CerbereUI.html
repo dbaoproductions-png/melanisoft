@@ -2,14 +2,19 @@
 (function(){
 'use strict';
 const q=id=>document.getElementById(id);
+window.__BUDGETSOFT_PREFETCH=window.__BUDGETSOFT_PREFETCH||{};
 
 /*
- * CerbereUI ne contient plus de moteur ni de renderer fonctionnel.
- * Il possède uniquement la route/navigation. Le cockpit officiel est
- * CerbereV3UI (Cerbère 3.7) chargé plus loin par Index.html.
- * Cette séparation empêche le renderer historique P1/P2/P3 à onglets de
- * reprendre la main et de faire disparaître M+M1 ou les ajustements.
+ * Garde global de navigation : une vue spécialisée ne doit jamais rester
+ * visible lorsqu'un autre onglet est sélectionné. Le handler est installé
+ * avant les routes spécialisées, puis chaque route réactive sa propre vue.
  */
+document.addEventListener('click',function(e){
+  const b=e.target.closest&&e.target.closest('.nav-item[data-view]');
+  if(!b)return;
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+},true);
+
 function masquerToutesLesVuesCerbere_(){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));}
 function activerNavCerbere_(){document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view==='cerbere'));}
 function assurerNavigationCerbere_(){
@@ -36,12 +41,26 @@ function ouvrirCerbereUI(){
   q('cerbere-refresh-37').onclick=lancer;lancer();
 }
 
+function lancerPrefetchBudgetSoft_(){
+  if(window.__BUDGETSOFT_PREFETCH_STARTED)return;
+  window.__BUDGETSOFT_PREFETCH_STARTED=true;
+  const cache=window.__BUDGETSOFT_PREFETCH;
+  const taches=[
+    next=>google.script.run.withSuccessHandler(d=>{cache.credits=d;next();}).withFailureHandler(()=>next()).chargerCreditsEtDettesV2(),
+    next=>google.script.run.withSuccessHandler(s=>{if(s&&s.disponible&&s.vue)cache.express=s.vue;next();}).withFailureHandler(()=>next()).chargerSnapshotCerbereExpress20260827(),
+    next=>google.script.run.withSuccessHandler(d=>{cache.pluxee=d;next();}).withFailureHandler(()=>next()).chargerPluxeeCerbere20260827()
+  ];
+  let i=0;
+  const suivant=()=>{if(i>=taches.length)return;const fn=taches[i++];setTimeout(()=>fn(suivant),350);};
+  suivant();
+}
+
 document.addEventListener('click',function(e){
   const b=e.target.closest&&e.target.closest('.nav-item[data-view="cerbere"]');
   if(!b)return;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();ouvrirCerbereUI();
 },true);
 window.ouvrirCerbereUI=ouvrirCerbereUI;
-document.addEventListener('DOMContentLoaded',assurerNavigationCerbere_);
+document.addEventListener('DOMContentLoaded',()=>{assurerNavigationCerbere_();setTimeout(lancerPrefetchBudgetSoft_,1400);});
 setTimeout(assurerNavigationCerbere_,500);
 })();
 </script>
@@ -74,7 +93,14 @@ function renduPluxeeCerbere_(e){
   document.getElementById('c37-pluxee-reset').onclick=()=>{dernierGesteCerbere=Date.now();google.script.run.withSuccessHandler(renduPluxeeCerbere_).withFailureHandler(err=>alert(err.message||err)).reinitialiserAllocationPluxeeCerbere20260827();};
 }
 
-function chargerBlocPluxeeCerbere_(){if(chargementPluxeeEnCours)return;const z=document.getElementById('cerbere-content');if(!z||!z.querySelector('.c37-canons'))return;chargementPluxeeEnCours=true;google.script.run.withSuccessHandler(e=>{chargementPluxeeEnCours=false;renduPluxeeCerbere_(e);}).withFailureHandler(()=>{chargementPluxeeEnCours=false;}).chargerPluxeeCerbere20260827();}
+function chargerBlocPluxeeCerbere_(){
+  if(chargementPluxeeEnCours)return;
+  const z=document.getElementById('cerbere-content');if(!z||!z.querySelector('.c37-canons'))return;
+  const cache=window.__BUDGETSOFT_PREFETCH&&window.__BUDGETSOFT_PREFETCH.pluxee;
+  if(cache){delete window.__BUDGETSOFT_PREFETCH.pluxee;renduPluxeeCerbere_(cache);return;}
+  chargementPluxeeEnCours=true;
+  google.script.run.withSuccessHandler(e=>{chargementPluxeeEnCours=false;renduPluxeeCerbere_(e);}).withFailureHandler(()=>{chargementPluxeeEnCours=false;}).chargerPluxeeCerbere20260827();
+}
 
 function installerGardeCerbere_(){
   const original=window.chargerCerbereV2UI;if(typeof original!=='function'||original.__gardeCerbere)return;
@@ -133,10 +159,12 @@ function renderExpress_(v){
   ${pl.disponible?`<div class="cex-card"><h3>Pluxee · solde réel ${money(pl.soldeReel)}</h3><small>Solde théorique ${money(pl.soldeTheorique)}</small>${(pl.lignes||[]).map(ligne_).join('')}</div>`:''}
   <div class="cex-card"><h3>Prochain cycle</h3><p>CB déjà engagée : <b>${money(v.contexte&&v.contexte.cbDejaEngageeM1)}</b><br>Trajectoire M+1 : <b>${money(v.contexte&&v.contexte.prochainCycle)}</b></p></div>
   <p class="helper-text">Lecture seule · décisions à la date réelle d’achat · Cerbère complet reste l’autorité financière.</p></article>`;
-  const r=q('cex-refresh');if(r)r.onclick=chargerExpress_;
+  const r=q('cex-refresh');if(r)r.onclick=()=>chargerExpress_(true);
 }
-function chargerExpress_(){
+function chargerExpress_(force){
   const s=assurerSectionExpress_();
+  const cache=!force&&window.__BUDGETSOFT_PREFETCH&&window.__BUDGETSOFT_PREFETCH.express;
+  if(cache){delete window.__BUDGETSOFT_PREFETCH.express;renderExpress_(cache);return;}
   s.innerHTML='<article class="card panel"><div class="loading">Chargement de Cerbère Express…</div></article>';
   google.script.run.withSuccessHandler(renderExpress_).withFailureHandler(e=>{s.innerHTML='<article class="card panel"><div class="cerb-error">'+esc(e&&e.message||e)+'</div></article>';}).chargerVueCerbereExpress20260827();
 }
@@ -145,7 +173,7 @@ function ouvrirExpress_(){
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view==='cerbere-express'));
   if(q('page-title'))q('page-title').textContent='Cerbère Express';
   if(q('page-eyebrow'))q('page-eyebrow').textContent='Décision quotidienne';
-  assurerSectionExpress_().classList.add('active');chargerExpress_();
+  assurerSectionExpress_().classList.add('active');chargerExpress_(false);
 }
 document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('.nav-item[data-view="cerbere-express"]');if(!b)return;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();ouvrirExpress_();},true);
 function maintenirNavExpress_(){assurerNavExpress_();}
