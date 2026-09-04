@@ -1,27 +1,47 @@
 <script>
 (function(){'use strict';
   const moneyP_=n=>typeof money!=='undefined'?money.format(Number(n||0)):Number(n||0).toLocaleString('fr-FR',{style:'currency',currency:'EUR'});
-  const escP_=s=>typeof echapper==='function'?echapper(String(s??'')):String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const escP_=s=>typeof echapper==='function'?echapper(String(s??'')):String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
   let cachePatrimoine_=null;
 
-  function carteComptePatrimoine_(c,icone){return `<article class="pat-account"><div class="pat-icon">${icone}</div><div><strong>${escP_(c.nom||'Compte')}</strong><small>${String(c.type)==='placement'?'Placement':'Livret / épargne'}</small></div><b>${moneyP_(c.solde)}</b></article>`;}
-  function carteActifPatrimoine_(a){return `<article class="pat-account"><div class="pat-icon">🏠</div><div><strong>${escP_(a.nom||'Actif')}</strong><small>${escP_(a.type||'Actif patrimonial')}</small></div><b>${moneyP_(a.valeur)}</b></article>`;}
+  function lignePatrimoine_(nom,sousTitre,valeur,icone,classe){
+    return `<div class="account-row patrimoine-row ${classe||''}">
+      <div class="account-main"><div class="account-icon">${icone}</div><div><strong>${escP_(nom||'Actif')}</strong><small>${escP_(sousTitre||'')}</small></div></div>
+      <div class="account-type patrimoine-kind">${escP_(sousTitre||'')}</div>
+      <div class="account-balance patrimoine-value">${moneyP_(valeur)}</div>
+    </div>`;
+  }
+  function carteComptePatrimoine_(c,icone){return lignePatrimoine_(c.nom,String(c.type)==='placement'?'Placement':'Livret / épargne',c.solde,icone,String(c.type)==='placement'?'placement':'livret');}
+  function carteActifPatrimoine_(a){return lignePatrimoine_(a.nom,a.type||'Actif patrimonial',a.valeur,'🏠','actif');}
 
   function rendrePatrimoine_(d){
     cachePatrimoine_=d;
     const z=document.getElementById('generic-view');if(!z)return;
     const livrets=Array.isArray(d?.livrets)?d.livrets:[],placements=Array.isArray(d?.placements)?d.placements:[],actifs=Array.isArray(d?.actifs)?d.actifs:[];
-    z.innerHTML=`<div class="section-toolbar"><p class="section-intro">Vue des actifs patrimoniaux et financiers. Les crédits et dettes sont suivis dans l’onglet Crédits.</p><button class="secondary-button" id="pat-refresh">Actualiser</button></div>
-      <div class="cards pat-summary">
-        <article class="card metric-card"><span>Actifs patrimoniaux</span><strong>${moneyP_(d?.totalActifsPatrimoniaux)}</strong><small>Immobilier et autres actifs saisis</small></article>
-        <article class="card metric-card"><span>Livrets</span><strong>${moneyP_(d?.totalLivrets)}</strong><small>Comptes de type épargne</small></article>
-        <article class="card metric-card"><span>Placements</span><strong>${moneyP_(d?.totalPlacements)}</strong><small>Comptes de type placement</small></article>
-        <article class="card metric-card"><span>Total des actifs</span><strong>${moneyP_(d?.totalActifs)}</strong><small>Patrimoine + actifs financiers</small></article>
+    z.innerHTML=`
+      <div class="section-toolbar patrimoine-toolbar">
+        <div><p class="section-intro">Vue consolidée des actifs patrimoniaux et financiers.</p><p class="helper-text">Les crédits et dettes sont suivis séparément dans l’onglet Crédits.</p></div>
+        <button class="secondary-button" id="pat-refresh">↻ Actualiser</button>
       </div>
-      <div class="pat-grid">
-        <article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Patrimoine</span><h2>Actifs</h2></div></div><div class="pat-list">${actifs.length?actifs.map(carteActifPatrimoine_).join(''):'<div class="empty-state">Aucun actif patrimonial enregistré.</div>'}</div></article>
-        <article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Épargne disponible</span><h2>Livrets</h2></div></div><div class="pat-list">${livrets.length?livrets.map(c=>carteComptePatrimoine_(c,'🐷')).join(''):'<div class="empty-state">Aucun compte de type épargne.</div>'}</div></article>
-        <article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Épargne investie</span><h2>Placements</h2></div></div><div class="pat-list">${placements.length?placements.map(c=>carteComptePatrimoine_(c,'📈')).join(''):'<div class="empty-state">Aucun compte de type placement.</div>'}</div></article>
+      <div class="cards patrimoine-summary">
+        <article class="card metric-card"><span>Actifs patrimoniaux</span><strong>${moneyP_(d?.totalActifsPatrimoniaux)}</strong><small>Immobilier et autres actifs</small></article>
+        <article class="card metric-card"><span>Livrets</span><strong>${moneyP_(d?.totalLivrets)}</strong><small>Épargne disponible</small></article>
+        <article class="card metric-card"><span>Placements</span><strong>${moneyP_(d?.totalPlacements)}</strong><small>Épargne investie</small></article>
+        <article class="card metric-card patrimoine-total"><span>Total des actifs</span><strong>${moneyP_(d?.totalActifs)}</strong><small>Patrimoine + actifs financiers</small></article>
+      </div>
+      <div class="patrimoine-panels">
+        <article class="card panel patrimoine-panel patrimoine-panel-wide">
+          <div class="panel-heading"><div><span class="panel-kicker">Patrimoine</span><h2>Actifs patrimoniaux</h2></div><span class="patrimoine-count">${actifs.length} actif${actifs.length>1?'s':''}</span></div>
+          <div class="patrimoine-list">${actifs.length?actifs.map(carteActifPatrimoine_).join(''):'<div class="empty-state">Aucun actif patrimonial enregistré.</div>'}</div>
+        </article>
+        <article class="card panel patrimoine-panel">
+          <div class="panel-heading"><div><span class="panel-kicker">Épargne disponible</span><h2>Livrets</h2></div><span class="patrimoine-count">${livrets.length}</span></div>
+          <div class="patrimoine-list">${livrets.length?livrets.map(c=>carteComptePatrimoine_(c,'🐷')).join(''):'<div class="empty-state">Aucun compte de type épargne.</div>'}</div>
+        </article>
+        <article class="card panel patrimoine-panel">
+          <div class="panel-heading"><div><span class="panel-kicker">Épargne investie</span><h2>Placements</h2></div><span class="patrimoine-count">${placements.length}</span></div>
+          <div class="patrimoine-list">${placements.length?placements.map(c=>carteComptePatrimoine_(c,'📈')).join(''):'<div class="empty-state">Aucun compte de type placement.</div>'}</div>
+        </article>
       </div>`;
     document.getElementById('pat-refresh')?.addEventListener('click',()=>chargerPatrimoineUI_(true));
   }
@@ -40,7 +60,18 @@
     w.__patrimoineActifs20260904=true;window.ouvrirVue=w;
   }
 
-  const st=document.createElement('style');st.textContent=`.pat-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:16px}.pat-grid>article:first-child{grid-column:1/-1}.pat-list{display:grid;gap:8px;margin-top:10px}.pat-account{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:11px 4px;border-top:1px solid #edf1ef}.pat-account:first-child{border-top:0}.pat-icon{width:38px;height:38px;border-radius:10px;background:#eef6f2;display:grid;place-items:center;font-size:20px}.pat-account strong,.pat-account small{display:block}.pat-account small{opacity:.62;margin-top:2px}.pat-account>b{font-size:17px}.pat-summary{grid-template-columns:repeat(4,minmax(0,1fr))}@media(max-width:900px){.pat-summary{grid-template-columns:repeat(2,1fr)}}@media(max-width:700px){.pat-grid,.pat-summary{grid-template-columns:1fr}.pat-grid>article:first-child{grid-column:auto}.pat-account{grid-template-columns:auto 1fr}.pat-account>b{grid-column:2}}`;
+  const st=document.createElement('style');st.textContent=`
+    .patrimoine-toolbar{align-items:flex-start}.patrimoine-toolbar .helper-text{margin:4px 0 0}
+    .patrimoine-summary{grid-template-columns:repeat(4,minmax(0,1fr));margin-top:16px}
+    .patrimoine-total{background:#edf7f3;border-color:#cfe4dc}.patrimoine-total strong{font-size:1.55em}
+    .patrimoine-panels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:18px}.patrimoine-panel-wide{grid-column:1/-1}
+    .patrimoine-panel .panel-heading{margin-bottom:8px}.patrimoine-count{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;padding:0 9px;border-radius:999px;background:#eef6f2;color:#48645a;font-size:12px;font-weight:700}
+    .patrimoine-list{margin-top:4px}.patrimoine-row{grid-template-columns:minmax(220px,1fr) minmax(120px,.6fr) auto;border-top:1px solid #edf1ef;padding:12px 4px}.patrimoine-row:first-child{border-top:0}
+    .patrimoine-row .account-main small{display:none}.patrimoine-kind{color:#697a74}.patrimoine-value{font-size:17px;font-weight:750;min-width:120px;text-align:right}
+    .patrimoine-row.livret .account-icon{background:#eef7f3}.patrimoine-row.placement .account-icon{background:#eef3f8}.patrimoine-row.actif .account-icon{background:#f4f1ea}
+    @media(max-width:1000px){.patrimoine-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media(max-width:760px){.patrimoine-panels,.patrimoine-summary{grid-template-columns:1fr}.patrimoine-panel-wide{grid-column:auto}.patrimoine-row{grid-template-columns:1fr auto}.patrimoine-kind{display:none}.patrimoine-row .account-main small{display:block}.patrimoine-value{min-width:auto}.patrimoine-toolbar{gap:12px}}
+  `;
   document.head.appendChild(st);
 })();
 </script>
