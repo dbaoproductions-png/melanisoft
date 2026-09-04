@@ -1,1 +1,56 @@
-<script>/* Plan UI remplacée par Plan V5.4 */</script>
+<script>
+(function(){'use strict';
+  const moneyDette_=new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'});
+  let detteCourante_=null;
+
+  function escDette_(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  function dateDette_(v){if(!v)return'—';const d=new Date(v);return isNaN(d)?'—':d.toLocaleDateString('fr-FR');}
+  function nombreDette_(s){const n=Number(String(s||'').replace(/[\s\u00a0\u202f]/g,'').replace('€','').replace(',','.').replace(/[^0-9.-]/g,''));return Number.isFinite(n)?n:0;}
+
+  function assurerModalRapprochementDette_(){
+    let m=document.getElementById('debt-reconcile-v2');if(m)return m;
+    m=document.createElement('div');m.id='debt-reconcile-v2';m.className='modal hidden debt-reconcile-overlay';
+    m.innerHTML=`<div class="modal-card debt-reconcile-card"><div class="modal-heading"><div><p class="panel-kicker">Dette hors crédit</p><h2>Rapprocher un paiement</h2></div><button type="button" class="modal-close" data-debt-reconcile-close>×</button></div><div class="debt-reconcile-summary"><div><small>Dette</small><strong id="debt-reconcile-name">—</strong></div><div><small>Reste à payer</small><strong id="debt-reconcile-balance">—</strong></div></div><p class="helper-text">Choisissez un débit bancaire correspondant. S'il couvre toute la dette, elle sera clôturée ; sinon le paiement sera déduit du reste à payer.</p><div id="debt-reconcile-candidates" class="debt-reconcile-candidates"><div class="loading">Recherche des paiements possibles…</div></div><details class="debt-reconcile-manual"><summary>Paiement absent des opérations ?</summary><form id="debt-reconcile-manual-form" class="debt-reconcile-manual-form"><label>Montant réglé<input id="debt-reconcile-manual-amount" inputmode="decimal" required></label><label>Date du paiement<input id="debt-reconcile-manual-date" type="date"></label><button type="submit" class="primary-button">Enregistrer ce règlement</button></form></details></div>`;
+    document.body.appendChild(m);
+    m.querySelector('[data-debt-reconcile-close]').onclick=()=>m.classList.add('hidden');
+    m.onclick=e=>{if(e.target===m)m.classList.add('hidden');};
+    m.querySelector('#debt-reconcile-manual-form').onsubmit=e=>{e.preventDefault();const montant=nombreDette_(document.getElementById('debt-reconcile-manual-amount').value);if(!montant)return;const b=e.submitter;b.disabled=true;google.script.run.withSuccessHandler(()=>{b.disabled=false;m.classList.add('hidden');if(typeof window.chargerCreditsUI==='function')window.chargerCreditsUI(true);}).withFailureHandler(err=>{b.disabled=false;const z=document.getElementById('debt-reconcile-candidates');if(z)z.innerHTML=`<div class="error">${escDette_(err.message||String(err))}</div>`;}).rapprocherPrevisionnelReelBudgetSoft({type:'dette',dette_id:detteCourante_.id,montant:montant,date:document.getElementById('debt-reconcile-manual-date').value});};
+    return m;
+  }
+
+  function rendreCandidatsDette_(xs){
+    const z=document.getElementById('debt-reconcile-candidates');if(!z)return;
+    xs=Array.isArray(xs)?xs:[];
+    if(!xs.length){z.innerHTML='<div class="empty-state">Aucun débit bancaire plausible trouvé. Vous pouvez enregistrer le règlement manuellement ci-dessous.</div>';return;}
+    z.innerHTML=xs.map(x=>`<div class="debt-candidate"><span>${dateDette_(x.date)}</span><div><strong>${escDette_(x.libelle||'Opération')}</strong><small>${x.solde?'Ce paiement solde la dette':'Reste après paiement : '+moneyDette_.format(Number(x.reste_apres||0))}</small></div><b>${moneyDette_.format(Number(x.montant||0))}</b><button type="button" class="secondary-button" data-use-debt-op="${escDette_(x.id)}">Utiliser</button></div>`).join('');
+    z.querySelectorAll('[data-use-debt-op]').forEach(b=>b.onclick=()=>{b.disabled=true;google.script.run.withSuccessHandler(()=>{b.disabled=false;document.getElementById('debt-reconcile-v2')?.classList.add('hidden');if(typeof window.chargerCreditsUI==='function')window.chargerCreditsUI(true);}).withFailureHandler(err=>{b.disabled=false;z.insertAdjacentHTML('afterbegin',`<div class="error">${escDette_(err.message||String(err))}</div>`);}).rapprocherPrevisionnelReelBudgetSoft({type:'dette',dette_id:detteCourante_.id,operation_id:b.dataset.useDebtOp});});
+  }
+
+  function ouvrirRapprochementDette_(id,row){
+    const nom=row.querySelector('.account-main strong')?.textContent||'Dette',reste=nombreDette_(row.querySelector('.account-type strong')?.textContent||'0');
+    detteCourante_={id:String(id),nom,reste};
+    const m=assurerModalRapprochementDette_();
+    document.getElementById('debt-reconcile-name').textContent=nom;
+    document.getElementById('debt-reconcile-balance').textContent=moneyDette_.format(reste);
+    document.getElementById('debt-reconcile-manual-amount').value=reste||'';
+    document.getElementById('debt-reconcile-manual-date').value=new Date().toISOString().slice(0,10);
+    document.getElementById('debt-reconcile-candidates').innerHTML='<div class="loading">Recherche des paiements possibles…</div>';
+    m.classList.remove('hidden');
+    google.script.run.withSuccessHandler(rendreCandidatsDette_).withFailureHandler(err=>{const z=document.getElementById('debt-reconcile-candidates');if(z)z.innerHTML=`<div class="error">${escDette_(err.message||String(err))}</div>`;}).listerCandidatsRapprochementBudgetSoft({type:'dette',dette_id:String(id)});
+  }
+
+  function installerBoutonsRapprochementDette_(){
+    document.querySelectorAll('#generic-view .debt-row:not(.debt-inactive)').forEach(row=>{
+      const edit=row.querySelector('[data-debt-edit]'),actions=row.querySelector('.debt-actions');
+      if(!edit||!actions||actions.querySelector('[data-debt-reconcile]'))return;
+      const b=document.createElement('button');b.type='button';b.className='secondary-button debt-action debt-reconcile-button';b.dataset.debtReconcile=edit.dataset.debtEdit;b.textContent='Rapprocher';b.onclick=()=>ouvrirRapprochementDette_(b.dataset.debtReconcile,row);actions.prepend(b);
+    });
+  }
+
+  const obs=new MutationObserver(installerBoutonsRapprochementDette_);obs.observe(document.documentElement,{childList:true,subtree:true});
+  document.addEventListener('DOMContentLoaded',installerBoutonsRapprochementDette_);setTimeout(installerBoutonsRapprochementDette_,500);
+
+  const st=document.createElement('style');st.textContent=`.debt-reconcile-button{font-weight:700}.debt-reconcile-card{width:min(720px,calc(100vw - 28px));max-width:720px;max-height:min(78vh,680px);overflow:auto}.debt-reconcile-summary{display:grid;grid-template-columns:1fr auto;gap:18px;padding:12px 14px;margin:0 0 12px;border-radius:12px;background:#f5faf8}.debt-reconcile-summary small,.debt-reconcile-summary strong{display:block}.debt-reconcile-summary strong{font-size:18px}.debt-reconcile-candidates{display:grid;gap:8px;margin-top:12px}.debt-candidate{display:grid;grid-template-columns:85px minmax(0,1fr) 110px auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid #e2ebe7;border-radius:10px;background:#fff}.debt-candidate strong,.debt-candidate small{display:block}.debt-candidate small{font-size:11px;opacity:.68;margin-top:2px}.debt-candidate>b{text-align:right}.debt-reconcile-manual{margin-top:16px;padding-top:12px;border-top:1px solid #e2ebe7}.debt-reconcile-manual summary{cursor:pointer;font-weight:700}.debt-reconcile-manual-form{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;margin-top:12px}.debt-reconcile-manual-form label{display:grid;gap:5px}@media(max-width:700px){.debt-reconcile-card{max-height:84vh}.debt-reconcile-summary{grid-template-columns:1fr}.debt-candidate{grid-template-columns:1fr auto}.debt-candidate>span{grid-column:1}.debt-candidate>div{grid-column:1}.debt-candidate>b{grid-column:2;grid-row:1/3}.debt-candidate>button{grid-column:1/-1;justify-self:start}.debt-reconcile-manual-form{grid-template-columns:1fr}}`;
+  document.head.appendChild(st);
+})();
+</script>
