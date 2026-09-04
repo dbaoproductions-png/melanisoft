@@ -1,15 +1,22 @@
-const PLAN_ACTIONS_V3_VERSION='3.0.0';
+const PLAN_ACTIONS_V3_VERSION='3.0.1';
+const PLAN_ACTIONS_V3_SCHEMA_KEY='PLAN_ACTIONS_SCHEMA_3_0_1';
 
 function assurerPlanActionsV3_(){
   assurerTablesPlanCerbere_();
+  const props=PropertiesService.getDocumentProperties();
   const ss=SpreadsheetApp.getActive();
   const sh=ss.getSheetByName('Plan_Actions');
+  const etapes=ss.getSheetByName('Plan_Action_Etapes');
+  const versions=ss.getSheetByName('Plan_Action_Versions');
+  if(props.getProperty(PLAN_ACTIONS_V3_SCHEMA_KEY)==='ok'&&sh&&etapes&&versions)return;
+  if(!sh)throw new Error('Feuille Plan_Actions introuvable après initialisation du Plan.');
   const extra=['mode_impact','source_type','source_id','source_libelle','projet','date_certitude','impact_confirme','processus','version_processus'];
   const headers=sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(x=>String(x||'').trim());
   const missing=extra.filter(x=>!headers.includes(x));
   if(missing.length)sh.getRange(1,headers.length+1,1,missing.length).setValues([missing]);
   assurerFeuillePlan_(ss,'Plan_Action_Etapes',['id','action_id','version','ordre','libelle','date_prevue','montant_prevu','montant_reel','statut','commentaire','cree_le','modifie_le']);
   assurerFeuillePlan_(ss,'Plan_Action_Versions',['id','action_id','version','date_version','motif','total_prevu','snapshot_json']);
+  props.setProperty(PLAN_ACTIONS_V3_SCHEMA_KEY,'ok');
 }
 
 function chargerActionsPlanV3(){
