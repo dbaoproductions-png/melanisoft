@@ -1,7 +1,7 @@
 <script>
 (function(){'use strict';
   const moneyP_=n=>typeof money!=='undefined'?money.format(Number(n||0)):Number(n||0).toLocaleString('fr-FR',{style:'currency',currency:'EUR'});
-  const escP_=s=>typeof echapper==='function'?echapper(String(s??'')):String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
+  const escP_=s=>typeof echapper==='function'?echapper(String(s??'')):String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   let cachePatrimoine_=null;
 
   function lignePatrimoine_(nom,sousTitre,valeur,icone,classe){
@@ -60,6 +60,59 @@
     w.__patrimoineActifs20260904=true;window.ouvrirVue=w;
   }
 
+  /* Doctrine 2026-09-04 : Analyses ne compare plus au vieux Budget. */
+  if(typeof window.rendreAnalyseGenerale==='function'&&!window.rendreAnalyseGenerale.__sansAncienBudget){
+    const rendreAnalyseGeneraleBase_=window.rendreAnalyseGenerale;
+    const propre=function(d,zone){
+      const r=rendreAnalyseGeneraleBase_.apply(this,arguments);
+      if(zone){
+        const blocs=[...zone.querySelectorAll('.analysis-alerts')];
+        blocs.filter(b=>/Écarts au budget/i.test(b.textContent||'')).forEach(b=>b.remove());
+      }
+      return r;
+    };
+    propre.__sansAncienBudget=true;
+    window.rendreAnalyseGenerale=propre;
+  }
+
+  function rendreParametresDoctrine_(){
+    const generic=document.getElementById('generic-view');if(!generic)return;
+    const p=window.sprint0809?.configuration?.periodeCourante;
+    let periode='28 inclus → 27 inclus';
+    if(p){
+      const d=new Date(p.debut),f=new Date(p.fin);
+      if(!isNaN(d)&&!isNaN(f))periode=`${d.toLocaleDateString('fr-FR')} → ${f.toLocaleDateString('fr-FR')}`;
+    }
+    generic.innerHTML=`<article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Configuration</span><h2>Paramètres BudgetSoft</h2></div></div>
+      <div class="cards parametres-doctrine-cards">
+        <article class="card metric-card"><span>Cycle budgétaire</span><strong>28 → 27</strong><small>Convention maître, non modifiable</small></article>
+        <article class="card metric-card"><span>Période courante</span><strong>${escP_(periode)}</strong><small>Calculée automatiquement</small></article>
+      </div>
+      <section class="analysis-block parametres-doctrine"><h3>Doctrine active</h3><p>Le cycle BudgetSoft est fixé du <strong>28 inclus au 27 inclus</strong>. Le salaire d’ouverture est conventionnellement rattaché au nouveau cycle et Cerbère applique sa propre logique de rapprochement sans déplacer cette frontière.</p><p class="helper-text">Les anciens réglages « jour de référence » et « jour habituel du salaire » ont été retirés : ils ne pilotent plus le moteur actuel.</p></section>
+    </article>`;
+  }
+
+  document.addEventListener('click',e=>{
+    const b=e.target.closest&&e.target.closest('.nav-item[data-view="parametres"]');
+    if(b)setTimeout(rendreParametresDoctrine_,20);
+  },true);
+  window.budgetsoftModules.parametres=rendreParametresDoctrine_;
+
+  /* Une ancienne UI Maintenance peut encore exister dans un déploiement : on la réduit au contrôle en lecture seule. */
+  function rendreMaintenanceDoctrine_(){
+    const z=document.getElementById('generic-view');if(!z)return;
+    z.innerHTML=`<article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Contrôle</span><h2>Maintenance</h2></div><button class="secondary-button" id="maintenance-refresh-doctrine">↻ Actualiser</button></div><p class="helper-text">Centre de contrôle en lecture seule. Les anciens nettoyages massifs et recalculs historiques ne font plus partie de la doctrine courante.</p><div id="maintenance-doctrine-content" class="loading">Contrôle en cours…</div></article>`;
+    const charger=()=>google.script.run.withSuccessHandler(r=>{
+      const c=r?.controle||{},comp=r?.compteurs||{};
+      const anomalies=Array.isArray(c.anomalies)?c.anomalies:[];
+      const zone=document.getElementById('maintenance-doctrine-content');if(!zone)return;
+      zone.className='';zone.innerHTML=`<div class="cards"><article class="card metric-card"><span>Qualité</span><strong>${Number(c.score||0)}/100</strong><small>${Number(c.erreurs||0)} erreur(s) · ${Number(c.attentions||0)} attention(s)</small></article><article class="card metric-card"><span>Opérations</span><strong>${Number(comp.Operations||0)}</strong><small>Base réelle</small></article><article class="card metric-card"><span>Charges fixes</span><strong>${Number(comp.Charges_fixes||0)}</strong><small>Référentiel</small></article></div>${anomalies.length?`<section class="analysis-block" style="margin-top:18px"><h3>Points à vérifier</h3>${anomalies.slice(0,50).map(a=>`<div class="account-row"><div><strong>${escP_(a.domaine||'Contrôle')}</strong><small>${escP_(a.message||'')}</small></div><span>${a.niveau==='erreur'?'Erreur':'Attention'}</span></div>`).join('')}</section>`:'<div class="empty-state" style="margin-top:18px">Aucune anomalie détectée.</div>'}`;
+    }).withFailureHandler(e=>{const zone=document.getElementById('maintenance-doctrine-content');if(zone){zone.className='error';zone.textContent=e.message||String(e);}}).chargerCentreMaintenance();
+    document.getElementById('maintenance-refresh-doctrine')?.addEventListener('click',charger);charger();
+  }
+  window.budgetsoftModules.maintenance=rendreMaintenanceDoctrine_;
+  document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('.nav-item[data-view="maintenance"]');if(b)setTimeout(rendreMaintenanceDoctrine_,20);},true);
+
   const st=document.createElement('style');st.textContent=`
     .patrimoine-toolbar{align-items:flex-start}.patrimoine-toolbar .helper-text{margin:4px 0 0}
     .patrimoine-summary{grid-template-columns:repeat(4,minmax(0,1fr));margin-top:16px}
@@ -69,8 +122,9 @@
     .patrimoine-list{margin-top:4px}.patrimoine-row{grid-template-columns:minmax(220px,1fr) minmax(120px,.6fr) auto;border-top:1px solid #edf1ef;padding:12px 4px}.patrimoine-row:first-child{border-top:0}
     .patrimoine-row .account-main small{display:none}.patrimoine-kind{color:#697a74}.patrimoine-value{font-size:17px;font-weight:750;min-width:120px;text-align:right}
     .patrimoine-row.livret .account-icon{background:#eef7f3}.patrimoine-row.placement .account-icon{background:#eef3f8}.patrimoine-row.actif .account-icon{background:#f4f1ea}
+    .parametres-doctrine-cards{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:8px}.parametres-doctrine{margin-top:18px}
     @media(max-width:1000px){.patrimoine-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
-    @media(max-width:760px){.patrimoine-panels,.patrimoine-summary{grid-template-columns:1fr}.patrimoine-panel-wide{grid-column:auto}.patrimoine-row{grid-template-columns:1fr auto}.patrimoine-kind{display:none}.patrimoine-row .account-main small{display:block}.patrimoine-value{min-width:auto}.patrimoine-toolbar{gap:12px}}
+    @media(max-width:760px){.patrimoine-panels,.patrimoine-summary,.parametres-doctrine-cards{grid-template-columns:1fr}.patrimoine-panel-wide{grid-column:auto}.patrimoine-row{grid-template-columns:1fr auto}.patrimoine-kind{display:none}.patrimoine-row .account-main small{display:block}.patrimoine-value{min-width:auto}.patrimoine-toolbar{gap:12px}}
   `;
   document.head.appendChild(st);
 })();
