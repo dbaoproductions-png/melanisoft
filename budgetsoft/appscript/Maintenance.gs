@@ -1,125 +1,26 @@
-const MAINTENANCE_VERSION = '2.3';
+const MAINTENANCE_VERSION = '2.4';
 
+/**
+ * Maintenance BudgetSoft 2.4
+ * Doctrine : ce module contrôle les données, il ne les répare, ne les migre
+ * et ne les efface jamais automatiquement.
+ */
 function chargerCentreMaintenance() {
   verifierInitialisation_();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const feuilles = ['Operations','Charges_fixes','Correspondances_bancaires','Rapprochements_a_valider'];
+  const feuilles = ['Operations', 'Charges_fixes', 'Correspondances_bancaires', 'Rapprochements_a_valider'];
   const compteurs = {};
   feuilles.forEach(nom => {
     const feuille = ss.getSheetByName(nom);
     compteurs[nom] = feuille ? Math.max(0, feuille.getLastRow() - 1) : 0;
   });
-  return { version: MAINTENANCE_VERSION, compteurs, controle: controlerQualiteBudgetSoft() };
-}
-
-function viderDonneesMaintenance(cible) {
-  verifierInitialisation_();
-  const autorisees = {
-    operations: ['Operations'],
-    rapprochements: ['Rapprochements_a_valider'],
-    correspondances: ['Correspondances_bancaires'],
-    charges_fixes: ['Charges_fixes'],
-    imports_bancaires: ['Operations','Rapprochements_a_valider','Correspondances_bancaires']
+  return {
+    version: MAINTENANCE_VERSION,
+    mode: 'lecture_seule',
+    doctrine: 'Contrôle uniquement : aucune migration, réparation ou suppression automatique.',
+    compteurs,
+    controle: controlerQualiteBudgetSoft()
   };
-  if (!autorisees[cible]) throw new Error('Type de nettoyage inconnu.');
-
-  const resultat = { cible, supprimees: 0, details: [] };
-  if (cible === 'imports_bancaires') {
-    resultat.details.push(viderOperationsPdf_());
-    resultat.details.push(viderFeuilleDonnees_('Rapprochements_a_valider'));
-    resultat.details.push(viderFeuilleDonnees_('Correspondances_bancaires'));
-    resultat.details.push(viderReferencesReleves_());
-  } else if (cible === 'operations') {
-    resultat.details.push(viderFeuilleDonnees_('Operations'));
-    resultat.details.push(viderReferencesReleves_());
-  } else {
-    autorisees[cible].forEach(nom => resultat.details.push(viderFeuilleDonnees_(nom)));
-  }
-  resultat.supprimees = resultat.details.reduce((s, d) => s + Number(d.supprimees || 0), 0);
-  journaliserMaintenance_('Nettoyage ' + cible, resultat.supprimees + ' élément(s) supprimé(s)');
-  return resultat;
-}
-
-function viderReferencesReleves_() {
-  const feuille = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Parametres');
-  if (!feuille || feuille.getLastRow() < 2) return { feuille: 'Références relevés', supprimees: 0 };
-  const valeurs = feuille.getDataRange().getValues();
-  const entetes = valeurs[0].map(v => String(v).trim().toLowerCase());
-  const indexCle = entetes.indexOf('cle');
-  if (indexCle < 0) return { feuille: 'Références relevés', supprimees: 0 };
-  const prefixes = [
-    'solde_releve_',
-    'date_solde_releve_',
-    'solde_ouverture_premier_releve_',
-    'date_ouverture_premier_releve_',
-    'historique_releves_'
-  ];
-  let supprimees = 0;
-  for (let i = valeurs.length - 1; i >= 1; i--) {
-    const cle = String(valeurs[i][indexCle] || '');
-    if (prefixes.some(prefixe => cle.indexOf(prefixe) === 0)) {
-      feuille.deleteRow(i + 1);
-      supprimees++;
-    }
-  }
-  return { feuille: 'Références relevés', supprimees };
-}
-
-function viderFeuilleDonnees_(nom) {
-  const feuille = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(nom);
-  if (!feuille || feuille.getLastRow() < 2) return { feuille: nom, supprimees: 0 };
-  const nombre = feuille.getLastRow() - 1;
-  feuille.getRange(2, 1, nombre, Math.max(1, feuille.getLastColumn())).clearContent();
-  return { feuille: nom, supprimees: nombre };
-}
-
-function viderOperationsPdf_() {
-  const feuille = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Operations');
-  if (!feuille || feuille.getLastRow() < 2) return { feuille: 'Operations PDF', supprimees: 0 };
-  const valeurs = feuille.getDataRange().getValues();
-  const entetes = valeurs[0].map(v => String(v).trim());
-  const indexCommentaire = entetes.indexOf('commentaire');
-  if (indexCommentaire < 0) return { feuille: 'Operations PDF', supprimees: 0 };
-  let supprimees = 0;
-  for (let i = valeurs.length - 1; i >= 1; i--) {
-    if (/\[PDF:HELLOBANK:/.test(String(valeurs[i][indexCommentaire] || ''))) {
-      feuille.deleteRow(i + 1);
-      supprimees++;
-    }
-  }
-  return { feuille: 'Operations PDF', supprimees };
-}
-
-function recalculerMaintenance(cible) {
-  verifierInitialisation_();
-  const resultat = { cible, succes: true, details: [] };
-  try {
-    if (cible === 'cycles' || cible === 'tout') {
-      const cycle = chargerCycleFinancier();
-      resultat.details.push('Cycle recalculé : ' + cycle.periode.jourCourant + '/' + cycle.periode.dureeJours + '.');
-    }
-    if (cible === 'budgets' || cible === 'tout') {
-      const budget = chargerBudgetPeriode('');
-      resultat.details.push('Budget recalculé : ' + budget.postes.length + ' poste(s).');
-    }
-    if (cible === 'patrimoine' || cible === 'tout') {
-      const patrimoine = chargerPatrimoine();
-      resultat.details.push('Patrimoine recalculé : ' + patrimoine.patrimoineNet + ' €.');
-    }
-    if (cible === 'analyses' || cible === 'tout') {
-      if (typeof chargerAnalysesBudgetaires === 'function') {
-        chargerAnalysesBudgetaires(6);
-        resultat.details.push('Analyses recalculées sur 6 périodes.');
-      } else {
-        resultat.details.push('Module Analyses indisponible.');
-      }
-    }
-    journaliserMaintenance_('Recalcul ' + cible, resultat.details.join(' '));
-  } catch (e) {
-    resultat.succes = false;
-    resultat.details.push(e.message || String(e));
-  }
-  return resultat;
 }
 
 function controlerQualiteBudgetSoft() {
@@ -127,6 +28,7 @@ function controlerQualiteBudgetSoft() {
   const comptes = lireTable_('Comptes');
   const categories = lireTable_('Categories');
   const operations = lireTable_('Operations');
+  const chargesFixes = lireTable_('Charges_fixes');
   const anomalies = [];
 
   const comptesIds = new Set(comptes.map(c => String(c.id || '')));
@@ -142,29 +44,46 @@ function controlerQualiteBudgetSoft() {
     const montant = Number(o.montant);
     if (isNaN(date.getTime())) anomalies.push({ niveau:'erreur', domaine:'Opérations', message:'Ligne ' + numero + ' : date invalide.' });
     if (!Number.isFinite(montant) || montant === 0) anomalies.push({ niveau:'erreur', domaine:'Opérations', message:'Ligne ' + numero + ' : montant nul ou invalide.' });
+
     const compte = String(o.compte || '');
-    if (compte && !comptesIds.has(compte) && !comptesNoms.has(normaliserTexteMaintenance_(compte))) anomalies.push({ niveau:'erreur', domaine:'Comptes', message:'Ligne ' + numero + ' : compte inconnu.' });
+    if (compte && !comptesIds.has(compte) && !comptesNoms.has(normaliserTexteMaintenance_(compte))) {
+      anomalies.push({ niveau:'erreur', domaine:'Comptes', message:'Ligne ' + numero + ' : compte inconnu.' });
+    }
+
     const categorie = String(o.categorie || '').trim();
     if (!categorie) anomalies.push({ niveau:'attention', domaine:'Catégories', message:'Ligne ' + numero + ' : opération sans catégorie.' });
-    else if (!categoriesNoms.has(normaliserTexteMaintenance_(categorie))) anomalies.push({ niveau:'attention', domaine:'Catégories', message:'Ligne ' + numero + ' : catégorie inconnue « ' + categorie + ' ».' });
+    else if (!categoriesNoms.has(normaliserTexteMaintenance_(categorie))) {
+      anomalies.push({ niveau:'attention', domaine:'Catégories', message:'Ligne ' + numero + ' : catégorie inconnue « ' + categorie + ' ».' });
+    }
   });
 
   const cles = {};
   operations.forEach((o, index) => {
     const date = new Date(o.date);
-    const dateCle = isNaN(date) ? '' : Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd');
-    const cle = [dateCle, normaliserTexteMaintenance_(o.libelle), Math.abs(Number(o.montant || 0)).toFixed(2), String(o.compte || '')].join('|');
+    const dateCle = isNaN(date.getTime()) ? '' : Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    const cle = [
+      dateCle,
+      normaliserTexteMaintenance_(o.libelle),
+      Math.abs(Number(o.montant || 0)).toFixed(2),
+      String(o.compte || '')
+    ].join('|');
     if (cles[cle]) anomalies.push({ niveau:'attention', domaine:'Doublons', message:'Doublon probable aux lignes ' + cles[cle] + ' et ' + (index + 2) + '.' });
     else cles[cle] = index + 2;
   });
 
-  try {
-    const cycle = chargerCycleFinancier();
-    if (!cycle.salaire) anomalies.push({ niveau:'attention', domaine:'Cycles', message:'Salaire principal non détecté.' });
-    if (new Date(cycle.periode.fin) <= new Date(cycle.periode.debut)) anomalies.push({ niveau:'erreur', domaine:'Cycles', message:'Dates du cycle incohérentes.' });
-  } catch (e) {
-    anomalies.push({ niveau:'erreur', domaine:'Cycles', message:'Calcul du cycle impossible : ' + (e.message || e) });
-  }
+  chargesFixes.forEach((c, index) => {
+    const numero = index + 2;
+    const actif = c.actif !== false && String(c.actif).toLowerCase() !== 'false' && String(c.actif) !== '0';
+    if (!actif) return;
+    const montant = Number(c.montant || 0);
+    if (!Number.isFinite(montant) || montant <= 0) {
+      anomalies.push({ niveau:'attention', domaine:'Charges fixes', message:'Ligne ' + numero + ' : charge active sans montant indicatif valide.' });
+    }
+    const categorie = String(c.categorie || '').trim();
+    if (categorie && !categoriesNoms.has(normaliserTexteMaintenance_(categorie))) {
+      anomalies.push({ niveau:'attention', domaine:'Charges fixes', message:'Ligne ' + numero + ' : catégorie inconnue « ' + categorie + ' ».' });
+    }
+  });
 
   const erreurs = anomalies.filter(a => a.niveau === 'erreur').length;
   const attentions = anomalies.filter(a => a.niveau === 'attention').length;
@@ -174,7 +93,12 @@ function controlerQualiteBudgetSoft() {
     erreurs,
     attentions,
     anomalies,
-    compteurs: { comptes: comptes.length, categories: categories.length, operations: operations.length }
+    compteurs: {
+      comptes: comptes.length,
+      categories: categories.length,
+      operations: operations.length,
+      chargesFixesActives: chargesFixes.filter(c => c.actif !== false && String(c.actif).toLowerCase() !== 'false' && String(c.actif) !== '0').length
+    }
   };
 }
 
@@ -190,14 +114,4 @@ function ajouterDoublonsNoms_(lignes, champ, libelle, anomalies) {
 
 function normaliserTexteMaintenance_(valeur) {
   return String(valeur || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-}
-
-function journaliserMaintenance_(action, details) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let feuille = ss.getSheetByName('Journal');
-  if (!feuille) {
-    feuille = ss.insertSheet('Journal');
-    feuille.appendRow(['date','action','details','utilisateur']);
-  }
-  feuille.appendRow([new Date(), action, details, Session.getActiveUser().getEmail() || 'Utilisateur']);
 }
