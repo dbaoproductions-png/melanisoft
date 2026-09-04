@@ -1,4 +1,4 @@
-const CREDITS_DATA_V2_VERSION = '2.4-2026-09-04';
+const CREDITS_DATA_V2_VERSION = '2.5-2026-09-04';
 
 function lireCreditsEtendusV2_() {
   const f=SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Credits');
@@ -22,6 +22,11 @@ function enrichirCreditV2_(c) {
   return x;
 }
 
+function statutDetteSoldeeV2_(statut){
+  const s=String(statut||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[\s-]+/g,'_');
+  return ['paye','payee','paye_e','solde','soldee','clos','close','cloture','cloturee'].includes(s);
+}
+
 function analyserCoherenceCreditsV2_(credits,dettes){
   const alertes=[],now=new Date();now.setHours(0,0,0,0);
   (credits||[]).forEach(c=>{
@@ -36,10 +41,10 @@ function analyserCoherenceCreditsV2_(credits,dettes){
     }
   });
   (dettes||[]).forEach(d=>{
-    const nom=String(d.nom||'Dette'),capital=Math.max(0,Number(d.capital_restant||0)),actif=String(d.actif).toLowerCase()!=='false',statut=String(d.statut||'').toLowerCase();
+    const nom=String(d.nom||'Dette'),capital=Math.max(0,Number(d.capital_restant||0)),actif=String(d.actif).toLowerCase()!=='false',soldee=statutDetteSoldeeV2_(d.statut);
     if(capital<=0&&actif)alertes.push({niveau:'info',type:'dette',id:d.id,nom,message:'Dette active avec un reste à payer nul.'});
     if(capital>0&&!actif)alertes.push({niveau:'attention',type:'dette',id:d.id,nom,message:'Dette inactive alors qu’un capital reste à payer.'});
-    if(capital>0&&/pay|sold|clos/.test(statut))alertes.push({niveau:'attention',type:'dette',id:d.id,nom,message:'Statut payé/soldé mais capital restant positif.'});
+    if(capital>0&&soldee)alertes.push({niveau:'attention',type:'dette',id:d.id,nom,message:'Statut payé/soldé mais capital restant positif.'});
   });
   return alertes;
 }
@@ -57,6 +62,21 @@ function chargerCreditsEtDettesV2() {
   const capitalRenouvelable=renouvelables.reduce((s,c)=>s+Number(c.capital_restant||0),0),coutRenouvelable=renouvelables.reduce((s,c)=>s+Number(c.cout_restant||0),0),tauxRenouvelablePondere=capitalRenouvelable?renouvelables.reduce((s,c)=>s+Number(c.capital_restant||0)*Number(c.taux||0),0)/capitalRenouvelable:0;
   const alertes=analyserCoherenceCreditsV2_(credits,dettes);
   return {version:CREDITS_DATA_V2_VERSION,lignes:tous,capitalRestant,capitalCredits,dettesHorsCredit,endettementTotal:capitalRestant,mensualites,mensualitesCredits,mensualitesDettes,tauxPondere,echeancesRestantes,coutRestant,amortissables,renouvelables,dettes,dettesActives,capitalRenouvelable,coutRenouvelable,tauxRenouvelablePondere,alertes};
+}
+
+function enregistrerCreditV2(d){
+  verifierInitialisation_();
+  if(!d||typeof d!=='object')throw new Error('Données du crédit invalides.');
+  const nom=String(d.nom||'').trim();if(!nom)throw new Error('Le nom du crédit est obligatoire.');
+  const c={
+    id:d.id||'',nom,numero_pret:String(d.numero_pret||'').trim(),type_credit:String(d.type_credit||'amortissable').toLowerCase()==='revolving'?'revolving':'amortissable',
+    capital_restant:Math.max(0,convertirNombre_(d.capital_restant||0)),mensualite:Math.max(0,convertirNombre_(d.mensualite||0)),taux:Math.max(0,convertirNombre_(d.taux||0)),
+    date_debut:d.date_debut?new Date(d.date_debut):'',prochaine_echeance:d.prochaine_echeance?new Date(d.prochaine_echeance):'',date_fin:d.date_fin?new Date(d.date_fin):'',
+    echeances_restantes:Math.max(0,parseInt(d.echeances_restantes,10)||0),cout_restant:Math.max(0,convertirNombre_(d.cout_restant||0)),cout_restant_precision:String(d.cout_restant_precision||'').trim(),
+    plafond_credit:Math.max(0,convertirNombre_(d.plafond_credit||0)),disponible_credit:Math.max(0,convertirNombre_(d.disponible_credit||0)),assurance_mensuelle:Math.max(0,convertirNombre_(d.assurance_mensuelle||0)),commentaire:String(d.commentaire||'').trim()
+  };
+  if(typeof enregistrerCreditEtendu_==='function')enregistrerCreditEtendu_(c);else enregistrerLigne('Credits',c);
+  return {ok:true,credit:enrichirCreditV2_(c)};
 }
 
 function diagnostiquerCreditsV2() {
