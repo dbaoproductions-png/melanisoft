@@ -27,25 +27,65 @@ function listerImprevusCerbere20260903(clePilotage){
   return typeof avecContexteLectureBudgetSoft20260827_==='function'?avecContexteLectureBudgetSoft20260827_('cerbere-imprevus-legers',executer):executer();
 }
 
+function chronometrerCoucheCerbere20260904_(liste,nom,fn){const t=Date.now(),resultat=fn();liste.push({nom:nom,ms:Date.now()-t});return resultat;}
+
 /** Chemin spécialisé cockpit : après le socle 3.7, seules C1/C2 traversent les passes terminales. */
 function chargerCerbereCockpitBaseRapide20260903_(){
-  const brut=chargerCerbereV37();if(!brut||brut.ok===false)return brut;
+  const timings=[],t0=Date.now();
+  let brut=chronometrerCoucheCerbere20260904_(timings,'V37 complet',()=>chargerCerbereV37());if(!brut||brut.ok===false)return brut;
   if(Array.isArray(brut.periodes)&&brut.periodes.length>2)brut.periodes=brut.periodes.slice(0,2);
-  let base=appliquerResteReellementPilotableV374_(brut);
-  base=typeof appliquerAuditCerbereV377_==='function'?appliquerAuditCerbereV377_(base):base;
-  base=typeof appliquerHistoriqueR0V378_==='function'?appliquerHistoriqueR0V378_(base):base;
-  base=typeof appliquerRapprochementCerbereV3711_==='function'?appliquerRapprochementCerbereV3711_(base):base;
-  base=typeof appliquerDoctrineCycleV3712_==='function'?appliquerDoctrineCycleV3712_(base):base;
-  base=typeof appliquerConventionSalaireTousCyclesV3712_==='function'?appliquerConventionSalaireTousCyclesV3712_(base):base;
-  base=typeof appliquerProjectionFrontiereV3713_==='function'?appliquerProjectionFrontiereV3713_(base):base;
-  base=typeof corrigerProjectionFrontiereV3713b_==='function'?corrigerProjectionFrontiereV3713b_(base):base;
-  base=typeof corrigerEffetsFinanciersActionsV3713_==='function'?corrigerEffetsFinanciersActionsV3713_(base):base;
-  base=stabiliserCerbereV3716_(base);base=stabiliserCerbereV3717_(base);
-  if(base&&typeof base==='object')base.version=CERBERE_PILOTAGE_V374_VERSION;return base;
+  let base=chronometrerCoucheCerbere20260904_(timings,'Reste réellement pilotable 3.7.24',()=>appliquerResteReellementPilotableV374_(brut));
+  base=chronometrerCoucheCerbere20260904_(timings,'Audit Cerbère 3.7.7',()=>typeof appliquerAuditCerbereV377_==='function'?appliquerAuditCerbereV377_(base):base);
+  base=chronometrerCoucheCerbere20260904_(timings,'Historique R0 3.7.8',()=>typeof appliquerHistoriqueR0V378_==='function'?appliquerHistoriqueR0V378_(base):base);
+  base=chronometrerCoucheCerbere20260904_(timings,'Rapprochement CF 3.7.11',()=>typeof appliquerRapprochementCerbereV3711_==='function'?appliquerRapprochementCerbereV3711_(base):base);
+  base=chronometrerCoucheCerbere20260904_(timings,'Doctrine cycle 3.7.12',()=>typeof appliquerDoctrineCycleV3712_==='function'?appliquerDoctrineCycleV3712_(base):base);
+  base=chronometrerCoucheCerbere20260904_(timings,'Convention salaire 3.7.12',()=>typeof appliquerConventionSalaireTousCyclesV3712_==='function'?appliquerConventionSalaireTousCyclesV3712_(base):base);
+  base=chronometrerCoucheCerbere20260904_(timings,'Projection frontière 3.7.13',()=>typeof appliquerProjectionFrontiereV3713_==='function'?appliquerProjectionFrontiereV3713_(base):base);
+  base=chronometrerCoucheCerbere20260904_(timings,'Correction frontière 3.7.13b',()=>typeof corrigerProjectionFrontiereV3713b_==='function'?corrigerProjectionFrontiereV3713b_(base):base);
+  base=chronometrerCoucheCerbere20260904_(timings,'Effets financiers Actions 3.7.13',()=>typeof corrigerEffetsFinanciersActionsV3713_==='function'?corrigerEffetsFinanciersActionsV3713_(base):base);
+  base=chronometrerCoucheCerbere20260904_(timings,'Stabilisation 3.7.16',()=>stabiliserCerbereV3716_(base));
+  base=chronometrerCoucheCerbere20260904_(timings,'Stabilisation 3.7.24',()=>stabiliserCerbereV3717_(base));
+  if(base&&typeof base==='object'){
+    base.version=CERBERE_PILOTAGE_V374_VERSION;
+    base.diagnostic=base.diagnostic||{};
+    base.diagnostic.performancePost35={dureeBaseMs:Date.now()-t0,couches:timings};
+  }
+  return base;
 }
 
 /** Surcharge du chargeur cockpit : même doctrine, payload C1/C2 seulement. */
 function chargerCerbereCockpit20260902(){
-  const executer=function(){const t0=Date.now(),base=chargerCerbereCockpitBaseRapide20260903_();if(!base||base.ok===false)return base;corrigerSuspensionsActionsEvenements20260903_(base);corrigerReelPilotableDateAchat20260902_(base);const periodes=Array.isArray(base.periodes)?base.periodes:[];periodes.forEach((p,i)=>enrichirCycleCockpitCerbere20260902_(p,i));base.cockpit20260902={version:'2026-09-03.fast-1',appreciation:appreciationCockpitCerbere20260902_(base),performance:{c1c2Seulement:true,dureeMs:Date.now()-t0},doctrine:'Cockpit C1/C2 : mêmes règles métier ; passes terminales limitées aux deux cycles affichés.'};return serialiserCerberePourClient_(base);};
+  const executer=function(){
+    const t0=Date.now(),base=chargerCerbereCockpitBaseRapide20260903_();if(!base||base.ok===false)return base;
+    const post=base.diagnostic&&base.diagnostic.performancePost35||{couches:[]},timings=Array.isArray(post.couches)?post.couches:[];
+    chronometrerCoucheCerbere20260904_(timings,'Suspensions Actions/Événements',()=>corrigerSuspensionsActionsEvenements20260903_(base));
+    chronometrerCoucheCerbere20260904_(timings,'Réel pilotable date achat',()=>corrigerReelPilotableDateAchat20260902_(base));
+    const periodes=Array.isArray(base.periodes)?base.periodes:[];
+    chronometrerCoucheCerbere20260904_(timings,'Enrichissement cockpit C1/C2',()=>periodes.forEach((p,i)=>enrichirCycleCockpitCerbere20260902_(p,i)));
+    let appreciation='';chronometrerCoucheCerbere20260904_(timings,'Appréciation cockpit',()=>{appreciation=appreciationCockpitCerbere20260902_(base);});
+    const perf={c1c2Seulement:true,dureeMs:Date.now()-t0,couches:timings};
+    base.cockpit20260902={version:'2026-09-04.profile-2',appreciation:appreciation,performance:perf,doctrine:'Cockpit C1/C2 : mêmes règles métier ; passes terminales limitées aux deux cycles affichés.'};
+    const ts=Date.now(),out=serialiserCerberePourClient_(base),serializationMs=Date.now()-ts;
+    if(out&&out.cockpit20260902&&out.cockpit20260902.performance){out.cockpit20260902.performance.serializationMs=serializationMs;out.cockpit20260902.performance.dureeMs=Date.now()-t0;}
+    return out;
+  };
   return typeof avecContexteLectureBudgetSoft20260827_==='function'?avecContexteLectureBudgetSoft20260827_('cerbere-cockpit-c1c2-20260903',executer):executer();
+}
+
+/** Extension de l'audit 1.2 : détaille les couches terminales sans relancer le moteur. */
+function auditGeneralProfilCerbere_(controles,performances,c,cockpitMs){
+  const d=c&&c.diagnostic||{},t=d.timings&&typeof d.timings==='object'?d.timings:{},socle=Number(d.duree_ms),socleMs=Number.isFinite(socle)?Math.max(0,Math.round(socle)):null;
+  if(socleMs!==null){
+    auditGeneralAjouter_(controles,'Performance Cerbère','Socle Cerbère 3.5','info',socleMs+' ms',null,'Temps interne de chargerCerbereV33().');
+    performances.push({module:'Cerbère · socle 3.5',ms:socleMs});
+    const apres=Math.max(0,Math.round(Number(cockpitMs||0)-socleMs));
+    auditGeneralAjouter_(controles,'Performance Cerbère','Couches après 3.5 + cockpit','info',apres+' ms',null,'Temps résiduel mesuré après le socle 3.5.');
+    performances.push({module:'Cerbère · après 3.5',ms:apres});
+  }
+  const labels={initialisation_ms:'3.5 · initialisation',canons_ms:'3.5 · canons P0/R0',lecture_structure_ms:'3.5 · lecture structure',lecture_plan_ms:'3.5 · lecture Plan',indexation_ms:'3.5 · indexation',reel_leger_ms:'3.5 · réel léger',construction_periodes_ms:'3.5 · construction P1–P6'};
+  Object.keys(labels).forEach(k=>{const ms=Number(t[k]);if(!Number.isFinite(ms))return;const n=Math.max(0,Math.round(ms));auditGeneralAjouter_(controles,'Performance Cerbère',labels[k],'info',n+' ms',null,'Chronométrage interne du socle 3.5.');performances.push({module:'Cerbère · '+labels[k],ms:n});});
+  const pc=c&&c.cockpit20260902&&c.cockpit20260902.performance||{},couches=Array.isArray(pc.couches)?pc.couches:[];
+  couches.forEach(x=>{const n=Math.max(0,Math.round(Number(x&&x.ms||0))),nom=String(x&&x.nom||'Couche terminale');auditGeneralAjouter_(controles,'Performance Cerbère','Post-3.5 · '+nom,'info',n+' ms',null,'Chronométrage de la passe terminale, sans calcul supplémentaire.');performances.push({module:'Cerbère · post-3.5 · '+nom,ms:n});});
+  const ser=Number(pc.serializationMs);if(Number.isFinite(ser)){const n=Math.max(0,Math.round(ser));auditGeneralAjouter_(controles,'Performance Cerbère','Post-3.5 · Sérialisation','info',n+' ms',null,'Conversion du cockpit en payload client.');performances.push({module:'Cerbère · post-3.5 · sérialisation',ms:n});}
+  auditGeneralAjouter_(controles,'Performance Cerbère','Cockpit complet mesuré','info',Math.max(0,Math.round(Number(cockpitMs||0)))+' ms',null,'Temps mesuré autour de chargerCerbereCockpit20260902().');
 }
