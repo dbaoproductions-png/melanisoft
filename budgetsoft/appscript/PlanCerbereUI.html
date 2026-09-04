@@ -76,6 +76,11 @@
   }
 
   function rendreParametresDoctrine_(){
+    /* L'audit général est désormais le renderer Paramètres prioritaire. */
+    if(typeof window.rendreParametresAuditGeneral_==='function'){
+      window.rendreParametresAuditGeneral_();
+      return;
+    }
     const generic=document.getElementById('generic-view');if(!generic)return;
     const p=window.sprint0809?.configuration?.periodeCourante;
     let periode='28 inclus → 27 inclus';
