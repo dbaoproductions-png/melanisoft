@@ -1,11 +1,11 @@
-const CERBERE_EXPRESS_VIEW_VERSION = '2026-09-03.1';
+const CERBERE_EXPRESS_VIEW_VERSION = '2026-09-05.1';
 
-/** Vue rapide : snapshot d'abord, recalcul uniquement s'il n'existe pas. */
+/** Vue rapide : snapshot frais d'abord ; si le snapshot est périmé, recalcul immédiat. */
 function chargerVueCerbereExpress20260827(){
   try{
     if(typeof chargerSnapshotCerbereExpress20260827==='function'){
       const s=chargerSnapshotCerbereExpress20260827();
-      if(s&&s.disponible&&s.vue)return s.vue;
+      if(s&&s.disponible&&s.vue&&!s.perime)return s.vue;
     }
   }catch(e){}
   if(typeof avecContexteLectureBudgetSoft20260827_==='function')return avecContexteLectureBudgetSoft20260827_('cerbere-express-calcul',chargerVueCerbereExpressSansContexte20260827_);
