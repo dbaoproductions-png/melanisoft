@@ -1,4 +1,4 @@
-const CERBERE_CB_DATE_COMPTABLE_FIX_VERSION = '2026-09-05.4';
+const CERBERE_CB_DATE_COMPTABLE_FIX_VERSION = '2026-09-05.5';
 const CERBERE_CANON_SCHEMA_MARKER_20260905_='CERBERE_CANON_SCHEMA_20260905_1';
 const CERBERE_R0_SCHEMA_MARKER_20260905_='CERBERE_R0_SCHEMA_20260905_1';
 var CERBERE_P0_LECTURE_CACHE_20260905_=null;
@@ -117,4 +117,29 @@ function chargerCerbereV37(){
   });
   base.version=CERBERE_V37_VERSION;base.principe='Cerbère 3.7.3 : P1 mesure l’autorisation pilotable ; RPt1 son reliquat. SS1 + Rt1 − CFt1 − DPt1 produit SCt1, trajectoire réévaluée de fin de cycle. SHBt1 est contrôlé séparément.';base.fenetreRoulante=fenetreV37_(periodes);base.diagnostic=base.diagnostic||{};base.diagnostic.moteur_37=CERBERE_V37_VERSION;base.diagnostic.doctrine_pt='RPt1 = P1 - consommé/engagé ; SCt1 = SS1 + Rt1 - CFt1 - DPt1';base.diagnostic.doctrine_coherence='SHBt1 comparé au solde Cerbère présent ; tout écart doit être mathématiquement explicable';base.diagnostic.performanceV37={roulantMs:tRoulant-t0,v37PropreMs:Date.now()-tRoulant};
   return serialiserCerberePourClient_(base);
+}
+
+/**
+ * Même doctrine que le correctif cockpit 2026-09-02, mais les opérations sont
+ * parcourues une seule fois pour C1/C2. La date d'achat n'est calculée qu'après
+ * les filtres montant/catégorie/CF, puis l'opération est affectée directement au
+ * cycle correspondant.
+ */
+function corrigerReelPilotableDateAchat20260902_(base){
+  const periodes=Array.isArray(base&&base.periodes)?base.periodes:[];if(!periodes.length)return;
+  const lireDirect=typeof lireTableDirecteBudgetSoft20260905_==='function'?lireTableDirecteBudgetSoft20260905_:lireTable_;
+  const ops0=lireDirect('Operations')||[],operations=typeof dedoublonnerOperationsCartesBudgetSoft_==='function'?dedoublonnerOperationsCartesBudgetSoft_(ops0):ops0;
+  const charges=lireDirect('Charges_fixes')||[],rapprochements=typeof lireRapprochementsCfDirectBudgetSoft20260905_==='function'?lireRapprochementsCfDirectBudgetSoft20260905_():(typeof lireRapprochementsChargesFixes==='function'?lireRapprochementsChargesFixes():[]);
+  const liensCf=typeof construireLiensCfCertainsV377_==='function'?construireLiensCfCertainsV377_(operations,charges,rapprochements):{};
+  const maintenant=Date.now(),cfg=periodes.map(p=>{const env=Array.isArray(p&&p.enveloppes)?p.enveloppes:[],debut=dateCockpit20260902_(p&&p.periode&&p.periode.debut),fin=dateCockpit20260902_(p&&p.periode&&p.periode.fin);return{p,env,cats:new Set(env.map(x=>String(x&&x.categorie||'').trim()).filter(Boolean)),a:debut?debut.getTime():NaN,z:fin?fin.getTime():NaN,reel:{}};});
+  const toutesCats=new Set();cfg.forEach(c=>c.cats.forEach(x=>toutesCats.add(x)));
+  operations.forEach(o=>{
+    const montant=Number(o&&o.montant||0);if(!Number.isFinite(montant)||montant>=0)return;
+    const cat=String(o&&o.categorie||'').trim();if(!toutesCats.has(cat))return;
+    const id=String(o&&o.id||'').trim();if((id&&liensCf[id])||String(o&&o.charge_fixe_id||'').trim())return;
+    if(typeof estReglementCbTechniqueV377_==='function'&&estReglementCbTechniqueV377_(o))return;
+    const d=dateAchatCockpit20260902_(o);if(!d)return;const t=d.getTime();if(!Number.isFinite(t)||t>maintenant)return;
+    for(let i=0;i<cfg.length;i++){const c=cfg[i];if(t>=c.a&&t<=c.z&&c.cats.has(cat)){c.reel[cat]=Number(c.reel[cat]||0)+Math.abs(montant);break;}}
+  });
+  cfg.forEach(c=>c.env.forEach(x=>{const cat=String(x&&x.categorie||'').trim();x.reelNetPrevisionnel=arrCockpit20260902_(Number(c.reel[cat]||0));x.reelPilotableDepuisDebutCycle=x.reelNetPrevisionnel;}));
 }
