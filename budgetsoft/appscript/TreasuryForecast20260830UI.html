@@ -23,6 +23,7 @@
 const money=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let comptesReq=0,opsReq=0,cerbereReq=0,cerbereBase=null;
+const comptesCache=new Map(),comptesEnCours=new Set();
 const q=id=>document.getElementById(id);
 function isoLocal(d){const x=new Date(d.getTime()-d.getTimezoneOffset()*60000);return x.toISOString().slice(0,10)}
 function plusJ(n){const d=new Date();d.setDate(d.getDate()+n);return isoLocal(d)}
@@ -33,11 +34,18 @@ function sourceLabel(s){return {operation_future:'Opération déjà connue',char
 function installerCarteComptes(){
  const z=document.querySelector('#comptes .accounts-summary');if(!z||q('treasury-forecast-card'))return;
  const card=document.createElement('article');card.id='treasury-forecast-card';card.className='card metric-card';card.innerHTML=`<span>Solde prévisionnel</span><strong id="tf-account-value">Calcul…</strong><small id="tf-account-detail">Compte courant à J+3</small><div class="tf-date"><input type="date" id="tf-account-date" value="${plusJ(3)}"></div><div class="tf-confidence" id="tf-account-confidence"></div>`;z.appendChild(card);
- q('tf-account-date').addEventListener('change',chargerPrevisionComptes);
+ q('tf-account-date').addEventListener('change',()=>chargerPrevisionComptes(true));
 }
-function chargerPrevisionComptes(){
- installerCarteComptes();const input=q('tf-account-date');if(!input)return;const id=++comptesReq;q('tf-account-value').textContent='Calcul…';
- google.script.run.withSuccessHandler(r=>{if(id!==comptesReq||!r||!r.ok)return;q('tf-account-value').textContent=money(r.soldePrevisionnel);q('tf-account-value').classList.toggle('amount-negative',Number(r.soldePrevisionnel)<0);q('tf-account-detail').textContent=`Réel ${money(r.soldeReel)} · variation ${Number(r.variationPrevue)>=0?'+':''}${money(r.variationPrevue)}`;q('tf-account-confidence').textContent=`Référence réelle ${dateFr(r.dateReference)} · fiabilité ${r.confiance?.libelle||'—'} · cible ${dateFr(r.dateCible)}`;}).withFailureHandler(()=>{if(id===comptesReq)q('tf-account-value').textContent='Indisponible';}).chargerTresoreriePrevisionnelleRapide20260901(input.value);
+function appliquerPrevisionComptes(r){
+ if(!r||!r.ok||!q('tf-account-value'))return;
+ q('tf-account-value').textContent=money(r.soldePrevisionnel);q('tf-account-value').classList.toggle('amount-negative',Number(r.soldePrevisionnel)<0);q('tf-account-detail').textContent=`Réel ${money(r.soldeReel)} · variation ${Number(r.variationPrevue)>=0?'+':''}${money(r.variationPrevue)}`;q('tf-account-confidence').textContent=`Référence réelle ${dateFr(r.dateReference)} · fiabilité ${r.confiance?.libelle||'—'} · cible ${dateFr(r.dateCible)}`;
+}
+function chargerPrevisionComptes(force){
+ installerCarteComptes();const input=q('tf-account-date');if(!input)return;const cible=input.value;
+ if(!force&&comptesCache.has(cible)){appliquerPrevisionComptes(comptesCache.get(cible));return;}
+ if(comptesEnCours.has(cible))return;
+ comptesEnCours.add(cible);const id=++comptesReq;if(!comptesCache.has(cible)&&q('tf-account-value'))q('tf-account-value').textContent='Calcul…';
+ google.script.run.withSuccessHandler(r=>{comptesEnCours.delete(cible);if(r&&r.ok)comptesCache.set(cible,r);if(id===comptesReq&&q('tf-account-date')?.value===cible)appliquerPrevisionComptes(r);}).withFailureHandler(()=>{comptesEnCours.delete(cible);if(id===comptesReq&&!comptesCache.has(cible)&&q('tf-account-value'))q('tf-account-value').textContent='Indisponible';}).chargerTresoreriePrevisionnelleRapide20260901(cible);
 }
 
 function installerOperations(){
@@ -50,15 +58,9 @@ function htmlFutures(xs,refining){
 }
 function chargerFuturesOperations(){
  installerOperations();const panel=q('operations-future-panel'),date=q('tf-ops-date');if(!panel||!date)return;panel.classList.remove('hidden');const z=q('tf-ops-list'),id=++opsReq;z.innerHTML='<div class="empty-state">Calcul des mouvements futurs…</div>';
- // 1) chemin ultra-rapide sans Cerbère : la liste utile s'affiche immédiatement.
  google.script.run.withSuccessHandler(r=>{
-   if(id!==opsReq)return;
-   z.innerHTML=htmlFutures(r&&r.lignes||[],true);
-   // 2) enrichissement différé : seul le débit CB estimé nécessite Cerbère.
-   setTimeout(()=>google.script.run.withSuccessHandler(full=>{
-     if(id!==opsReq||!full||!full.ok)return;
-     z.innerHTML=htmlFutures(full.lignes||[],false);
-   }).withFailureHandler(()=>{if(id===opsReq){const n=z.querySelector('.tf-refining');if(n)n.textContent='Flux explicites affichés · estimation CB indisponible.';}}).listerMouvementsFutursTresorerieRapide20260901(date.value),40);
+   if(id!==opsReq)return;z.innerHTML=htmlFutures(r&&r.lignes||[],true);
+   setTimeout(()=>google.script.run.withSuccessHandler(full=>{if(id!==opsReq||!full||!full.ok)return;z.innerHTML=htmlFutures(full.lignes||[],false);}).withFailureHandler(()=>{if(id===opsReq){const n=z.querySelector('.tf-refining');if(n)n.textContent='Flux explicites affichés · estimation CB indisponible.';}}).listerMouvementsFutursTresorerieRapide20260901(date.value),40);
  }).withFailureHandler(()=>{z.innerHTML='<div class="empty-state">Impossible de calculer les opérations futures.</div>';}).listerMouvementsFutursTresorerieSansCerbere20260902(date.value);
 }
 
@@ -73,15 +75,12 @@ function chargerCerbereForecast(){
 function majCerbereLocal(){
  if(!cerbereBase||!q('tf-cerbere-value'))return;const solde=Number(cerbereBase.soldePrevisionnel||0);q('tf-cerbere-value').textContent=money(solde);q('tf-cerbere-value').style.color=solde<0?'#9b3535':'';q('tf-cerbere-detail').textContent=`Référence ${dateFr(cerbereBase.dateReference)} · ${cerbereBase.confiance?.libelle||'—'} · réel + flux bancaires restant à passer`;const joker=document.querySelector('.c37-month [data-joker]');q('tf-cerbere-delta').textContent='Les molettes'+(joker?.checked?' et le Joker':'')+' agissent sur l’estimation du prochain débit CB, pas sur le solde avant ce débit.';
 }
-function brancherCerbere(){
- const root=document.querySelector('.c37-month');if(!root)return;installerCerbereCard();
- if(!cerbereBase)chargerCerbereForecast();else majCerbereLocal();
-}
+function brancherCerbere(){const root=document.querySelector('.c37-month');if(!root)return;installerCerbereCard();if(!cerbereBase)chargerCerbereForecast();else majCerbereLocal();}
 
 function activeView(){return window.state&&state.currentView||document.querySelector('.nav-item.active')?.dataset.view||'';}
-function tick(){const v=activeView();if(v==='comptes'){installerCarteComptes();if(!q('tf-account-value')?.dataset.loaded){q('tf-account-value')&&(q('tf-account-value').dataset.loaded='1');chargerPrevisionComptes();}}else if(v==='operations')installerOperations();else if(v==='cerbere'||document.querySelector('.c37-month'))brancherCerbere();}
-document.addEventListener('click',e=>{const b=e.target.closest?.('.nav-item[data-view]');if(!b)return;setTimeout(()=>{if(b.dataset.view==='comptes'){installerCarteComptes();chargerPrevisionComptes();}else if(b.dataset.view==='operations')installerOperations();else if(b.dataset.view==='cerbere'){cerbereBase=null;setTimeout(brancherCerbere,180);}},80);},true);
+function tick(){const v=activeView();if(v==='comptes'){installerCarteComptes();chargerPrevisionComptes(false);}else if(v==='operations')installerOperations();else if(v==='cerbere'||document.querySelector('.c37-month'))brancherCerbere();}
+document.addEventListener('click',e=>{const b=e.target.closest?.('.nav-item[data-view]');if(!b)return;setTimeout(()=>{if(b.dataset.view==='comptes'){installerCarteComptes();chargerPrevisionComptes(false);}else if(b.dataset.view==='operations')installerOperations();else if(b.dataset.view==='cerbere'){cerbereBase=null;setTimeout(brancherCerbere,180);}},80);},true);
 const obs=new MutationObserver(()=>setTimeout(tick,120));obs.observe(document.body,{childList:true,subtree:true});
-document.addEventListener('DOMContentLoaded',()=>setTimeout(tick,700));setTimeout(tick,1200);
+document.addEventListener('DOMContentLoaded',()=>{setTimeout(tick,700);setTimeout(()=>{installerCarteComptes();chargerPrevisionComptes(false);},950);});setTimeout(tick,1200);
 })();
 </script>
