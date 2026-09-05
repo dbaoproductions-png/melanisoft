@@ -1,4 +1,4 @@
-const BANKING_SAFETY_V2='3.0';
+const BANKING_SAFETY_V2='3.1';
 
 function restaurerOperationsDepuisSauvegardeV2(nom){
   const ss=SpreadsheetApp.getActiveSpreadsheet(),src=ss.getSheetByName(String(nom||'')),dst=ss.getSheetByName('Operations');
@@ -46,13 +46,41 @@ function propositionCategorieFluxV27_(o,ctx){
 // N reste la source brute, O/P/C sont des enrichissements, M reste vide sans vraie date d'achat.
 function preparerFluxV23_(lignes,compte){return(lignes||[]).map(x=>{const avaitAchat=!!x.date_achat;const n=normaliserEntreeBancaire_(Object.assign({},x,{compte:x.compte||compte}),'flux');if(!avaitAchat){n.date_achat='';n.date=n.date_comptable;}if(x.libelle_bancaire)n.libelle_bancaire=x.libelle_bancaire;if(x.marchand_normalise)n.marchand_normalise=x.marchand_normalise;else if(typeof hb3Contrepartie_==='function'&&n.libelle_bancaire)n.marchand_normalise=hb3Contrepartie_(n.libelle_bancaire);if(x.carte_fin)n.carte_fin=x.carte_fin;else if(typeof hb3CarteFin_==='function'&&n.libelle_bancaire)n.carte_fin=hb3CarteFin_(n.libelle_bancaire);if(x.libelle)n.libelle=x.libelle;return n;}).filter(x=>x.compte&&Number.isFinite(x.montant)&&x.date_comptable);}
 
+function identiteGroupeV31_(o){
+  let marchand=String(o&&o.marchand_normalise||'').trim();
+  const brut=String(o&&o.libelle_bancaire||o&&o.libelle||'');
+  if(!marchand&&typeof hb3Contrepartie_==='function')marchand=String(hb3Contrepartie_(brut)||'').trim();
+  if(!marchand)marchand=brut;
+  return normaliserTexteBanqueFiable_(marchand);
+}
+function cleGroupeEquivalentV31_(o){return [dateJourV23_(o&&o.date_comptable||o&&o.date),centimesBanque_(o&&o.montant),identiteGroupeV31_(o)].join('|');}
+function rapprocherGroupesEquivalentsV31_(incoming,existants,used){
+  const gi={},ge={},matches=[],indexes=new Set(),groupes=[];
+  incoming.forEach((n,i)=>{const k=cleGroupeEquivalentV31_(n);if(k.endsWith('|'))return;(gi[k]||(gi[k]=[])).push({n,i});});
+  existants.forEach(o=>{const k=cleGroupeEquivalentV31_(o);if(k.endsWith('|'))return;(ge[k]||(ge[k]=[])).push(o);});
+  Object.keys(gi).forEach(k=>{
+    const ins=gi[k],ex=(ge[k]||[]).filter(o=>!used.has(String(o.id)));
+    if(ins.length<2||ins.length!==ex.length)return;
+    const tousCompatibles=ins.every(x=>ex.every(o=>Number(scoreMatchBancaire_(x.n,o)||0)>=60));
+    if(!tousCompatibles)return;
+    const triesIn=ins.slice().sort((a,b)=>a.i-b.i),triesEx=ex.slice().sort((a,b)=>{const ar=estRecurrenceV23_(a)?0:1,br=estRecurrenceV23_(b)?0:1;if(ar!==br)return ar-br;return String(a.id).localeCompare(String(b.id));});
+    triesIn.forEach((x,j)=>{const o=triesEx[j];indexes.add(x.i);used.add(String(o.id));matches.push({n:x.n,o,raison:'groupe équivalent '+ins.length+'×'+ex.length+' validé par multiplicité'});});
+    groupes.push({cle:k,nombre:ins.length,date:dateJourV23_(ins[0].n.date_comptable||ins[0].n.date),montant:ins[0].n.montant,marchand:identiteGroupeV31_(ins[0].n)});
+  });
+  return{matches,indexes,groupes};
+}
+
 function planifierSnapshotV23_(incoming,ops,compte){
   const existants=ops.filter(o=>String(o.compte)===String(compte)),groupIn={},groupEx={};
   incoming.forEach((n,i)=>{const k=empreinteExacteV23_(n);(groupIn[k]||(groupIn[k]=[])).push({n,i});});
   existants.forEach(o=>{const k=empreinteExacteV23_(o);(groupEx[k]||(groupEx[k]=[])).push(o);});
   const used=new Set(),protegesAmbigus=new Set(),matches=[],ambigues=[],nouvelles=[],absorbees=[];
+  const groupesAuto=rapprocherGroupesEquivalentsV31_(incoming,existants,used);
+  groupesAuto.matches.forEach(m=>matches.push(m));
   Object.keys(groupIn).forEach(k=>{
-    const ins=groupIn[k],cands=(groupEx[k]||[]).slice().sort((a,b)=>{const ar=estRecurrenceV23_(a)?0:1,br=estRecurrenceV23_(b)?0:1;if(ar!==br)return ar-br;return String(a.id).localeCompare(String(b.id));});
+    const ins=groupIn[k].filter(x=>!groupesAuto.indexes.has(x.i));
+    if(!ins.length)return;
+    const cands=(groupEx[k]||[]).filter(o=>!used.has(String(o.id))).slice().sort((a,b)=>{const ar=estRecurrenceV23_(a)?0:1,br=estRecurrenceV23_(b)?0:1;if(ar!==br)return ar-br;return String(a.id).localeCompare(String(b.id));});
     if(cands.length>=ins.length){ins.forEach((x,j)=>{const o=cands[j];used.add(String(o.id));matches.push({n:x.n,o,raison:'empreinte bancaire exacte'});});return;}
     ins.forEach((x,j)=>{
       if(j<cands.length){const o=cands[j];used.add(String(o.id));matches.push({n:x.n,o,raison:'empreinte bancaire exacte'});return;}
@@ -65,7 +93,7 @@ function planifierSnapshotV23_(incoming,ops,compte){
   matches.forEach(m=>{existants.forEach(o=>{if(used.has(String(o.id))||protegesAmbigus.has(String(o.id))||!estRecurrenceV23_(o))return;if(centimesBanque_(o.montant)!==centimesBanque_(m.n.montant))return;if(dateJourV23_(o.date_comptable||o.date)!==dateJourV23_(m.n.date_comptable||m.n.date))return;if(!identiteProcheV23_(o.libelle_bancaire||o.libelle,m.n.libelle_bancaire||m.n.libelle))return;used.add(String(o.id));absorbees.push({placeholder:o,cible:m.o,n:m.n});});});
   const dates=incoming.map(n=>dateJourV23_(n.date_comptable||n.date)).filter(Boolean).sort(),minDate=dates[0]||'',maxDate=dates[dates.length-1]||'';
   const orphelines=existants.filter(o=>{const id=String(o.id),d=dateJourV23_(o.date_comptable||o.date),src=String(o.source_bancaire||'').toLowerCase();if(!d||d<minDate||d>maxDate||used.has(id)||protegesAmbigus.has(id))return false;return estRecurrenceV23_(o)||src==='flux';});
-  return{matches,nouvelles,ambigues,absorbees,orphelines,protegesAmbigus:[...protegesAmbigus],minDate,maxDate};
+  return{matches,nouvelles,ambigues,absorbees,orphelines,protegesAmbigus:[...protegesAmbigus],groupesRapproches:groupesAuto.groupes,minDate,maxDate};
 }
 
 function appliquerDecisionsAmbiguitesV30_(plan,decisions){
@@ -89,7 +117,7 @@ function appliquerDecisionsAmbiguitesV30_(plan,decisions){
 function analyserFluxBancaireAvantImportV2(lignes,compte){
   const recues=(lignes||[]).length,incoming=preparerFluxV23_(lignes,compte),rejetes=Math.max(0,recues-incoming.length),ctl=controlerLotBancaire_(incoming,null),ops=lireOperationsBancaires_().map(enrichirDepuisCommentaireBanque_),p=planifierSnapshotV23_(incoming,ops,compte),ctx=contexteCategoriesFluxV27_(ops);
   const detailsNouvelles=p.nouvelles.slice(0,30).map(a=>{const pc=propositionCategorieFluxV27_(a.n,ctx);return{date:dateJourV23_(a.n.date_comptable||a.n.date),montant:a.n.montant,libelle:a.n.libelle_bancaire||a.n.libelle,categorieProposee:pc?pc.categorie:'',sourceCategorie:pc?pc.source:''};});
-  return{version:BANKING_SAFETY_V2,controle:ctl,recues,exploitables:incoming.length,rejetes,existantes:p.matches.length,nouvelles:p.nouvelles.length,ambigues:p.ambigues.length,protegeesPdf:p.matches.filter(m=>estPdfDefinitifV27_(m.o)).length,placeholders:p.absorbees.length,orphelines:p.orphelines.length,pret:rejetes===0&&p.ambigues.length===0,resolutionRequise:rejetes===0&&p.ambigues.length>0,detailsNouvelles,detailsExistantes:p.matches.slice(0,30).map(m=>({date:dateJourV23_(m.n.date_comptable||m.n.date),montant:m.n.montant,libelle:m.n.libelle_bancaire||m.n.libelle,sourceExistante:m.o.source_bancaire||'',statutExistant:m.o.statut_bancaire||'',categorieExistante:m.o.categorie||'',protegeePdf:estPdfDefinitifV27_(m.o)})),detailsAmbigues:p.ambigues.map((a,index)=>({index,date:dateJourV23_(a.n.date_comptable||a.n.date),libelle:a.n.libelle_bancaire||a.n.libelle,montant:a.n.montant,raison:a.raison,candidats:a.candidates.map(c=>({id:c.o.id,date:dateJourV23_(c.o.date_comptable||c.o.date),libelle:c.o.libelle_bancaire||c.o.libelle,montant:c.o.montant,categorie:c.o.categorie||'',source:c.o.source_bancaire||'',statut:c.o.statut_bancaire||'',score:c.score,protegeePdf:estPdfDefinitifV27_(c.o)}))})),detailsOrphelines:p.orphelines.slice(0,30).map(o=>({id:o.id,date:dateJourV23_(o.date_comptable||o.date),montant:o.montant,libelle:o.libelle_bancaire||o.libelle,recurrence:estRecurrenceV23_(o)}))};
+  return{version:BANKING_SAFETY_V2,controle:ctl,recues,exploitables:incoming.length,rejetes,existantes:p.matches.length,nouvelles:p.nouvelles.length,ambigues:p.ambigues.length,groupesRapproches:p.groupesRapproches||[],protegeesPdf:p.matches.filter(m=>estPdfDefinitifV27_(m.o)).length,placeholders:p.absorbees.length,orphelines:p.orphelines.length,pret:rejetes===0&&p.ambigues.length===0,resolutionRequise:rejetes===0&&p.ambigues.length>0,detailsNouvelles,detailsExistantes:p.matches.slice(0,30).map(m=>({date:dateJourV23_(m.n.date_comptable||m.n.date),montant:m.n.montant,libelle:m.n.libelle_bancaire||m.n.libelle,sourceExistante:m.o.source_bancaire||'',statutExistant:m.o.statut_bancaire||'',categorieExistante:m.o.categorie||'',protegeePdf:estPdfDefinitifV27_(m.o)})),detailsAmbigues:p.ambigues.map((a,index)=>({index,date:dateJourV23_(a.n.date_comptable||a.n.date),libelle:a.n.libelle_bancaire||a.n.libelle,montant:a.n.montant,raison:a.raison,candidats:a.candidates.map(c=>({id:c.o.id,date:dateJourV23_(c.o.date_comptable||c.o.date),libelle:c.o.libelle_bancaire||c.o.libelle,montant:c.o.montant,categorie:c.o.categorie||'',source:c.o.source_bancaire||'',statut:c.o.statut_bancaire||'',score:c.score,protegeePdf:estPdfDefinitifV27_(c.o)}))})),detailsOrphelines:p.orphelines.slice(0,30).map(o=>({id:o.id,date:dateJourV23_(o.date_comptable||o.date),montant:o.montant,libelle:o.libelle_bancaire||o.libelle,recurrence:estRecurrenceV23_(o)}))};
 }
 
 function importerFluxBancaireControleV2(lignes,compte,decisionsAmbiguites){
@@ -117,6 +145,6 @@ function importerFluxBancaireControleV2(lignes,compte,decisionsAmbiguites){
     const vals=out.map(o=>serialiserOpBancaire_(o,headers));f.clearContents();f.getRange(1,1,1,headers.length).setValues([headers]);if(vals.length)f.getRange(2,1,vals.length,headers.length).setValues(vals);f.setFrozenRows(1);SpreadsheetApp.flush();
     const apresOps=lireOperationsBancaires_(),apres=checksumOperationsBanque_(apresOps),attendu=avant.nombre-p.absorbees.length-p.orphelines.length+resolu.nouvelles.length;const cles=apresOps.map(o=>String(o.cle_rapprochement||'').trim()).filter(Boolean);
     if(apres.nombre!==attendu||apres.ids!==apres.nombre||cles.length!==new Set(cles).size){f.clearContents();const bv=backup.getDataRange().getValues();f.getRange(1,1,bv.length,bv[0].length).setValues(bv);SpreadsheetApp.flush();throw new Error('Contrôle après écriture échoué ; restauration automatique effectuée.');}
-    return{bloque:false,recues:incoming.length,remplacees:modifieesExistantes,existantes:resolu.matches.length,protegeesPdf,creees:resolu.nouvelles.length,categorisees,ambiguesIgnorees:resolu.ignorees.length,ambiguesResolues:p.ambigues.length-resolu.ignorees.length,placeholdersSupprimes:p.absorbees.length,orphelinesSupprimees:p.orphelines.length,controle:ctl,sauvegarde:backup.getName(),totalApres:apres.nombre};
+    return{bloque:false,recues:incoming.length,remplacees:modifieesExistantes,existantes:resolu.matches.length,protegeesPdf,creees:resolu.nouvelles.length,categorisees,ambiguesIgnorees:resolu.ignorees.length,ambiguesResolues:p.ambigues.length-resolu.ignorees.length,groupesRapproches:(p.groupesRapproches||[]).length,placeholdersSupprimes:p.absorbees.length,orphelinesSupprimees:p.orphelines.length,controle:ctl,sauvegarde:backup.getName(),totalApres:apres.nombre};
   }finally{lock.releaseLock();}
 }
