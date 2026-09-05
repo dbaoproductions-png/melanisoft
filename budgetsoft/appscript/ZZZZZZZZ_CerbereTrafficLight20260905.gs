@@ -5,7 +5,7 @@
  * Rouge : allocation dépassée.
  * L'appréciation générale devient factuelle et dérivée des mêmes règles.
  */
-const CERBERE_TRAFFIC_LIGHT_VERSION='2026-09-05.1';
+const CERBERE_TRAFFIC_LIGHT_VERSION='2026-09-05.2';
 
 function vigilanceExpress_(partConsommee,partTemps,reste,allocation,jour){
   const pc=Math.max(0,Number(partConsommee||0));
@@ -49,4 +49,16 @@ function appreciationCockpitCerbere20260902_(base){
   if(rouges>0)return{niveau:'rouge',emoji:'🔴',titre:'Enveloppe dépassée',resume:rouges+' poste'+(rouges>1?'s ont':' a')+' dépassé l’allocation prévue.',consigne:'Réduire ou réallouer le budget sur les postes dépassés.'};
   if(oranges>0)return{niveau:'orange',emoji:'🟠',titre:'Rythme supérieur au cycle',resume:oranges+' poste'+(oranges>1?'s sont':' est')+' consommé'+(oranges>1?'s':'')+' plus vite que l’avancement du cycle.',consigne:plusRapide?plusRapide+' est le poste le plus en avance sur son rythme.':'Surveiller les postes en avance sur le rythme du cycle.'};
   return{niveau:'vert',emoji:'🟢',titre:'Rythme conforme',resume:'Aucun poste ne dépasse son allocation ni l’avancement du cycle.',consigne:'Le pilotable suit le rythme prévu du cycle.'};
+}
+
+/* La révision du snapshot dépend aussi du code Express : un déploiement ne peut
+ * plus laisser BudgetSoft croire qu'un ancien snapshot est encore frais. */
+function empreinteSourcesCerbereExpress20260827_(){
+  const ss=SpreadsheetApp.getActiveSpreadsheet(),fichier=DriveApp.getFileById(ss.getId()),modifieLe=fichier.getLastUpdated().getTime(),props=PropertiesService.getDocumentProperties().getProperties(),utiles={};
+  Object.keys(props).sort().forEach(k=>{if(String(k).indexOf(CERBERE_EXPRESS_SNAPSHOT_PREFIX)===0)return;utiles[k]=props[k];});
+  const jour=Utilities.formatDate(new Date(),Session.getScriptTimeZone(),'yyyy-MM-dd');
+  const code=[CERBERE_TRAFFIC_LIGHT_VERSION,typeof CERBERE_EXPRESS_VIEW_VERSION==='undefined'?'':CERBERE_EXPRESS_VIEW_VERSION,typeof CERBERE_EXPRESS_VERSION==='undefined'?'':CERBERE_EXPRESS_VERSION].join('|');
+  const brut=[CERBERE_EXPRESS_SNAPSHOT_VERSION,String(modifieLe),jour,code,JSON.stringify(utiles)].join('|');
+  const digest=Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,brut,Utilities.Charset.UTF_8);
+  return digest.map(b=>('0'+((b+256)%256).toString(16)).slice(-2)).join('');
 }
