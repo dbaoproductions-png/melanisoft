@@ -7,7 +7,7 @@
  * On ne réinjecte PAS ces CB dans les molettes de C2 : elles ont déjà joué leur
  * rôle analytique dans C1. C2 ne reçoit que leur impact global de trésorerie.
  */
-const CERBERE_CB_DOUBLE_ROLE_VERSION='2026-09-05.4';
+const CERBERE_CB_DOUBLE_ROLE_VERSION='2026-09-05.5';
 
 function dateAchatCbDoubleRole20260905_(o){
   /* Le libellé bancaire est prioritaire : sur Hello bank il porte la vraie date
@@ -45,8 +45,8 @@ function calculerReportCbCycleSuivant20260905_(base){
   const ps=Array.isArray(base&&base.periodes)?base.periodes:[];
   if(ps.length<2)return{montant:0,lignes:[],diagnostic:{raison:'moins de deux périodes'}};
   const p1=ps[0]&&ps[0].periode||{},p2=ps[1]&&ps[1].periode||{};
-  const d12=dateValideVentilationBudgetSoft_(p1.fin),d21=dateValideVentilationBudgetSoft_(p2.debut),d22=dateValideVentilationBudgetSoft_(p2.fin);
-  if(!d12||!d21||!d22)return{montant:0,lignes:[],diagnostic:{raison:'bornes C1/C2 invalides',p1:p1,p2:p2}};
+  const d11=dateValideVentilationBudgetSoft_(p1.debut),d12=dateValideVentilationBudgetSoft_(p1.fin),d21=dateValideVentilationBudgetSoft_(p2.debut),d22=dateValideVentilationBudgetSoft_(p2.fin);
+  if(!d11||!d12||!d21||!d22)return{montant:0,lignes:[],diagnostic:{raison:'bornes C1/C2 invalides',p1:p1,p2:p2}};
   const lireDirect=typeof lireTableDirecteBudgetSoft20260905_==='function'?lireTableDirecteBudgetSoft20260905_:lireTable_;
   /* Important : pas de dédoublonnage global ici. Le report doit voir les lignes
    * d'achat CB individuelles, même si un traitement technique sait les regrouper. */
@@ -55,7 +55,9 @@ function calculerReportCbCycleSuivant20260905_(base){
   const diag={operations:ops.length,depenses:0,cbDetectees:0,avecDateAchat:0,dansFenetre:0,rejetsTechnique:0};
   const jour=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime();
   const z1=jour(d12),tn=jour(now);
-  const debutCb=new Date(d21.getFullYear(),d21.getMonth(),1),aCb=jour(debutCb);
+  /* La fenêtre suit le cycle BudgetSoft réel (28 -> 27), pas le mois civil.
+   * Les achats CB des 28–31 août doivent donc déjà réduire le prochain cycle. */
+  const debutCb=d11,aCb=jour(debutCb);
   const impactCycle2=d21,a2=jour(d21),z2=jour(d22);
 
   (ops||[]).forEach(o=>{
@@ -100,10 +102,10 @@ function chargerCerbereCockpit20260902(){
     chronometrerCoucheCerbere20260904_(timings,'CB double rôle C1/C2',()=>appliquerReportCbCycleSuivant20260905_(base));
     let appreciation='';chronometrerCoucheCerbere20260904_(timings,'Appréciation cockpit',()=>{appreciation=appreciationCockpitCerbere20260902_(base);});
     const perf={c1c2Seulement:true,dureeMs:Date.now()-t0,couches:timings};
-    base.cockpit20260902={version:'2026-09-05.cb-double-role-4',appreciation:appreciation,performance:perf,doctrine:'Cockpit C1/C2 : CB imputée aux lignes par date achat dans C1 et au global du cycle de débit dans C2.'};
+    base.cockpit20260902={version:'2026-09-05.cb-double-role-5',appreciation:appreciation,performance:perf,doctrine:'Cockpit C1/C2 : CB imputée aux lignes par date achat dans C1 et au global du cycle de débit dans C2.'};
     const ts=Date.now(),out=serialiserCerberePourClient_(base),serializationMs=Date.now()-ts;
     if(out&&out.cockpit20260902&&out.cockpit20260902.performance){out.cockpit20260902.performance.serializationMs=serializationMs;out.cockpit20260902.performance.dureeMs=Date.now()-t0;}
     return out;
   };
-  return typeof avecContexteLectureBudgetSoft20260827_==='function'?avecContexteLectureBudgetSoft20260827_('cerbere-cockpit-cb-double-role-20260905-v4',executer):executer();
+  return typeof avecContexteLectureBudgetSoft20260827_==='function'?avecContexteLectureBudgetSoft20260827_('cerbere-cockpit-cb-double-role-20260905-v5',executer):executer();
 }
