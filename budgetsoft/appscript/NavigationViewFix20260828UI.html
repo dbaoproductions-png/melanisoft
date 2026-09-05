@@ -1,15 +1,13 @@
 <script>
 (function(){
-  const VERSION='2026-08-28.1';
+  const VERSION='2026-09-05.2';
+  window.__BUDGETSOFT_PREFETCH=window.__BUDGETSOFT_PREFETCH||{};
 
   function nettoyerVueChargesFixes_(view){
     if(view!=='charges_fixes')document.getElementById('charges_fixes')?.classList.remove('active');
   }
 
   // Le routeur historique ne connaît que dashboard/comptes/operations.
-  // Après une ouverture de Charges fixes, il laissait donc cette section active
-  // lors des navigations suivantes. On complète le routeur sans modifier les
-  // écrans spécialisés (Pluxee, Cerbère, etc.).
   const ouvrirVueBase=window.ouvrirVue;
   if(typeof ouvrirVueBase==='function'&&!ouvrirVueBase.__fixChargesPersistantes20260828){
     const wrapper=function(view){
@@ -20,21 +18,115 @@
     window.ouvrirVue=wrapper;
   }
 
+  function nombreEuro_(v){
+    const s=String(v||'').replace(/[\u00a0\u202f\s€]/g,'').replace(/[^0-9,.-]/g,'').replace(',','.');
+    const n=Number(s);return Number.isFinite(n)?n:0;
+  }
+  function euro_(n){return new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));}
+
+  function enrichirRevolvingsVisuels_(){
+    if((window.state&&state.currentView)!=='credits')return;
+    const panels=[...document.querySelectorAll('#generic-view .credit-panel')];
+    const panel=panels.find(p=>/Crédits renouvelables/i.test(p.querySelector('h2')?.textContent||''));
+    if(!panel)return;
+    let total=0,nb=0;
+    panel.querySelectorAll('.credit-note').forEach(note=>{
+      if(!/disponible communiqué/i.test(note.textContent||''))return;
+      const m=(note.textContent||'').match(/disponible communiqué\s+([+\-]?[\d\s\u00a0\u202f.,]+)\s*€/i);
+      if(m){total+=Math.max(0,nombreEuro_(m[1]));nb++;}
+      note.innerHTML=note.innerHTML.replace(/disponible communiqué/i,'réserve disponible');
+    });
+    let footer=panel.querySelector('#revolving-reserve-total');
+    if(!footer){
+      footer=document.createElement('div');footer.id='revolving-reserve-total';footer.className='account-row';footer.style.marginTop='14px';footer.style.fontWeight='700';panel.appendChild(footer);
+    }
+    footer.innerHTML=`<div class="account-main"><div class="account-icon">∑</div><div><strong>Réserve disponible totale</strong><small>${nb} crédit(s) renouvelable(s)</small></div></div><div class="account-type"><strong>${euro_(total)}</strong><small>Disponibles communiqués</small></div>`;
+  }
+
+  function enrichirPatrimoineVisuel_(){
+    if((window.state&&state.currentView)!=='patrimoine')return;
+    document.querySelectorAll('#generic-view .metric-card span').forEach(s=>{
+      if(/^Patrimoine net$/i.test((s.textContent||'').trim()))s.textContent='Patrimoine - (dettes et crédits)';
+    });
+  }
+
+  function postTraiterVue_(){
+    enrichirRevolvingsVisuels_();
+    enrichirPatrimoineVisuel_();
+  }
+
+  // Patrimoine : si le calcul a fini en arrière-plan, l'onglet l'utilise sans nouvel aller-retour.
+  function installerCachePatrimoine_(){
+    const modules=window.budgetsoftModules;if(!modules||typeof modules.patrimoine!=='function'||modules.patrimoine.__prefetch20260905)return;
+    const base=modules.patrimoine;
+    const w=function(){
+      const pre=window.__BUDGETSOFT_PREFETCH.patrimoine;
+      if(!pre)return base.apply(this,arguments);
+      const zone=document.getElementById('generic-view');
+      if(!zone)return base.apply(this,arguments);
+      zone.innerHTML='<article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Situation globale</span><h2>Patrimoine net</h2></div><button class="primary-button" type="button" onclick="ajouterElementPatrimoine()">＋ Ajouter</button></div><div id="patrimoine-status" class="helper-text"></div><div id="patrimoine-content"></div></article>';
+      try{planningUI.patrimoine=pre;delete window.__BUDGETSOFT_PREFETCH.patrimoine;rendrePatrimoine();postTraiterVue_();}catch(e){return base.apply(this,arguments);}
+    };
+    w.__prefetch20260905=true;modules.patrimoine=w;
+  }
+
+  // Analyses : le premier affichage à 6 périodes consomme le calcul préparé en arrière-plan.
+  function installerCacheAnalyses_(){
+    if(typeof window.chargerAnalysesUI!=='function'||window.chargerAnalysesUI.__prefetch20260905)return;
+    const base=window.chargerAnalysesUI;
+    const w=function(){
+      const pre=window.__BUDGETSOFT_PREFETCH.analyses;
+      try{
+        if(pre&&typeof analysesUI!=='undefined'&&Number(analysesUI.nombrePeriodes||6)===6){
+          analysesUI.donnees=pre;delete window.__BUDGETSOFT_PREFETCH.analyses;rendreAnalyses();return;
+        }
+      }catch(e){}
+      return base.apply(this,arguments);
+    };
+    w.__prefetch20260905=true;window.chargerAnalysesUI=w;
+  }
+
+  // Préchargements séquentiels : pas de rafale d'appels Apps Script au démarrage.
+  function prechargerFond_(){
+    const cache=window.__BUDGETSOFT_PREFETCH;
+    const apresCredits=()=>setTimeout(()=>{
+      if(cache.patrimoine)return apresPatrimoine();
+      google.script.run.withSuccessHandler(r=>{cache.patrimoine=r;apresPatrimoine();}).withFailureHandler(apresPatrimoine).chargerPatrimoine();
+    },120);
+    const apresPatrimoine=()=>setTimeout(()=>{
+      if(cache.analyses)return apresAnalyses();
+      google.script.run.withSuccessHandler(r=>{cache.analyses=r;apresAnalyses();}).withFailureHandler(apresAnalyses).chargerAnalysesBudgetairesV23(6);
+    },120);
+    const apresAnalyses=()=>setTimeout(()=>{
+      if(cache.pluxee)return;
+      google.script.run.withSuccessHandler(r=>{cache.pluxee=r;}).withFailureHandler(()=>{}).chargerPluxee();
+    },120);
+    if(cache.credits)return apresCredits();
+    google.script.run.withSuccessHandler(r=>{cache.credits=r;apresCredits();}).withFailureHandler(apresCredits).chargerCreditsEtDettesV2();
+  }
+
   document.addEventListener('click',e=>{
     const b=e.target.closest?.('.nav-item[data-view]');
     if(!b)return;
     nettoyerVueChargesFixes_(b.dataset.view);
+    setTimeout(postTraiterVue_,180);
   },true);
 
-  // Filet de sécurité : une seule vue principale doit rester active.
   document.addEventListener('DOMContentLoaded',()=>{
+    installerCachePatrimoine_();installerCacheAnalyses_();
     document.querySelectorAll('.nav-item[data-view]').forEach(b=>{
       b.addEventListener('click',()=>setTimeout(()=>{
         const view=b.dataset.view;
         if(view!=='charges_fixes')document.getElementById('charges_fixes')?.classList.remove('active');
+        postTraiterVue_();
       },0));
     });
+    const lancer=()=>prechargerFond_();
+    if('requestIdleCallback' in window)requestIdleCallback(lancer,{timeout:2200});else setTimeout(lancer,1300);
   });
+
+  const zone=document.getElementById('generic-view');
+  if(zone)new MutationObserver(()=>setTimeout(postTraiterVue_,40)).observe(zone,{childList:true,subtree:true});
 
   window.NAVIGATION_VIEW_FIX_20260828_VERSION=VERSION;
 })();
