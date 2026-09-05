@@ -1,0 +1,49 @@
+<script>
+(function(){'use strict';
+  const COLORS={vert:'#2f7d63',orange:'#c18a25',rouge:'#ba5148'};
+  function montant(txt){
+    const s=String(txt||'').replace(/[^0-9,.-]/g,'').replace(/\.(?=.*\.)/g,'').replace(',','.');
+    const n=Number(s);return Number.isFinite(n)?n:0;
+  }
+  function dateFrCourte(s){
+    const m=String(s||'').trim().match(/^(\d{2})\/(\d{2})\/(\d{2,4})$/);if(!m)return null;
+    const y=Number(m[3])<100?2000+Number(m[3]):Number(m[3]);
+    return new Date(y,Number(m[2])-1,Number(m[1]),12);
+  }
+  function progressionCycle(cycle){
+    const txt=cycle&&cycle.querySelector('header > span')?cycle.querySelector('header > span').textContent:'';
+    const m=String(txt||'').match(/(\d{2}\/\d{2}\/\d{2,4})\s*→\s*(\d{2}\/\d{2}\/\d{2,4})/);if(!m)return 0;
+    const a=dateFrCourte(m[1]),z=dateFrCourte(m[2]),n=new Date();if(!a||!z)return 0;
+    const day=d=>Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())/86400000;
+    const jours=Math.max(1,Math.round(day(z)-day(a))+1),jour=Math.max(1,Math.min(jours,Math.floor(day(n)-day(a))+1));
+    return jour/jours;
+  }
+  function niveau(allocation,consomme,progression){
+    if(consomme>allocation+.009||(allocation<=0&&consomme>0))return'rouge';
+    if(allocation>0&&consomme/allocation>progression+.0001)return'orange';
+    return'vert';
+  }
+  function appliquer(){
+    document.querySelectorAll('.c4-cycle').forEach(cycle=>{
+      const prog=progressionCycle(cycle);
+      cycle.querySelectorAll('.c4-line').forEach(row=>{
+        const range=row.querySelector('.c4-range');if(!range)return;
+        const spans=row.querySelectorAll(':scope > span');
+        const reel=spans.length>1?Math.max(0,montant(spans[1].textContent)):0;
+        const allocation=Math.max(0,Number(range.value||0));
+        const n=niveau(allocation,reel,prog);
+        range.dataset.traffic=n;
+        range.style.accentColor=COLORS[n];
+        row.classList.toggle('traffic-orange',n==='orange');
+        row.classList.toggle('traffic-rouge',n==='rouge');
+      });
+    });
+  }
+  let timer=0;function planifier(){clearTimeout(timer);timer=setTimeout(appliquer,20);}
+  document.addEventListener('input',e=>{if(e.target&&e.target.classList&&e.target.classList.contains('c4-range'))planifier();},true);
+  document.addEventListener('change',planifier,true);
+  new MutationObserver(planifier).observe(document.documentElement,{subtree:true,childList:true,characterData:true});
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',appliquer);else appliquer();
+  const st=document.createElement('style');st.textContent='.c4-range[data-traffic="orange"]{accent-color:#c18a25}.c4-range[data-traffic="rouge"]{accent-color:#ba5148}.c4-line.traffic-orange [data-reste]{color:#926509;font-weight:800}.c4-line.traffic-rouge [data-reste]{color:#a73f38;font-weight:800}';document.head.appendChild(st);
+})();
+</script>
