@@ -7,40 +7,55 @@
  * On ne réinjecte PAS ces CB dans les molettes de C2 : elles ont déjà joué leur
  * rôle analytique dans C1. C2 ne reçoit que leur impact global de trésorerie.
  */
-const CERBERE_CB_DOUBLE_ROLE_VERSION='2026-09-05.2';
+const CERBERE_CB_DOUBLE_ROLE_VERSION='2026-09-05.3';
+
+function dateAchatCbDoubleRole20260905_(o){
+  let d=null;
+  try{if(typeof dateAchatMetierBudgetSoft_==='function')d=dateAchatMetierBudgetSoft_(o);}catch(e){}
+  if(!d)d=dateValideVentilationBudgetSoft_(o&&o.date_achat);
+  if(d)return d;
+
+  /* Repli indispensable pour les lignes importées où date_achat n'a pas été
+   * persistée : Hello bank encode la date d'achat dans le libellé, par ex.
+   * "Paiement cb du 020926 ..." ou "Cb du 020926 ...". */
+  const lib=String(o&&o.libelle_bancaire||o&&o.libelle||'');
+  let m=lib.match(/\b(?:paiement\s+)?(?:cb|carte)\s+du\s+(\d{2})[\s\/.-]?(\d{2})[\s\/.-]?(\d{2,4})\b/i);
+  if(!m)m=lib.match(/\bdu\s+(\d{2})(\d{2})(\d{2})\b/i);
+  if(m){
+    let y=Number(m[3]);if(y<100)y+=2000;
+    const x=new Date(y,Number(m[2])-1,Number(m[1]));
+    if(!isNaN(x.getTime())&&x.getDate()===Number(m[1])&&x.getMonth()===Number(m[2])-1)return x;
+  }
+  return null;
+}
+
+function estAchatCbDoubleRole20260905_(o){
+  if(typeof estReglementCbTechniqueV377_==='function'&&estReglementCbTechniqueV377_(o))return false;
+  const lib=String(o&&o.libelle_bancaire||o&&o.libelle||'');
+  return !!String(o&&o.carte_fin||'').trim()||/\b(?:PAIEMENT\s+)?(?:CB|CARTE)\b/i.test(lib);
+}
 
 function calculerReportCbCycleSuivant20260905_(base){
   const ps=Array.isArray(base&&base.periodes)?base.periodes:[];
   if(ps.length<2)return{montant:0,lignes:[]};
   const p1=ps[0]&&ps[0].periode||{},p2=ps[1]&&ps[1].periode||{};
-  const d11=dateValideVentilationBudgetSoft_(p1.debut),d12=dateValideVentilationBudgetSoft_(p1.fin),d21=dateValideVentilationBudgetSoft_(p2.debut),d22=dateValideVentilationBudgetSoft_(p2.fin);
-  if(!d11||!d12||!d21||!d22)return{montant:0,lignes:[]};
+  const d12=dateValideVentilationBudgetSoft_(p1.fin),d21=dateValideVentilationBudgetSoft_(p2.debut),d22=dateValideVentilationBudgetSoft_(p2.fin);
+  if(!d12||!d21||!d22)return{montant:0,lignes:[]};
   const lireDirect=typeof lireTableDirecteBudgetSoft20260905_==='function'?lireTableDirecteBudgetSoft20260905_:lireTable_;
   const ops0=lireDirect('Operations')||[],ops=typeof dedoublonnerOperationsCartesBudgetSoft_==='function'?dedoublonnerOperationsCartesBudgetSoft_(ops0):ops0;
   const now=new Date(),lignes=[];let total=0;
   const jour=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime();
   const z1=jour(d12),tn=jour(now);
-  /* Doctrine métier actuelle : pour C2 qui commence le 28/09, les CB déjà
-   * engagées sont les achats depuis le 01/09. Plus généralement, on prend le
-   * premier jour du mois civil dans lequel commence C2. */
   const debutCb=new Date(d21.getFullYear(),d21.getMonth(),1),aCb=jour(debutCb);
   const impactCycle2=d21,a2=jour(d21),z2=jour(d22);
 
   (ops||[]).forEach(o=>{
     const m=Number(o&&o.montant||0);if(!Number.isFinite(m)||m>=0)return;
-    if(typeof estReglementCbTechniqueV377_==='function'&&estReglementCbTechniqueV377_(o))return;
-    const lib=String(o&&o.libelle_bancaire||o&&o.libelle||''),estCarte=!!String(o&&o.carte_fin||'').trim()||/\b(?:CB|CARTE)\b/i.test(lib);
-    if(!estCarte)return;
-    const da=typeof dateAchatMetierBudgetSoft_==='function'?dateAchatMetierBudgetSoft_(o):dateValideVentilationBudgetSoft_(o&&o.date_achat);if(!da)return;
+    if(!estAchatCbDoubleRole20260905_(o))return;
+    const da=dateAchatCbDoubleRole20260905_(o);if(!da)return;
     const ta=jour(da);if(ta<aCb||ta>z1||ta>tn)return;
-
-    /* Ne pas utiliser date_comptable de l'achat individuel pour décider que la
-     * CB est déjà débitée : dans les imports bancaires elle peut être datée du
-     * jour d'achat. Le débit réel de carte est une opération technique distincte,
-     * déjà exclue ci-dessus. Toute CB individuelle de la fenêtre est donc un
-     * engagement du prochain cycle. */
     const ti=jour(impactCycle2);if(ti<a2||ti>z2)return;
-    const a=Math.abs(m);total+=a;lignes.push({id:String(o&&o.id||''),categorie:String(o&&o.categorie||''),montant:Math.round(a*100)/100,dateAchat:Utilities.formatDate(da,Session.getScriptTimeZone(),'yyyy-MM-dd'),dateImpact:Utilities.formatDate(impactCycle2,Session.getScriptTimeZone(),'yyyy-MM-dd'),dateComptable:String(o&&o.date_comptable||''),carteFin:String(o&&o.carte_fin||'')});
+    const a=Math.abs(m);total+=a;lignes.push({id:String(o&&o.id||''),categorie:String(o&&o.categorie||''),montant:Math.round(a*100)/100,dateAchat:Utilities.formatDate(da,Session.getScriptTimeZone(),'yyyy-MM-dd'),dateImpact:Utilities.formatDate(impactCycle2,Session.getScriptTimeZone(),'yyyy-MM-dd'),dateComptable:String(o&&o.date_comptable||''),carteFin:String(o&&o.carte_fin||''),libelle:String(o&&o.libelle_bancaire||o&&o.libelle||'')});
   });
   return{montant:Math.round(total*100)/100,lignes,debutFenetre:Utilities.formatDate(debutCb,Session.getScriptTimeZone(),'yyyy-MM-dd'),dateImpact:Utilities.formatDate(impactCycle2,Session.getScriptTimeZone(),'yyyy-MM-dd')};
 }
@@ -57,8 +72,6 @@ function appliquerReportCbCycleSuivant20260905_(base){
   return base;
 }
 
-/* Surcharge terminale du chargeur cockpit : même pipeline existant, avec la
- * passe CB double-rôle juste après l'enrichissement C1/C2. */
 function chargerCerbereCockpit20260902(){
   const executer=function(){
     const t0=Date.now(),base=chargerCerbereCockpitBaseRapide20260903_();if(!base||base.ok===false)return base;
@@ -70,10 +83,10 @@ function chargerCerbereCockpit20260902(){
     chronometrerCoucheCerbere20260904_(timings,'CB double rôle C1/C2',()=>appliquerReportCbCycleSuivant20260905_(base));
     let appreciation='';chronometrerCoucheCerbere20260904_(timings,'Appréciation cockpit',()=>{appreciation=appreciationCockpitCerbere20260902_(base);});
     const perf={c1c2Seulement:true,dureeMs:Date.now()-t0,couches:timings};
-    base.cockpit20260902={version:'2026-09-05.cb-double-role-2',appreciation:appreciation,performance:perf,doctrine:'Cockpit C1/C2 : CB imputée aux lignes par date achat dans C1 et au global du cycle de débit dans C2.'};
+    base.cockpit20260902={version:'2026-09-05.cb-double-role-3',appreciation:appreciation,performance:perf,doctrine:'Cockpit C1/C2 : CB imputée aux lignes par date achat dans C1 et au global du cycle de débit dans C2.'};
     const ts=Date.now(),out=serialiserCerberePourClient_(base),serializationMs=Date.now()-ts;
     if(out&&out.cockpit20260902&&out.cockpit20260902.performance){out.cockpit20260902.performance.serializationMs=serializationMs;out.cockpit20260902.performance.dureeMs=Date.now()-t0;}
     return out;
   };
-  return typeof avecContexteLectureBudgetSoft20260827_==='function'?avecContexteLectureBudgetSoft20260827_('cerbere-cockpit-cb-double-role-20260905-v2',executer):executer();
+  return typeof avecContexteLectureBudgetSoft20260827_==='function'?avecContexteLectureBudgetSoft20260827_('cerbere-cockpit-cb-double-role-20260905-v3',executer):executer();
 }
