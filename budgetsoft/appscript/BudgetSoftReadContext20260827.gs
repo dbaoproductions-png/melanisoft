@@ -1,4 +1,4 @@
-const BUDGETSOFT_READ_CONTEXT_VERSION='2026-09-03.2';
+const BUDGETSOFT_READ_CONTEXT_VERSION='2026-09-05.1';
 var BUDGETSOFT_READ_CONTEXT_ACTIVE_=null;
 var BUDGETSOFT_READ_CONTEXT_LAST_STATS_=null;
 
@@ -29,6 +29,7 @@ function avecContexteLectureBudgetSoft20260827_(label, fn) {
     appels:0,
     lecturesFeuille:0,
     reutilisations:0,
+    reutilisationsDirectes:0,
     parTable:{},
     dureeMs:0
   };
@@ -39,7 +40,7 @@ function avecContexteLectureBudgetSoft20260827_(label, fn) {
   }
   function lireMemo_(cle, lecteur){
     stats.appels++;
-    if(!stats.parTable[cle])stats.parTable[cle]={appels:0,lecturesFeuille:0,reutilisations:0,dureeLectureMs:0,lignes:0};
+    if(!stats.parTable[cle])stats.parTable[cle]={appels:0,lecturesFeuille:0,reutilisations:0,reutilisationsDirectes:0,dureeLectureMs:0,lignes:0};
     const s=stats.parTable[cle];s.appels++;
     if(Object.prototype.hasOwnProperty.call(memo,cle)){
       stats.reutilisations++;s.reutilisations++;
@@ -87,6 +88,29 @@ function avecContexteLectureBudgetSoft20260827_(label, fn) {
     console.log('[PERF BudgetSoft] '+JSON.stringify(stats));
   }
 }
+
+/**
+ * Accès sans clone au mémo de l'exécution courante.
+ * À réserver aux traitements garantis en lecture seule : la valeur retournée
+ * est la référence conservée dans le contexte et ne doit jamais être modifiée.
+ */
+function lireMemoDirectBudgetSoft20260905_(cle, lecteur){
+  const ctx=BUDGETSOFT_READ_CONTEXT_ACTIVE_;
+  if(!ctx||!ctx.memo)return typeof lecteur==='function'?lecteur():null;
+  cle=String(cle||'');
+  if(Object.prototype.hasOwnProperty.call(ctx.memo,cle)){
+    const s=ctx.stats;
+    if(s){s.reutilisationsDirectes=(s.reutilisationsDirectes||0)+1;if(!s.parTable[cle])s.parTable[cle]={appels:0,lecturesFeuille:0,reutilisations:0,reutilisationsDirectes:0,dureeLectureMs:0,lignes:0};s.parTable[cle].reutilisationsDirectes=(s.parTable[cle].reutilisationsDirectes||0)+1;}
+    return ctx.memo[cle];
+  }
+  const valeur=typeof lecteur==='function'?lecteur():null;
+  // Le lecteur contextualisé a normalement rempli memo. On privilégie alors
+  // cette référence canonique ; sinon on retourne simplement sa valeur.
+  return Object.prototype.hasOwnProperty.call(ctx.memo,cle)?ctx.memo[cle]:valeur;
+}
+function lireTableDirecteBudgetSoft20260905_(nom){const n=String(nom||'');return lireMemoDirectBudgetSoft20260905_('TABLE:'+n,function(){return lireTable_(n);});}
+function lirePlanDynamiqueDirectBudgetSoft20260905_(nom){const n=String(nom||'');return lireMemoDirectBudgetSoft20260905_('PLAN_DYN:'+n,function(){return typeof lireFeuilleDynamiquePlan_==='function'?lireFeuilleDynamiquePlan_(n):[];});}
+function lireRapprochementsCfDirectBudgetSoft20260905_(){return lireMemoDirectBudgetSoft20260905_('RAPPRO_CF',function(){return typeof lireRapprochementsChargesFixes==='function'?lireRapprochementsChargesFixes():[];});}
 
 function lireDernieresStatsLectureBudgetSoft20260827(){
   return BUDGETSOFT_READ_CONTEXT_LAST_STATS_||{ok:false,version:BUDGETSOFT_READ_CONTEXT_VERSION,message:'Aucune mesure dans cette exécution.'};
