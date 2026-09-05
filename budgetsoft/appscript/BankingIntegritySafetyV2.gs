@@ -1,4 +1,4 @@
-const BANKING_SAFETY_V2='2.9';
+const BANKING_SAFETY_V2='3.0';
 
 function restaurerOperationsDepuisSauvegardeV2(nom){
   const ss=SpreadsheetApp.getActiveSpreadsheet(),src=ss.getSheetByName(String(nom||'')),dst=ss.getSheetByName('Operations');
@@ -68,20 +68,43 @@ function planifierSnapshotV23_(incoming,ops,compte){
   return{matches,nouvelles,ambigues,absorbees,orphelines,protegesAmbigus:[...protegesAmbigus],minDate,maxDate};
 }
 
+function appliquerDecisionsAmbiguitesV30_(plan,decisions){
+  const choix=Array.isArray(decisions)?decisions:[],matches=plan.matches.slice(),nouvelles=plan.nouvelles.slice(),ignorees=[];
+  plan.ambigues.forEach((a,i)=>{
+    const d=choix.find(x=>Number(x&&x.index)===i);
+    if(!d){ignorees.push(a);return;}
+    const action=String(d.action||'').toLowerCase();
+    if(action==='ignorer'){ignorees.push(a);return;}
+    if(action==='creer'){nouvelles.push({n:a.n,raison:'création validée manuellement'});return;}
+    if(action==='lier'){
+      const id=String(d.candidatId||'').trim(),c=(a.candidates||[]).find(x=>String(x&&x.o&&x.o.id||'')===id);
+      if(!c)throw new Error('Décision ambiguë invalide : le candidat choisi n’est plus proposé pour la ligne '+(i+1)+'. Relancez la simulation.');
+      matches.push({n:a.n,o:c.o,raison:'correspondance validée manuellement'});return;
+    }
+    throw new Error('Décision ambiguë inconnue pour la ligne '+(i+1)+'.');
+  });
+  return{matches,nouvelles,ignorees};
+}
+
 function analyserFluxBancaireAvantImportV2(lignes,compte){
   const recues=(lignes||[]).length,incoming=preparerFluxV23_(lignes,compte),rejetes=Math.max(0,recues-incoming.length),ctl=controlerLotBancaire_(incoming,null),ops=lireOperationsBancaires_().map(enrichirDepuisCommentaireBanque_),p=planifierSnapshotV23_(incoming,ops,compte),ctx=contexteCategoriesFluxV27_(ops);
   const detailsNouvelles=p.nouvelles.slice(0,30).map(a=>{const pc=propositionCategorieFluxV27_(a.n,ctx);return{date:dateJourV23_(a.n.date_comptable||a.n.date),montant:a.n.montant,libelle:a.n.libelle_bancaire||a.n.libelle,categorieProposee:pc?pc.categorie:'',sourceCategorie:pc?pc.source:''};});
-  return{version:BANKING_SAFETY_V2,controle:ctl,recues,exploitables:incoming.length,rejetes,existantes:p.matches.length,nouvelles:p.nouvelles.length,ambigues:p.ambigues.length,protegeesPdf:p.matches.filter(m=>estPdfDefinitifV27_(m.o)).length,placeholders:p.absorbees.length,orphelines:p.orphelines.length,pret:rejetes===0,pretPartiel:rejetes===0&&p.ambigues.length>0,detailsNouvelles,detailsExistantes:p.matches.slice(0,30).map(m=>({date:dateJourV23_(m.n.date_comptable||m.n.date),montant:m.n.montant,libelle:m.n.libelle_bancaire||m.n.libelle,sourceExistante:m.o.source_bancaire||'',statutExistant:m.o.statut_bancaire||'',categorieExistante:m.o.categorie||'',protegeePdf:estPdfDefinitifV27_(m.o)})),detailsAmbigues:p.ambigues.slice(0,20).map(a=>({libelle:a.n.libelle_bancaire,montant:a.n.montant,raison:a.raison,candidats:a.candidates.map(c=>({id:c.o.id,libelle:c.o.libelle_bancaire||c.o.libelle,score:c.score}))})),detailsOrphelines:p.orphelines.slice(0,30).map(o=>({id:o.id,date:dateJourV23_(o.date_comptable||o.date),montant:o.montant,libelle:o.libelle_bancaire||o.libelle,recurrence:estRecurrenceV23_(o)}))};
+  return{version:BANKING_SAFETY_V2,controle:ctl,recues,exploitables:incoming.length,rejetes,existantes:p.matches.length,nouvelles:p.nouvelles.length,ambigues:p.ambigues.length,protegeesPdf:p.matches.filter(m=>estPdfDefinitifV27_(m.o)).length,placeholders:p.absorbees.length,orphelines:p.orphelines.length,pret:rejetes===0&&p.ambigues.length===0,resolutionRequise:rejetes===0&&p.ambigues.length>0,detailsNouvelles,detailsExistantes:p.matches.slice(0,30).map(m=>({date:dateJourV23_(m.n.date_comptable||m.n.date),montant:m.n.montant,libelle:m.n.libelle_bancaire||m.n.libelle,sourceExistante:m.o.source_bancaire||'',statutExistant:m.o.statut_bancaire||'',categorieExistante:m.o.categorie||'',protegeePdf:estPdfDefinitifV27_(m.o)})),detailsAmbigues:p.ambigues.map((a,index)=>({index,date:dateJourV23_(a.n.date_comptable||a.n.date),libelle:a.n.libelle_bancaire||a.n.libelle,montant:a.n.montant,raison:a.raison,candidats:a.candidates.map(c=>({id:c.o.id,date:dateJourV23_(c.o.date_comptable||c.o.date),libelle:c.o.libelle_bancaire||c.o.libelle,montant:c.o.montant,categorie:c.o.categorie||'',source:c.o.source_bancaire||'',statut:c.o.statut_bancaire||'',score:c.score,protegeePdf:estPdfDefinitifV27_(c.o)}))})),detailsOrphelines:p.orphelines.slice(0,30).map(o=>({id:o.id,date:dateJourV23_(o.date_comptable||o.date),montant:o.montant,libelle:o.libelle_bancaire||o.libelle,recurrence:estRecurrenceV23_(o)}))};
 }
 
-function importerFluxBancaireControleV2(lignes,compte){
+function importerFluxBancaireControleV2(lignes,compte,decisionsAmbiguites){
   const incoming=preparerFluxV23_(lignes,compte),ctl=controlerLotBancaire_(incoming,null);if(!ctl.nombre)throw new Error('Aucune opération exploitable.');
   const lock=LockService.getDocumentLock();lock.waitLock(30000);let backup=null;
   try{
     const ss=SpreadsheetApp.getActiveSpreadsheet(),f=ss.getSheetByName('Operations'),headers=assurerColonnesBancaires_(),ops=lireOperationsBancaires_().map(enrichirDepuisCommentaireBanque_),avant=checksumOperationsBanque_(ops),p=planifierSnapshotV23_(incoming,ops,compte),ctx=contexteCategoriesFluxV27_(ops);
+    if(p.ambigues.length){
+      const choix=Array.isArray(decisionsAmbiguites)?decisionsAmbiguites:[];
+      if(choix.length<p.ambigues.length)return{bloque:true,message:'Import bloqué : '+p.ambigues.length+' ambiguïté(s) doivent être tranchées dans la simulation.'};
+    }
+    const resolu=appliquerDecisionsAmbiguitesV30_(p,decisionsAmbiguites);
     backup=creerSauvegardeOperationsSecurite_('import flux');
     const supprimer=new Set(p.absorbees.map(x=>String(x.placeholder.id)).concat(p.orphelines.map(x=>String(x.id))));
-    const matchById=new Map(p.matches.map(m=>[String(m.o.id),m]));
+    const matchById=new Map(resolu.matches.map(m=>[String(m.o.id),m]));
     const nouveaux=[];let protegeesPdf=0,modifieesExistantes=0,categorisees=0;
     const out=ops.filter(o=>!supprimer.has(String(o.id))).map(o=>{
       const m=matchById.get(String(o.id));if(!m)return o;
@@ -90,10 +113,10 @@ function importerFluxBancaireControleV2(lignes,compte){
       const maj=Object.assign({},o,{date:n.date,date_comptable:n.date_comptable,date_achat:n.date_achat,libelle:n.libelle||o.libelle,libelle_bancaire:n.libelle_bancaire,marchand_normalise:n.marchand_normalise,carte_fin:n.carte_fin,source_bancaire:'flux',statut_bancaire:'provisoire',commentaire:comment,modifie_le:new Date()});
       maj.cle_rapprochement=cleTransactionUnique_(maj);modifieesExistantes++;return maj;
     });
-    p.nouvelles.forEach(a=>{const now=new Date(),n=a.n,nouveau=Object.assign({id:Utilities.getUuid(),categorie:'',commentaire:'',cree_le:now,modifie_le:now},n),pc=propositionCategorieFluxV27_(n,ctx);if(pc&&pc.categorie){nouveau.categorie=pc.categorie;categorisees++;}nouveau.cle_rapprochement=cleTransactionUnique_(nouveau);out.push(nouveau);nouveaux.push(nouveau.id);});
+    resolu.nouvelles.forEach(a=>{const now=new Date(),n=a.n,nouveau=Object.assign({id:Utilities.getUuid(),categorie:'',commentaire:'',cree_le:now,modifie_le:now},n),pc=propositionCategorieFluxV27_(n,ctx);if(pc&&pc.categorie){nouveau.categorie=pc.categorie;categorisees++;}nouveau.cle_rapprochement=cleTransactionUnique_(nouveau);out.push(nouveau);nouveaux.push(nouveau.id);});
     const vals=out.map(o=>serialiserOpBancaire_(o,headers));f.clearContents();f.getRange(1,1,1,headers.length).setValues([headers]);if(vals.length)f.getRange(2,1,vals.length,headers.length).setValues(vals);f.setFrozenRows(1);SpreadsheetApp.flush();
-    const apresOps=lireOperationsBancaires_(),apres=checksumOperationsBanque_(apresOps),attendu=avant.nombre-p.absorbees.length-p.orphelines.length+p.nouvelles.length;const cles=apresOps.map(o=>String(o.cle_rapprochement||'').trim()).filter(Boolean);
+    const apresOps=lireOperationsBancaires_(),apres=checksumOperationsBanque_(apresOps),attendu=avant.nombre-p.absorbees.length-p.orphelines.length+resolu.nouvelles.length;const cles=apresOps.map(o=>String(o.cle_rapprochement||'').trim()).filter(Boolean);
     if(apres.nombre!==attendu||apres.ids!==apres.nombre||cles.length!==new Set(cles).size){f.clearContents();const bv=backup.getDataRange().getValues();f.getRange(1,1,bv.length,bv[0].length).setValues(bv);SpreadsheetApp.flush();throw new Error('Contrôle après écriture échoué ; restauration automatique effectuée.');}
-    return{bloque:false,recues:incoming.length,remplacees:modifieesExistantes,existantes:p.matches.length,protegeesPdf,creees:p.nouvelles.length,categorisees,ambiguesIgnorees:p.ambigues.length,placeholdersSupprimes:p.absorbees.length,orphelinesSupprimees:p.orphelines.length,controle:ctl,sauvegarde:backup.getName(),totalApres:apres.nombre};
+    return{bloque:false,recues:incoming.length,remplacees:modifieesExistantes,existantes:resolu.matches.length,protegeesPdf,creees:resolu.nouvelles.length,categorisees,ambiguesIgnorees:resolu.ignorees.length,ambiguesResolues:p.ambigues.length-resolu.ignorees.length,placeholdersSupprimes:p.absorbees.length,orphelinesSupprimees:p.orphelines.length,controle:ctl,sauvegarde:backup.getName(),totalApres:apres.nombre};
   }finally{lock.releaseLock();}
 }
