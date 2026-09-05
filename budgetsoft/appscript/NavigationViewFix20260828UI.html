@@ -1,6 +1,6 @@
 <script>
 (function(){
-  const VERSION='2026-09-05.2';
+  const VERSION='2026-09-05.3';
   window.__BUDGETSOFT_PREFETCH=window.__BUDGETSOFT_PREFETCH||{};
 
   function nettoyerVueChargesFixes_(view){
@@ -55,17 +55,33 @@
     enrichirPatrimoineVisuel_();
   }
 
-  // Patrimoine : si le calcul a fini en arrière-plan, l'onglet l'utilise sans nouvel aller-retour.
+  // Budget : calculé en arrière-plan, puis conservé en mémoire après le premier rendu.
+  function installerCacheBudget_(){
+    const modules=window.budgetsoftModules;if(!modules||typeof modules.budget!=='function'||modules.budget.__prefetch20260905)return;
+    const base=modules.budget;
+    const w=function(){
+      let donnees=null;
+      try{donnees=(typeof planningUI!=='undefined'&&planningUI.budget)||window.__BUDGETSOFT_PREFETCH.budget||null;}catch(e){}
+      if(!donnees)return base.apply(this,arguments);
+      const zone=document.getElementById('generic-view');if(!zone)return base.apply(this,arguments);
+      zone.innerHTML='<article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Prévisions</span><h2>Budget de la période</h2></div></div><div id="budget-ui-status" class="helper-text"></div><div id="budget-ui-content"></div></article>';
+      try{planningUI.budget=donnees;delete window.__BUDGETSOFT_PREFETCH.budget;rendreBudget();}catch(e){return base.apply(this,arguments);}
+    };
+    w.__prefetch20260905=true;modules.budget=w;
+  }
+
+  // Patrimoine : le calcul préparé en arrière-plan, puis la dernière valeur rendue, sont réutilisés.
   function installerCachePatrimoine_(){
     const modules=window.budgetsoftModules;if(!modules||typeof modules.patrimoine!=='function'||modules.patrimoine.__prefetch20260905)return;
     const base=modules.patrimoine;
     const w=function(){
-      const pre=window.__BUDGETSOFT_PREFETCH.patrimoine;
-      if(!pre)return base.apply(this,arguments);
+      let donnees=null;
+      try{donnees=(typeof planningUI!=='undefined'&&planningUI.patrimoine)||window.__BUDGETSOFT_PREFETCH.patrimoine||null;}catch(e){}
+      if(!donnees)return base.apply(this,arguments);
       const zone=document.getElementById('generic-view');
       if(!zone)return base.apply(this,arguments);
       zone.innerHTML='<article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Situation globale</span><h2>Patrimoine net</h2></div><button class="primary-button" type="button" onclick="ajouterElementPatrimoine()">＋ Ajouter</button></div><div id="patrimoine-status" class="helper-text"></div><div id="patrimoine-content"></div></article>';
-      try{planningUI.patrimoine=pre;delete window.__BUDGETSOFT_PREFETCH.patrimoine;rendrePatrimoine();postTraiterVue_();}catch(e){return base.apply(this,arguments);}
+      try{planningUI.patrimoine=donnees;delete window.__BUDGETSOFT_PREFETCH.patrimoine;rendrePatrimoine();postTraiterVue_();}catch(e){return base.apply(this,arguments);}
     };
     w.__prefetch20260905=true;modules.patrimoine=w;
   }
@@ -80,27 +96,32 @@
         if(pre&&typeof analysesUI!=='undefined'&&Number(analysesUI.nombrePeriodes||6)===6){
           analysesUI.donnees=pre;delete window.__BUDGETSOFT_PREFETCH.analyses;rendreAnalyses();return;
         }
+        if(typeof analysesUI!=='undefined'&&analysesUI.donnees&&Number(analysesUI.nombrePeriodes||6)===6){rendreAnalyses();return;}
       }catch(e){}
       return base.apply(this,arguments);
     };
     w.__prefetch20260905=true;window.chargerAnalysesUI=w;
   }
 
-  // Préchargements séquentiels : pas de rafale d'appels Apps Script au démarrage.
+  // Préchargements séquentiels : on prépare réellement plusieurs onglets sans rafale d'appels.
   function prechargerFond_(){
     const cache=window.__BUDGETSOFT_PREFETCH;
     const apresCredits=()=>setTimeout(()=>{
       if(cache.patrimoine)return apresPatrimoine();
       google.script.run.withSuccessHandler(r=>{cache.patrimoine=r;apresPatrimoine();}).withFailureHandler(apresPatrimoine).chargerPatrimoine();
-    },120);
+    },140);
     const apresPatrimoine=()=>setTimeout(()=>{
       if(cache.analyses)return apresAnalyses();
       google.script.run.withSuccessHandler(r=>{cache.analyses=r;apresAnalyses();}).withFailureHandler(apresAnalyses).chargerAnalysesBudgetairesV23(6);
-    },120);
+    },140);
     const apresAnalyses=()=>setTimeout(()=>{
+      if(cache.budget)return apresBudget();
+      google.script.run.withSuccessHandler(r=>{cache.budget=r;apresBudget();}).withFailureHandler(apresBudget).chargerBudgetPeriode('');
+    },140);
+    const apresBudget=()=>setTimeout(()=>{
       if(cache.pluxee)return;
       google.script.run.withSuccessHandler(r=>{cache.pluxee=r;}).withFailureHandler(()=>{}).chargerPluxee();
-    },120);
+    },140);
     if(cache.credits)return apresCredits();
     google.script.run.withSuccessHandler(r=>{cache.credits=r;apresCredits();}).withFailureHandler(apresCredits).chargerCreditsEtDettesV2();
   }
@@ -113,7 +134,7 @@
   },true);
 
   document.addEventListener('DOMContentLoaded',()=>{
-    installerCachePatrimoine_();installerCacheAnalyses_();
+    installerCacheBudget_();installerCachePatrimoine_();installerCacheAnalyses_();
     document.querySelectorAll('.nav-item[data-view]').forEach(b=>{
       b.addEventListener('click',()=>setTimeout(()=>{
         const view=b.dataset.view;
