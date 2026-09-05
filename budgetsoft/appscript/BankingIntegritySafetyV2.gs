@@ -1,4 +1,4 @@
-const BANKING_SAFETY_V2='2.8';
+const BANKING_SAFETY_V2='2.9';
 
 function restaurerOperationsDepuisSauvegardeV2(nom){
   const ss=SpreadsheetApp.getActiveSpreadsheet(),src=ss.getSheetByName(String(nom||'')),dst=ss.getSheetByName('Operations');
@@ -50,22 +50,28 @@ function planifierSnapshotV23_(incoming,ops,compte){
   const existants=ops.filter(o=>String(o.compte)===String(compte)),groupIn={},groupEx={};
   incoming.forEach((n,i)=>{const k=empreinteExacteV23_(n);(groupIn[k]||(groupIn[k]=[])).push({n,i});});
   existants.forEach(o=>{const k=empreinteExacteV23_(o);(groupEx[k]||(groupEx[k]=[])).push(o);});
-  const used=new Set(),matches=[],ambigues=[],nouvelles=[],absorbees=[];
+  const used=new Set(),protegesAmbigus=new Set(),matches=[],ambigues=[],nouvelles=[],absorbees=[];
   Object.keys(groupIn).forEach(k=>{
     const ins=groupIn[k],cands=(groupEx[k]||[]).slice().sort((a,b)=>{const ar=estRecurrenceV23_(a)?0:1,br=estRecurrenceV23_(b)?0:1;if(ar!==br)return ar-br;return String(a.id).localeCompare(String(b.id));});
     if(cands.length>=ins.length){ins.forEach((x,j)=>{const o=cands[j];used.add(String(o.id));matches.push({n:x.n,o,raison:'empreinte bancaire exacte'});});return;}
-    ins.forEach((x,j)=>{if(j<cands.length){const o=cands[j];used.add(String(o.id));matches.push({n:x.n,o,raison:'empreinte bancaire exacte'});return;}const possibles=existants.filter(o=>!used.has(String(o.id))&&centimesBanque_(o.montant)===centimesBanque_(x.n.montant)&&dateJourV23_(o.date_comptable||o.date)===dateJourV23_(x.n.date_comptable||x.n.date)).map(o=>({o,score:scoreMatchBancaire_(x.n,o)})).filter(c=>c.score>=60).sort((a,b)=>b.score-a.score);if(possibles.length===1){used.add(String(possibles[0].o.id));matches.push({n:x.n,o:possibles[0].o,raison:'date + montant + score unique'});}else if(possibles.length>1)ambigues.push({n:x.n,candidates:possibles.slice(0,5),raison:'plusieurs candidats résiduels'});else nouvelles.push({n:x.n,raison:'aucune correspondance'});});
+    ins.forEach((x,j)=>{
+      if(j<cands.length){const o=cands[j];used.add(String(o.id));matches.push({n:x.n,o,raison:'empreinte bancaire exacte'});return;}
+      const possibles=existants.filter(o=>!used.has(String(o.id))&&!protegesAmbigus.has(String(o.id))&&centimesBanque_(o.montant)===centimesBanque_(x.n.montant)&&dateJourV23_(o.date_comptable||o.date)===dateJourV23_(x.n.date_comptable||x.n.date)).map(o=>({o,score:scoreMatchBancaire_(x.n,o)})).filter(c=>c.score>=60).sort((a,b)=>b.score-a.score);
+      if(possibles.length===1){used.add(String(possibles[0].o.id));matches.push({n:x.n,o:possibles[0].o,raison:'date + montant + score unique'});}
+      else if(possibles.length>1){possibles.forEach(c=>protegesAmbigus.add(String(c.o.id)));ambigues.push({n:x.n,candidates:possibles.slice(0,5),raison:'plusieurs candidats résiduels'});}
+      else nouvelles.push({n:x.n,raison:'aucune correspondance'});
+    });
   });
-  matches.forEach(m=>{existants.forEach(o=>{if(used.has(String(o.id))||!estRecurrenceV23_(o))return;if(centimesBanque_(o.montant)!==centimesBanque_(m.n.montant))return;if(dateJourV23_(o.date_comptable||o.date)!==dateJourV23_(m.n.date_comptable||m.n.date))return;if(!identiteProcheV23_(o.libelle_bancaire||o.libelle,m.n.libelle_bancaire||m.n.libelle))return;used.add(String(o.id));absorbees.push({placeholder:o,cible:m.o,n:m.n});});});
+  matches.forEach(m=>{existants.forEach(o=>{if(used.has(String(o.id))||protegesAmbigus.has(String(o.id))||!estRecurrenceV23_(o))return;if(centimesBanque_(o.montant)!==centimesBanque_(m.n.montant))return;if(dateJourV23_(o.date_comptable||o.date)!==dateJourV23_(m.n.date_comptable||m.n.date))return;if(!identiteProcheV23_(o.libelle_bancaire||o.libelle,m.n.libelle_bancaire||m.n.libelle))return;used.add(String(o.id));absorbees.push({placeholder:o,cible:m.o,n:m.n});});});
   const dates=incoming.map(n=>dateJourV23_(n.date_comptable||n.date)).filter(Boolean).sort(),minDate=dates[0]||'',maxDate=dates[dates.length-1]||'';
-  const orphelines=existants.filter(o=>{const d=dateJourV23_(o.date_comptable||o.date),src=String(o.source_bancaire||'').toLowerCase();if(!d||d<minDate||d>maxDate||used.has(String(o.id)))return false;return estRecurrenceV23_(o)||src==='flux';});
-  return{matches,nouvelles,ambigues,absorbees,orphelines,minDate,maxDate};
+  const orphelines=existants.filter(o=>{const id=String(o.id),d=dateJourV23_(o.date_comptable||o.date),src=String(o.source_bancaire||'').toLowerCase();if(!d||d<minDate||d>maxDate||used.has(id)||protegesAmbigus.has(id))return false;return estRecurrenceV23_(o)||src==='flux';});
+  return{matches,nouvelles,ambigues,absorbees,orphelines,protegesAmbigus:[...protegesAmbigus],minDate,maxDate};
 }
 
 function analyserFluxBancaireAvantImportV2(lignes,compte){
   const recues=(lignes||[]).length,incoming=preparerFluxV23_(lignes,compte),rejetes=Math.max(0,recues-incoming.length),ctl=controlerLotBancaire_(incoming,null),ops=lireOperationsBancaires_().map(enrichirDepuisCommentaireBanque_),p=planifierSnapshotV23_(incoming,ops,compte),ctx=contexteCategoriesFluxV27_(ops);
   const detailsNouvelles=p.nouvelles.slice(0,30).map(a=>{const pc=propositionCategorieFluxV27_(a.n,ctx);return{date:dateJourV23_(a.n.date_comptable||a.n.date),montant:a.n.montant,libelle:a.n.libelle_bancaire||a.n.libelle,categorieProposee:pc?pc.categorie:'',sourceCategorie:pc?pc.source:''};});
-  return{version:BANKING_SAFETY_V2,controle:ctl,recues,exploitables:incoming.length,rejetes,existantes:p.matches.length,nouvelles:p.nouvelles.length,ambigues:p.ambigues.length,protegeesPdf:p.matches.filter(m=>estPdfDefinitifV27_(m.o)).length,placeholders:p.absorbees.length,orphelines:p.orphelines.length,pret:rejetes===0&&p.ambigues.length===0,detailsNouvelles,detailsExistantes:p.matches.slice(0,30).map(m=>({date:dateJourV23_(m.n.date_comptable||m.n.date),montant:m.n.montant,libelle:m.n.libelle_bancaire||m.n.libelle,sourceExistante:m.o.source_bancaire||'',statutExistant:m.o.statut_bancaire||'',categorieExistante:m.o.categorie||'',protegeePdf:estPdfDefinitifV27_(m.o)})),detailsAmbigues:p.ambigues.slice(0,20).map(a=>({libelle:a.n.libelle_bancaire,montant:a.n.montant,raison:a.raison,candidats:a.candidates.map(c=>({id:c.o.id,libelle:c.o.libelle_bancaire||c.o.libelle,score:c.score}))})),detailsOrphelines:p.orphelines.slice(0,30).map(o=>({id:o.id,date:dateJourV23_(o.date_comptable||o.date),montant:o.montant,libelle:o.libelle_bancaire||o.libelle,recurrence:estRecurrenceV23_(o)}))};
+  return{version:BANKING_SAFETY_V2,controle:ctl,recues,exploitables:incoming.length,rejetes,existantes:p.matches.length,nouvelles:p.nouvelles.length,ambigues:p.ambigues.length,protegeesPdf:p.matches.filter(m=>estPdfDefinitifV27_(m.o)).length,placeholders:p.absorbees.length,orphelines:p.orphelines.length,pret:rejetes===0,pretPartiel:rejetes===0&&p.ambigues.length>0,detailsNouvelles,detailsExistantes:p.matches.slice(0,30).map(m=>({date:dateJourV23_(m.n.date_comptable||m.n.date),montant:m.n.montant,libelle:m.n.libelle_bancaire||m.n.libelle,sourceExistante:m.o.source_bancaire||'',statutExistant:m.o.statut_bancaire||'',categorieExistante:m.o.categorie||'',protegeePdf:estPdfDefinitifV27_(m.o)})),detailsAmbigues:p.ambigues.slice(0,20).map(a=>({libelle:a.n.libelle_bancaire,montant:a.n.montant,raison:a.raison,candidats:a.candidates.map(c=>({id:c.o.id,libelle:c.o.libelle_bancaire||c.o.libelle,score:c.score}))})),detailsOrphelines:p.orphelines.slice(0,30).map(o=>({id:o.id,date:dateJourV23_(o.date_comptable||o.date),montant:o.montant,libelle:o.libelle_bancaire||o.libelle,recurrence:estRecurrenceV23_(o)}))};
 }
 
 function importerFluxBancaireControleV2(lignes,compte){
@@ -73,7 +79,6 @@ function importerFluxBancaireControleV2(lignes,compte){
   const lock=LockService.getDocumentLock();lock.waitLock(30000);let backup=null;
   try{
     const ss=SpreadsheetApp.getActiveSpreadsheet(),f=ss.getSheetByName('Operations'),headers=assurerColonnesBancaires_(),ops=lireOperationsBancaires_().map(enrichirDepuisCommentaireBanque_),avant=checksumOperationsBanque_(ops),p=planifierSnapshotV23_(incoming,ops,compte),ctx=contexteCategoriesFluxV27_(ops);
-    if(p.ambigues.length)return{bloque:true,message:'Import bloqué : '+p.ambigues.length+' ambiguïté(s).'};
     backup=creerSauvegardeOperationsSecurite_('import flux');
     const supprimer=new Set(p.absorbees.map(x=>String(x.placeholder.id)).concat(p.orphelines.map(x=>String(x.id))));
     const matchById=new Map(p.matches.map(m=>[String(m.o.id),m]));
@@ -89,6 +94,6 @@ function importerFluxBancaireControleV2(lignes,compte){
     const vals=out.map(o=>serialiserOpBancaire_(o,headers));f.clearContents();f.getRange(1,1,1,headers.length).setValues([headers]);if(vals.length)f.getRange(2,1,vals.length,headers.length).setValues(vals);f.setFrozenRows(1);SpreadsheetApp.flush();
     const apresOps=lireOperationsBancaires_(),apres=checksumOperationsBanque_(apresOps),attendu=avant.nombre-p.absorbees.length-p.orphelines.length+p.nouvelles.length;const cles=apresOps.map(o=>String(o.cle_rapprochement||'').trim()).filter(Boolean);
     if(apres.nombre!==attendu||apres.ids!==apres.nombre||cles.length!==new Set(cles).size){f.clearContents();const bv=backup.getDataRange().getValues();f.getRange(1,1,bv.length,bv[0].length).setValues(bv);SpreadsheetApp.flush();throw new Error('Contrôle après écriture échoué ; restauration automatique effectuée.');}
-    return{bloque:false,recues:incoming.length,remplacees:modifieesExistantes,existantes:p.matches.length,protegeesPdf,creees:p.nouvelles.length,categorisees,placeholdersSupprimes:p.absorbees.length,orphelinesSupprimees:p.orphelines.length,controle:ctl,sauvegarde:backup.getName(),totalApres:apres.nombre};
+    return{bloque:false,recues:incoming.length,remplacees:modifieesExistantes,existantes:p.matches.length,protegeesPdf,creees:p.nouvelles.length,categorisees,ambiguesIgnorees:p.ambigues.length,placeholdersSupprimes:p.absorbees.length,orphelinesSupprimees:p.orphelines.length,controle:ctl,sauvegarde:backup.getName(),totalApres:apres.nombre};
   }finally{lock.releaseLock();}
 }
