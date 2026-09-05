@@ -89,3 +89,49 @@ function auditGeneralProfilCerbere_(controles,performances,c,cockpitMs){
   const ser=Number(pc.serializationMs);if(Number.isFinite(ser)){const n=Math.max(0,Math.round(ser));auditGeneralAjouter_(controles,'Performance Cerbère','Post-3.5 · Sérialisation','info',n+' ms',null,'Conversion du cockpit en payload client.');performances.push({module:'Cerbère · post-3.5 · sérialisation',ms:n});}
   auditGeneralAjouter_(controles,'Performance Cerbère','Cockpit complet mesuré','info',Math.max(0,Math.round(Number(cockpitMs||0)))+' ms',null,'Temps mesuré autour de chargerCerbereCockpit20260902().');
 }
+
+/**
+ * Optimisation 2026-09-05 : même audit métier 3.7.9, mais les opérations sont
+ * préparées une fois puis indexées par cycle bancaire / cycle d'imputation.
+ * Évite 3 à 4 rescans complets des Operations par période.
+ */
+function appliquerAuditCerbereV377_(base){
+  if(!base||base.ok===false)return base;
+  const operations=tableauCerbereV379_(lireTable_('Operations'));
+  const charges=tableauCerbereV379_(lireTable_('Charges_fixes'));
+  const rapprochements=typeof lireRapprochementsChargesFixes==='function'?tableauCerbereV379_(lireRapprochementsChargesFixes()):lireFeuilleDynamiqueCerbereV379_('Rapprochements_charges_fixes');
+  const controles=lireFeuilleDynamiqueCerbereV379_('Controles_releves');
+  const actions=typeof lireFeuilleDynamiquePlan_==='function'?tableauCerbereV379_(lireFeuilleDynamiquePlan_('Plan_Actions')):lireFeuilleDynamiqueCerbereV379_('Plan_Actions');
+  const periodes=tableauCerbereV379_(base.periodes),p0Postes=tableauCerbereV379_(base.p0&&base.p0.postes),p0Cats=new Set(p0Postes.map(x=>String(x&&x.categorie||'').trim()).filter(Boolean));p0Cats.add('Divers');
+  const r0Postes=tableauCerbereV379_(base.recettesCanon&&base.recettesCanon.postes),r0Cats=new Set(r0Postes.map(x=>String(x&&x.categorie||'').trim()).filter(Boolean));
+  const cfMatchByOp=construireLiensCfCertainsV377Optimise_(operations,charges,rapprochements);
+  const banqueParCycle=periodes.map(()=>[]),imputationParCycle=periodes.map(()=>[]);
+  const meta=operations.map(o=>({o,id:String(o&&o.id||'').trim(),m:Number(o&&o.montant||0),cat:String(o&&o.categorie||'').trim(),db:dateOperationBanqueV377_(o),di:dateImputationCerbereV377_(o)}));
+  meta.forEach(x=>periodes.forEach((p,i)=>{const per=p&&p.periode||p;if(x.db&&dateDansCycleV377_(x.db,per))banqueParCycle[i].push(x);if(x.di&&dateDansCycleV377_(x.di,per))imputationParCycle[i].push(x);}));
+  let report=null;
+  periodes.forEach((p,i)=>{
+    if(!p||typeof p!=='object')return;
+    const v=p.v37||(p.v37={}),periode=p.periode||p,opsB=banqueParCycle[i]||[],opsI=imputationParCycle[i]||[];
+    if(i===0){const ss=calculerSS1DepuisRelevesV377_(operations,controles,periode);if(ss&&Number.isFinite(ss.montant)){v.ss1=arrV377_(ss.montant);v.soldeOuverture=v.ss1;v.ss1Statut='reconstitué depuis relevé PDF + opérations définitives';v.ss1Audit=ss;}}else if(report!==null){v.ss1=arrV377_(report);v.soldeOuverture=v.ss1;v.ss1Statut='projeté depuis la fin Cerbère corrigée de la période précédente';}
+    const reelR0={};let recettesHorsR0=0;opsB.forEach(x=>{if(x.m<=0)return;if(r0Cats.has(x.cat))reelR0[x.cat]=(reelR0[x.cat]||0)+x.m;else recettesHorsR0+=x.m;});
+    let rtSocle=0;r0Postes.forEach(x=>{const cat=String(x&&x.categorie||'').trim(),canon=Number(x&&x.montant||0),reel=Number(reelR0[cat]||0);rtSocle+=i===0?Math.max(canon,reel):canon;});
+    const recettesPlan=Number(v.recettesEvenements||0);v.rt1=arrV377_(rtSocle+(i===0?recettesHorsR0:0)+recettesPlan);v.rt1Audit={socle:arrV377_(rtSocle),reelParCategorie:reelR0,horsR0:arrV377_(i===0?recettesHorsR0:0),plan:arrV377_(recettesPlan)};
+    const cfRef=calculerCfReferenceCycleV377_(charges,actions,periode),remplacements={};opsB.forEach(x=>{const cfId=cfMatchByOp[x.id];if(cfId)remplacements[cfId]=(remplacements[cfId]||0)+Math.abs(x.m);});
+    let cft1=0;tableauCerbereV379_(cfRef.lignes).forEach(c=>{cft1+=Object.prototype.hasOwnProperty.call(remplacements,c.id)?Number(remplacements[c.id]):Number(c.montant||0);});v.chargesFixesTotal=arrV377_(cfRef.total);v.cft1=arrV377_(cft1);v.cf1Statut=i===0?'référence du cycle auditée':'projection depuis CF0 courant + Actions liées à une CF';v.cft1Audit={reference:arrV377_(cfRef.total),remplacements,actionsAppliquees:tableauCerbereV379_(cfRef.actionsAppliquees)};
+    const fuiteCfParCat={};opsI.forEach(x=>{if(!cfMatchByOp[x.id]||!p0Cats.has(x.cat))return;fuiteCfParCat[x.cat]=(fuiteCfParCat[x.cat]||0)+Math.abs(x.m);});
+    const enveloppes=tableauCerbereV379_(p.enveloppes);let dpt1=0,ret1=0;enveloppes.forEach(x=>{const cat=String(x&&x.categorie||'').trim(),brut=Number(x&&x.reelNetPrevisionnel!=null?x.reelNetPrevisionnel:(x&&x.reelImpute||0)),reel=Math.max(0,brut-Number(fuiteCfParCat[cat]||0)),plan=Number(x&&x.planifie||0),allocation=Math.max(0,Number(x&&x.prevu||0)),engage=arrV377_(reel+plan),reste=arrV377_(allocation-engage),proj=arrV377_(Math.max(allocation,engage));x.reelNetPrevisionnel=arrV377_(reel);x.engageV37=engage;x.resteV37=reste;x.dpt1=proj;dpt1+=proj;ret1+=reste;});v.dpt1=arrV377_(dpt1);v.ret1=arrV377_(ret1);v.fuiteCfCorrigeeParCategorie=fuiteCfParCat;
+    let het1=0;const heDetail={};opsI.forEach(x=>{if(x.m>=0||p0Cats.has(x.cat)||cfMatchByOp[x.id]||estReglementCbTechniqueV377_(x.o))return;const a=Math.abs(x.m);het1+=a;heDetail[x.cat]=(heDetail[x.cat]||0)+a;});v.het1=arrV377_(het1);v.horsPilotableAControler=v.het1;v.het1Detail=heDetail;
+    v.dt1=arrV377_(Number(v.cft1||0)+Number(v.dpt1||0)+Number(v.het1||0));v.sct1=arrV377_(Number(v.ss1||0)+Number(v.rt1||0)-v.dt1);v.rpt1=v.sct1;v.resteReellementPilotable=v.sct1;v.disponibleJusquau27=v.sct1;const absorbable=arrV377_(enveloppes.reduce((s,x)=>s+Math.max(0,Number(x&&x.prevu||0)-Number(x&&x.engageV37||0)),0));v.absorbableParAllocations=absorbable;v.incompressible=arrV377_(v.sct1<0?Math.max(0,Math.abs(v.sct1)-absorbable):0);v.auditInvariantV379=verifierInvariantPeriodeCerbereV379_(p);p.resteBudgetPilotable=v.ret1;p.resteReellementPilotable=v.sct1;p.capacitePilotable=v.sct1;p.capaciteTresorerie=v.sct1;report=v.sct1;
+  });
+  base.version='3.7.10';base.diagnostic=base.diagnostic||{};base.diagnostic.audit_379='3.7.10 indexé : mêmes règles, opérations préparées une fois par cycle';base.diagnostic.non_regression=diagnostiquerStructureCerbereV379_(base);return base;
+}
+
+function construireLiensCfCertainsV377Optimise_(operations,charges,rapprochements){
+  operations=tableauCerbereV379_(operations);charges=tableauCerbereV379_(charges);rapprochements=tableauCerbereV379_(rapprochements);
+  const out={},chargeById={},chargesParMontant={};
+  charges.forEach(c=>{const id=String(c&&c.id||'').trim();if(id)chargeById[id]=c;const montant=Math.abs(Number(c&&c.montant||0));if(!montant)return;const k=montant.toFixed(2),n=normaliserV377_(c&&c.libelle||c&&c.libelle_bancaire);(chargesParMontant[k]||(chargesParMontant[k]=[])).push({c,id,n});});
+  operations.forEach(o=>{const id=String(o&&o.id||''),cf=String(o&&o.charge_fixe_id||'').trim();if(id&&cf&&chargeById[cf])out[id]=cf;});
+  rapprochements.forEach(r=>{const op=String(r&&r.operation_id||''),cf=String(r&&r.charge_fixe_id||'');if(!op||!cf||!chargeById[cf])return;const statut=normaliserV377_(r.statut),score=Number(r.score||0),em=Math.abs(Number(r.ecart_montant||0)),ej=Math.abs(Number(r.ecart_jours||0));if(statut.indexOf('valid')>=0||String(r.decision||'').trim()||(score>=70&&em<=0.01&&ej<=2))out[op]=cf;});
+  operations.forEach(o=>{const opId=String(o&&o.id||'');if(!opId||out[opId])return;const nom=normaliserV377_(o.libelle||o.libelle_bancaire),mont=Math.abs(Number(o.montant||0));if(!nom||!mont)return;const candidats=(chargesParMontant[mont.toFixed(2)]||[]).filter(x=>x.n&&nom.length>=6&&(nom.indexOf(x.n)>=0||x.n.indexOf(nom)>=0));if(candidats.length===1)out[opId]=candidats[0].id;});
+  return out;
+}
