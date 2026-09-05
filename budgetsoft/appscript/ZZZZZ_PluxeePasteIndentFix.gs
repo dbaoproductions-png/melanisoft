@@ -1,12 +1,11 @@
 // Correctif du parseur copier-coller Pluxee.
-// Le Markdown copié depuis l'historique Pluxee indente la plupart des lignes
-// (ex. "  ##### 22/08/2026 à 14h09"). Il faut supprimer l'indentation
-// avant les marqueurs Markdown, sinon seules les premières lignes non indentées
-// sont reconnues.
+// Les puces Markdown doivent être supprimées sans retirer le signe d'un montant
+// négatif (ex. "-1,20 €"). Un tiret n'est donc considéré comme une puce que
+// lorsqu'il est suivi d'un espace.
 
 function nettoyerLigneCollerPluxee_(s){
   return String(s||'')
-    .replace(/^\s*[-*]+\s*/,'')
+    .replace(/^\s*(?:[*•]+\s*|[-–—]+\s+)/,'')
     .replace(/^\s*#+\s*/,'')
     .replace(/\[image\]\([^)]*\)/ig,'')
     .replace(/\s+/g,' ')
