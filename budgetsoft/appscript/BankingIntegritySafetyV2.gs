@@ -1,4 +1,4 @@
-const BANKING_SAFETY_V2='3.1';
+const BANKING_SAFETY_V2='3.2';
 
 function restaurerOperationsDepuisSauvegardeV2(nom){
   const ss=SpreadsheetApp.getActiveSpreadsheet(),src=ss.getSheetByName(String(nom||'')),dst=ss.getSheetByName('Operations');
@@ -53,18 +53,18 @@ function identiteGroupeV31_(o){
   if(!marchand)marchand=brut;
   return normaliserTexteBanqueFiable_(marchand);
 }
-function cleGroupeEquivalentV31_(o){return [dateJourV23_(o&&o.date_comptable||o&&o.date),centimesBanque_(o&&o.montant),identiteGroupeV31_(o)].join('|');}
+function cleMultipliciteV32_(o){return [dateJourV23_(o&&o.date_comptable||o&&o.date),centimesBanque_(o&&o.montant)].join('|');}
 function rapprocherGroupesEquivalentsV31_(incoming,existants,used){
   const gi={},ge={},matches=[],indexes=new Set(),groupes=[];
-  incoming.forEach((n,i)=>{const k=cleGroupeEquivalentV31_(n);if(k.endsWith('|'))return;(gi[k]||(gi[k]=[])).push({n,i});});
-  existants.forEach(o=>{const k=cleGroupeEquivalentV31_(o);if(k.endsWith('|'))return;(ge[k]||(ge[k]=[])).push(o);});
+  (incoming||[]).forEach((n,i)=>{const k=cleMultipliciteV32_(n);if(!k||k.charAt(0)==='|')return;(gi[k]||(gi[k]=[])).push({n,i});});
+  (existants||[]).forEach(o=>{const k=cleMultipliciteV32_(o);if(!k||k.charAt(0)==='|')return;(ge[k]||(ge[k]=[])).push(o);});
   Object.keys(gi).forEach(k=>{
-    const ins=gi[k],ex=(ge[k]||[]).filter(o=>!used.has(String(o.id)));
+    const ins=gi[k],ex=(ge[k]||[]).filter(o=>!used.has(String(o&&o.id||'')));
     if(ins.length<2||ins.length!==ex.length)return;
-    const tousCompatibles=ins.every(x=>ex.every(o=>Number(scoreMatchBancaire_(x.n,o)||0)>=60));
+    const tousCompatibles=ins.every(x=>ex.every(o=>Number(scoreMatchBancaire_(x.n,o)||0)>=90&&identiteProcheV23_(x.n&&(x.n.libelle_bancaire||x.n.libelle),o&&(o.libelle_bancaire||o.libelle))));
     if(!tousCompatibles)return;
-    const triesIn=ins.slice().sort((a,b)=>a.i-b.i),triesEx=ex.slice().sort((a,b)=>{const ar=estRecurrenceV23_(a)?0:1,br=estRecurrenceV23_(b)?0:1;if(ar!==br)return ar-br;return String(a.id).localeCompare(String(b.id));});
-    triesIn.forEach((x,j)=>{const o=triesEx[j];indexes.add(x.i);used.add(String(o.id));matches.push({n:x.n,o,raison:'groupe équivalent '+ins.length+'×'+ex.length+' validé par multiplicité'});});
+    const triesIn=ins.slice().sort((a,b)=>a.i-b.i),triesEx=ex.slice().sort((a,b)=>{const ar=estRecurrenceV23_(a)?0:1,br=estRecurrenceV23_(b)?0:1;if(ar!==br)return ar-br;return String(a&&a.id||'').localeCompare(String(b&&b.id||''));});
+    triesIn.forEach((x,j)=>{const o=triesEx[j];indexes.add(x.i);used.add(String(o.id));matches.push({n:x.n,o,raison:'groupe '+ins.length+'×'+ex.length+' date+montant/identité validé'});});
     groupes.push({cle:k,nombre:ins.length,date:dateJourV23_(ins[0].n.date_comptable||ins[0].n.date),montant:ins[0].n.montant,marchand:identiteGroupeV31_(ins[0].n)});
   });
   return{matches,indexes,groupes};
