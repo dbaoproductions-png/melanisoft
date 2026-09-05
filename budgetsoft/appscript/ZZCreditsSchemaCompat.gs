@@ -76,6 +76,10 @@ function chargerCreditsEtDettes() {
   const capitalRenouvelable = renouvelables.reduce((s, c) => s + Number(c.capital_restant || 0), 0);
   const coutRenouvelable = renouvelables.reduce((s, c) => s + Number(c.cout_restant || 0), 0);
   const tauxRenouvelablePondere = capitalRenouvelable ? renouvelables.reduce((s, c) => s + Number(c.capital_restant || 0) * Number(c.taux || 0), 0) / capitalRenouvelable : 0;
+  // Le disponible communiqué par chaque organisme est la donnée de référence :
+  // il peut différer de plafond - encours en présence d'opérations en cours.
+  const reserveDisponibleRenouvelable = Math.round(renouvelables.reduce((s,c)=>s+Math.max(0,Number(c.disponible_credit||0)),0)*100)/100;
+  renouvelables.forEach(c=>c.reserve_disponible=Math.max(0,Number(c.disponible_credit||0)));
 
-  return { version: '1.9-schema-etendu', lignes: tous, capitalRestant, mensualites, tauxPondere, echeancesRestantes, coutRestant, amortissables, renouvelables, capitalRenouvelable, coutRenouvelable, tauxRenouvelablePondere };
+  return { version: '2.0-schema-etendu', lignes: tous, capitalRestant, mensualites, tauxPondere, echeancesRestantes, coutRestant, amortissables, renouvelables, capitalRenouvelable, coutRenouvelable, tauxRenouvelablePondere, reserveDisponibleRenouvelable };
 }
