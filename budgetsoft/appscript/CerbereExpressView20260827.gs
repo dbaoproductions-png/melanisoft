@@ -1,18 +1,16 @@
-const CERBERE_EXPRESS_VIEW_VERSION = '2026-09-05.1';
+const CERBERE_EXPRESS_VIEW_VERSION = '2026-09-05.2';
 
-/** Vue rapide : snapshot frais d'abord ; si le snapshot est périmé, recalcul immédiat. */
+/**
+ * Vue interne Google Sheets : toujours calculée depuis le cockpit frais.
+ * Le snapshot est réservé à la vue publique/tokenisée afin d'éviter qu'une
+ * ancienne copie locale masque une évolution déjà visible dans le webapp.
+ */
 function chargerVueCerbereExpress20260827(){
-  try{
-    if(typeof chargerSnapshotCerbereExpress20260827==='function'){
-      const s=chargerSnapshotCerbereExpress20260827();
-      if(s&&s.disponible&&s.vue&&!s.perime)return s.vue;
-    }
-  }catch(e){}
-  if(typeof avecContexteLectureBudgetSoft20260827_==='function')return avecContexteLectureBudgetSoft20260827_('cerbere-express-calcul',chargerVueCerbereExpressSansContexte20260827_);
+  if(typeof avecContexteLectureBudgetSoft20260827_==='function')return avecContexteLectureBudgetSoft20260827_('cerbere-express-calcul-frais',chargerVueCerbereExpressSansContexte20260827_);
   return chargerVueCerbereExpressSansContexte20260827_();
 }
 
-/** Calcul frais utilisé par le rafraîchissement du snapshot. */
+/** Calcul frais utilisé aussi par le rafraîchissement du snapshot public. */
 function chargerVueCerbereExpressSansContexte20260827_(){
   const e=chargerCerbereExpress20260827();
   if(!e||e.ok===false)return e||{ok:false,erreur:'Cerbère Express indisponible'};
@@ -25,4 +23,4 @@ function chargerVueCerbereExpressSansContexte20260827_(){
 function ouvrirCerbereExpress20260827(){const html=HtmlService.createTemplateFromFile('CerbereExpressMobile20260827').evaluate().setTitle('Cerbère Express');SpreadsheetApp.getUi().showSidebar(html);}
 function installerMenuCerbereExpress20260827(){SpreadsheetApp.getUi().createMenu('🐺 Cerbère Express').addItem('Ouvrir Cerbère Express','ouvrirCerbereExpress20260827').addToUi();return{ok:true,version:CERBERE_EXPRESS_VIEW_VERSION,message:'Menu Cerbère Express installé dans Google Sheets.'};}
 function auditerVueCerbereExpress20260827(){const v=chargerVueCerbereExpress20260827();const out={ok:!!(v&&v.ok),version:v&&v.version,moteurVersion:v&&v.moteurVersion,cycle:v&&v.cycle,meteo:v&&v.meteo,consigneSaillante:v&&v.consigneSaillante,pilotable:v&&v.pilotable?{allocation:v.pilotable.allocation,consomme:v.pilotable.consomme,reste:v.pilotable.reste,aVentiler:v.pilotable.aVentiler}:null,pluxee:v&&v.pluxee,contexte:v&&v.contexte};console.log(JSON.stringify(out));return out;}
-function auditerPerformanceCerbereExpress20260827(){const t=Date.now(),v=chargerVueCerbereExpress20260827(),dureeMs=Date.now()-t;const out={ok:!!(v&&v.ok),version:CERBERE_EXPRESS_VIEW_VERSION,dureeMs,dureeSecondes:Math.round(dureeMs/100)/10,source:v&&v.performance&&v.performance.source||'snapshot/vue'};console.log('[PERF Cerbere Express] '+JSON.stringify(out));return out;}
+function auditerPerformanceCerbereExpress20260827(){const t=Date.now(),v=chargerVueCerbereExpress20260827(),dureeMs=Date.now()-t;const out={ok:!!(v&&v.ok),version:CERBERE_EXPRESS_VIEW_VERSION,dureeMs,dureeSecondes:Math.round(dureeMs/100)/10,source:'cockpit-frais'};console.log('[PERF Cerbere Express] '+JSON.stringify(out));return out;}
