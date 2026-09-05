@@ -1,5 +1,5 @@
-const MAINTENANCE_VERSION='3.2';
-const AUDIT_GENERAL_VERSION='1.2-2026-09-04';
+const MAINTENANCE_VERSION='3.3';
+const AUDIT_GENERAL_VERSION='1.3-2026-09-05';
 
 function chargerCentreMaintenance(){
   verifierInitialisation_();
@@ -15,13 +15,14 @@ function controlerQualiteBudgetSoft(){
   ajouterDoublonsNoms_(comptes,'nom','Compte en double',anomalies);ajouterDoublonsNoms_(categories,'nom','Catégorie en double',anomalies);
   operations.forEach((o,i)=>{
     const n=i+2,d=auditGeneralDate_(o.date_comptable||o.date),m=Number(o.montant),cp=String(o.compte||''),cat=String(o.categorie||'').trim();
+    if(!String(o.id||'').trim())anomalies.push({niveau:'erreur',domaine:'Sources',message:'Ligne '+n+' : opération sans ID.'});
     if(!d)anomalies.push({niveau:'erreur',domaine:'Opérations',message:'Ligne '+n+' : date invalide.'});
     if(!Number.isFinite(m)||m===0)anomalies.push({niveau:'erreur',domaine:'Opérations',message:'Ligne '+n+' : montant nul ou invalide.'});
     if(cp&&!compteIds.has(cp)&&!compteNoms.has(normaliserTexteMaintenance_(cp)))anomalies.push({niveau:'erreur',domaine:'Comptes',message:'Ligne '+n+' : compte inconnu.'});
     if(!cat)anomalies.push({niveau:'attention',domaine:'Catégories',message:'Ligne '+n+' : opération sans catégorie.'});
     else if(!catNoms.has(normaliserTexteMaintenance_(cat)))anomalies.push({niveau:'attention',domaine:'Catégories',message:'Ligne '+n+' : catégorie inconnue « '+cat+' ».'});
   });
-  const dup=auditGeneralDoublonsOperations_(operations);dup.exemples.forEach(x=>anomalies.push({niveau:'attention',domaine:'Doublons',message:x}));
+  const dup=auditGeneralDoublonsOperations_(operations);dup.exemplesForts.forEach(x=>anomalies.push({niveau:'attention',domaine:'Doublons',message:x}));
   charges.forEach((c,i)=>{if(!auditGeneralActif_(c.actif))return;const n=i+2,m=Number(c.montant||0),cat=String(c.categorie||'').trim();if(!Number.isFinite(m)||m<=0)anomalies.push({niveau:'attention',domaine:'Charges fixes',message:'Ligne '+n+' : charge active sans montant valide.'});if(cat&&!catNoms.has(normaliserTexteMaintenance_(cat)))anomalies.push({niveau:'attention',domaine:'Charges fixes',message:'Ligne '+n+' : catégorie inconnue « '+cat+' ».'});});
   const erreurs=anomalies.filter(a=>a.niveau==='erreur').length,attentions=anomalies.filter(a=>a.niveau==='attention').length;
   return{score:Math.max(0,Math.round(100-erreurs*8-attentions*2)),erreurs,attentions,anomalies,compteurs:{comptes:comptes.length,categories:categories.length,operations:operations.length,chargesFixesActives:charges.filter(c=>auditGeneralActif_(c.actif)).length}};
@@ -35,9 +36,13 @@ function auditerBudgetSoftGeneral(){
   const compteIds=new Set(comptes.map(c=>String(c.id||'')).filter(Boolean)),compteNoms=new Set(comptes.map(c=>normaliserTexteMaintenance_(c.nom)).filter(Boolean)),catNoms=new Set(categories.map(c=>normaliserTexteMaintenance_(c.nom)).filter(Boolean)),opIds=new Set(operations.map(o=>String(o.id||'')).filter(Boolean)),chargeIds=new Set(charges.map(c=>String(c.id||'')).filter(Boolean));
 
   auditGeneralAjouter_(controles,'Sources','Operations présentes',operations.length?'ok':'attention',operations.length,null,'Nombre de mouvements réels présents dans le tableur.');
-  auditGeneralAjouter_(controles,'Sources','IDs Operations uniques',auditGeneralIdsUniques_(operations)?'ok':'erreur',operations.length,null,'Chaque opération doit avoir un identifiant unique.',true);
-  auditGeneralAjouter_(controles,'Sources','IDs Comptes uniques',auditGeneralIdsUniques_(comptes)?'ok':'erreur',comptes.length,null,'Chaque compte doit avoir un identifiant unique.',true);
-  auditGeneralAjouter_(controles,'Sources','IDs Charges fixes uniques',auditGeneralIdsUniques_(charges)?'ok':'erreur',charges.length,null,'Chaque charge fixe doit avoir un identifiant unique.',true);
+  const idsOps=auditGeneralEtatIds_(operations),idsComptes=auditGeneralEtatIds_(comptes),idsCharges=auditGeneralEtatIds_(charges);
+  auditGeneralAjouter_(controles,'Sources','IDs Operations présents',idsOps.manquants?'erreur':'ok',idsOps.manquants,0,'Chaque opération doit avoir un identifiant non vide.',true);
+  auditGeneralAjouter_(controles,'Sources','IDs Operations uniques',idsOps.doublons?'erreur':'ok',idsOps.doublons,0,'Aucun identifiant d’opération ne doit être réutilisé.',true);
+  auditGeneralAjouter_(controles,'Sources','IDs Comptes présents',idsComptes.manquants?'erreur':'ok',idsComptes.manquants,0,'Chaque compte doit avoir un identifiant non vide.',true);
+  auditGeneralAjouter_(controles,'Sources','IDs Comptes uniques',idsComptes.doublons?'erreur':'ok',idsComptes.doublons,0,'Aucun identifiant de compte ne doit être réutilisé.',true);
+  auditGeneralAjouter_(controles,'Sources','IDs Charges fixes présents',idsCharges.manquants?'erreur':'ok',idsCharges.manquants,0,'Chaque charge fixe doit avoir un identifiant non vide.',true);
+  auditGeneralAjouter_(controles,'Sources','IDs Charges fixes uniques',idsCharges.doublons?'erreur':'ok',idsCharges.doublons,0,'Aucun identifiant de charge fixe ne doit être réutilisé.',true);
 
   let datesInvalides=0,montantsInvalides=0,comptesInconnus=0,sansCategorie=0;const catsInconnues=new Set();
   operations.forEach(o=>{const d=auditGeneralDate_(o.date_comptable||o.date),m=Number(o.montant),cp=String(o.compte||''),cat=String(o.categorie||'').trim();if(!d)datesInvalides++;if(!Number.isFinite(m)||m===0)montantsInvalides++;if(cp&&!compteIds.has(cp)&&!compteNoms.has(normaliserTexteMaintenance_(cp)))comptesInconnus++;if(!cat)sansCategorie++;else if(!catNoms.has(normaliserTexteMaintenance_(cat)))catsInconnues.add(cat);});
@@ -47,7 +52,8 @@ function auditerBudgetSoftGeneral(){
   auditGeneralAjouter_(controles,'Opérations','Catégories connues',catsInconnues.size?'attention':'ok',catsInconnues.size,0,catsInconnues.size?'Catégories absentes du référentiel : '+[...catsInconnues].sort().join(', ')+'.':'Toutes les catégories utilisées existent dans le référentiel.');
   auditGeneralAjouter_(controles,'Opérations','Opérations à classer',sansCategorie?'attention':'ok',sansCategorie,0,'Opérations sans catégorie métier.');
   const doublons=auditGeneralDoublonsOperations_(operations);
-  auditGeneralAjouter_(controles,'Opérations','Doublons probables',doublons.nombre?'attention':'ok',doublons.nombre,0,doublons.nombre?'Exemples : '+doublons.exemples.slice(0,5).join(' · '):'Aucun doublon probable selon la clé date + compte + libellé + montant.');
+  auditGeneralAjouter_(controles,'Opérations','Doublons forts',doublons.forts?'attention':'ok',doublons.forts,0,doublons.forts?'Même opération apparente avec une référence bancaire/import identique. Exemples : '+doublons.exemplesForts.slice(0,5).join(' · '):'Aucun doublon fort : aucune collision n’est confirmée par une référence bancaire/import commune.');
+  auditGeneralAjouter_(controles,'Opérations','Transactions similaires',doublons.similaires?'info':'ok',doublons.similaires,0,doublons.similaires?'Collisions date + compte + libellé + montant sans preuve suffisante de doublon. Exemples : '+doublons.exemplesSimilaires.slice(0,5).join(' · '):'Aucune transaction similaire détectée.');
 
   const comptesActifs=comptes.filter(c=>auditGeneralActif_(c.actif));
   const soldes=comptesActifs.map(c=>({id:String(c.id||''),nom:String(c.nom||''),type:String(c.type||'').toLowerCase(),solde:auditGeneralArrondi_(auditGeneralNombre_(c.solde_initial)+operations.filter(o=>String(o.compte||'')===String(c.id||'')||String(o.compte||'')===String(c.nom||'')).reduce((s,o)=>s+auditGeneralNombre_(o.montant),0))}));
@@ -119,8 +125,10 @@ function auditGeneralArrondi_(n){n=Number(n);return Number.isFinite(n)?Math.roun
 function auditGeneralActif_(v){if(typeof convertirBooleen_==='function')return convertirBooleen_(v);if(v===false||v===0||v===null||v===undefined)return false;return !['0','false','non','no','inactif','inactive'].includes(String(v).trim().toLowerCase());}
 function auditGeneralDate_(v){if(!v)return null;const d=v instanceof Date?new Date(v):new Date(v);return isNaN(d.getTime())?null:d;}
 function auditGeneralDateIso_(d){return Utilities.formatDate(d,Session.getScriptTimeZone()||'Europe/Paris','yyyy-MM-dd');}
-function auditGeneralIdsUniques_(lignes){const ids=(lignes||[]).map(x=>String(x.id||'').trim()).filter(Boolean);return ids.length===new Set(ids).size;}
+function auditGeneralEtatIds_(lignes){const ids=(lignes||[]).map(x=>String(x&&x.id||'').trim()),manquants=ids.filter(x=>!x).length,comptes={};ids.filter(Boolean).forEach(id=>comptes[id]=(comptes[id]||0)+1);const doublons=Object.keys(comptes).reduce((s,id)=>s+Math.max(0,comptes[id]-1),0);return{manquants,doublons,total:ids.length};}
+function auditGeneralIdsUniques_(lignes){const e=auditGeneralEtatIds_(lignes);return e.manquants===0&&e.doublons===0;}
 function auditGeneralMensualiserCharge_(c){const m=Math.abs(auditGeneralNombre_(c&&c.montant)),f=normaliserTexteMaintenance_(c&&c.frequence);if(f.indexOf('annu')>=0)return m/12;if(f.indexOf('trimes')>=0)return m/3;if(f.indexOf('semestr')>=0)return m/6;if(f.indexOf('bimes')>=0)return m/2;if(f.indexOf('hebdo')>=0)return m*52/12;if(f.indexOf('quotid')>=0)return m*365/12;return m;}
-function auditGeneralDoublonsOperations_(ops){const vus=new Map(),exemples=[];let nombre=0;(ops||[]).forEach((o,i)=>{const d=auditGeneralDate_(o.date_comptable||o.date),date=d?auditGeneralDateIso_(d):'',lib=normaliserTexteMaintenance_(o.libelle_bancaire||o.libelle),mont=Math.abs(auditGeneralNombre_(o.montant)),cp=String(o.compte||''),k=[date,lib,mont.toFixed(2),cp].join('|');if(vus.has(k)){nombre++;if(exemples.length<8){const j=vus.get(k)+2;exemples.push('lignes '+j+' / '+(i+2)+' · '+date+' · '+String(o.libelle||o.libelle_bancaire||'').slice(0,45)+' · '+mont.toFixed(2)+' €');}}else vus.set(k,i);});return{nombre,exemples};}
+function auditGeneralReferenceForteOperation_(o){const champs=['cle_rapprochement','reference_bancaire','reference_operation','id_bancaire','transaction_id','operation_bancaire_id','empreinte_import','hash_import','source_id','id_source'];for(let i=0;i<champs.length;i++){const k=champs[i],v=String(o&&o[k]||'').trim();if(v)return k+'='+v;}const source=String(o&&o.source_bancaire||'').trim(),ligne=String(o&&(o.source_ligne||o.ligne_source||o.numero_ligne_source)||'').trim();return source&&ligne?'source_ligne='+source+'|'+ligne:'';}
+function auditGeneralDoublonsOperations_(ops){const groupes=new Map(),exemplesForts=[],exemplesSimilaires=[];let forts=0,similaires=0;(ops||[]).forEach((o,i)=>{const d=auditGeneralDate_(o.date_comptable||o.date),date=d?auditGeneralDateIso_(d):'',lib=normaliserTexteMaintenance_(o.libelle_bancaire||o.libelle),mont=Math.abs(auditGeneralNombre_(o.montant)),cp=String(o.compte||''),k=[date,lib,mont.toFixed(2),cp].join('|'),precedents=groupes.get(k)||[],ref=auditGeneralReferenceForteOperation_(o),fort=ref&&precedents.some(x=>x.ref===ref),texte='lignes '+((precedents.length?precedents[0].i:i)+2)+' / '+(i+2)+' · '+date+' · '+String(o.libelle||o.libelle_bancaire||'').slice(0,45)+' · '+mont.toFixed(2)+' €';if(precedents.length){if(fort){forts++;if(exemplesForts.length<8)exemplesForts.push(texte+' · référence '+ref);}else{similaires++;if(exemplesSimilaires.length<8)exemplesSimilaires.push(texte);}}precedents.push({i,ref});groupes.set(k,precedents);});return{nombre:forts,forts,similaires,exemples:exemplesForts,exemplesForts,exemplesSimilaires};}
 function ajouterDoublonsNoms_(lignes,champ,libelle,anomalies){const vus={};(lignes||[]).forEach((l,i)=>{const k=normaliserTexteMaintenance_(l[champ]);if(!k)return;if(vus[k])anomalies.push({niveau:'attention',domaine:'Doublons',message:libelle+' : lignes '+vus[k]+' et '+(i+2)+'.'});else vus[k]=i+2;});}
 function normaliserTexteMaintenance_(v){return String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');}
