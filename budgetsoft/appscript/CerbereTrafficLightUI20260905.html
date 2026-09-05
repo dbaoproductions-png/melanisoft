@@ -23,7 +23,13 @@
     if(allocation>0&&consomme/allocation>progression+.0001)return'orange';
     return'vert';
   }
+  function libellesP2(){
+    const c2=document.getElementById('c4-1');if(!c2)return;
+    const walker=document.createTreeWalker(c2,NodeFilter.SHOW_TEXT);
+    let n;while((n=walker.nextNode())){if(n.nodeValue&&/\bP1\b/.test(n.nodeValue))n.nodeValue=n.nodeValue.replace(/\bP1\b/g,'P2');}
+  }
   function appliquer(){
+    libellesP2();
     document.querySelectorAll('.c4-cycle').forEach(cycle=>{
       const prog=progressionCycle(cycle);
       cycle.querySelectorAll('.c4-line').forEach(row=>{
