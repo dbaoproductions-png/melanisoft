@@ -3,21 +3,32 @@ function chargerPatrimoine() {
   const actifs = lireTable_('Actifs');
   const comptes = lireTable_('Comptes').filter(c => convertirBooleen_(c.actif));
   const operations = lireTable_('Operations');
+  const credits = lireTable_('Credits').filter(c => Math.max(0, convertirNombre_(c.capital_restant || 0)) > 0);
+  const dettes = lireTable_('Dettes').filter(d => {
+    const actif = d.actif === '' || d.actif === null || d.actif === undefined ? true : convertirBooleen_(d.actif);
+    return actif && Math.max(0, convertirNombre_(d.capital_restant || 0)) > 0;
+  });
 
-  const soldeCompte = c => {
-    const id = String(c.id || '');
-    const nom = String(c.nom || '');
-    return Math.round((convertirNombre_(c.solde_initial || 0) + operations
-      .filter(o => String(o.compte || '') === id || String(o.compte || '') === nom)
-      .reduce((s,o) => s + convertirNombre_(o.montant || 0), 0)) * 100) / 100;
-  };
+  // Un seul parcours des opérations : auparavant chaque compte rescannait toute la table.
+  const compteCanonique = {};
+  comptes.forEach(c => {
+    const id = String(c.id || '').trim();
+    const nom = String(c.nom || '').trim();
+    if(id) compteCanonique[id] = id;
+    if(nom) compteCanonique[nom] = id || nom;
+  });
+  const mouvementsParCompte = {};
+  operations.forEach(o => {
+    const cle = compteCanonique[String(o.compte || '').trim()];
+    if(!cle) return;
+    mouvementsParCompte[cle] = (mouvementsParCompte[cle] || 0) + convertirNombre_(o.montant || 0);
+  });
 
-  const financiers = comptes.map(c => ({
-    id: c.id,
-    nom: c.nom,
-    type: String(c.type || '').toLowerCase(),
-    solde: soldeCompte(c)
-  }));
+  const financiers = comptes.map(c => {
+    const cle = String(c.id || '').trim() || String(c.nom || '').trim();
+    const solde = Math.round((convertirNombre_(c.solde_initial || 0) + Number(mouvementsParCompte[cle] || 0)) * 100) / 100;
+    return {id:c.id, nom:c.nom, type:String(c.type || '').toLowerCase(), solde};
+  });
   const livrets = financiers.filter(c => c.type === 'epargne');
   const placements = financiers.filter(c => c.type === 'placement');
 
@@ -25,16 +36,28 @@ function chargerPatrimoine() {
   const totalLivrets = livrets.reduce((s,c) => s + Math.max(0, Number(c.solde || 0)), 0);
   const totalPlacements = placements.reduce((s,c) => s + Math.max(0, Number(c.solde || 0)), 0);
   const totalFinancier = totalLivrets + totalPlacements;
+  const totalActifs = totalActifsPatrimoniaux + totalFinancier;
+  const totalCredits = credits.reduce((s,c) => s + Math.max(0, convertirNombre_(c.capital_restant || 0)), 0);
+  const totalDettesHorsCredit = dettes.reduce((s,d) => s + Math.max(0, convertirNombre_(d.capital_restant || 0)), 0);
+  const totalDettes = totalCredits + totalDettesHorsCredit;
+  const patrimoineNet = totalActifs - totalDettes;
+  const r = n => Math.round(Number(n || 0) * 100) / 100;
 
   return {
     actifs,
     livrets,
     placements,
-    totalActifsPatrimoniaux: Math.round(totalActifsPatrimoniaux * 100) / 100,
-    totalLivrets: Math.round(totalLivrets * 100) / 100,
-    totalPlacements: Math.round(totalPlacements * 100) / 100,
-    totalFinancier: Math.round(totalFinancier * 100) / 100,
-    totalActifs: Math.round((totalActifsPatrimoniaux + totalFinancier) * 100) / 100
+    credits,
+    dettes,
+    totalActifsPatrimoniaux:r(totalActifsPatrimoniaux),
+    totalLivrets:r(totalLivrets),
+    totalPlacements:r(totalPlacements),
+    totalFinancier:r(totalFinancier),
+    totalActifs:r(totalActifs),
+    totalCredits:r(totalCredits),
+    totalDettesHorsCredit:r(totalDettesHorsCredit),
+    totalDettes:r(totalDettes),
+    patrimoineNet:r(patrimoineNet)
   };
 }
 
