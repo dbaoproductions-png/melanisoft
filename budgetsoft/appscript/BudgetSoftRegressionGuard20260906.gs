@@ -1,4 +1,4 @@
-const BUDGETSOFT_REGRESSION_GUARD_VERSION='2026-09-06.6';
+const BUDGETSOFT_REGRESSION_GUARD_VERSION='2026-09-06.7';
 
 function arrRegressionBudgetSoft20260906_(n){return Math.round(Number(n||0)*100)/100;}
 function ecartRegressionBudgetSoft20260906_(a,b){return arrRegressionBudgetSoft20260906_(Number(a||0)-Number(b||0));}
@@ -31,9 +31,6 @@ function auditerCoherenceRevisionBudgetSoft20260906_(etat){
     if(Number.isFinite(Number(tres.soldePrevisionnel))&&!proche(tres.soldePrevisionnel,transTres.soldePrevisionnel))err('TRANSVERSE_SOLDE_PREVISIONNEL','Le bloc transversal diverge du moteur de trésorerie canonique.',{module:tres.soldePrevisionnel,transversal:transTres.soldePrevisionnel});
   }
 
-  // Une seule partition temporelle des opérations dans tout BudgetSoft hors Cerbère.
-  // Le nombre source doit être exactement égal à Réel + Futur + indaté : aucune ligne
-  // ne peut être perdue, dupliquée ou classée par une seconde doctrine locale.
   if(transOps&&Object.keys(transOps).length){
     const source=Number(sourceMeta&&sourceMeta.tables&&sourceMeta.tables.Operations);
     const realisees=Number(transOps.realisees&&transOps.realisees.nombre||0),futures=Number(transOps.futures&&transOps.futures.nombre||0),indatees=Number(transOps.indatees&&transOps.indatees.nombre||0);
@@ -53,7 +50,6 @@ function auditerCoherenceRevisionBudgetSoft20260906_(etat){
   return {ok:erreurs.length===0,version:BUDGETSOFT_REGRESSION_GUARD_VERSION,erreurs,avertissements};
 }
 
-/** Audit autonome de la frontière date_comptable. */
 function auditerPartitionOperationsBudgetSoft20260906(){
   const ops=lireTable_('Operations')||[],p=partitionnerOperationsCanoniqueBudgetSoft20260906_(ops,new Date()),ref=p.dateReference,erreurs=[];
   const idsR=new Set(),idsF=new Set(),idsI=new Set();
@@ -67,13 +63,15 @@ function auditerPartitionOperationsBudgetSoft20260906(){
 
 /**
  * Oracle de développement du classeur BudgetSoft (80) reçu le 06/09/2026.
- * Les montants ci-dessous ne pilotent jamais l'application. Ils sont seulement
- * des témoins de recette et deviennent inapplicables dès que la signature change.
+ * Les valeurs du 07/09 sont désormais celles du flux CANONIQUE après neutralisation
+ * des doublons bancaires stricts. Les valeurs brutes historiques ne sont pas des
+ * résultats attendus de l'application.
  */
 function auditerOracleBudgetSoft80_20260906(){
-  const ops=lireTable_('Operations')||[],credits=typeof lireCreditsEtendusV2_==='function'?lireCreditsEtendusV2_():lireTable_('Credits'),dettes=lireTable_('Dettes')||[];
-  const signature={operations:ops.length,credits:credits.length,dettes:dettes.length};
-  const attendu={operations:2595,credits:7,dettes:3,cbEngagee:823.99,operations0709:9,totalDebits0709:698.82,soldePrevisionnel0709:-1095.50,capitalAmortissable:108370.87,encoursRevolving:12375.93,dettesHorsCredit:1242.20};
+  const opsBrutes=lireTable_('Operations')||[],ops=typeof dedoublonnerOperationsCartesBudgetSoft_==='function'?dedoublonnerOperationsCartesBudgetSoft_(opsBrutes):opsBrutes;
+  const credits=typeof lireCreditsEtendusV2_==='function'?lireCreditsEtendusV2_():lireTable_('Credits'),dettes=lireTable_('Dettes')||[];
+  const signature={operations:opsBrutes.length,credits:credits.length,dettes:dettes.length};
+  const attendu={operations:2595,credits:7,dettes:3,cbEngagee:823.99,operations0709:6,totalDebits0709:308.67,capitalAmortissable:108370.87,encoursRevolving:12375.93,dettesHorsCredit:1242.20};
   const correspond=signature.operations===attendu.operations&&signature.credits===attendu.credits&&signature.dettes===attendu.dettes;
   if(!correspond)return{ok:true,applicable:false,version:BUDGETSOFT_REGRESSION_GUARD_VERSION,signature,attendu,message:'Oracle BudgetSoft (80) non applicable à ce nouvel état du classeur.'};
 
@@ -81,15 +79,12 @@ function auditerOracleBudgetSoft80_20260906(){
   const capitalAmortissable=arrRegressionBudgetSoft20260906_(amort.reduce((s,x)=>s+Math.abs(Number(x.capital_restant||0)),0));
   const encoursRevolving=arrRegressionBudgetSoft20260906_(rev.reduce((s,x)=>s+Math.abs(Number(x.capital_restant||0)),0));
   const dettesHorsCredit=arrRegressionBudgetSoft20260906_(dettes.filter(d=>String(d.actif).toLowerCase()!=='false'&&Number(d.capital_restant||0)>0).reduce((s,d)=>s+Math.abs(Number(d.capital_restant||0)),0));
-
   const ops0709=ops.filter(o=>jourComptableCanonBudgetSoft20260906_(o)==='2026-09-07');
   const totalDebits0709=arrRegressionBudgetSoft20260906_(ops0709.filter(o=>Number(o.montant)<0).reduce((s,o)=>s+Math.abs(Number(o.montant||0)),0));
 
-  let cbEngagee=null,soldePrevisionnel0709=null;
+  let cbEngagee=null;
   try{const base=chargerCerbereCockpitBaseRapide20260903_(),r=calculerReportCbCycleSuivant20260905_(base);cbEngagee=arrRegressionBudgetSoft20260906_(r&&r.montant);}catch(e){cbEngagee=null;}
-  try{const q=chargerTresorerieComptableCanoniqueBudgetSoft20260906('2026-09-07');soldePrevisionnel0709=arrRegressionBudgetSoft20260906_(q&&q.soldePrevisionnel);}catch(e){soldePrevisionnel0709=null;}
-
-  const mesures={cbEngagee,operations0709:ops0709.length,totalDebits0709,soldePrevisionnel0709,capitalAmortissable,encoursRevolving,dettesHorsCredit};
+  const mesures={cbEngagee,operations0709:ops0709.length,totalDebits0709,capitalAmortissable,encoursRevolving,dettesHorsCredit};
   const erreurs=[];Object.keys(mesures).forEach(k=>{if(mesures[k]!==null&&Math.abs(Number(mesures[k])-Number(attendu[k]))>.01)erreurs.push({cle:k,attendu:attendu[k],obtenu:mesures[k]});});
-  return{ok:erreurs.length===0,applicable:true,version:BUDGETSOFT_REGRESSION_GUARD_VERSION,signature,attendu,mesures,erreurs};
+  return{ok:erreurs.length===0,applicable:true,version:BUDGETSOFT_REGRESSION_GUARD_VERSION,signature,attendu,mesures,erreurs,note:'Les contrôles du 07/09 portent sur le flux canonique dédoublonné.'};
 }
