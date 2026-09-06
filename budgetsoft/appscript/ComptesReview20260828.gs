@@ -1,4 +1,4 @@
-const COMPTES_REVIEW_20260828_VERSION='2026-09-06.5';
+const COMPTES_REVIEW_20260828_VERSION='2026-09-06.6';
 
 /**
  * Lecture prioritaire de la révision globale : l'ouverture de Comptes ne doit plus
