@@ -1,4 +1,7 @@
 function chargerPatrimoine() {
+  const global=typeof lireModuleSnapshotGlobalBudgetSoft20260906_==='function'?lireModuleSnapshotGlobalBudgetSoft20260906_('patrimoine'):null;
+  if(global)return global;
+
   verifierInitialisation_();
   const actifs = lireTable_('Actifs');
   const comptes = lireTable_('Comptes').filter(c => convertirBooleen_(c.actif));
@@ -9,7 +12,6 @@ function chargerPatrimoine() {
     return actif && Math.max(0, convertirNombre_(d.capital_restant || 0)) > 0;
   });
 
-  // Un seul parcours des opérations : auparavant chaque compte rescannait toute la table.
   const compteCanonique = {};
   comptes.forEach(c => {
     const id = String(c.id || '').trim();
@@ -57,7 +59,8 @@ function chargerPatrimoine() {
     totalCredits:r(totalCredits),
     totalDettesHorsCredit:r(totalDettesHorsCredit),
     totalDettes:r(totalDettes),
-    patrimoineNet:r(patrimoineNet)
+    patrimoineNet:r(patrimoineNet),
+    sourceBudgetSoft:'recalcul_secours'
   };
 }
 
