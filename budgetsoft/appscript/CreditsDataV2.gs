@@ -1,4 +1,4 @@
-const CREDITS_DATA_V2_VERSION = '2.5-2026-09-04';
+const CREDITS_DATA_V2_VERSION = '2.6-2026-09-06';
 
 function lireCreditsEtendusV2_() {
   const f=SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Credits');
@@ -50,6 +50,9 @@ function analyserCoherenceCreditsV2_(credits,dettes){
 }
 
 function chargerCreditsEtDettesV2() {
+  const global=typeof lireModuleSnapshotGlobalBudgetSoft20260906_==='function'?lireModuleSnapshotGlobalBudgetSoft20260906_('credits'):null;
+  if(global)return global;
+
   verifierInitialisation_();
   const credits=lireCreditsEtendusV2_().map(enrichirCreditV2_),dettes=typeof lireDettesV2_==='function'?lireDettesV2_():lireTable_('Dettes');
   const dettesActives=dettes.filter(d=>String(d.actif).toLowerCase()!=='false'&&Number(d.capital_restant||0)>0);
@@ -61,7 +64,7 @@ function chargerCreditsEtDettesV2() {
   const amortissables=credits.filter(c=>c.type_credit==='amortissable'),renouvelables=credits.filter(c=>c.type_credit==='revolving');
   const capitalRenouvelable=renouvelables.reduce((s,c)=>s+Number(c.capital_restant||0),0),coutRenouvelable=renouvelables.reduce((s,c)=>s+Number(c.cout_restant||0),0),tauxRenouvelablePondere=capitalRenouvelable?renouvelables.reduce((s,c)=>s+Number(c.capital_restant||0)*Number(c.taux||0),0)/capitalRenouvelable:0;
   const alertes=analyserCoherenceCreditsV2_(credits,dettes);
-  return {version:CREDITS_DATA_V2_VERSION,lignes:tous,capitalRestant,capitalCredits,dettesHorsCredit,endettementTotal:capitalRestant,mensualites,mensualitesCredits,mensualitesDettes,tauxPondere,echeancesRestantes,coutRestant,amortissables,renouvelables,dettes,dettesActives,capitalRenouvelable,coutRenouvelable,tauxRenouvelablePondere,alertes};
+  return {version:CREDITS_DATA_V2_VERSION,lignes:tous,capitalRestant,capitalCredits,dettesHorsCredit,endettementTotal:capitalRestant,mensualites,mensualitesCredits,mensualitesDettes,tauxPondere,echeancesRestantes,coutRestant,amortissables,renouvelables,dettes,dettesActives,capitalRenouvelable,coutRenouvelable,tauxRenouvelablePondere,alertes,sourceBudgetSoft:'recalcul_secours'};
 }
 
 function enregistrerCreditV2(d){
@@ -81,6 +84,6 @@ function enregistrerCreditV2(d){
 
 function diagnostiquerCreditsV2() {
   const d=chargerCreditsEtDettesV2();
-  const resume={version:d.version,capitalCredits:d.capitalCredits,dettesHorsCredit:d.dettesHorsCredit,endettementTotal:d.endettementTotal,capitalRenouvelable:d.capitalRenouvelable,coutRenouvelable:d.coutRenouvelable,alertes:d.alertes,dettes:(d.dettes||[]).map(x=>({nom:x.nom,creancier:x.creancier,capital_restant:x.capital_restant,statut:x.statut,actif:x.actif})),renouvelables:(d.renouvelables||[]).map(c=>({nom:c.nom,type_credit:c.type_credit,capital_restant:c.capital_restant,cout_restant:c.cout_restant,plafond_credit:c.plafond_credit,disponible_credit:c.disponible_credit,assurance_mensuelle:c.assurance_mensuelle,prochaine_echeance:c.prochaine_echeance})),amortissables:(d.amortissables||[]).map(c=>({nom:c.nom,capital_restant:c.capital_restant,mensualite:c.mensualite,taux:c.taux,cout_restant:c.cout_restant,prochaine_echeance:c.prochaine_echeance,date_fin:c.date_fin}))};
+  const resume={version:d.version,sourceBudgetSoft:d.sourceBudgetSoft||'',revisionBudgetSoft:d.revisionBudgetSoft||'',capitalCredits:d.capitalCredits,dettesHorsCredit:d.dettesHorsCredit,endettementTotal:d.endettementTotal,capitalRenouvelable:d.capitalRenouvelable,coutRenouvelable:d.coutRenouvelable,alertes:d.alertes,dettes:(d.dettes||[]).map(x=>({nom:x.nom,creancier:x.creancier,capital_restant:x.capital_restant,statut:x.statut,actif:x.actif})),renouvelables:(d.renouvelables||[]).map(c=>({nom:c.nom,type_credit:c.type_credit,capital_restant:c.capital_restant,cout_restant:c.cout_restant,plafond_credit:c.plafond_credit,disponible_credit:c.disponible_credit,assurance_mensuelle:c.assurance_mensuelle,prochaine_echeance:c.prochaine_echeance})),amortissables:(d.amortissables||[]).map(c=>({nom:c.nom,capital_restant:c.capital_restant,mensualite:c.mensualite,taux:c.taux,cout_restant:c.cout_restant,prochaine_echeance:c.prochaine_echeance,date_fin:c.date_fin}))};
   console.log(JSON.stringify(resume,null,2));return resume;
 }
