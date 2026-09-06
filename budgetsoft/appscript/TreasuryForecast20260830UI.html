@@ -33,19 +33,20 @@ function sourceLabel(s){return {operation_future:'Opération déjà connue',char
 
 function installerCarteComptes(){
  const z=document.querySelector('#comptes .accounts-summary');if(!z||q('treasury-forecast-card'))return;
- const card=document.createElement('article');card.id='treasury-forecast-card';card.className='card metric-card';card.innerHTML=`<span>Solde prévisionnel</span><strong id="tf-account-value">Calcul…</strong><small id="tf-account-detail">Compte courant à J+3</small><div class="tf-date"><input type="date" id="tf-account-date" value="${plusJ(3)}"></div><div class="tf-confidence" id="tf-account-confidence"></div>`;z.appendChild(card);
+ const card=document.createElement('article');card.id='treasury-forecast-card';card.className='card metric-card';card.innerHTML=`<span>Solde prévisionnel</span><strong id="tf-account-value">Lecture…</strong><small id="tf-account-detail">Flux connus selon date comptable</small><div class="tf-date"><input type="date" id="tf-account-date" value="${plusJ(3)}"></div><div class="tf-confidence" id="tf-account-confidence"></div>`;z.appendChild(card);
  q('tf-account-date').addEventListener('change',()=>chargerPrevisionComptes(true));
 }
 function appliquerPrevisionComptes(r){
  if(!r||!r.ok||!q('tf-account-value'))return;
- q('tf-account-value').textContent=money(r.soldePrevisionnel);q('tf-account-value').classList.toggle('amount-negative',Number(r.soldePrevisionnel)<0);q('tf-account-detail').textContent=`Réel ${money(r.soldeReel)} · variation ${Number(r.variationPrevue)>=0?'+':''}${money(r.variationPrevue)}`;q('tf-account-confidence').textContent=`Référence réelle ${dateFr(r.dateReference)} · fiabilité ${r.confiance?.libelle||'—'} · cible ${dateFr(r.dateCible)}`;
+ const variation=Number(r.variationComptableCertaine!=null?r.variationComptableCertaine:r.variationPrevue||0);
+ q('tf-account-value').textContent=money(r.soldePrevisionnel);q('tf-account-value').classList.toggle('amount-negative',Number(r.soldePrevisionnel)<0);q('tf-account-detail').textContent=`Réel ${money(r.soldeReel)} · variation ${variation>=0?'+':''}${money(variation)}`;q('tf-account-confidence').textContent=`Date comptable · ${r.source==='snapshot_global'?'révision '+String(r.revisionBudgetSoft||'').slice(0,8):'calcul de secours'} · cible ${dateFr(r.dateCible)}`;
 }
 function chargerPrevisionComptes(force){
  installerCarteComptes();const input=q('tf-account-date');if(!input)return;const cible=input.value;
  if(!force&&comptesCache.has(cible)){appliquerPrevisionComptes(comptesCache.get(cible));return;}
  if(comptesEnCours.has(cible))return;
- comptesEnCours.add(cible);const id=++comptesReq;if(!comptesCache.has(cible)&&q('tf-account-value'))q('tf-account-value').textContent='Calcul…';
- google.script.run.withSuccessHandler(r=>{comptesEnCours.delete(cible);if(r&&r.ok)comptesCache.set(cible,r);if(id===comptesReq&&q('tf-account-date')?.value===cible)appliquerPrevisionComptes(r);}).withFailureHandler(()=>{comptesEnCours.delete(cible);if(id===comptesReq&&!comptesCache.has(cible)&&q('tf-account-value'))q('tf-account-value').textContent='Indisponible';}).chargerTresoreriePrevisionnelleRapide20260901(cible);
+ comptesEnCours.add(cible);const id=++comptesReq;if(!comptesCache.has(cible)&&q('tf-account-value'))q('tf-account-value').textContent='Lecture…';
+ google.script.run.withSuccessHandler(r=>{comptesEnCours.delete(cible);if(r&&r.ok)comptesCache.set(cible,r);if(id===comptesReq&&q('tf-account-date')?.value===cible)appliquerPrevisionComptes(r);}).withFailureHandler(()=>{comptesEnCours.delete(cible);if(id===comptesReq&&!comptesCache.has(cible)&&q('tf-account-value'))q('tf-account-value').textContent='Indisponible';}).chargerTresorerieComptableCanoniqueBudgetSoft20260906(cible);
 }
 
 function installerOperations(){
@@ -66,14 +67,14 @@ function chargerFuturesOperations(){
 
 function cibleFinCycleDepuisDom(){const root=document.querySelector('.c37-month');if(!root)return null;const t=root.querySelector('header>span')?.textContent||'';const m=t.match(/→\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(!m)return null;return `${m[3]}-${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;}
 function installerCerbereCard(){
- const topo=document.querySelector('.c37-month .c37-topo');if(!topo||q('tf-cerbere-card'))return false;const c=document.createElement('div');c.id='tf-cerbere-card';c.innerHTML='<span>SOLDE BANCAIRE ESTIMÉ AU 27</span><b id="tf-cerbere-value">Calcul…</b><small id="tf-cerbere-detail">Projection bancaire indépendante des molettes avant le débit CB</small><div class="tf-cerbere-delta" id="tf-cerbere-delta"></div>';topo.appendChild(c);return true;
+ const topo=document.querySelector('.c37-month .c37-topo');if(!topo||q('tf-cerbere-card'))return false;const c=document.createElement('div');c.id='tf-cerbere-card';c.innerHTML='<span>SOLDE BANCAIRE COMPTABLE AU 27</span><b id="tf-cerbere-value">Lecture…</b><small id="tf-cerbere-detail">Solde réel + flux connus selon date comptable</small><div class="tf-cerbere-delta" id="tf-cerbere-delta"></div>';topo.appendChild(c);return true;
 }
 function chargerCerbereForecast(){
  if(!document.querySelector('.c37-month'))return;installerCerbereCard();const id=++cerbereReq,target=cibleFinCycleDepuisDom();if(!target)return;
- google.script.run.withSuccessHandler(r=>{if(id!==cerbereReq||!r||!r.ok)return;cerbereBase=r;majCerbereLocal();}).withFailureHandler(()=>{}).chargerTresoreriePrevisionnelleRapide20260901(target);
+ google.script.run.withSuccessHandler(r=>{if(id!==cerbereReq||!r||!r.ok)return;cerbereBase=r;majCerbereLocal();}).withFailureHandler(()=>{}).chargerTresorerieComptableCanoniqueBudgetSoft20260906(target);
 }
 function majCerbereLocal(){
- if(!cerbereBase||!q('tf-cerbere-value'))return;const solde=Number(cerbereBase.soldePrevisionnel||0);q('tf-cerbere-value').textContent=money(solde);q('tf-cerbere-value').style.color=solde<0?'#9b3535':'';q('tf-cerbere-detail').textContent=`Référence ${dateFr(cerbereBase.dateReference)} · ${cerbereBase.confiance?.libelle||'—'} · réel + flux bancaires restant à passer`;const joker=document.querySelector('.c37-month [data-joker]');q('tf-cerbere-delta').textContent='Les molettes'+(joker?.checked?' et le Joker':'')+' agissent sur l’estimation du prochain débit CB, pas sur le solde avant ce débit.';
+ if(!cerbereBase||!q('tf-cerbere-value'))return;const solde=Number(cerbereBase.soldePrevisionnel||0);q('tf-cerbere-value').textContent=money(solde);q('tf-cerbere-value').style.color=solde<0?'#9b3535':'';q('tf-cerbere-detail').textContent=`Référence ${dateFr(cerbereBase.dateReference)} · date comptable · réel + flux bancaires connus`;const joker=document.querySelector('.c37-month [data-joker]');q('tf-cerbere-delta').textContent='Les molettes'+(joker?.checked?' et le Joker':'')+' relèvent du pilotage Cerbère ; elles ne modifient pas ce solde comptable.';
 }
 function brancherCerbere(){const root=document.querySelector('.c37-month');if(!root)return;installerCerbereCard();if(!cerbereBase)chargerCerbereForecast();else majCerbereLocal();}
 
