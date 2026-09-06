@@ -1,4 +1,4 @@
-const BUDGETSOFT_CANONICAL_VALUES_VERSION='2026-09-06.3';
+const BUDGETSOFT_CANONICAL_VALUES_VERSION='2026-09-06.4';
 
 function arrCanonBudgetSoft20260906_(n){return Math.round(Number(n||0)*100)/100;}
 function actifCanonBudgetSoft20260906_(v){return v!==false&&String(v).toLowerCase()!=='false'&&String(v)!=='0';}
@@ -28,11 +28,6 @@ function composerPatrimoineCanoniqueBudgetSoft20260906_(sources,comptes,credits)
   };
 }
 
-/**
- * Frontière temporelle commune à tout BudgetSoft hors exception Cerbère : date_comptable.
- * On compare des jours civils dans le fuseau du script afin d'éviter le piège UTC de
- * new Date('YYYY-MM-DD'). La colonne historique `date` n'est qu'un secours de migration.
- */
 function jourCanonBudgetSoft20260906_(v){
   if(v==null||v==='')return null;
   if(v instanceof Date&&!isNaN(v.getTime()))return Utilities.formatDate(v,Session.getScriptTimeZone(),'yyyy-MM-dd');
@@ -45,23 +40,12 @@ function jourCanonBudgetSoft20260906_(v){
   return isNaN(d.getTime())?null:Utilities.formatDate(d,Session.getScriptTimeZone(),'yyyy-MM-dd');
 }
 function jourComptableCanonBudgetSoft20260906_(o){return jourCanonBudgetSoft20260906_(o&&(o.date_comptable||o.date));}
-function dateComptableCanonBudgetSoft20260906_(o){
-  const j=jourComptableCanonBudgetSoft20260906_(o);if(!j)return null;
-  const p=j.split('-').map(Number);return new Date(p[0],p[1]-1,p[2]);
-}
+function dateComptableCanonBudgetSoft20260906_(o){const j=jourComptableCanonBudgetSoft20260906_(o);if(!j)return null;const p=j.split('-').map(Number);return new Date(p[0],p[1]-1,p[2]);}
 function jourReferenceCanonBudgetSoft20260906_(dateReference){return jourCanonBudgetSoft20260906_(dateReference||new Date())||Utilities.formatDate(new Date(),Session.getScriptTimeZone(),'yyyy-MM-dd');}
 
-/**
- * Arbitre canonique des Opérations. Tous les écrans/services hors Cerbère doivent
- * consommer cette partition au lieu de réimplémenter leur propre filtre de dates.
- */
 function partitionnerOperationsCanoniqueBudgetSoft20260906_(operations,dateReference){
   const ref=jourReferenceCanonBudgetSoft20260906_(dateReference),realisees=[],futures=[],indatees=[];
-  (operations||[]).forEach(o=>{
-    const j=jourComptableCanonBudgetSoft20260906_(o);
-    if(!j){indatees.push(o);return;}
-    (j<=ref?realisees:futures).push(o);
-  });
+  (operations||[]).forEach(o=>{const j=jourComptableCanonBudgetSoft20260906_(o);if(!j){indatees.push(o);return;}(j<=ref?realisees:futures).push(o);});
   return {version:BUDGETSOFT_CANONICAL_VALUES_VERSION,dateReference:ref,realisees,futures,indatees};
 }
 function construireResumeOperationsCanoniqueBudgetSoft20260906_(operations,dateReference){
@@ -70,30 +54,34 @@ function construireResumeOperationsCanoniqueBudgetSoft20260906_(operations,dateR
   return {version:BUDGETSOFT_CANONICAL_VALUES_VERSION,dateReference:p.dateReference,realisees:{nombre:p.realisees.length,net:somme(p.realisees)},futures:{nombre:p.futures.length,net:somme(p.futures)},indatees:{nombre:p.indatees.length,net:somme(p.indatees)}};
 }
 
-/** Agrégats Crédits publiés une seule fois pour UI, Patrimoine et Analyse. */
 function construireAgregatsCreditsCanonBudgetSoft20260906_(credits){
   const amort=Array.isArray(credits&&credits.amortissables)?credits.amortissables:[],rev=Array.isArray(credits&&credits.renouvelables)?credits.renouvelables:[];
-  return {
-    version:BUDGETSOFT_CANONICAL_VALUES_VERSION,
-    capitalAmortissable:arrCanonBudgetSoft20260906_(amort.reduce((s,c)=>s+Math.abs(Number(c&&c.capital_restant||0)),0)),
-    encoursRevolving:arrCanonBudgetSoft20260906_(rev.reduce((s,c)=>s+Math.abs(Number(c&&c.capital_restant||0)),0)),
-    capitalCredits:arrCanonBudgetSoft20260906_(Number(credits&&credits.capitalCredits||0)),
-    dettesHorsCredit:arrCanonBudgetSoft20260906_(Number(credits&&credits.dettesHorsCredit||0)),
-    endettementTotal:arrCanonBudgetSoft20260906_(Number(credits&&credits.endettementTotal||0))
-  };
+  return {version:BUDGETSOFT_CANONICAL_VALUES_VERSION,capitalAmortissable:arrCanonBudgetSoft20260906_(amort.reduce((s,c)=>s+Math.abs(Number(c&&c.capital_restant||0)),0)),encoursRevolving:arrCanonBudgetSoft20260906_(rev.reduce((s,c)=>s+Math.abs(Number(c&&c.capital_restant||0)),0)),capitalCredits:arrCanonBudgetSoft20260906_(Number(credits&&credits.capitalCredits||0)),dettesHorsCredit:arrCanonBudgetSoft20260906_(Number(credits&&credits.dettesHorsCredit||0)),endettementTotal:arrCanonBudgetSoft20260906_(Number(credits&&credits.endettementTotal||0))};
 }
 
 function dateFinCycleCanonBudgetSoft20260906_(reference){const d=reference instanceof Date?new Date(reference):new Date(reference||new Date());if(isNaN(d.getTime()))return new Date();return d.getDate()<=27?new Date(d.getFullYear(),d.getMonth(),27):new Date(d.getFullYear(),d.getMonth()+1,27);}
 
+/**
+ * Registre transversal d'une révision.
+ * IMPORTANT : cette fonction compose des valeurs déjà calculées ; elle ne relance
+ * jamais un second moteur de trésorerie. Operations est normalisé une seule fois
+ * par la primitive canonique de déduplication avant partition/agrégation.
+ */
 function construireTransversalesBudgetSoft20260906_(modules){
   const m=modules||{},sources=m.sources||{},comptes=m.comptes||{},credits=m.credits||{},express=m.cerbereExpress||{};
-  const cible=dateFinCycleCanonBudgetSoft20260906_(new Date());
-  const tres=typeof construireTresorerieComptableCanoniqueBudgetSoft20260906_==='function'
-    ?construireTresorerieComptableCanoniqueBudgetSoft20260906_(sources,comptes,cible,new Date())
-    :(m.tresorerieComptable||m.tresorerieFinCycle||{});
+  const opsBrutes=Array.isArray(sources.Operations)?sources.Operations:[];
+  const opsCanoniques=typeof dedoublonnerOperationsCartesCanonique20260906V3_==='function'
+    ?dedoublonnerOperationsCartesCanonique20260906V3_(opsBrutes)
+    :(typeof dedoublonnerOperationsCartesBudgetSoft_==='function'?dedoublonnerOperationsCartesBudgetSoft_(opsBrutes):opsBrutes);
+  const tres=m.tresorerieComptable||{};
+  const resumeOps=construireResumeOperationsCanoniqueBudgetSoft20260906_(opsCanoniques,new Date());
+  resumeOps.sourceBrute=opsBrutes.length;
+  resumeOps.sourceCanonique=opsCanoniques.length;
+  resumeOps.doublonsBancairesExclus=Math.max(0,opsBrutes.length-opsCanoniques.length);
+  resumeOps.versionDedoublonnage=typeof BUDGETSOFT_CANONICAL_BANK_DEDUP_VERSION!=='undefined'?BUDGETSOFT_CANONICAL_BANK_DEDUP_VERSION:'';
   return {
     version:BUDGETSOFT_CANONICAL_VALUES_VERSION,
-    operations:construireResumeOperationsCanoniqueBudgetSoft20260906_(sources.Operations||[],new Date()),
+    operations:resumeOps,
     comptes:{disponible:arrCanonBudgetSoft20260906_(comptes.synthese&&comptes.synthese.disponible),epargne:arrCanonBudgetSoft20260906_(comptes.synthese&&comptes.synthese.epargne),placements:arrCanonBudgetSoft20260906_(comptes.synthese&&comptes.synthese.placements),pluxee:comptes.synthese&&comptes.synthese.pluxee},
     credits:construireAgregatsCreditsCanonBudgetSoft20260906_(credits),
     tresorerie:{version:tres.version||'',soldeReel:Number(tres.soldeReel),variationComptableCertaine:Number(tres.variationComptableCertaine!=null?tres.variationComptableCertaine:tres.variationPrevue),soldePrevisionnel:Number(tres.soldePrevisionnel),dateCible:tres.dateCible||'',nombreOperationsFutures:Number(tres.nombreOperationsFutures||0)},
