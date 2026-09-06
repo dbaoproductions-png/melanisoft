@@ -1,26 +1,29 @@
-const COMPTES_REVIEW_20260828_VERSION='2026-08-28.4';
+const COMPTES_REVIEW_20260828_VERSION='2026-09-06.1';
 
 /**
  * Vue Comptes rapide.
  * Source de vérité bancaire : dernier solde de relevé certifié + mouvements réels
  * postérieurs selon date_comptable.
- * Le chemin normal privilégie un snapshot matérialisé ; aucun recalcul Dashboard.
+ * Un snapshot périmé peut être utilisé visuellement par l'UI qui le gère elle-même,
+ * mais jamais comme solde d'autorité pour les calculs BudgetSoft.
  */
 function chargerSyntheseComptes20260828(){
   const t0=Date.now();
   let s=null;
   try{s=chargerSnapshotComptes20260828();}catch(e){s=null;}
 
-  if(s&&s.disponible&&s.vue){
+  // Doctrine 2026-09-06 : un snapshot périmé ne doit plus contaminer le solde
+  // prévisionnel ni les autres modules qui consomment cette synthèse.
+  if(s&&s.disponible&&s.vue&&!s.perime){
     const r=JSON.parse(JSON.stringify(s.vue));
     r.performance={
       dureeMs:Date.now()-t0,
       controleDashboardExecute:false,
       source:'snapshot',
-      snapshotPerime:!!s.perime,
+      snapshotPerime:false,
       snapshotGenereLe:s.genereLe||''
     };
-    r.snapshotPerime=!!s.perime;
+    r.snapshotPerime=false;
     return r;
   }
 
@@ -29,7 +32,7 @@ function chargerSyntheseComptes20260828(){
   r.performance={
     dureeMs:Date.now()-t0,
     controleDashboardExecute:false,
-    source:'recalcul',
+    source:s&&s.disponible&&s.perime?'recalcul_snapshot_perime':'recalcul',
     snapshotPerime:false,
     snapshotGenereLe:refresh&&refresh.genereLe||''
   };
@@ -71,8 +74,7 @@ function construireSyntheseComptes20260828_(){
     derniereDateReelle[id]=null;
   });
 
-  // Une seule passe sur Operations. On évite l'enrichissement complet de chaque ligne :
-  // les imports modernes portent déjà date_comptable ; on n'enrichit qu'en repli si elle manque.
+  // Une seule passe sur Operations. La date comptable gouverne la frontière du Réel.
   operations.forEach(function(brut){
     if(/\[RECURRENCE:[^\]]+\]/.test(String(brut&&brut.commentaire||'')))return;
     let o=brut;
@@ -180,8 +182,7 @@ function auditerSyntheseComptes20260828(){
     comptes:r.comptes.map(function(c){return{nom:c.nom,type:c.type,actif:actifComptes20260828_(c.actif),soldeReel:c.soldeReel,dateSolde:c.dateSolde,sourceSolde:c.sourceSolde};}),
     archives:r.archives
   };
-  console.log(JSON.stringify(audit));
-  return audit;
+  console.log(JSON.stringify(audit));return audit;
 }
 
 function actifComptes20260828_(v){return v!==false&&String(v).toLowerCase()!=='false'&&String(v)!=='0';}
