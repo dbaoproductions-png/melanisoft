@@ -1,4 +1,4 @@
-const BUDGETSOFT_CANONICAL_BANK_DEDUP_VERSION='2026-09-06.2';
+const BUDGETSOFT_CANONICAL_BANK_DEDUP_VERSION='2026-09-06.3';
 
 function baseCleRapprochementBudgetSoft20260906_(o){
   const c=String(o&&o.cle_rapproment||o&&o.cle_rapprochement||'').trim();
@@ -41,18 +41,18 @@ function fusionnerMetadonneesDoublonsBudgetSoft20260906_(gagnant,groupe){
 }
 
 /**
- * Déduplication canonique prudente des doublons CB de flux.
+ * Déduplication canonique prudente V3.
+ * Nom volontairement unique : tous les moteurs transversaux appellent cette
+ * primitive directement afin qu'une ancienne définition Apps Script du nom
+ * historique ne puisse jamais reprendre la main par ordre de chargement.
  *
- * Une clé bancaire identique ne suffit PAS à conclure à un doublon : plusieurs
- * achats réels peuvent avoir le même marchand, le même montant, la même carte et
- * la même date (ex. plusieurs trajets VélôToulouse). On ne neutralise donc qu'une
- * "ombre" inter-dates : un groupe partage la même clé HB|FLOW, au moins une ligne
- * porte la date comptable attendue inscrite dans la clé et au moins une autre porte
- * une date comptable différente. La ligne sur la date attendue est canonique ; les
- * représentations décalées sont exclues. Les multiplicités strictement sur la même
- * date sont conservées intégralement.
+ * Règle : une clé bancaire identique n'est jamais suffisante. On neutralise
+ * uniquement une représentation inter-dates lorsqu'il existe au moins une ligne
+ * sur la date comptable attendue inscrite dans la clé HB|FLOW et au moins une ligne
+ * du même groupe sur une autre date comptable. Toutes les multiplicités présentes
+ * sur la date canonique sont conservées.
  */
-function dedoublonnerOperationsCartesBudgetSoft_(operations){
+function dedoublonnerOperationsCartesCanonique20260906V3_(operations){
   const src=Array.isArray(operations)?operations:[];
   const groupes=new Map(),gardes=[];
   src.forEach((o,index)=>{
@@ -67,12 +67,7 @@ function dedoublonnerOperationsCartesBudgetSoft_(operations){
     const avecJour=items.map(x=>({o:x.o,index:x.index,jour:typeof jourComptableCanonBudgetSoft20260906_==='function'?jourComptableCanonBudgetSoft20260906_(x.o):''}));
     const canoniques=avecJour.filter(x=>info.dateComptableAttendue&&x.jour===info.dateComptableAttendue);
     const ombres=avecJour.filter(x=>info.dateComptableAttendue&&x.jour&&x.jour!==info.dateComptableAttendue);
-
-    // Aucun couple canonique/ombre inter-dates : on conserve toutes les lignes.
     if(!canoniques.length||!ombres.length){avecJour.forEach(x=>gardes.push({o:x.o,index:x.index}));return;}
-
-    // S'il existe plusieurs opérations réelles sur la date canonique, elles restent
-    // toutes distinctes. On ne supprime que les représentations datées ailleurs.
     const tries=canoniques.slice().sort((a,b)=>scoreDoublonBancaireCanoniqueBudgetSoft20260906_(b.o,base)-scoreDoublonBancaireCanoniqueBudgetSoft20260906_(a.o,base)||b.index-a.index);
     const principal=tries[0];
     const fusion=fusionnerMetadonneesDoublonsBudgetSoft20260906_(principal.o,avecJour.map(x=>x.o));
@@ -82,10 +77,13 @@ function dedoublonnerOperationsCartesBudgetSoft_(operations){
   return gardes.map(x=>x.o);
 }
 
+// Compatibilité historique seulement. Les moteurs canoniques n'appellent plus ce nom.
+function dedoublonnerOperationsCartesBudgetSoft_(operations){return dedoublonnerOperationsCartesCanonique20260906V3_(operations);}
+
 function auditerDedoublonnageBancaireCanoniqueBudgetSoft20260906(){
-  const src=lireTable_('Operations')||[],dedup=dedoublonnerOperationsCartesBudgetSoft_(src);
+  const src=lireTable_('Operations')||[],dedup=dedoublonnerOperationsCartesCanonique20260906V3_(src);
   const arr=n=>Math.round(Number(n||0)*100)/100;
   const somme=xs=>arr(xs.reduce((s,o)=>s+Number(o&&o.montant||0),0));
-  const r={ok:true,version:BUDGETSOFT_CANONICAL_BANK_DEDUP_VERSION,source:src.length,canonique:dedup.length,doublonsExclus:src.length-dedup.length,netSource:somme(src),netCanonique:somme(dedup),ecartNet:arr(somme(dedup)-somme(src)),doctrine:'ombres CB inter-dates uniquement ; multiplicités même date conservées'};
+  const r={ok:true,version:BUDGETSOFT_CANONICAL_BANK_DEDUP_VERSION,primitive:'dedoublonnerOperationsCartesCanonique20260906V3_',source:src.length,canonique:dedup.length,doublonsExclus:src.length-dedup.length,netSource:somme(src),netCanonique:somme(dedup),ecartNet:arr(somme(dedup)-somme(src)),doctrine:'ombres CB inter-dates uniquement ; multiplicités même date conservées'};
   console.log(JSON.stringify(r));return r;
 }
