@@ -1,4 +1,4 @@
-const BUDGETSOFT_GLOBAL_SNAPSHOT_VERSION='2026-09-06.2';
+const BUDGETSOFT_GLOBAL_SNAPSHOT_VERSION='2026-09-06.3';
 const BUDGETSOFT_GLOBAL_SNAPSHOT_PREFIX='BUDGETSOFT_GLOBAL_SNAPSHOT_';
 const BUDGETSOFT_GLOBAL_SNAPSHOT_CHUNK=7000;
 const BUDGETSOFT_HISTORY_SHEET='BudgetSoft_History';
@@ -22,13 +22,10 @@ function reconstruireSnapshotGlobalBudgetSoft20260906(origine){
         catch(e){const x={module:nom,erreur:String(e&&e.message||e)};erreurs.push(x);modules[nom]={ok:false,erreur:x.erreur};return modules[nom];}
       }
 
-      // Lecture brute commune, gardée uniquement en mémoire pendant cette exécution.
       const sources=chargerToutesLesDonnees();
       modules.sourceMeta={version:sources&&sources.meta&&sources.meta.version||'',tables:{}};
       Object.keys(sources||{}).forEach(k=>{if(Array.isArray(sources[k]))modules.sourceMeta.tables[k]=sources[k].length;});
 
-      // Comptes : on force ici une vue fraîche, puis les autres moteurs de la même
-      // reconstruction peuvent réutiliser son snapshot local transitoire.
       const comptes=prendre('comptes',()=>{
         if(typeof rafraichirSnapshotComptes20260828==='function'){
           const r=rafraichirSnapshotComptes20260828();
@@ -39,13 +36,35 @@ function reconstruireSnapshotGlobalBudgetSoft20260906(origine){
       const credits=prendre('credits',()=>typeof chargerCreditsEtDettesV2==='function'?chargerCreditsEtDettesV2():null);
       const dashboard=prendre('dashboard',()=>typeof chargerDashboardReel==='function'?chargerDashboardReel():null);
       const patrimoine=prendre('patrimoine',()=>typeof composerPatrimoineCanoniqueBudgetSoft20260906_==='function'?composerPatrimoineCanoniqueBudgetSoft20260906_(sources,comptes,credits):chargerPatrimoine());
-      const tresorerie=prendre('tresorerieFinCycle',()=>typeof chargerTresorerieFinCycle20260830==='function'?chargerTresorerieFinCycle20260830():null);
+
+      // Trésorerie canonique = math comptable pure. Elle seule fait autorité pour
+      // les soldes prévisionnels BudgetSoft. L'ancien moteur enrichi est conservé
+      // temporairement comme projection étendue/diagnostic, jamais comme vérité.
+      const cibleFinCycle=typeof dateFinCycleCanonBudgetSoft20260906_==='function'?dateFinCycleCanonBudgetSoft20260906_(new Date()):new Date();
+      const tresorerieComptable=prendre('tresorerieComptable',()=>typeof construireTresorerieComptableCanoniqueBudgetSoft20260906_==='function'
+        ?construireTresorerieComptableCanoniqueBudgetSoft20260906_(sources,comptes,cibleFinCycle,new Date())
+        :null);
+      prendre('projectionEtendue',()=>typeof chargerTresorerieFinCycle20260830==='function'?chargerTresorerieFinCycle20260830():null);
+
       const cerbere=prendre('cerbere',()=>typeof chargerCerbereCockpit20260902==='function'?chargerCerbereCockpit20260902():null);
       const cerbereExpress=prendre('cerbereExpress',()=>typeof chargerVueCerbereExpressSansContexte20260827_==='function'?chargerVueCerbereExpressSansContexte20260827_():null);
 
       const transversales=typeof construireTransversalesBudgetSoft20260906_==='function'
         ?construireTransversalesBudgetSoft20260906_(Object.assign({sources:sources},modules))
         :{};
+      // Garantit que le bloc transversal publie exactement la même trésorerie que
+      // le module canonique de cette révision, sans second calcul concurrent.
+      if(tresorerieComptable&&transversales&&transversales.tresorerie){
+        transversales.tresorerie={
+          version:tresorerieComptable.version||'',
+          soldeReel:Number(tresorerieComptable.soldeReel),
+          variationComptableCertaine:Number(tresorerieComptable.variationComptableCertaine),
+          soldePrevisionnel:Number(tresorerieComptable.soldePrevisionnel),
+          dateCible:tresorerieComptable.dateCible||'',
+          nombreOperationsFutures:Number(tresorerieComptable.nombreOperationsFutures||0)
+        };
+      }
+
       const provisoire={modules:modules,erreurs:erreurs,transversales:transversales};
       const coherence=typeof auditerCoherenceRevisionBudgetSoft20260906_==='function'
         ?auditerCoherenceRevisionBudgetSoft20260906_(provisoire)
@@ -110,8 +129,8 @@ function ecrireSnapshotGlobalBudgetSoft20260906_(etat){
 function empreinteRevisionGlobaleBudgetSoft20260906_(genereLe,modules){
   const brut=JSON.stringify({version:BUDGETSOFT_GLOBAL_SNAPSHOT_VERSION,doctrine:'2026-09-06',genereLe,versions:{
     comptes:modules&&modules.comptes&&modules.comptes.version||'',credits:modules&&modules.credits&&modules.credits.version||'',
-    tresorerie:modules&&modules.tresorerieFinCycle&&modules.tresorerieFinCycle.version||'',cerbere:modules&&modules.cerbere&&modules.cerbere.version||'',
-    cerbereExpress:modules&&modules.cerbereExpress&&modules.cerbereExpress.version||''
+    tresorerie:modules&&modules.tresorerieComptable&&modules.tresorerieComptable.version||'',projection:modules&&modules.projectionEtendue&&modules.projectionEtendue.version||'',
+    cerbere:modules&&modules.cerbere&&modules.cerbere.version||'',cerbereExpress:modules&&modules.cerbereExpress&&modules.cerbereExpress.version||''
   }});
   const digest=Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,brut,Utilities.Charset.UTF_8);
   return digest.map(b=>('0'+((b+256)%256).toString(16)).slice(-2)).join('').slice(0,20);
@@ -121,7 +140,6 @@ function serialiserEtatGlobalBudgetSoft20260906_(v){if(v instanceof Date)return 
 function encoderEtatGlobalBudgetSoft20260906_(texte){return Utilities.base64EncodeWebSafe(Utilities.gzip(Utilities.newBlob(String(texte||''),'application/json','budgetsoft-global.json')).getBytes());}
 function decoderEtatGlobalBudgetSoft20260906_(texte){return Utilities.ungzip(Utilities.newBlob(Utilities.base64DecodeWebSafe(String(texte||'')),'application/gzip','budgetsoft-global.json.gz')).getDataAsString('UTF-8');}
 
-/** Historisation : quotidien + événements significatifs. */
 function archiverEtatBudgetSoftSiNecessaire20260906_(etat,origine){
   if(!etat||!etat.revisionBudgetSoft||etat.ok!==true)return;
   const ss=SpreadsheetApp.getActiveSpreadsheet();let sh=ss.getSheetByName(BUDGETSOFT_HISTORY_SHEET);
@@ -155,7 +173,8 @@ function auditerSnapshotGlobalBudgetSoft20260906(){
   const s=chargerSnapshotGlobalBudgetSoft20260906();if(!s.disponible)return s;const e=s.etat,m=e.modules||{};
   return{ok:e.ok,version:e.version,revisionBudgetSoft:e.revisionBudgetSoft,genereLe:e.genereLe,coherence:e.coherence,transversales:e.transversales,erreurs:e.erreurs||[],clesModules:Object.keys(m),
     credits:m.credits?{capitalCredits:m.credits.capitalCredits,capitalRenouvelable:m.credits.capitalRenouvelable,amortissables:(m.credits.amortissables||[]).length,renouvelables:(m.credits.renouvelables||[]).length}:null,
-    tresorerie:m.tresorerieFinCycle?{soldeReel:m.tresorerieFinCycle.soldeReel,soldePrevisionnel:m.tresorerieFinCycle.soldePrevisionnel,dateCible:m.tresorerieFinCycle.dateCible}:null,
+    tresorerieComptable:m.tresorerieComptable?{soldeReel:m.tresorerieComptable.soldeReel,variationComptableCertaine:m.tresorerieComptable.variationComptableCertaine,soldePrevisionnel:m.tresorerieComptable.soldePrevisionnel,dateCible:m.tresorerieComptable.dateCible,nombreOperationsFutures:m.tresorerieComptable.nombreOperationsFutures}:null,
+    projectionEtendue:m.projectionEtendue?{soldeReel:m.projectionEtendue.soldeReel,soldePrevisionnel:m.projectionEtendue.soldePrevisionnel,dateCible:m.projectionEtendue.dateCible}:null,
     cerbereExpress:m.cerbereExpress?{contexte:m.cerbereExpress.contexte,pilotable:m.cerbereExpress.pilotable}:null,
     patrimoine:m.patrimoine?{patrimoineNet:m.patrimoine.patrimoineNet,totalDettes:m.patrimoine.totalDettes}:null};
 }
