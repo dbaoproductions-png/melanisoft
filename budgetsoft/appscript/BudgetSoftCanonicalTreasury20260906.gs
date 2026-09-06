@@ -1,4 +1,4 @@
-const BUDGETSOFT_CANONICAL_TREASURY_VERSION='2026-09-06.2';
+const BUDGETSOFT_CANONICAL_TREASURY_VERSION='2026-09-06.3';
 
 function arrTresorerieCanoniqueBudgetSoft20260906_(n){return Math.round(Number(n||0)*100)/100;}
 function finJourTresorerieCanoniqueBudgetSoft20260906_(v){
@@ -42,11 +42,6 @@ function construireTresorerieComptableCanoniqueBudgetSoft20260906_(sources,compt
   return {ok:true,version:BUDGETSOFT_CANONICAL_TREASURY_VERSION,doctrine:'date comptable uniquement ; aucune estimation Cerbère/Plan/CF virtuelle',dateReference:jourReferenceCanonBudgetSoft20260906_(ref),dateCible:jourReferenceCanonBudgetSoft20260906_(cible),soldeReel,variationComptableCertaine:variation,variationPrevue:variation,soldePrevisionnel,operationsFutures:lignes,nombreOperationsFutures:lignes.length,confiance:{niveau:'certain',libelle:'Comptable'},comptes:perimetre.map(c=>({id:c.id,nom:c.nom,soldeReel:c.soldeReel,dateSolde:c.dateSolde,sourceSolde:c.sourceSolde}))};
 }
 
-/**
- * Lecture sans recalcul pour toute cible comprise dans l'horizon déjà calculé par
- * le snapshot global. Une révision produite par une ancienne version de ce moteur
- * est refusée afin qu'un déploiement ne puisse jamais servir un ancien calcul.
- */
 function lireTresorerieComptableSnapshotBudgetSoft20260906_(dateCible){
   if(typeof chargerSnapshotGlobalBudgetSoft20260906!=='function')return null;
   try{
