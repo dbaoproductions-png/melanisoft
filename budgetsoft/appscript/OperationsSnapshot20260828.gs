@@ -1,4 +1,4 @@
-const OPERATIONS_SNAPSHOT_20260828_VERSION='2026-08-28.1';
+const OPERATIONS_SNAPSHOT_20260828_VERSION='2026-09-06.2';
 const OPERATIONS_SNAPSHOT_20260828_PREFIX='OPERATIONS_SNAPSHOT_20260828_';
 const OPERATIONS_SNAPSHOT_20260828_CHUNK=7800;
 const OPERATIONS_SNAPSHOT_20260828_RECENTES=180;
@@ -33,8 +33,13 @@ function serialisableSnapshot20260828_(v){
 }
 
 function construireSnapshotOperations20260828_(operations,comptes,categories){
-  const ops=(operations||[]).slice().sort((a,b)=>{
-    const da=new Date(a.date_comptable||a.date||0),db=new Date(b.date_comptable||b.date||0);
+  // Double garde : même si un appelant transmet toute la table Operations, le
+  // snapshot de la liste courante ne peut contenir aucune date_comptable future.
+  const partition=typeof partitionnerOperationsCanoniqueBudgetSoft20260906_==='function'
+    ?partitionnerOperationsCanoniqueBudgetSoft20260906_(operations||[],new Date())
+    :{realisees:operations||[],futures:[],indatees:[],dateReference:''};
+  const ops=partition.realisees.slice().sort((a,b)=>{
+    const da=dateComptableCanonBudgetSoft20260906_(a)||new Date(0),db=dateComptableCanonBudgetSoft20260906_(b)||new Date(0);
     return db-da;
   });
   let revenus=0,depenses=0,sansCategorie=0;
@@ -47,12 +52,16 @@ function construireSnapshotOperations20260828_(operations,comptes,categories){
     ok:true,
     version:OPERATIONS_SNAPSHOT_20260828_VERSION,
     genereLe:Utilities.formatDate(new Date(),Session.getScriptTimeZone(),"yyyy-MM-dd'T'HH:mm:ss"),
+    dateReference:partition.dateReference||'',
     totalOperations:ops.length,
+    totalOperationsSource:(operations||[]).length,
+    totalFutures:partition.futures.length,
+    totalIndatees:partition.indatees.length,
     resume:{revenus,depenses,solde:revenus-depenses,sansCategorie},
     Operations:ops.slice(0,OPERATIONS_SNAPSHOT_20260828_RECENTES).map(compacteOperationSnapshot20260828_),
     Comptes:(comptes||[]),
     Categories:(categories||[]),
-    meta:{version:'0.8-lab',source:'operations_snapshot'}
+    meta:{version:'0.8-lab',source:'operations_snapshot_canonique'}
   });
 }
 
@@ -105,6 +114,6 @@ function invaliderSnapshotOperations20260828(){
 
 function auditerSnapshotOperations20260828(){
   const s=chargerSnapshotOperations20260828();
-  const r={ok:!!s.disponible,version:OPERATIONS_SNAPSHOT_20260828_VERSION,disponible:!!s.disponible,dureeLectureMs:Number(s.dureeLectureMs||0),genereLe:s.genereLe||'',totalOperations:Number(s.totalOperations||0),operationsEmbarquees:Array.isArray(s.Operations)?s.Operations.length:0};
+  const r={ok:!!s.disponible,version:OPERATIONS_SNAPSHOT_20260828_VERSION,disponible:!!s.disponible,dureeLectureMs:Number(s.dureeLectureMs||0),genereLe:s.genereLe||'',dateReference:s.dateReference||'',totalOperations:Number(s.totalOperations||0),totalFutures:Number(s.totalFutures||0),totalIndatees:Number(s.totalIndatees||0),operationsEmbarquees:Array.isArray(s.Operations)?s.Operations.length:0};
   console.log(JSON.stringify(r));return r;
 }
