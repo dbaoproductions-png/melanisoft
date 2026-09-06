@@ -1,4 +1,4 @@
-const COMPTES_REVIEW_20260828_VERSION='2026-09-06.3';
+const COMPTES_REVIEW_20260828_VERSION='2026-09-06.4';
 
 /**
  * Lecture prioritaire de la révision globale : l'ouverture de Comptes ne doit plus
@@ -45,18 +45,30 @@ function construireSyntheseComptes20260828_(){
   const comptes=lireTable_('Comptes');
   const operations=lireTable_('Operations');
   const parametres=Object.fromEntries(lireTable_('Parametres').map(function(p){return[String(p.cle),p.valeur];}));
-  const maintenant=new Date(),aujourdHuiFin=new Date(maintenant);aujourdHuiFin.setHours(23,59,59,999);
+  const maintenant=new Date();
   const jourAuj=typeof jourReferenceCanonBudgetSoft20260906_==='function'?jourReferenceCanonBudgetSoft20260906_(maintenant):Utilities.formatDate(maintenant,Session.getScriptTimeZone(),'yyyy-MM-dd');
   const comptesParCle={};comptes.forEach(function(c){comptesParCle[String(c.id)]=c;comptesParCle[String(c.nom)]=c;});
   const refs={},cumulReel={},cumulApresRef={},derniereDateReelle={};
 
   comptes.forEach(function(c){
     const id=String(c.id),valeur=parametres['solde_releve_'+id],dateBrute=parametres['date_solde_releve_'+id];
-    const base=valeur===undefined||valeur===''?null:Number(String(valeur).replace(',','.')),date=dateBrute?new Date(dateBrute):null;
+    const base=valeur===undefined||valeur===''?null:Number(String(valeur).replace(',','.'));
     const jourRef=typeof jourCanonBudgetSoft20260906_==='function'?jourCanonBudgetSoft20260906_(dateBrute):null;
-    const dateValide=!!(date&&!isNaN(date));
-    const nonFuture=jourRef?jourRef<=jourAuj:(dateValide&&date<=aujourdHuiFin);
-    refs[id]={disponible:Number.isFinite(base)&&dateValide&&nonFuture,solde:Number.isFinite(base)?base:null,date:dateValide?date:null,future:Number.isFinite(base)&&dateValide&&!nonFuture,dateBrute:dateBrute||''};
+    // Une référence bancaire n'est exploitable que si sa date est canoniquement
+    // interprétable ET non future. Pas de secours via new Date() : une ambiguïté de
+    // format ne doit jamais transformer un futur en Réel.
+    const disponible=Number.isFinite(base)&&!!jourRef&&jourRef<=jourAuj;
+    const p=jourRef?jourRef.split('-').map(Number):null;
+    const dateCanon=p?new Date(p[0],p[1]-1,p[2],12,0,0,0):null;
+    refs[id]={
+      disponible,
+      solde:Number.isFinite(base)?base:null,
+      jour:jourRef||'',
+      date:disponible?dateCanon:null,
+      future:Number.isFinite(base)&&!!jourRef&&jourRef>jourAuj,
+      dateInvalide:Number.isFinite(base)&&!jourRef,
+      dateBrute:dateBrute||''
+    };
     cumulReel[id]=0;cumulApresRef[id]=0;derniereDateReelle[id]=null;
   });
 
@@ -64,34 +76,43 @@ function construireSyntheseComptes20260828_(){
     if(/\[RECURRENCE:[^\]]+\]/.test(String(brut&&brut.commentaire||'')))return;
     let o=brut;if(!(o&&o.date_comptable)&&typeof enrichirDepuisCommentaireBanque_==='function'){try{o=enrichirDepuisCommentaireBanque_(brut)||brut;}catch(e){o=brut;}}
     const jour=typeof jourComptableCanonBudgetSoft20260906_==='function'?jourComptableCanonBudgetSoft20260906_(o):null;
-    const d=new Date((o&&o.date_comptable)||(o&&o.date));
-    if((jour&&jour>jourAuj)||(!jour&&isNaN(d))||(!jour&&d>aujourdHuiFin))return;
+    if(!jour||jour>jourAuj)return;
     const type=String(o&&o.type||'').toLowerCase();if(type!=='revenu'&&type!=='depense')return;
     const compte=comptesParCle[String(o.compte)];if(!compte)return;
     const id=String(compte.id),brutMontant=Math.abs(Number(o.montant||0));if(!Number.isFinite(brutMontant)||brutMontant<=0)return;
     const montant=type==='depense'?-brutMontant:brutMontant;cumulReel[id]+=montant;
+    const jp=jour.split('-').map(Number),d=new Date(jp[0],jp[1]-1,jp[2],12,0,0,0);
     if(!derniereDateReelle[id]||d>derniereDateReelle[id])derniereDateReelle[id]=d;
-    const ref=refs[id];if(ref&&ref.disponible&&d>ref.date)cumulApresRef[id]+=montant;
+    const ref=refs[id];if(ref&&ref.disponible&&jour>ref.jour)cumulApresRef[id]+=montant;
   });
 
   const lignes=comptes.map(function(c){
     const id=String(c.id),ref=refs[id];
     const solde=ref&&ref.disponible?arrondirComptes20260828_(ref.solde+cumulApresRef[id]):arrondirComptes20260828_(Number(c.solde_initial||0)+cumulReel[id]);
-    let dateSolde=ref&&ref.disponible?ref.date:derniereDateReelle[id];if(derniereDateReelle[id]&&ref&&ref.disponible&&derniereDateReelle[id]>ref.date)dateSolde=derniereDateReelle[id];
-    if(dateSolde){const j=typeof jourCanonBudgetSoft20260906_==='function'?jourCanonBudgetSoft20260906_(dateSolde):null;if((j&&j>jourAuj)||(!j&&dateSolde>aujourdHuiFin))dateSolde=null;}
-    return {id:c.id,nom:c.nom,type:c.type,actif:c.actif,soldeReel:solde,dateSolde:dateSolde?Utilities.formatDate(dateSolde,Session.getScriptTimeZone(),'yyyy-MM-dd'):'',sourceSolde:ref&&ref.disponible?'releve_certifie':'solde_initial',referenceFutureIgnoree:!!(ref&&ref.future),dateReferenceFutureIgnoree:ref&&ref.future?String(ref.dateBrute||''):''};
+    let dateSolde=ref&&ref.disponible?ref.date:derniereDateReelle[id];
+    if(derniereDateReelle[id]&&ref&&ref.disponible&&derniereDateReelle[id]>ref.date)dateSolde=derniereDateReelle[id];
+    const sourceSolde=ref&&ref.disponible?'releve_certifie':'solde_initial';
+    const dateSoldeIso=dateSolde?Utilities.formatDate(dateSolde,Session.getScriptTimeZone(),'yyyy-MM-dd'):'';
+    // Invariant fort : impossible de publier « relevé certifié » sans date réelle.
+    if(sourceSolde==='releve_certifie'&&(!dateSoldeIso||dateSoldeIso>jourAuj))throw new Error('Référence bancaire invalide pour '+String(c.nom||id)+' : '+String(dateSoldeIso||ref&&ref.dateBrute||'sans date'));
+    return {id:c.id,nom:c.nom,type:c.type,actif:c.actif,soldeReel:solde,dateSolde:dateSoldeIso,sourceSolde,referenceFutureIgnoree:!!(ref&&ref.future),referenceDateInvalideIgnoree:!!(ref&&ref.dateInvalide),dateReferenceIgnoree:ref&&(ref.future||ref.dateInvalide)?String(ref.dateBrute||''):''};
   });
   const actifs=lignes.filter(function(c){return actifComptes20260828_(c.actif);});
   const sommeTypes=function(types){return arrondirComptes20260828_(actifs.filter(function(c){return types.indexOf(String(c.type||'').toLowerCase())>=0;}).reduce(function(s,c){return s+c.soldeReel;},0));};
   let pluxee=null;try{const p=chargerPluxee();pluxee=p&&p.ok?Number(p.solde):null;}catch(e){pluxee=null;}
-  return {ok:true,version:COMPTES_REVIEW_20260828_VERSION,synthese:{disponible:sommeTypes(['courant','especes']),epargne:sommeTypes(['epargne']),placements:sommeTypes(['placement']),pluxee:Number.isFinite(pluxee)?arrondirComptes20260828_(pluxee):null},comptes:lignes,archives:lignes.filter(function(c){return !actifComptes20260828_(c.actif);}).length,avertissements:lignes.filter(c=>c.referenceFutureIgnoree).map(c=>({code:'REFERENCE_SOLDE_FUTURE_IGNOREE',compte:c.nom,date:c.dateReferenceFutureIgnoree}))};
+  const avertissements=[];
+  lignes.forEach(c=>{
+    if(c.referenceFutureIgnoree)avertissements.push({code:'REFERENCE_SOLDE_FUTURE_IGNOREE',compte:c.nom,date:c.dateReferenceIgnoree});
+    if(c.referenceDateInvalideIgnoree)avertissements.push({code:'REFERENCE_SOLDE_DATE_INVALIDE_IGNOREE',compte:c.nom,date:c.dateReferenceIgnoree});
+  });
+  return {ok:true,version:COMPTES_REVIEW_20260828_VERSION,dateReferenceReel:jourAuj,synthese:{disponible:sommeTypes(['courant','especes']),epargne:sommeTypes(['epargne']),placements:sommeTypes(['placement']),pluxee:Number.isFinite(pluxee)?arrondirComptes20260828_(pluxee):null},comptes:lignes,archives:lignes.filter(function(c){return !actifComptes20260828_(c.actif);}).length,avertissements};
 }
 
-function auditerPerformanceComptesRapide20260828(){const t0=Date.now(),r=chargerSyntheseComptes20260828(),out={ok:r.ok===true,version:r.version,dureeMs:Date.now()-t0,source:r.performance&&r.performance.source||'',snapshotPerime:!!r.snapshotPerime,revisionBudgetSoft:r.revisionBudgetSoft||'',synthese:r.synthese,comptes:r.comptes.length,controleDashboardExecute:false,avertissements:r.avertissements||[]};console.log(JSON.stringify(out));return out;}
+function auditerPerformanceComptesRapide20260828(){const t0=Date.now(),r=chargerSyntheseComptes20260828(),out={ok:r.ok===true,version:r.version,dureeMs:Date.now()-t0,source:r.performance&&r.performance.source||'',snapshotPerime:!!r.snapshotPerime,revisionBudgetSoft:r.revisionBudgetSoft||'',dateReferenceReel:r.dateReferenceReel||'',synthese:r.synthese,comptes:r.comptes.length,controleDashboardExecute:false,avertissements:r.avertissements||[]};console.log(JSON.stringify(out));return out;}
 function auditerSyntheseComptes20260828(){
   const tComptes=Date.now(),r=construireSyntheseComptes20260828_(),dureeComptesMs=Date.now()-tComptes;let dashboardSolde=null,dashboardErreur='',dureeDashboardMs=null;const tDashboard=Date.now();
   try{const d=chargerDashboardReelV2();dashboardSolde=d&&d.courtTerme&&Number.isFinite(Number(d.courtTerme.soldeBancaire))?Number(d.courtTerme.soldeBancaire):null;}catch(e){dashboardErreur=e&&e.message?e.message:String(e);}dureeDashboardMs=Date.now()-tDashboard;
-  const audit={ok:r.ok===true,version:r.version,synthese:r.synthese,controleDashboard:{solde:Number.isFinite(dashboardSolde)?arrondirComptes20260828_(dashboardSolde):null,ecart:Number.isFinite(dashboardSolde)?arrondirComptes20260828_(r.synthese.disponible-dashboardSolde):null,erreur:dashboardErreur||null},performance:{comptesMs:dureeComptesMs,dashboardMs:dureeDashboardMs,totalAuditMs:dureeComptesMs+dureeDashboardMs},comptes:r.comptes.map(function(c){return{nom:c.nom,type:c.type,actif:actifComptes20260828_(c.actif),soldeReel:c.soldeReel,dateSolde:c.dateSolde,sourceSolde:c.sourceSolde,referenceFutureIgnoree:c.referenceFutureIgnoree};}),archives:r.archives,avertissements:r.avertissements||[]};console.log(JSON.stringify(audit));return audit;
+  const audit={ok:r.ok===true,version:r.version,dateReferenceReel:r.dateReferenceReel||'',synthese:r.synthese,controleDashboard:{solde:Number.isFinite(dashboardSolde)?arrondirComptes20260828_(dashboardSolde):null,ecart:Number.isFinite(dashboardSolde)?arrondirComptes20260828_(r.synthese.disponible-dashboardSolde):null,erreur:dashboardErreur||null},performance:{comptesMs:dureeComptesMs,dashboardMs:dureeDashboardMs,totalAuditMs:dureeComptesMs+dureeDashboardMs},comptes:r.comptes.map(function(c){return{nom:c.nom,type:c.type,actif:actifComptes20260828_(c.actif),soldeReel:c.soldeReel,dateSolde:c.dateSolde,sourceSolde:c.sourceSolde,referenceFutureIgnoree:c.referenceFutureIgnoree,referenceDateInvalideIgnoree:c.referenceDateInvalideIgnoree};}),archives:r.archives,avertissements:r.avertissements||[]};console.log(JSON.stringify(audit));return audit;
 }
 function actifComptes20260828_(v){return v!==false&&String(v).toLowerCase()!=='false'&&String(v)!=='0';}
 function arrondirComptes20260828_(n){return Math.round((Number(n)||0)*100)/100;}
