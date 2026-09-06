@@ -44,14 +44,14 @@ function construireTresorerieComptableCanoniqueBudgetSoft20260906_(sources,compt
 
 /**
  * Lecture sans recalcul pour toute cible comprise dans l'horizon déjà calculé par
- * le snapshot global. Le changement de date dans Comptes devient une simple somme
- * sur les flux canoniques embarqués dans la même revisionBudgetSoft.
+ * le snapshot global. Une révision produite par une ancienne version de ce moteur
+ * est refusée afin qu'un déploiement ne puisse jamais servir un ancien calcul.
  */
 function lireTresorerieComptableSnapshotBudgetSoft20260906_(dateCible){
   if(typeof chargerSnapshotGlobalBudgetSoft20260906!=='function')return null;
   try{
     const g=chargerSnapshotGlobalBudgetSoft20260906(),e=g&&g.disponible&&g.etat,t=e&&e.ok===true&&e.modules&&e.modules.tresorerieComptable;
-    if(!t||t.ok!==true)return null;
+    if(!t||t.ok!==true||String(t.version||'')!==BUDGETSOFT_CANONICAL_TREASURY_VERSION)return null;
     const ref=jourReferenceCanonBudgetSoft20260906_(t.dateReference),max=jourReferenceCanonBudgetSoft20260906_(t.dateCible),cible=jourReferenceCanonBudgetSoft20260906_(dateCible||max);
     if(cible<ref||cible>max)return null;
     const lignes=(t.operationsFutures||[]).filter(x=>{const j=jourReferenceCanonBudgetSoft20260906_(x.date);return j>ref&&j<=cible;});
