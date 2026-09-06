@@ -1,4 +1,4 @@
-const BUDGETSOFT_CANONICAL_VALUES_VERSION='2026-09-06.2';
+const BUDGETSOFT_CANONICAL_VALUES_VERSION='2026-09-06.3';
 
 function arrCanonBudgetSoft20260906_(n){return Math.round(Number(n||0)*100)/100;}
 function actifCanonBudgetSoft20260906_(v){return v!==false&&String(v).toLowerCase()!=='false'&&String(v)!=='0';}
@@ -28,16 +28,46 @@ function composerPatrimoineCanoniqueBudgetSoft20260906_(sources,comptes,credits)
   };
 }
 
-/** Frontière temporelle commune : date_comptable, date en secours historique. */
+/**
+ * Frontière temporelle commune à tout BudgetSoft hors exception Cerbère : date_comptable.
+ * On compare des jours civils dans le fuseau du script afin d'éviter le piège UTC de
+ * new Date('YYYY-MM-DD'). La colonne historique `date` n'est qu'un secours de migration.
+ */
+function jourCanonBudgetSoft20260906_(v){
+  if(v==null||v==='')return null;
+  if(v instanceof Date&&!isNaN(v.getTime()))return Utilities.formatDate(v,Session.getScriptTimeZone(),'yyyy-MM-dd');
+  const s=String(v).trim();
+  const m=s.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|[T\s])/);
+  if(m)return m[1]+'-'+m[2]+'-'+m[3];
+  const f=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(f)return f[3]+'-'+String(f[2]).padStart(2,'0')+'-'+String(f[1]).padStart(2,'0');
+  const d=new Date(v);
+  return isNaN(d.getTime())?null:Utilities.formatDate(d,Session.getScriptTimeZone(),'yyyy-MM-dd');
+}
+function jourComptableCanonBudgetSoft20260906_(o){return jourCanonBudgetSoft20260906_(o&&(o.date_comptable||o.date));}
 function dateComptableCanonBudgetSoft20260906_(o){
-  const v=o&&(o.date_comptable||o.date);if(!v)return null;const d=v instanceof Date?new Date(v):new Date(v);return isNaN(d.getTime())?null:d;
+  const j=jourComptableCanonBudgetSoft20260906_(o);if(!j)return null;
+  const p=j.split('-').map(Number);return new Date(p[0],p[1]-1,p[2]);
+}
+function jourReferenceCanonBudgetSoft20260906_(dateReference){return jourCanonBudgetSoft20260906_(dateReference||new Date())||Utilities.formatDate(new Date(),Session.getScriptTimeZone(),'yyyy-MM-dd');}
+
+/**
+ * Arbitre canonique des Opérations. Tous les écrans/services hors Cerbère doivent
+ * consommer cette partition au lieu de réimplémenter leur propre filtre de dates.
+ */
+function partitionnerOperationsCanoniqueBudgetSoft20260906_(operations,dateReference){
+  const ref=jourReferenceCanonBudgetSoft20260906_(dateReference),realisees=[],futures=[],indatees=[];
+  (operations||[]).forEach(o=>{
+    const j=jourComptableCanonBudgetSoft20260906_(o);
+    if(!j){indatees.push(o);return;}
+    (j<=ref?realisees:futures).push(o);
+  });
+  return {version:BUDGETSOFT_CANONICAL_VALUES_VERSION,dateReference:ref,realisees,futures,indatees};
 }
 function construireResumeOperationsCanoniqueBudgetSoft20260906_(operations,dateReference){
-  const ref=dateReference instanceof Date?new Date(dateReference):new Date(dateReference||new Date());ref.setHours(23,59,59,999);
-  const realisees=[],futures=[];
-  (operations||[]).forEach(o=>{const d=dateComptableCanonBudgetSoft20260906_(o);if(!d)return;(d<=ref?realisees:futures).push(o);});
+  const p=partitionnerOperationsCanoniqueBudgetSoft20260906_(operations,dateReference);
   const somme=xs=>arrCanonBudgetSoft20260906_(xs.reduce((s,o)=>s+Number(o&&o.montant||0),0));
-  return {version:BUDGETSOFT_CANONICAL_VALUES_VERSION,dateReference:ref.toISOString(),realisees:{nombre:realisees.length,net:somme(realisees)},futures:{nombre:futures.length,net:somme(futures)}};
+  return {version:BUDGETSOFT_CANONICAL_VALUES_VERSION,dateReference:p.dateReference,realisees:{nombre:p.realisees.length,net:somme(p.realisees)},futures:{nombre:p.futures.length,net:somme(p.futures)},indatees:{nombre:p.indatees.length,net:somme(p.indatees)}};
 }
 
 /** Agrégats Crédits publiés une seule fois pour UI, Patrimoine et Analyse. */
@@ -60,7 +90,7 @@ function construireTransversalesBudgetSoft20260906_(modules){
   const cible=dateFinCycleCanonBudgetSoft20260906_(new Date());
   const tres=typeof construireTresorerieComptableCanoniqueBudgetSoft20260906_==='function'
     ?construireTresorerieComptableCanoniqueBudgetSoft20260906_(sources,comptes,cible,new Date())
-    :(m.tresorerieFinCycle||{});
+    :(m.tresorerieComptable||m.tresorerieFinCycle||{});
   return {
     version:BUDGETSOFT_CANONICAL_VALUES_VERSION,
     operations:construireResumeOperationsCanoniqueBudgetSoft20260906_(sources.Operations||[],new Date()),
