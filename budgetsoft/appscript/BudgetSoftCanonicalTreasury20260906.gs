@@ -1,4 +1,4 @@
-const BUDGETSOFT_CANONICAL_TREASURY_VERSION='2026-09-06.3';
+const BUDGETSOFT_CANONICAL_TREASURY_VERSION='2026-09-06.4';
 
 function arrTresorerieCanoniqueBudgetSoft20260906_(n){return Math.round(Number(n||0)*100)/100;}
 function finJourTresorerieCanoniqueBudgetSoft20260906_(v){
@@ -11,11 +11,7 @@ function estEpargneCanoniqueBudgetSoft20260906_(c){return /livret|epargne|éparg
 function operationReelleCanoniqueBudgetSoft20260906_(o){return !/\[RECURRENCE:[^\]]+\]/.test(String(o&&o.commentaire||''));}
 function montantSigneCanoniqueBudgetSoft20260906_(o){const n=Number(o&&o.montant||0);if(Number.isFinite(n)&&Math.abs(n)>.000001)return n;const a=Math.abs(Number(o&&o.montant||0)),t=String(o&&o.type||'').toLowerCase();if(t==='depense'||t==='tresorerie_sortie')return-a;if(t==='revenu'||t==='tresorerie_entree')return a;return 0;}
 
-/**
- * Prévision comptable canonique BudgetSoft.
- * AUCUNE doctrine Cerbère et aucun flux inventé : solde réel canonique + opérations
- * déjà connues dont la date_comptable est future et <= cible.
- */
+/** Prévision comptable canonique : solde réel + opérations connues par date_comptable. */
 function construireTresorerieComptableCanoniqueBudgetSoft20260906_(sources,comptes,dateCible,dateReference){
   const ref=finJourTresorerieCanoniqueBudgetSoft20260906_(dateReference||new Date());
   let cible=finJourTresorerieCanoniqueBudgetSoft20260906_(dateCible||ref);if(!ref||!cible)throw new Error('Date de trésorerie canonique invalide.');if(cible<ref)cible=new Date(ref);
@@ -24,7 +20,6 @@ function construireTresorerieComptableCanoniqueBudgetSoft20260906_(sources,compt
   const perimetre=courants.length?courants:lignesComptes.filter(c=>!estEpargneCanoniqueBudgetSoft20260906_(c));
   const cles=new Set();perimetre.forEach(c=>{cles.add(String(c.id||''));cles.add(String(c.nom||''));});
   const soldeReel=arrTresorerieCanoniqueBudgetSoft20260906_(perimetre.reduce((s,c)=>s+Number(c&&c.soldeReel||0),0));
-
   let operations=Array.isArray(sources&&sources.Operations)?sources.Operations:[];
   if(typeof dedoublonnerOperationsCartesBudgetSoft_==='function'){try{operations=dedoublonnerOperationsCartesBudgetSoft_(operations);}catch(e){}}
   const lignes=[];
