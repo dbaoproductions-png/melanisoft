@@ -1,4 +1,4 @@
-const BUDGETSOFT_REGRESSION_GUARD_VERSION='2026-09-06.1';
+const BUDGETSOFT_REGRESSION_GUARD_VERSION='2026-09-06.2';
 
 function arrRegressionBudgetSoft20260906_(n){return Math.round(Number(n||0)*100)/100;}
 function ecartRegressionBudgetSoft20260906_(a,b){return arrRegressionBudgetSoft20260906_(Number(a||0)-Number(b||0));}
@@ -12,7 +12,7 @@ function auditerCoherenceRevisionBudgetSoft20260906_(etat){
   const erreurs=[],avertissements=[],m=etat&&etat.modules||{};
   function err(code,message,detail){erreurs.push({code,message,detail:detail||null});}
   function warn(code,message,detail){avertissements.push({code,message,detail:detail||null});}
-  function proche(a,b,tol){return Number.isFinite(Number(a))&&Number.isFinite(Number(b))&&Math.abs(Number(a)-Number(b))<=(tol==null?.01:tol);}
+  function proche(a,b,tol){const t=tol==null?0.01:Number(tol);return Number.isFinite(Number(a))&&Number.isFinite(Number(b))&&Math.abs(Number(a)-Number(b))<=t;}
 
   const cred=m.credits||{},pat=m.patrimoine||{},comptes=m.comptes||{},tres=m.tresorerieFinCycle||{},cerb=m.cerbere||{},express=m.cerbereExpress||{};
 
@@ -29,17 +29,15 @@ function auditerCoherenceRevisionBudgetSoft20260906_(etat){
     if(Number.isFinite(Number(pat.totalDettesHorsCredit))&&Number.isFinite(Number(cred.dettesHorsCredit))&&!proche(pat.totalDettesHorsCredit,cred.dettesHorsCredit))err('PATRIMOINE_DETTES','Patrimoine et Crédits ne publient pas le même total de dettes hors crédit.',{patrimoine:pat.totalDettesHorsCredit,credits:cred.dettesHorsCredit});
   }
 
-  // Le périmètre de trésorerie est le disponible courant (pas l'épargne).
   const dispo=comptes&&comptes.synthese&&Number(comptes.synthese.disponible);
   if(Number.isFinite(dispo)&&Number.isFinite(Number(tres.soldeReel))&&!proche(dispo,tres.soldeReel))err('SOLDE_REEL','Comptes et Trésorerie ne publient pas le même solde réel disponible.',{comptes:dispo,tresorerie:tres.soldeReel,ecart:ecartRegressionBudgetSoft20260906_(dispo,tres.soldeReel)});
 
-  // Express doit être une vue du cockpit et non un second moteur.
   const ps=Array.isArray(cerb&&cerb.periodes)?cerb.periodes:[];
   const c1=ps[0]&&ps[0].v37&&ps[0].v37.cockpit20260902||{};
   const c2=ps[1]&&ps[1].v37&&ps[1].v37.cockpit20260902||{};
   if(express&&express.ok&&ps.length){
-    if(Number.isFinite(Number(c1.p1Total))&&Number.isFinite(Number(express.pilotable&&express.pilotable.allocation))&&!proche(c1.p1Total,express.pilotable.allocation))err('CERBERE_EXPRESS_P1','Cerbère Express diverge du P1 de Cerbère.',{cerbere:c1.p1Total,express:express.pilotable&&express.pilotable.allocation});
-    if(Number.isFinite(Number(c2.reportCbCycle))&&Number.isFinite(Number(express.contexte&&express.contexte.cbDejaEngageeM1))&&!proche(c2.reportCbCycle,express.contexte.cbDejaEngageeM1))err('CERBERE_EXPRESS_CB','Cerbère Express diverge de l’engagement CB publié par Cerbère.',{cerbere:c2.reportCbCycle,express:express.contexte&&express.contexte.cbDejaEngageeM1});
+    if(Number.isFinite(Number(c1.p1Total))&&Number.isFinite(Number(express.pilotable&&express.pilotable.allocation))&&!proche(c1.p1Total,express.pilotable&&express.pilotable.allocation))err('CERBERE_EXPRESS_P1','Cerbère Express diverge du P1 de Cerbère.',{cerbere:c1.p1Total,express:express.pilotable&&express.pilotable.allocation});
+    if(Number.isFinite(Number(c2.reportCbCycle))&&Number.isFinite(Number(express.contexte&&express.contexte.cbDejaEngageeM1))&&!proche(c2.reportCbCycle,express.contexte&&express.contexte.cbDejaEngageeM1))err('CERBERE_EXPRESS_CB','Cerbère Express diverge de l’engagement CB publié par Cerbère.',{cerbere:c2.reportCbCycle,express:express.contexte&&express.contexte.cbDejaEngageeM1});
   }
 
   if(etat&&Array.isArray(etat.erreurs)&&etat.erreurs.length)warn('MODULES_EN_ERREUR','Un ou plusieurs modules ont échoué pendant la reconstruction.',etat.erreurs);
