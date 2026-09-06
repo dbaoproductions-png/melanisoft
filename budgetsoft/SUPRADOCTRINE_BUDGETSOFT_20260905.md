@@ -32,7 +32,22 @@ Elle gouverne notamment :
 
 Une opération dont la date comptable est future reste une **opération future** dans les modules généraux, même si Cerbère peut déjà la considérer comme engagée selon sa doctrine propre.
 
-## 3. Exception strictement locale : CB dans Cerbère
+## 3. Principe fondamental : hors Cerbère, BudgetSoft est déterministe
+
+**Cerbère est le seul module autorisé à introduire une lecture volontairement non comptable d'une CB différée.**
+
+Partout ailleurs dans BudgetSoft, il n'y a pas de doctrine métier concurrente à la comptabilité : il n'y a que des données d'entrée, des règles explicites et des calculs déterministes.
+
+Autrement dit :
+
+- même données sources + même date de référence + même version moteur = **même résultat** ;
+- un solde, un capital restant dû, un encours, un patrimoine net, un total de dépenses, une échéance future ou un agrégat ne doit jamais dépendre du module qui l'affiche ;
+- ces grandeurs ne sont pas des « interprétations » : ce sont des **valeurs mathématiques canoniques** ;
+- si deux modules affichent deux valeurs différentes pour la même grandeur et la même révision, il s'agit d'un **bug**, jamais d'une différence de doctrine légitime.
+
+L'unique exception métier est la lecture anticipée des CB différées par Cerbère : Cerbère peut considérer comme déjà engagée une dépense qui n'est pas encore comptabilisée par la banque. Cette exception reste strictement locale à Cerbère et Cerbère Express.
+
+## 4. Exception strictement locale : CB dans Cerbère
 
 Cerbère et Cerbère Express sont les seuls modules autorisés à appliquer une lecture anticipée des cartes bancaires à débit différé.
 
@@ -45,21 +60,21 @@ Elle ne change jamais :
 - son appartenance aux opérations futures ;
 - la vérité bancaire utilisée par le prévisionnel de trésorerie.
 
-## 4. Double rôle des CB dans Cerbère
+## 5. Double rôle des CB dans Cerbère
 
 Une CB différée possède deux lectures simultanées, sans créer deux opérations.
 
-### 4.1 Rôle analytique / pilotage
+### 5.1 Rôle analytique / pilotage
 
 La dépense peut consommer une enveloppe pilotable selon sa **date d'achat** et la règle M / M+1 ci-dessous.
 
-### 4.2 Rôle bancaire / trésorerie
+### 5.2 Rôle bancaire / trésorerie
 
 La même dépense impacte la trésorerie selon sa **date comptable / date réelle de débit bancaire**.
 
 Le double rôle est intentionnel ; le double comptage est interdit.
 
-## 5. Règle M / M+1 et molettes
+## 6. Règle M / M+1 et molettes
 
 Pour une CB déjà engagée :
 
@@ -86,7 +101,7 @@ En résumé :
 
 Le code ne doit donc jamais réduire cette logique à un simple booléen `appartientAuMois`.
 
-## 6. Une opération, plusieurs lectures
+## 7. Une opération, plusieurs lectures
 
 `Operations` reste l'unique base du Réel. Une CB ne doit jamais être dupliquée pour matérialiser son double rôle.
 
@@ -98,7 +113,7 @@ La même opération peut simultanément être :
 
 Les règlements techniques / agrégés de carte ne doivent pas recréer une dépense économique déjà portée par les achats unitaires.
 
-## 7. Solde prévisionnel bancaire
+## 8. Solde prévisionnel bancaire
 
 Le solde prévisionnel appartient à la doctrine générale BudgetSoft, pas à la doctrine spéciale d'engagement Cerbère.
 
@@ -112,21 +127,23 @@ Conséquences :
 - elle ne doit pas apparaître comme opération réalisée avant cette date ;
 - le fait qu'une CB soit déjà engagée pour Cerbère ne la rend pas comptabilisée dans les autres modules.
 
-## 8. Principe obligatoire de développement
+Le solde prévisionnel est donc un **calcul mathématique canonique**, non une estimation doctrinale de Cerbère, sauf composante future explicitement marquée comme estimation et séparée de la vérité comptable.
+
+## 9. Principe obligatoire de développement
 
 **Aucun correctif ni développement ne doit être réalisé isolément.**
 
 Avant modification du code, appliquer cet ordre de contrôle :
 
 1. **Supradoctrine BudgetSoft** — invariants communs.
-2. **Doctrine du module concerné** — règle spécialisée éventuelle.
+2. **Doctrine du module concerné** — uniquement s'il existe réellement une règle spécialisée ; en pratique, l'exception structurante concerne Cerbère.
 3. **Doctrine du sous-module** — si le module possède une vue spécialisée, par exemple Cerbère Express.
 4. **Effets de bord sur les modules frères** — vérifier explicitement qu'une exception locale ne fuit pas vers eux.
 5. **Registre des valeurs transversales** — vérifier si la donnée modifiée est déjà produite par un propriétaire canonique.
 
 Une correction est considérée correcte seulement si elle respecte ces cinq niveaux.
 
-## 9. Arbitres communs plutôt que règles recopiées
+## 10. Arbitres communs plutôt que règles recopiées
 
 Les décisions structurantes doivent être centralisées dans des arbitres communs, puis consommées par les modules selon leur doctrine, notamment :
 
@@ -148,7 +165,7 @@ Les décisions structurantes doivent être centralisées dans des arbitres commu
 
 Le but est d'éviter que plusieurs modules réimplémentent chacun une définition différente d'une même grandeur.
 
-## 10. Contrôles de non-régression obligatoires
+## 11. Contrôles de non-régression obligatoires
 
 Toute modification liée aux dates ou aux CB doit au minimum vérifier simultanément :
 
@@ -161,7 +178,9 @@ Toute modification liée aux dates ou aux CB doit au minimum vérifier simultan�
 - qu'aucune CB n'est comptée deux fois ;
 - que Cerbère Express restitue les mêmes vérités Cerbère que son module parent, avec seulement sa spécialisation d'affichage / synthèse.
 
-## 11. Principe d'état global atomique
+Pour toute valeur hors Cerbère, un test supplémentaire s'impose : **deux modules consommant la même valeur canonique doivent obtenir strictement le même nombre pour la même révision**.
+
+## 12. Principe d'état global atomique
 
 BudgetSoft doit tendre vers un **snapshot global unique**, et non vers une collection de snapshots indépendants par module.
 
@@ -182,7 +201,7 @@ Elle doit porter au minimum :
 
 Un module ne doit pas mélanger une valeur issue d'un ancien snapshot avec une autre recalculée après coup.
 
-## 12. Politique d'actualisation
+## 13. Politique d'actualisation
 
 La cible d'architecture est :
 
@@ -193,7 +212,7 @@ La cible d'architecture est :
 
 Une reconstruction doit être atomique : l'ancienne révision reste visible tant que la nouvelle n'est pas complètement calculée et validée.
 
-## 13. Registre normatif des valeurs transversales
+## 14. Registre normatif des valeurs transversales
 
 Dès qu'une grandeur est utilisée par au moins deux modules, elle devient **transversale** et doit avoir un propriétaire canonique unique.
 
@@ -212,7 +231,7 @@ Dès qu'une grandeur est utilisée par au moins deux modules, elle devient **tra
 | P0 | budget maître | référence persistante unique ; Pn sont dérivés |
 | Plan normalisé | moteur Plan | statut, date d'effet et impact sont normalisés une fois |
 | Identification CB | arbitre BudgetSoft | champs structurés prioritaires ; heuristique texte seulement en secours d'import |
-| Engagement CB M/M+1 | Cerbère | exception locale ; aucun autre module ne reprend cette logique |
+| Engagement CB M/M+1 | Cerbère | **seule exception non comptable** ; aucun autre module ne reprend cette logique |
 | CB déjà engagée | Cerbère | calculée une fois et consommée par Cerbère Express |
 | Revenus/dépenses constatés | agrégateur Operations | agrégats communs par période, sans rescanner/reclassifier différemment |
 | Crédits amortissables | service Crédits | capital restant dû canonique |
@@ -222,7 +241,7 @@ Dès qu'une grandeur est utilisée par au moins deux modules, elle devient **tra
 | Pluxee | service Pluxee | valeur dédiée, distincte du solde bancaire, publiée une fois dans la révision |
 | Rapprochement CF0 | lien porté par Operations | le lien validé est la vérité ; les modules ne réinventent pas le rapprochement |
 
-## 14. Interdiction des recalculs concurrents
+## 15. Interdiction des recalculs concurrents
 
 Un module consommateur ne doit **jamais recalculer localement** une valeur inscrite au registre transversal, sauf audit temporaire explicitement marqué comme tel.
 
@@ -237,7 +256,7 @@ Exemples obligatoires :
 
 Les anciens moteurs peuvent subsister pendant la migration, mais **un seul point d'entrée final** doit être autoritaire dans une révision donnée.
 
-## 15. Dépendances : sens unique
+## 16. Dépendances : sens unique
 
 Les dépendances doivent suivre ce sens :
 
@@ -262,7 +281,7 @@ En particulier :
 - Patrimoine dépend des agrégats Comptes/Crédits ; ces services ne dépendent pas de Patrimoine ;
 - le solde prévisionnel peut consommer une hypothèse Cerbère uniquement pour une composante explicitement estimative du futur débit CB, jamais pour reconstruire le solde bancaire réel.
 
-## 16. Invalidation et mutations
+## 17. Invalidation et mutations
 
 Toute écriture dans une source maître doit déclarer quelles valeurs transversales elle invalide. À terme, l'invalidation peut être globale pour rester simple et sûre.
 
@@ -278,7 +297,7 @@ Au minimum :
 
 Une mutation ne doit jamais « réparer » directement plusieurs caches locaux divergents : elle invalide puis fait produire une nouvelle révision globale.
 
-## 17. Audit architectural constaté au 06/09/2026
+## 18. Audit architectural constaté au 06/09/2026
 
 L'audit du dépôt a identifié plusieurs duplications à résorber :
 
@@ -292,7 +311,7 @@ L'audit du dépôt a identifié plusieurs duplications à résorber :
 
 Ces duplications sont désormais considérées comme **dette technique à résorber** ; elles ne doivent pas être reproduites dans de nouveaux développements.
 
-## 18. Règle pour toute nouvelle fonctionnalité
+## 19. Règle pour toute nouvelle fonctionnalité
 
 Avant d'ajouter un calcul :
 
@@ -303,3 +322,5 @@ Avant d'ajouter un calcul :
 5. ajouter un test de cohérence inter-modules et, si nécessaire, une règle d'invalidation.
 
 **Une nouvelle fonctionnalité ne doit jamais créer une deuxième vérité pour une grandeur existante.**
+
+Hors de l'exception Cerbère/CB différée, **une différence de valeur entre modules est toujours une erreur de calcul, de source, de périmètre ou de révision — jamais une différence de doctrine légitime.**
