@@ -52,4 +52,67 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',appliquer);else appliquer();
   const st=document.createElement('style');st.textContent='.c4-range[data-traffic="orange"]{accent-color:#c18a25}.c4-range[data-traffic="rouge"]{accent-color:#ba5148}.c4-line.traffic-orange [data-reste]{color:#926509;font-weight:800}.c4-line.traffic-rouge [data-reste]{color:#a73f38;font-weight:800}';document.head.appendChild(st);
 })();
+
+/*
+ * Supradoctrine BudgetSoft 2026-09-06 :
+ * - l'écran Opérations suit la date comptable ; une ligne future reste dans « Futures » ;
+ * - Cerbère/Cerbère Express conservent seuls leur lecture anticipée des achats CB ;
+ * - les groupes de crédits affichent leurs agrégats, sans recalcul autonome dans l'UI.
+ */
+(function(){'use strict';
+  const VERSION='2026-09-06.1';
+  const finAujourdhui=()=>{const d=new Date();d.setHours(23,59,59,999);return d;};
+  const dateComptable=o=>{const v=o&&((o.date_comptable!==undefined&&o.date_comptable!==null&&o.date_comptable!=='')?o.date_comptable:o.date);const d=v?new Date(v):null;return d&&!isNaN(d)?d:null;};
+  const estComptabilisee=o=>{const d=dateComptable(o);return !d||d<=finAujourdhui();};
+
+  function installerDoctrineOperations(){
+    const courant=window.operationsFiltrees;
+    if(typeof courant!=='function'||courant.__dateComptable20260906)return;
+    const completBase=typeof courant.__complet==='function'?courant.__complet:courant;
+    const completFiltre=function(){return (completBase.apply(this,arguments)||[]).filter(estComptabilisee);};
+    const filtre=function(){return (courant.apply(this,arguments)||[]).filter(estComptabilisee);};
+    filtre.__dateComptable20260906=true;
+    if(courant.__limiteOperations20260828)filtre.__limiteOperations20260828=true;
+    filtre.__complet=completFiltre;
+    window.operationsFiltrees=filtre;
+    try{if(window.state&&state.currentView==='operations'&&typeof rendreListeOperations==='function')rendreListeOperations();}catch(e){}
+  }
+
+  const euro=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));
+  let creditsEnCours=false,creditsCache=null,creditsCacheAt=0;
+  function poserTotal(h2,label,valeur){
+    const panel=h2&&h2.closest('.panel');if(!panel)return;
+    const heading=panel.querySelector('.panel-heading');if(!heading)return;
+    let badge=heading.querySelector('[data-credit-total-20260906="'+label+'"]');
+    if(!badge){badge=document.createElement('div');badge.dataset.creditTotal20260906=label;badge.className='credit-group-total-20260906';heading.appendChild(badge);}
+    badge.innerHTML='<span>'+label+'</span><strong>'+euro(valeur)+'</strong>';
+  }
+  function appliquerTotauxCredits(data){
+    const zone=document.getElementById('generic-view');if(!zone||!data)return;
+    const hs=[...zone.querySelectorAll('.panel-heading h2')];
+    const hAm=hs.find(h=>/Crédits amortissables/i.test(h.textContent||''));
+    const hRev=hs.find(h=>/Crédits renouvelables/i.test(h.textContent||''));
+    const am=Array.isArray(data.amortissables)?data.amortissables:[];
+    const rev=Array.isArray(data.renouvelables)?data.renouvelables:[];
+    const capitalAm=am.reduce((s,c)=>s+Math.max(0,Number(c&&c.capital_restant||0)),0);
+    const encoursRev=rev.reduce((s,c)=>s+Math.max(0,Number(c&&c.capital_restant||0)),0);
+    if(hAm)poserTotal(hAm,'Capital restant dû',capitalAm);
+    if(hRev)poserTotal(hRev,'Encours total',encoursRev);
+  }
+  function chargerTotauxCredits(){
+    const zone=document.getElementById('generic-view');
+    if(!zone||!/[Cc]rédits amortissables/.test(zone.textContent||''))return;
+    if(creditsCache&&Date.now()-creditsCacheAt<15000){appliquerTotauxCredits(creditsCache);return;}
+    if(creditsEnCours)return;creditsEnCours=true;
+    google.script.run.withSuccessHandler(d=>{creditsEnCours=false;creditsCache=d;creditsCacheAt=Date.now();appliquerTotauxCredits(d);}).withFailureHandler(()=>{creditsEnCours=false;}).chargerCreditsEtDettesV2();
+  }
+
+  const style=document.createElement('style');style.textContent='.credit-group-total-20260906{margin-left:auto;text-align:right;display:flex;flex-direction:column;gap:2px}.credit-group-total-20260906 span{font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.04em}.credit-group-total-20260906 strong{font-size:18px;color:#183d32}';document.head.appendChild(style);
+  function tick(){installerDoctrineOperations();chargerTotauxCredits();}
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(tick,300));
+  document.addEventListener('click',e=>{if(e.target.closest?.('.nav-item[data-view]'))setTimeout(tick,180);},true);
+  new MutationObserver(()=>{clearTimeout(window.__budgetsoftDoctrineTick);window.__budgetsoftDoctrineTick=setTimeout(tick,80);}).observe(document.documentElement,{childList:true,subtree:true});
+  setTimeout(tick,900);
+  console.log('[BudgetSoft supradoctrine UI] '+VERSION);
+})();
 </script>
