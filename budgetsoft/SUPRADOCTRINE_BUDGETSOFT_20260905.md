@@ -324,3 +324,22 @@ Avant d'ajouter un calcul :
 **Une nouvelle fonctionnalité ne doit jamais créer une deuxième vérité pour une grandeur existante.**
 
 Hors de l'exception Cerbère/CB différée, **une différence de valeur entre modules est toujours une erreur de calcul, de source, de périmètre ou de révision — jamais une différence de doctrine légitime.**
+
+## 20. Historisation des trajectoires
+
+Le snapshot global courant et les snapshots historiques ont deux fonctions différentes.
+
+- Le **snapshot opérationnel courant** sert à afficher rapidement un état cohérent de BudgetSoft ; il peut être remplacé par une révision plus récente.
+- Le **snapshot historique** sert au futur module Analyse ; il fige les valeurs canoniques connues à un instant donné et ne doit jamais être recalculé rétroactivement avec un moteur plus récent.
+
+Politique cible :
+
+1. conserver au maximum un snapshot historique quotidien ordinaire ;
+2. conserver en plus les états liés à des événements significatifs : import majeur, modification P0/Plan, crédit/dette, clôture de cycle ou demande explicite ;
+3. conserver les snapshots de clôture de cycle et les références mensuelles sans écrasement ;
+4. chaque archive porte au minimum `revisionBudgetSoft`, `genereLe`, `versionDoctrine`, versions moteurs utiles et valeurs transversales canoniques ;
+5. l'historique sert à mesurer les trajectoires : trésorerie, endettement, encours revolving, patrimoine net, consommation budgétaire, précision des prévisions, évolution P0/P1 et autres agrégats ;
+6. l'historique ne doit pas dupliquer les données sources complètes si les agrégats canoniques suffisent à l'analyse ; un payload compact complémentaire peut être conservé pour permettre l'audit ;
+7. une évolution de code ou de doctrine ne réécrit jamais le passé : elle crée de nouvelles révisions comparables aux anciennes.
+
+Ainsi, le module Analyse doit pouvoir distinguer une **évolution réelle de la situation** d'une **évolution du moteur de calcul ou de la doctrine**.
