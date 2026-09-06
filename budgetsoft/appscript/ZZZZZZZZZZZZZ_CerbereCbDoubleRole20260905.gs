@@ -58,10 +58,6 @@ function calculerReportCbCycleSuivant20260905_(base){
     const da=dateAchatCbDoubleRole20260905_(o);if(!da)return;diag.avecDateAchat++;
     const ta=jour(da);if(ta<aCb||ta>z1||ta>tn)return;diag.dansFenetre++;
 
-    /* Le rôle analytique reste piloté par la date d'achat. Pour C2, en revanche,
-     * seule la date comptable réelle indique dans quel cycle le débit différé
-     * pèsera sur la trésorerie. Cela évite de reporter de nouveau des achats dont
-     * le débit a déjà été comptabilisé avant l'ouverture de C2. */
     let impact=dateValideVentilationBudgetSoft_(o&&o.date_comptable);
     if(impact){
       diag.avecDateComptable++;
@@ -69,8 +65,6 @@ function calculerReportCbCycleSuivant20260905_(base){
       if(tc<a2||tc>z2){diag.rejetsHorsCycleComptable++;return;}
       diag.dateComptableC2++;
     }else{
-      /* Compatibilité pour les anciennes lignes manuelles sans date comptable :
-       * on les reporte à l'ouverture de C2 plutôt que de les perdre. */
       diag.sansDateComptable++;impact=impactCycle2;diag.fallbackSansDateComptable++;
     }
 
@@ -100,6 +94,17 @@ function auditerReportCbCycleSuivant20260905(){
 }
 
 function chargerCerbereCockpit20260902(){
+  try{
+    if(typeof chargerCerbereDepuisSnapshotGlobalBudgetSoft20260906==='function'){
+      const snapshot=chargerCerbereDepuisSnapshotGlobalBudgetSoft20260906();
+      if(snapshot&&snapshot.ok!==false&&snapshot.source==='snapshot_global'){
+        snapshot.sourceBudgetSoft='snapshot_global';
+        snapshot.versionSnapshotFirst='2026-09-06.2';
+        return snapshot;
+      }
+    }
+  }catch(e){}
+
   const executer=function(){
     const t0=Date.now(),base=chargerCerbereCockpitBaseRapide20260903_();if(!base||base.ok===false)return base;
     const post=base.diagnostic&&base.diagnostic.performancePost35||{couches:[]},timings=Array.isArray(post.couches)?post.couches:[];
@@ -111,6 +116,8 @@ function chargerCerbereCockpit20260902(){
     let appreciation='';chronometrerCoucheCerbere20260904_(timings,'Appréciation cockpit',()=>{appreciation=appreciationCockpitCerbere20260902_(base);});
     const perf={c1c2Seulement:true,dureeMs:Date.now()-t0,couches:timings};
     base.cockpit20260902={version:'2026-09-05.cb-double-role-8',appreciation:appreciation,performance:perf,doctrine:'Cockpit C1/C2 : CB imputée aux lignes par date achat dans C1 et au global de C2 selon la date comptable, sans toucher aux molettes C2.'};
+    base.sourceBudgetSoft='recalcul_secours';
+    base.versionSnapshotFirst='2026-09-06.2';
     const ts=Date.now(),out=serialiserCerberePourClient_(base),serializationMs=Date.now()-ts;
     if(out&&out.cockpit20260902&&out.cockpit20260902.performance){out.cockpit20260902.performance.serializationMs=serializationMs;out.cockpit20260902.performance.dureeMs=Date.now()-t0;}
     return out;
