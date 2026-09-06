@@ -1,14 +1,14 @@
-const BUDGETSOFT_REGRESSION_GUARD_VERSION='2026-09-06.4';
+const BUDGETSOFT_REGRESSION_GUARD_VERSION='2026-09-06.5';
 
 function arrRegressionBudgetSoft20260906_(n){return Math.round(Number(n||0)*100)/100;}
 function ecartRegressionBudgetSoft20260906_(a,b){return arrRegressionBudgetSoft20260906_(Number(a||0)-Number(b||0));}
 
 function auditerCoherenceRevisionBudgetSoft20260906_(etat){
-  const erreurs=[],avertissements=[],m=etat&&etat.modules||{};
+  const erreurs=[],avertissements=[],m=etat&&etat.modules||{},t=etat&&etat.transversales||{};
   function err(code,message,detail){erreurs.push({code,message,detail:detail||null});}
   function warn(code,message,detail){avertissements.push({code,message,detail:detail||null});}
-  function proche(a,b,tol){const t=tol==null?0.01:Number(tol);return Number.isFinite(Number(a))&&Number.isFinite(Number(b))&&Math.abs(Number(a)-Number(b))<=t;}
-  const cred=m.credits||{},pat=m.patrimoine||{},comptes=m.comptes||{},tres=m.tresorerieFinCycle||{},cerb=m.cerbere||{},express=m.cerbereExpress||{};
+  function proche(a,b,tol){const x=tol==null?0.01:Number(tol);return Number.isFinite(Number(a))&&Number.isFinite(Number(b))&&Math.abs(Number(a)-Number(b))<=x;}
+  const cred=m.credits||{},pat=m.patrimoine||{},comptes=m.comptes||{},tres=m.tresorerieComptable||{},cerb=m.cerbere||{},express=m.cerbereExpress||{},transTres=t.tresorerie||{};
 
   if(Array.isArray(cred.amortissables)&&Array.isArray(cred.renouvelables)){
     const amort=arrRegressionBudgetSoft20260906_(cred.amortissables.reduce((s,c)=>s+Math.abs(Number(c&&c.capital_restant||0)),0));
@@ -24,7 +24,12 @@ function auditerCoherenceRevisionBudgetSoft20260906_(etat){
   }
 
   const dispo=comptes&&comptes.synthese&&Number(comptes.synthese.disponible);
-  if(Number.isFinite(dispo)&&Number.isFinite(Number(tres.soldeReel))&&!proche(dispo,tres.soldeReel))err('SOLDE_REEL','Comptes et Trésorerie ne publient pas le même solde réel disponible.',{comptes:dispo,tresorerie:tres.soldeReel,ecart:ecartRegressionBudgetSoft20260906_(dispo,tres.soldeReel)});
+  if(Number.isFinite(dispo)&&Number.isFinite(Number(tres.soldeReel))&&!proche(dispo,tres.soldeReel))err('SOLDE_REEL','Comptes et Trésorerie comptable canonique ne publient pas le même solde réel disponible.',{comptes:dispo,tresorerie:tres.soldeReel,ecart:ecartRegressionBudgetSoft20260906_(dispo,tres.soldeReel)});
+  if(Number.isFinite(Number(tres.soldeReel))&&Number.isFinite(Number(tres.variationComptableCertaine))&&Number.isFinite(Number(tres.soldePrevisionnel))&&!proche(Number(tres.soldeReel)+Number(tres.variationComptableCertaine),tres.soldePrevisionnel))err('SOLDE_PREVISIONNEL_FORMULE','Le solde prévisionnel canonique ne respecte pas solde réel + flux futurs comptables.',{soldeReel:tres.soldeReel,variation:tres.variationComptableCertaine,soldePrevisionnel:tres.soldePrevisionnel});
+  if(transTres&&Object.keys(transTres).length){
+    if(Number.isFinite(Number(tres.soldeReel))&&!proche(tres.soldeReel,transTres.soldeReel))err('TRANSVERSE_SOLDE_REEL','Le bloc transversal diverge du moteur de trésorerie canonique.',{module:tres.soldeReel,transversal:transTres.soldeReel});
+    if(Number.isFinite(Number(tres.soldePrevisionnel))&&!proche(tres.soldePrevisionnel,transTres.soldePrevisionnel))err('TRANSVERSE_SOLDE_PREVISIONNEL','Le bloc transversal diverge du moteur de trésorerie canonique.',{module:tres.soldePrevisionnel,transversal:transTres.soldePrevisionnel});
+  }
 
   const ps=Array.isArray(cerb&&cerb.periodes)?cerb.periodes:[];
   const c1=ps[0]&&ps[0].v37&&ps[0].v37.cockpit20260902||{};
@@ -42,12 +47,6 @@ function auditerCoherenceRevisionBudgetSoft20260906_(etat){
  * Oracle de développement du classeur BudgetSoft (80) reçu le 06/09/2026.
  * Les montants ci-dessous ne pilotent jamais l'application. Ils sont seulement
  * des témoins de recette et deviennent inapplicables dès que la signature change.
- *
- * Important : on ne fige PAS un « solde réel du 06/09 » déduit algébriquement.
- * La valeur attendue explicitement validée est le solde prévisionnel BudgetSoft au
- * 07/09 (-1 095,50 €), calculé selon la date comptable. Le relevé Hello Bank peut
- * pré-afficher des écritures futures : ce comportement bancaire ne change pas la
- * frontière comptable BudgetSoft.
  */
 function auditerOracleBudgetSoft80_20260906(){
   const ops=lireTable_('Operations')||[],credits=typeof lireCreditsEtendusV2_==='function'?lireCreditsEtendusV2_():lireTable_('Credits'),dettes=lireTable_('Dettes')||[];
@@ -66,7 +65,7 @@ function auditerOracleBudgetSoft80_20260906(){
 
   let cbEngagee=null,soldePrevisionnel0709=null;
   try{const base=chargerCerbereCockpitBaseRapide20260903_(),r=calculerReportCbCycleSuivant20260905_(base);cbEngagee=arrRegressionBudgetSoft20260906_(r&&r.montant);}catch(e){cbEngagee=null;}
-  try{const t=chargerTresorerieComptableCanoniqueBudgetSoft20260906('2026-09-07');soldePrevisionnel0709=arrRegressionBudgetSoft20260906_(t&&t.soldePrevisionnel);}catch(e){soldePrevisionnel0709=null;}
+  try{const q=chargerTresorerieComptableCanoniqueBudgetSoft20260906('2026-09-07');soldePrevisionnel0709=arrRegressionBudgetSoft20260906_(q&&q.soldePrevisionnel);}catch(e){soldePrevisionnel0709=null;}
 
   const mesures={cbEngagee,operations0709:ops0709.length,totalDebits0709,soldePrevisionnel0709,capitalAmortissable,encoursRevolving,dettesHorsCredit};
   const erreurs=[];Object.keys(mesures).forEach(k=>{if(mesures[k]!==null&&Math.abs(Number(mesures[k])-Number(attendu[k]))>.01)erreurs.push({cle:k,attendu:attendu[k],obtenu:mesures[k]});});
