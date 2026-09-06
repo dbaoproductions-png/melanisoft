@@ -1,4 +1,4 @@
-const BUDGETSOFT_CANONICAL_VALUES_VERSION='2026-09-06.1';
+const BUDGETSOFT_CANONICAL_VALUES_VERSION='2026-09-06.2';
 
 function arrCanonBudgetSoft20260906_(n){return Math.round(Number(n||0)*100)/100;}
 function actifCanonBudgetSoft20260906_(v){return v!==false&&String(v).toLowerCase()!=='false'&&String(v)!=='0';}
@@ -28,10 +28,7 @@ function composerPatrimoineCanoniqueBudgetSoft20260906_(sources,comptes,credits)
   };
 }
 
-/**
- * Frontière temporelle commune : date_comptable, avec date seulement en secours
- * pour les anciennes lignes qui n'en possèdent pas encore.
- */
+/** Frontière temporelle commune : date_comptable, date en secours historique. */
 function dateComptableCanonBudgetSoft20260906_(o){
   const v=o&&(o.date_comptable||o.date);if(!v)return null;const d=v instanceof Date?new Date(v):new Date(v);return isNaN(d.getTime())?null:d;
 }
@@ -56,14 +53,20 @@ function construireAgregatsCreditsCanonBudgetSoft20260906_(credits){
   };
 }
 
+function dateFinCycleCanonBudgetSoft20260906_(reference){const d=reference instanceof Date?new Date(reference):new Date(reference||new Date());if(isNaN(d.getTime()))return new Date();return d.getDate()<=27?new Date(d.getFullYear(),d.getMonth(),27):new Date(d.getFullYear(),d.getMonth()+1,27);}
+
 function construireTransversalesBudgetSoft20260906_(modules){
-  const m=modules||{},sources=m.sources||{},comptes=m.comptes||{},credits=m.credits||{},tres=m.tresorerieFinCycle||{},express=m.cerbereExpress||{};
+  const m=modules||{},sources=m.sources||{},comptes=m.comptes||{},credits=m.credits||{},express=m.cerbereExpress||{};
+  const cible=dateFinCycleCanonBudgetSoft20260906_(new Date());
+  const tres=typeof construireTresorerieComptableCanoniqueBudgetSoft20260906_==='function'
+    ?construireTresorerieComptableCanoniqueBudgetSoft20260906_(sources,comptes,cible,new Date())
+    :(m.tresorerieFinCycle||{});
   return {
     version:BUDGETSOFT_CANONICAL_VALUES_VERSION,
     operations:construireResumeOperationsCanoniqueBudgetSoft20260906_(sources.Operations||[],new Date()),
     comptes:{disponible:arrCanonBudgetSoft20260906_(comptes.synthese&&comptes.synthese.disponible),epargne:arrCanonBudgetSoft20260906_(comptes.synthese&&comptes.synthese.epargne),placements:arrCanonBudgetSoft20260906_(comptes.synthese&&comptes.synthese.placements),pluxee:comptes.synthese&&comptes.synthese.pluxee},
     credits:construireAgregatsCreditsCanonBudgetSoft20260906_(credits),
-    tresorerie:{soldeReel:Number(tres.soldeReel),soldePrevisionnel:Number(tres.soldePrevisionnel),dateCible:tres.dateCible||''},
+    tresorerie:{version:tres.version||'',soldeReel:Number(tres.soldeReel),variationComptableCertaine:Number(tres.variationComptableCertaine!=null?tres.variationComptableCertaine:tres.variationPrevue),soldePrevisionnel:Number(tres.soldePrevisionnel),dateCible:tres.dateCible||'',nombreOperationsFutures:Number(tres.nombreOperationsFutures||0)},
     cerbere:{cbDejaEngagee:Number(express.contexte&&express.contexte.cbDejaEngageeM1||0),p1:Number(express.contexte&&express.contexte.p1||0),restePilotable:Number(express.pilotable&&express.pilotable.reste||0)}
   };
 }
