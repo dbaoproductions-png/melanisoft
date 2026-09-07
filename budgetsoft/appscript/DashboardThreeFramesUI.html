@@ -20,13 +20,13 @@
       carte('Charges fixes restantes',fmt(c.chargesFixes),(c.nombreCharges||0)+' charge(s)')+
       carte('Pilotable encore disponible',fmt(c.pilotableDisponible),'Source Cerbère Express',true)+
       carte('Pilotable disponible par jour',fmt(c.pilotableParJour),c.joursRestants?'Sur '+c.joursRestants+' jour(s)':'Fin du cycle',true),5)}${grille(carte('Résultat constaté du cycle',fmt(c.resultat),'Recettes - dépenses bancaires réelles'),1)}`;
-    const noteSoldeSuiv=s.projectionTresorerieDisponible===false?'Non publié tant que la trésorerie future complète n’est pas fiable':'Projection de trésorerie';
-    if(b)b.innerHTML=`<div class="panel-heading"><div><span class="panel-kicker">Anticipation</span><h2>Cycle suivant · ${ech(s.libelle||'')}</h2></div><span class="badge">Prévision</span></div><div class="helper-text">${dfr(s.debut)} → ${dfr(s.fin)} · les valeurs sans propriétaire métier fiable restent volontairement à —</div>${grille(
-      carte('Solde prévisionnel à J1',fmt(s.soldeJ1),noteSoldeSuiv)+
-      carte('Solde prévisionnel à mi-cycle',fmt(s.soldeMiCycle),noteSoldeSuiv)+
-      carte('Solde prévisionnel au dernier jour',fmt(s.soldeFinCycle),noteSoldeSuiv)+
-      carte('Recettes prévisionnelles',fmt(s.revenusPrevisionnels),'Source Cerbère')+
-      carte('Dépenses budgétées',fmt(s.depensesBudgetees!=null?s.depensesBudgetees:s.depensesPrevisionnelles),'Charges fixes + hors-pilotable + CB + pilotable ; enveloppe, pas débit bancaire prévu')+
+    const noteProjection=s.sourceProjection==='moteur_tresorerie_previsionnelle'?'Moteur de trésorerie prévisionnelle':'Projection de trésorerie';
+    if(b)b.innerHTML=`<div class="panel-heading"><div><span class="panel-kicker">Anticipation</span><h2>Cycle suivant · ${ech(s.libelle||'')}</h2></div><span class="badge">Prévision</span></div><div class="helper-text">${dfr(s.debut)} → ${dfr(s.fin)} · projection bancaire issue du moteur prévisionnel</div>${grille(
+      carte('Solde prévisionnel à J1',fmt(s.soldeJ1),noteProjection)+
+      carte('Solde prévisionnel à mi-cycle',fmt(s.soldeMiCycle),noteProjection)+
+      carte('Solde prévisionnel au dernier jour',fmt(s.soldeFinCycle),noteProjection)+
+      carte('Recettes prévisionnelles',fmt(s.revenusPrevisionnels),noteProjection)+
+      carte('Dépenses prévisionnelles',fmt(s.depensesPrevisionnelles),noteProjection)+
       carte('CB différées engagées',fmt(s.cbDifferees),'Source Cerbère Express')+
       carte('Pilotable prévisionnel',fmt(s.pilotablePrevisionnel),'Source Cerbère Express',true),4)}`;
     if(z)z.innerHTML=`<div class="panel-heading"><div><span class="panel-kicker">Repère</span><h2>Cycle précédent · ${ech(p.libelle||'')}</h2></div><span class="badge">${p.operations||0} opération(s)</span></div><div class="helper-text">${dfr(p.debut)} → ${dfr(p.fin)}</div>${grille(
