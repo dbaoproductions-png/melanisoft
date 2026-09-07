@@ -1,4 +1,4 @@
-const BUDGETSOFT_READ_CONTEXT_VERSION='2026-09-05.2';
+const BUDGETSOFT_READ_CONTEXT_VERSION='2026-09-07.1';
 var BUDGETSOFT_READ_CONTEXT_ACTIVE_=null;
 var BUDGETSOFT_READ_CONTEXT_LAST_STATS_=null;
 
@@ -10,6 +10,10 @@ var BUDGETSOFT_READ_CONTEXT_LAST_STATS_=null;
  * Depuis 2026-09-03, le contexte couvre aussi les lecteurs dynamiques utilisés
  * par Plan/Cerbère. Depuis 2026-09-05, le cockpit Cerbère peut réutiliser sans
  * clone quelques sources garanties en lecture seule pendant cette exécution.
+ *
+ * Depuis 2026-09-07, la représentation JSON de chaque source est sérialisée une
+ * seule fois. Les consommateurs isolés reçoivent toujours un clone JSON, mais on
+ * évite les JSON.stringify répétés sur les grosses tables (notamment Operations).
  */
 function avecContexteLectureBudgetSoft20260827_(label, fn) {
   if (typeof fn !== 'function') throw new Error('Fonction de lecture manquante.');
@@ -22,6 +26,7 @@ function avecContexteLectureBudgetSoft20260827_(label, fn) {
   const originalRapproCf = typeof lireRapprochementsChargesFixes === 'function' ? lireRapprochementsChargesFixes : null;
   const debut = Date.now(),libelle=String(label||'lecture');
   const memo = Object.create(null);
+  const memoJson = Object.create(null);
   const directCerbere=/^cerbere-cockpit/.test(libelle);
   const clesDirectesCerbere=new Set([
     'TABLE:Operations','TABLE:Charges_fixes','TABLE:Categories','TABLE:Comptes',
@@ -37,27 +42,44 @@ function avecContexteLectureBudgetSoft20260827_(label, fn) {
     lecturesFeuille:0,
     reutilisations:0,
     reutilisationsDirectes:0,
+    serialisationsJson:0,
+    clonesParParse:0,
     parTable:{},
     dureeMs:0
   };
 
-  function clone_(value){if(value==null)return value;return JSON.parse(JSON.stringify(value));}
   function assurerStats_(cle){if(!stats.parTable[cle])stats.parTable[cle]={appels:0,lecturesFeuille:0,reutilisations:0,reutilisationsDirectes:0,dureeLectureMs:0,lignes:0};return stats.parTable[cle];}
+  function cloneDepuisMemo_(cle){
+    const v=memo[cle];
+    if(v==null)return v;
+    const json=memoJson[cle];
+    if(json==null)return v;
+    stats.clonesParParse++;
+    return JSON.parse(json);
+  }
+  function initialiserMemo_(cle,valeur){
+    if(valeur==null){memo[cle]=valeur;memoJson[cle]=null;return valeur;}
+    const json=JSON.stringify(valeur);
+    stats.serialisationsJson++;
+    memoJson[cle]=json;
+    memo[cle]=JSON.parse(json);
+    return memo[cle];
+  }
   function lireMemo_(cle, lecteur){
     stats.appels++;const s=assurerStats_(cle);s.appels++;
     if(Object.prototype.hasOwnProperty.call(memo,cle)){
       stats.reutilisations++;s.reutilisations++;
       if(directCerbere&&clesDirectesCerbere.has(cle)){stats.reutilisationsDirectes++;s.reutilisationsDirectes++;return memo[cle];}
-      return clone_(memo[cle]);
+      return cloneDepuisMemo_(cle);
     }
     const t=Date.now(), valeur=lecteur(), dt=Date.now()-t;
-    memo[cle]=clone_(valeur);
+    initialiserMemo_(cle,valeur);
     stats.lecturesFeuille++;s.lecturesFeuille++;s.dureeLectureMs+=dt;
     s.lignes=Array.isArray(valeur)?valeur.length:(valeur&&Array.isArray(valeur.lignes)?valeur.lignes.length:0);
-    return directCerbere&&clesDirectesCerbere.has(cle)?memo[cle]:clone_(memo[cle]);
+    return directCerbere&&clesDirectesCerbere.has(cle)?memo[cle]:cloneDepuisMemo_(cle);
   }
 
-  BUDGETSOFT_READ_CONTEXT_ACTIVE_={label:stats.label,memo:memo,stats:stats,directCerbere:directCerbere};
+  BUDGETSOFT_READ_CONTEXT_ACTIVE_={label:stats.label,memo:memo,memoJson:memoJson,stats:stats,directCerbere:directCerbere};
   lireTable_=function(nom){const cle=String(nom||'');return lireMemo_('TABLE:'+cle,function(){return originalLireTable(cle);});};
   if(originalPlanDyn)lireFeuilleDynamiquePlan_=function(nom){const cle=String(nom||'');return lireMemo_('PLAN_DYN:'+cle,function(){return originalPlanDyn(cle);});};
   if(originalPlanTable)lireTablePlanCerbere_=function(nom){const cle=String(nom||'');return lireMemo_('PLAN_TABLE:'+cle,function(){return originalPlanTable(cle);});};
