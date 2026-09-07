@@ -1,4 +1,4 @@
-const BUDGETSOFT_DASHBOARD_SYNTHESE_VERSION='2026-09-07.1';
+const BUDGETSOFT_DASHBOARD_SYNTHESE_VERSION='2026-09-07.2';
 
 function arrDashboardSynthese20260907_(n){return Math.round(Number(n||0)*100)/100;}
 function dateDashboardSynthese20260907_(v){const d=v instanceof Date?new Date(v):new Date(v||0);if(isNaN(d))return null;d.setHours(0,0,0,0);return d;}
@@ -8,6 +8,7 @@ function milieuDashboardSynthese20260907_(a,b){const d=dateDashboardSynthese2026
 function libelleCycleDashboardSynthese20260907_(fin){return fin?fin.toLocaleDateString('fr-FR',{month:'long',year:'numeric'}).replace(/^./,c=>c.toUpperCase()):'';}
 function signeDashboardSynthese20260907_(o){if(typeof montantSigneCanoniqueBudgetSoft20260906_==='function')return Number(montantSigneCanoniqueBudgetSoft20260906_(o)||0);const n=Number(o&&o.montant||0),t=String(o&&o.type||'').toLowerCase();if(Number.isFinite(n)&&n!==0)return n;if(t==='depense'||t==='tresorerie_sortie')return-Math.abs(n);return Math.abs(n);}
 function estCarteDashboardSynthese20260907_(o){return !!String(o&&o.carte_fin||'').trim()||/\b(?:paiement\s+)?cb\b/i.test(String(o&&o.libelle_bancaire||o&&o.libelle||''));}
+function nombreFiniDashboardSynthese20260907_(v){const n=Number(v);return Number.isFinite(n)?n:null;}
 
 function cyclesDashboardSynthese20260907_(cerbere,reference){
   const p=cerbere&&Array.isArray(cerbere.periodes)&&cerbere.periodes[0],pp=p&&(p.periode||p);
@@ -32,8 +33,8 @@ function composerDashboardSyntheseBudgetSoft20260907_(ctx){
   const lignesProj=Array.isArray(proj.lignes)?proj.lignes:[];
   function projEntre(a,b){const x=dateDashboardSynthese20260907_(a),y=dateDashboardSynthese20260907_(b);let net=0,rev=0,dep=0;const lignes=[];lignesProj.forEach(l=>{const d=dateDashboardSynthese20260907_(l&&l.date);if(!d||d<x||d>y)return;const m=Number(l.montantSigne||0);if(!Number.isFinite(m))return;net+=m;if(m>0)rev+=m;else dep+=Math.abs(m);lignes.push(l);});return{net:arrDashboardSynthese20260907_(net),revenus:arrDashboardSynthese20260907_(rev),depenses:arrDashboardSynthese20260907_(dep),lignes};}
   function soldeProjection(cible){const d=dateDashboardSynthese20260907_(cible);if(d<=reference)return soldeHistorique(d);const lendemain=new Date(reference);lendemain.setDate(lendemain.getDate()+1);return arrDashboardSynthese20260907_(Number(tres.soldeReel||0)+projEntre(lendemain,d).net);}
-  const stCourant=stats(cc.debut,cc.fin,reference),stPrec=stats(cp.debut,cp.fin,cp.fin),milieuCourant=milieuDashboardSynthese20260907_(cc.debut,cc.fin),milieuSuiv=milieuDashboardSynthese20260907_(cs.debut,cs.fin),milieuPrec=milieuDashboardSynthese20260907_(cp.debut,cp.fin);
-  const demain=new Date(reference);demain.setDate(demain.getDate()+1);const futurCourant=projEntre(demain,cc.fin),futurSuiv=projEntre(cs.debut,cs.fin);
+  const stCourant=stats(cc.debut,cc.fin,reference),stPrec=stats(cp.debut,cp.fin,cp.fin),milieuCourant=milieuDashboardSynthese20260907_(cc.debut,cc.fin),milieuPrec=milieuDashboardSynthese20260907_(cp.debut,cp.fin);
+  const demain=new Date(reference);demain.setDate(demain.getDate()+1);const futurCourant=projEntre(demain,cc.fin);
   const prelevements=opValides.filter(o=>{const d=dateOp(o),s=signeDashboardSynthese20260907_(o);return d>reference&&d<=cc.fin&&s<0&&!estCarteDashboardSynthese20260907_(o);});
   const chargesRestantes=futurCourant.lignes.filter(l=>String(l.source||'')==='charge_fixe');
   const sommeAbs=xs=>arrDashboardSynthese20260907_(xs.reduce((s,x)=>s+Math.abs(Number(x.montantSigne!=null?x.montantSigne:x.montant||0)),0));
@@ -43,9 +44,21 @@ function composerDashboardSyntheseBudgetSoft20260907_(ctx){
   const cbCourant=Number.isFinite(cb)?arrDashboardSynthese20260907_(cb):0;
   const joursRestants=Math.max(0,ecartJoursDashboardSynthese20260907_(reference,cc.fin)),duree=Math.max(1,ecartJoursDashboardSynthese20260907_(cc.debut,cc.fin));
   const courant={libelle:libelleCycleDashboardSynthese20260907_(cc.fin),debut:isoDashboardSynthese20260907_(cc.debut),fin:isoDashboardSynthese20260907_(cc.fin),dateReference:isoDashboardSynthese20260907_(reference),joursRestants,duree,progression:joursRestants+'/'+duree,soldeBancaire:Number(tres.soldeReel||0),soldeMiCycle:soldeProjection(milieuCourant),soldeFinCycle:soldeProjection(cc.fin),revenusConstates:stCourant.revenus,revenusAttendus:arrDashboardSynthese20260907_(stCourant.revenus+futurCourant.revenus),depensesConstatees:stCourant.depenses,depensesAttendues:arrDashboardSynthese20260907_(stCourant.depenses+futurCourant.depenses),cbDifferees:cbCourant,nombreCb:null,prelevements:sommeAbs(prelevements),nombrePrelevements:prelevements.length,chargesFixes:sommeAbs(chargesRestantes),nombreCharges:chargesRestantes.length,pilotableDisponible:pilotableCourant,pilotableParJour:pilotableCourant==null?null:arrDashboardSynthese20260907_(joursRestants?pilotableCourant/joursRestants:pilotableCourant),resultat:stCourant.resultat};
-  const suivant={libelle:libelleCycleDashboardSynthese20260907_(cs.fin),debut:isoDashboardSynthese20260907_(cs.debut),fin:isoDashboardSynthese20260907_(cs.fin),soldeJ1:soldeProjection(cs.debut),soldeMiCycle:soldeProjection(milieuSuiv),soldeFinCycle:soldeProjection(cs.fin),revenusPrevisionnels:futurSuiv.revenus,depensesPrevisionnelles:futurSuiv.depenses,cbDifferees:Number(exp&&exp.contexte&&exp.contexte.cbDejaEngageeM1||0),pilotablePrevisionnel:pilotableSuiv};
-  const precedent={libelle:libelleCycleDashboardSynthese20260907_(cp.fin),debut:isoDashboardSynthese20260907_(cp.debut),fin:isoDashboardSynthese20260907_(cp.fin),operations:stPrec.operations,soldeJ1:soldeHistorique(cp.debut),soldeMiCycle:soldeHistorique(milieuPrec),soldeFinCycle:soldeHistorique(cp.fin),revenus:stPrec.revenus,depenses:stPrec.depenses,cbDifferees:null,pilotableInitial:null};
-  return{ok:true,version:BUDGETSOFT_DASHBOARD_SYNTHESE_VERSION,versionCorrection:'3.0',sourceBudgetSoft:'composition_snapshot',doctrine:'Dashboard de synthèse : aucune vérité métier recalculée quand un propriétaire BudgetSoft/Cerbère existe.',courtTerme:courant,cycleSuivant:suivant,cyclePrecedent:precedent,provenance:{solde:'tresorerieComptable',previsions:'projectionEtendue',pilotable:'cerbereExpress',cbDifferees:'cerbereExpress',historique:'Operations canoniques + solde canonique'}};
+
+  // Cycle suivant : seules les valeurs possédées par Cerbère/Cerbère Express sont publiées.
+  // L'ancienne projection étendue ne doit pas produire de faux soldes futurs en l'absence
+  // d'un propriétaire de trésorerie couvrant correctement les revenus réguliers du cycle.
+  const pSuiv=cer&&Array.isArray(cer.periodes)?(cer.periodes[1]||null):null,vSuiv=pSuiv&&(pSuiv.v37||{}),cockpitSuiv=vSuiv&&(vSuiv.cockpit20260902||{});
+  const recettesSuiv=nombreFiniDashboardSynthese20260907_(vSuiv&&vSuiv.rt1);
+  const cfSuiv=nombreFiniDashboardSynthese20260907_(vSuiv&&vSuiv.cft1);
+  const hetSuiv=nombreFiniDashboardSynthese20260907_(cockpitSuiv&&cockpitSuiv.het1!=null?cockpitSuiv.het1:(vSuiv&&vSuiv.het1));
+  const cbSuiv=nombreFiniDashboardSynthese20260907_(exp&&exp.contexte&&exp.contexte.cbDejaEngageeM1);
+  let depensesSuiv=null;
+  if(cfSuiv!=null&&hetSuiv!=null&&cbSuiv!=null&&pilotableSuiv!=null)depensesSuiv=arrDashboardSynthese20260907_(cfSuiv+hetSuiv+cbSuiv+pilotableSuiv);
+  const suivant={libelle:libelleCycleDashboardSynthese20260907_(cs.fin),debut:isoDashboardSynthese20260907_(cs.debut),fin:isoDashboardSynthese20260907_(cs.fin),soldeJ1:null,soldeMiCycle:null,soldeFinCycle:null,revenusPrevisionnels:recettesSuiv==null?null:arrDashboardSynthese20260907_(recettesSuiv),depensesPrevisionnelles:depensesSuiv,cbDifferees:cbSuiv==null?0:arrDashboardSynthese20260907_(cbSuiv),pilotablePrevisionnel:pilotableSuiv,projectionTresorerieDisponible:false,detailPrevision:{chargesFixes:cfSuiv,horsPilotable:hetSuiv,reportCb:cbSuiv,pilotable:pilotableSuiv}};
+
+  const precedent={libelle:libelleCycleDashboardSynthese20260907_(cp.fin),debut:isoDashboardSynthese20260907_(cp.debut),fin:isoDashboardSynthese20260907_(cp.fin),operations:stPrec.operations,soldeJ1:soldeHistorique(cp.debut),soldeMiCycle:soldeHistorique(milieuPrec),soldeFinCycle:soldeHistorique(cp.fin),revenus:stPrec.revenus,depenses:stPrec.depenses,netOperations:stPrec.net,ecartReconciliation:arrDashboardSynthese20260907_(soldeHistorique(cp.fin)-soldeHistorique(cp.debut)-stPrec.net),cbDifferees:null,pilotableInitial:null};
+  return{ok:true,version:BUDGETSOFT_DASHBOARD_SYNTHESE_VERSION,versionCorrection:'3.1',sourceBudgetSoft:'composition_snapshot',doctrine:'Dashboard de synthèse : aucune vérité métier recalculée quand un propriétaire BudgetSoft/Cerbère existe ; une projection indisponible est affichée comme telle plutôt qu’inventée.',courtTerme:courant,cycleSuivant:suivant,cyclePrecedent:precedent,provenance:{solde:'tresorerieComptable',previsionsCourant:'projectionEtendue',previsionsCycleSuivant:'Cerbère/Cerbère Express uniquement ; soldes masqués tant que la trésorerie future complète n’a pas de propriétaire fiable',pilotable:'cerbereExpress',cbDifferees:'cerbereExpress',historique:'Operations canoniques + solde canonique'}};
 }
 
 function chargerDashboardSyntheseBudgetSoft20260907(){
@@ -55,3 +68,9 @@ function chargerDashboardSyntheseBudgetSoft20260907(){
 }
 
 function auditerDashboardSyntheseBudgetSoft20260907(){const t=Date.now(),d=chargerDashboardSyntheseBudgetSoft20260907(),r={ok:!!(d&&d.ok!==false),version:d&&d.version||'',source:d&&d.source||d&&d.sourceBudgetSoft||'',revisionBudgetSoft:d&&d.revisionBudgetSoft||'',dureeMs:Date.now()-t,solde:d&&d.courtTerme&&d.courtTerme.soldeBancaire,pilotable:d&&d.courtTerme&&d.courtTerme.pilotableDisponible,progression:d&&d.courtTerme&&d.courtTerme.progression};console.log(JSON.stringify(r));return r;}
+
+function auditerCycleSuivantEtHistoriqueDashboardBudgetSoft20260907(){
+  const d=chargerDashboardSyntheseBudgetSoft20260907(),s=d&&d.cycleSuivant||{},p=d&&d.cyclePrecedent||{};
+  const r={ok:!!(d&&d.ok!==false),version:d&&d.version||'',versionCorrection:d&&d.versionCorrection||'',cycleSuivant:{revenusPrevisionnels:s.revenusPrevisionnels,depensesPrevisionnelles:s.depensesPrevisionnelles,cbDifferees:s.cbDifferees,pilotablePrevisionnel:s.pilotablePrevisionnel,soldeJ1:s.soldeJ1,soldeMiCycle:s.soldeMiCycle,soldeFinCycle:s.soldeFinCycle,detailPrevision:s.detailPrevision||null},cyclePrecedent:{soldeJ1:p.soldeJ1,soldeFinCycle:p.soldeFinCycle,revenusBudgetaires:p.revenus,depensesBudgetaires:p.depenses,netOperations:p.netOperations,ecartReconciliation:p.ecartReconciliation}};
+  console.log('[AUDIT Dashboard cycles] '+JSON.stringify(r));return r;
+}
