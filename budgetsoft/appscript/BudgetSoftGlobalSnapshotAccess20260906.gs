@@ -1,14 +1,16 @@
-const BUDGETSOFT_GLOBAL_ACCESS_VERSION='2026-09-06.1';
+const BUDGETSOFT_GLOBAL_ACCESS_VERSION='2026-09-07.2';
 
 /**
  * Lecture commune du dernier snapshot global publié.
- * Pendant une reconstruction globale, on retourne volontairement null afin que
+ * Pendant TOUTE reconstruction globale, on retourne volontairement null afin que
  * les moteurs propriétaires recalculent depuis les sources de la révision en cours.
+ * Aucun constructeur global ne doit pouvoir consommer la révision précédente.
  */
 function lireEtatGlobalBudgetSoftSiDisponible20260906_(){
   try{
     const ctx=typeof BUDGETSOFT_READ_CONTEXT_ACTIVE_!=='undefined'?BUDGETSOFT_READ_CONTEXT_ACTIVE_:null;
-    if(ctx&&String(ctx.label||'')==='budgetsoft-global-snapshot')return null;
+    const label=ctx&&String(ctx.label||'')||'';
+    if(/^budgetsoft-global-snapshot(?:$|-)/.test(label))return null;
     if(typeof chargerSnapshotGlobalBudgetSoft20260906!=='function')return null;
     const s=chargerSnapshotGlobalBudgetSoft20260906();
     const e=s&&s.disponible&&s.etat;
