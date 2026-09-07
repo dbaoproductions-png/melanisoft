@@ -9,7 +9,7 @@
   function ratio(a,b){return `${fmt(a)} / ${fmt(b)}`;}
   function render(d){
     const c=d&&d.courtTerme||{},s=d&&d.cycleSuivant||{},p=d&&d.cyclePrecedent||{},a=document.getElementById('dash-current'),b=document.getElementById('dash-forecast'),z=document.getElementById('dash-previous');
-    if(a)a.innerHTML=`<div class="panel-heading"><div><span class="panel-kicker">Priorité</span><h2>Chiffres clés de ${ech((c.libelle||'').replace(/\s+\d{4}$/,''))}</h2></div><span class="badge" style="font-size:20px;font-weight:800;padding:8px 13px">${ech(c.progression||'—')} jours</span></div><div class="helper-text">${ech(c.libelle||'Cycle')} · ${dfr(c.debut)} → ${dfr(c.fin)} · données au ${dfr(c.dateReference)}</div>${grille(
+    if(a)a.innerHTML=`<div class="panel-heading"><div><span class="panel-kicker">Priorité</span><h2>Chiffres clés de ${ech((c.libelle||'').replace(/\s+\d{4}$/,''))}</h2></div><span class="badge" style="font-size:20px;font-weight:800;padding:8px 13px">${ech(c.joursRestants==null?'—':c.joursRestants+' jours restants')}</span></div><div class="helper-text">${ech(c.libelle||'Cycle')} · ${dfr(c.debut)} → ${dfr(c.fin)} · données au ${dfr(c.dateReference)}</div>${grille(
       carte('Solde bancaire réel',fmt(c.soldeBancaire),'Valeur comptable canonique')+
       carte('Solde prévisionnel à mi-cycle',fmt(c.soldeMiCycle),'Projection au milieu du cycle')+
       carte('Solde prévisionnel au dernier jour',fmt(c.soldeFinCycle),'Projection au '+dfr(c.fin))+
@@ -20,20 +20,21 @@
       carte('Charges fixes restantes',fmt(c.chargesFixes),(c.nombreCharges||0)+' charge(s)')+
       carte('Pilotable encore disponible',fmt(c.pilotableDisponible),'Source Cerbère Express',true)+
       carte('Pilotable disponible par jour',fmt(c.pilotableParJour),c.joursRestants?'Sur '+c.joursRestants+' jour(s)':'Fin du cycle',true),5)}${grille(carte('Résultat constaté du cycle',fmt(c.resultat),'Recettes - dépenses bancaires réelles'),1)}`;
-    if(b)b.innerHTML=`<div class="panel-heading"><div><span class="panel-kicker">Anticipation</span><h2>Cycle suivant · ${ech(s.libelle||'')}</h2></div><span class="badge">Prévision</span></div><div class="helper-text">${dfr(s.debut)} → ${dfr(s.fin)}</div>${grille(
-      carte('Solde prévisionnel à J1',fmt(s.soldeJ1),'Premier jour du cycle')+
-      carte('Solde prévisionnel à mi-cycle',fmt(s.soldeMiCycle),'Milieu du cycle')+
-      carte('Solde prévisionnel au dernier jour',fmt(s.soldeFinCycle),'Fin du cycle')+
-      carte('Recettes prévisionnelles',fmt(s.revenusPrevisionnels),'Projection connue')+
-      carte('Dépenses prévisionnelles',fmt(s.depensesPrevisionnelles),'Projection connue')+
-      carte('CB différées engagées',fmt(s.cbDifferees),'Déjà engagées pour ce cycle')+
+    const noteSoldeSuiv=s.projectionTresorerieDisponible===false?'Non publié tant que la trésorerie future complète n’est pas fiable':'Projection de trésorerie';
+    if(b)b.innerHTML=`<div class="panel-heading"><div><span class="panel-kicker">Anticipation</span><h2>Cycle suivant · ${ech(s.libelle||'')}</h2></div><span class="badge">Prévision</span></div><div class="helper-text">${dfr(s.debut)} → ${dfr(s.fin)} · les valeurs sans propriétaire métier fiable restent volontairement à —</div>${grille(
+      carte('Solde prévisionnel à J1',fmt(s.soldeJ1),noteSoldeSuiv)+
+      carte('Solde prévisionnel à mi-cycle',fmt(s.soldeMiCycle),noteSoldeSuiv)+
+      carte('Solde prévisionnel au dernier jour',fmt(s.soldeFinCycle),noteSoldeSuiv)+
+      carte('Recettes prévisionnelles',fmt(s.revenusPrevisionnels),'Source Cerbère')+
+      carte('Dépenses prévisionnelles',fmt(s.depensesPrevisionnelles),'Charges fixes + hors-pilotable + CB + pilotable')+
+      carte('CB différées engagées',fmt(s.cbDifferees),'Source Cerbère Express')+
       carte('Pilotable prévisionnel',fmt(s.pilotablePrevisionnel),'Source Cerbère Express',true),4)}`;
     if(z)z.innerHTML=`<div class="panel-heading"><div><span class="panel-kicker">Repère</span><h2>Cycle précédent · ${ech(p.libelle||'')}</h2></div><span class="badge">${p.operations||0} opération(s)</span></div><div class="helper-text">${dfr(p.debut)} → ${dfr(p.fin)}</div>${grille(
       carte('Solde à J1',fmt(p.soldeJ1),'Premier jour du cycle')+
       carte('Solde à mi-cycle',fmt(p.soldeMiCycle),'Milieu du cycle')+
       carte('Solde au dernier jour',fmt(p.soldeFinCycle),'Fin du cycle')+
-      carte('Recettes',fmt(p.revenus),'Constaté')+
-      carte('Dépenses',fmt(p.depenses),'Constaté')+
+      carte('Recettes budgétaires',fmt(p.revenus),'Opérations de type revenu')+
+      carte('Dépenses budgétaires',fmt(p.depenses),'Opérations de type dépense')+
       carte('CB différées engagées',fmt(p.cbDifferees),p.cbDifferees==null?'Historique non encore publié':'Constaté')+
       carte('Pilotable initial du cycle',fmt(p.pilotableInitial),p.pilotableInitial==null?'Historique non encore publié':'Source Cerbère'),4)}`;
   }
