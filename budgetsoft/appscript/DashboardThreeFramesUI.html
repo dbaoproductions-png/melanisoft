@@ -26,11 +26,11 @@
       carte('Solde prévisionnel à mi-cycle',fmt(s.soldeMiCycle),noteSoldeSuiv)+
       carte('Solde prévisionnel au dernier jour',fmt(s.soldeFinCycle),noteSoldeSuiv)+
       carte('Recettes prévisionnelles',fmt(s.revenusPrevisionnels),'Source Cerbère')+
-      carte('Dépenses prévisionnelles',fmt(s.depensesPrevisionnelles),'Charges fixes + hors-pilotable + CB + pilotable')+
+      carte('Dépenses budgétées',fmt(s.depensesBudgetees!=null?s.depensesBudgetees:s.depensesPrevisionnelles),'Charges fixes + hors-pilotable + CB + pilotable ; enveloppe, pas débit bancaire prévu')+
       carte('CB différées engagées',fmt(s.cbDifferees),'Source Cerbère Express')+
       carte('Pilotable prévisionnel',fmt(s.pilotablePrevisionnel),'Source Cerbère Express',true),4)}`;
     if(z)z.innerHTML=`<div class="panel-heading"><div><span class="panel-kicker">Repère</span><h2>Cycle précédent · ${ech(p.libelle||'')}</h2></div><span class="badge">${p.operations||0} opération(s)</span></div><div class="helper-text">${dfr(p.debut)} → ${dfr(p.fin)}</div>${grille(
-      carte('Solde à J1',fmt(p.soldeJ1),'Premier jour du cycle')+
+      carte('Solde à J1',fmt(p.soldeJ1),'Solde d’ouverture, avant les mouvements du premier jour')+
       carte('Solde à mi-cycle',fmt(p.soldeMiCycle),'Milieu du cycle')+
       carte('Solde au dernier jour',fmt(p.soldeFinCycle),'Fin du cycle')+
       carte('Recettes budgétaires',fmt(p.revenus),'Opérations de type revenu')+
