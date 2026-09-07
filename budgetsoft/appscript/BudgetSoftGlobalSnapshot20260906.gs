@@ -1,4 +1,4 @@
-const BUDGETSOFT_GLOBAL_SNAPSHOT_VERSION='2026-09-06.3';
+const BUDGETSOFT_GLOBAL_SNAPSHOT_VERSION='2026-09-07.1';
 const BUDGETSOFT_GLOBAL_SNAPSHOT_PREFIX='BUDGETSOFT_GLOBAL_SNAPSHOT_';
 const BUDGETSOFT_GLOBAL_SNAPSHOT_CHUNK=7000;
 const BUDGETSOFT_HISTORY_SHEET='BudgetSoft_History';
@@ -34,7 +34,7 @@ function reconstruireSnapshotGlobalBudgetSoft20260906(origine){
         return typeof construireSyntheseComptes20260828_==='function'?construireSyntheseComptes20260828_():chargerSyntheseComptes20260828();
       });
       const credits=prendre('credits',()=>typeof chargerCreditsEtDettesV2==='function'?chargerCreditsEtDettesV2():null);
-      const dashboard=prendre('dashboard',()=>typeof chargerDashboardReel==='function'?chargerDashboardReel():null);
+      const dashboard=prendre('dashboard',()=>typeof chargerDashboardReelV2==='function'?chargerDashboardReelV2():(typeof chargerDashboardReel==='function'?chargerDashboardReel():null));
       const patrimoine=prendre('patrimoine',()=>typeof composerPatrimoineCanoniqueBudgetSoft20260906_==='function'?composerPatrimoineCanoniqueBudgetSoft20260906_(sources,comptes,credits):chargerPatrimoine());
 
       // Trésorerie canonique = math comptable pure. Elle seule fait autorité pour
@@ -52,8 +52,6 @@ function reconstruireSnapshotGlobalBudgetSoft20260906(origine){
       const transversales=typeof construireTransversalesBudgetSoft20260906_==='function'
         ?construireTransversalesBudgetSoft20260906_(Object.assign({sources:sources},modules))
         :{};
-      // Garantit que le bloc transversal publie exactement la même trésorerie que
-      // le module canonique de cette révision, sans second calcul concurrent.
       if(tresorerieComptable&&transversales&&transversales.tresorerie){
         transversales.tresorerie={
           version:tresorerieComptable.version||'',
@@ -129,6 +127,7 @@ function ecrireSnapshotGlobalBudgetSoft20260906_(etat){
 function empreinteRevisionGlobaleBudgetSoft20260906_(genereLe,modules){
   const brut=JSON.stringify({version:BUDGETSOFT_GLOBAL_SNAPSHOT_VERSION,doctrine:'2026-09-06',genereLe,versions:{
     comptes:modules&&modules.comptes&&modules.comptes.version||'',credits:modules&&modules.credits&&modules.credits.version||'',
+    dashboard:modules&&modules.dashboard&&modules.dashboard.versionCorrection||'',
     tresorerie:modules&&modules.tresorerieComptable&&modules.tresorerieComptable.version||'',projection:modules&&modules.projectionEtendue&&modules.projectionEtendue.version||'',
     cerbere:modules&&modules.cerbere&&modules.cerbere.version||'',cerbereExpress:modules&&modules.cerbereExpress&&modules.cerbereExpress.version||''
   }});
@@ -172,6 +171,7 @@ function initialiserArchitectureSnapshotBudgetSoft20260906(){const installation=
 function auditerSnapshotGlobalBudgetSoft20260906(){
   const s=chargerSnapshotGlobalBudgetSoft20260906();if(!s.disponible)return s;const e=s.etat,m=e.modules||{};
   return{ok:e.ok,version:e.version,revisionBudgetSoft:e.revisionBudgetSoft,genereLe:e.genereLe,coherence:e.coherence,transversales:e.transversales,erreurs:e.erreurs||[],clesModules:Object.keys(m),
+    dashboard:m.dashboard?{versionCorrection:m.dashboard.versionCorrection||'',sourceBudgetSoft:m.dashboard.sourceBudgetSoft||'',soldeBancaire:m.dashboard.courtTerme&&m.dashboard.courtTerme.soldeBancaire,revenusConstates:m.dashboard.courtTerme&&m.dashboard.courtTerme.revenusConstates,depensesConstatees:m.dashboard.courtTerme&&m.dashboard.courtTerme.depensesConstatees}:null,
     credits:m.credits?{capitalCredits:m.credits.capitalCredits,capitalRenouvelable:m.credits.capitalRenouvelable,amortissables:(m.credits.amortissables||[]).length,renouvelables:(m.credits.renouvelables||[]).length}:null,
     tresorerieComptable:m.tresorerieComptable?{soldeReel:m.tresorerieComptable.soldeReel,variationComptableCertaine:m.tresorerieComptable.variationComptableCertaine,soldePrevisionnel:m.tresorerieComptable.soldePrevisionnel,dateCible:m.tresorerieComptable.dateCible,nombreOperationsFutures:m.tresorerieComptable.nombreOperationsFutures}:null,
     projectionEtendue:m.projectionEtendue?{soldeReel:m.projectionEtendue.soldeReel,soldePrevisionnel:m.projectionEtendue.soldePrevisionnel,dateCible:m.projectionEtendue.dateCible}:null,
