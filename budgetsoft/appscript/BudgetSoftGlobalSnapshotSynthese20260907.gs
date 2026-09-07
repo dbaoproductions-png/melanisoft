@@ -1,4 +1,4 @@
-const BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION='2026-09-07.1';
+const BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION='2026-09-07.2';
 
 function reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(origine){
   verifierInitialisation_();
@@ -9,8 +9,16 @@ function reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(origine){
     const construire=function(){
       const genereLe=new Date().toISOString(),modules={},erreurs=[];
       function prendre(nom,fn){const t=Date.now();try{const v=fn();modules[nom]=v;perf[nom]=Date.now()-t;return v;}catch(e){perf[nom]=Date.now()-t;const x={module:nom,erreur:String(e&&e.message||e)};erreurs.push(x);modules[nom]={ok:false,erreur:x.erreur};return modules[nom];}}
-      const sources=prendre('sources',()=>chargerToutesLesDonnees());
-      modules.sourceMeta={version:sources&&sources.meta&&sources.meta.version||'',tables:{}};Object.keys(sources||{}).forEach(k=>{if(Array.isArray(sources[k]))modules.sourceMeta.tables[k]=sources[k].length;});
+
+      // Les sources brutes servent uniquement pendant la construction. Elles ne doivent
+      // jamais être stockées dans modules, sinon le snapshot réembarque notamment les
+      // milliers d'Operations et peut dépasser le quota de DocumentProperties.
+      const tSources=Date.now();let sources;
+      try{sources=chargerToutesLesDonnees();perf.sources=Date.now()-tSources;}
+      catch(e){perf.sources=Date.now()-tSources;const x={module:'sources',erreur:String(e&&e.message||e)};erreurs.push(x);sources={};}
+      modules.sourceMeta={version:sources&&sources.meta&&sources.meta.version||'',tables:{}};
+      Object.keys(sources||{}).forEach(k=>{if(Array.isArray(sources[k]))modules.sourceMeta.tables[k]=sources[k].length;});
+
       const comptes=prendre('comptes',()=>{if(typeof rafraichirSnapshotComptes20260828==='function'){const r=rafraichirSnapshotComptes20260828();return r&&r.vue?r.vue:r;}return typeof construireSyntheseComptes20260828_==='function'?construireSyntheseComptes20260828_():chargerSyntheseComptes20260828();});
       const credits=prendre('credits',()=>typeof chargerCreditsEtDettesV2==='function'?chargerCreditsEtDettesV2():null);
       const patrimoine=prendre('patrimoine',()=>typeof composerPatrimoineCanoniqueBudgetSoft20260906_==='function'?composerPatrimoineCanoniqueBudgetSoft20260906_(sources,comptes,credits):chargerPatrimoine());
@@ -29,8 +37,8 @@ function reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(origine){
     if(!etat||!etat.revisionBudgetSoft)throw new Error('Etat global BudgetSoft synthèse invalide.');
     if(etat.ok!==true){etat.publie=false;etat.message='Nouvelle révision synthèse non publiée : ancienne révision conservée.';console.log('[SNAPSHOT Synthese] '+JSON.stringify({ok:false,dureeMs:Date.now()-t0,performance:perf,erreurs:etat.erreurs,coherence:etat.coherence}));return etat;}
     etat.publie=true;ecrireSnapshotGlobalBudgetSoft20260906_(etat);archiverEtatBudgetSoftSiNecessaire20260906_(etat,String(origine||'manuel_synthese'));
-    const dash=etat.modules&&etat.modules.dashboard||{};console.log('[SNAPSHOT Synthese] '+JSON.stringify({ok:true,revisionBudgetSoft:etat.revisionBudgetSoft,dureeMs:Date.now()-t0,performance:perf,dashboardVersion:dash.version||''}));return etat;
+    const dash=etat.modules&&etat.modules.dashboard||{};console.log('[SNAPSHOT Synthese] '+JSON.stringify({ok:true,revisionBudgetSoft:etat.revisionBudgetSoft,dureeMs:Date.now()-t0,performance:perf,dashboardVersion:dash.version||'',sourceBruteStockee:!!(etat.modules&&etat.modules.sources)}));return etat;
   }finally{lock.releaseLock();}
 }
 function actualiserBudgetSoftSyntheseMaintenant20260907(){return reconstruireSnapshotGlobalSyntheseBudgetSoft20260907('manuel_force_synthese');}
-function auditerSnapshotDashboardSynthesePublie20260907(){const s=chargerSnapshotGlobalBudgetSoft20260906(),e=s&&s.disponible&&s.etat,m=e&&e.modules||{},d=m.dashboard||{};const r={ok:!!(e&&e.ok&&d.version===BUDGETSOFT_DASHBOARD_SYNTHESE_VERSION),revisionBudgetSoft:e&&e.revisionBudgetSoft||'',dashboardVersion:d.version||'',versionCorrection:d.versionCorrection||'',solde:d.courtTerme&&d.courtTerme.soldeBancaire,pilotable:d.courtTerme&&d.courtTerme.pilotableDisponible,progression:d.courtTerme&&d.courtTerme.progression,performance:e&&e.performance||null};console.log(JSON.stringify(r));return r;}
+function auditerSnapshotDashboardSynthesePublie20260907(){const s=chargerSnapshotGlobalBudgetSoft20260906(),e=s&&s.disponible&&s.etat,m=e&&e.modules||{},d=m.dashboard||{};const r={ok:!!(e&&e.ok&&d.version===BUDGETSOFT_DASHBOARD_SYNTHESE_VERSION&&!m.sources),revisionBudgetSoft:e&&e.revisionBudgetSoft||'',dashboardVersion:d.version||'',versionCorrection:d.versionCorrection||'',solde:d.courtTerme&&d.courtTerme.soldeBancaire,pilotable:d.courtTerme&&d.courtTerme.pilotableDisponible,progression:d.courtTerme&&d.courtTerme.progression,sourceBruteStockee:!!m.sources,performance:e&&e.performance||null};console.log(JSON.stringify(r));return r;}
