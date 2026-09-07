@@ -1,4 +1,4 @@
-const DASHBOARD_CORRECTIONS_19082026_VERSION = '2.3';
+const DASHBOARD_CORRECTIONS_19082026_VERSION = '2.4';
 
 function normaliserTexteCreditDashboard2026_(v) {try { return normaliserTexteBanque_(String(v || '')); }catch (e) { return String(v || '').toUpperCase(); }}
 function creditPourChargeDashboard2026_(charge, credits) {const t=normaliserTexteCreditDashboard2026_([charge.libelle||'',charge.libelle_bancaire||''].join(' '));const candidats=(credits||[]).filter(c=>{const tc=normaliserTexteCreditDashboard2026_([c.nom||'',c.numero_pret||''].join(' '));if(/ACCESSIO/.test(t))return/ACCESSIO/.test(tc);if(/CASDEN/.test(t))return/CASDEN/.test(tc);if(/CREATIS/.test(t))return/CREATIS/.test(tc);if(/FLOA|CDISCOUNT/.test(t))return/FLOA|CDISCOUNT/.test(tc);if(/ONEY|BANQUE ACCORD/.test(t))return/ONEY|CARTE B/.test(tc);if(/CARREFOUR|PASS/.test(t))return/CARREFOUR.*PASS/.test(tc);if(/COFIDIS/.test(t))return/COFIDIS/.test(tc)&&!/ACCESSIO/.test(tc);return false;});return candidats.length===1?candidats[0]:null;}
@@ -23,10 +23,37 @@ function statsEconomiquesDashboard2026_(debut,fin){
 }
 
 function chargerDashboardReelV2() {
+  try{
+    if(typeof chargerDashboardDepuisSnapshotGlobalBudgetSoft20260906==='function'){
+      const snap=chargerDashboardDepuisSnapshotGlobalBudgetSoft20260906();
+      if(snap&&snap.ok!==false&&snap.source==='snapshot_global'){
+        snap.sourceBudgetSoft='snapshot_global';
+        snap.versionCorrection=DASHBOARD_CORRECTIONS_19082026_VERSION;
+        return snap;
+      }
+    }
+  }catch(e){}
+
   const d=chargerDashboardReel();if(!d)return d;
   if(d.cycleSuivant){const salaire=salaireMoyenNetBancaire2026_(),projection=projectionChargesFixesCycle2026_(d.cycleSuivant.debut,d.cycleSuivant.fin),cb=Number(d.cycleSuivant.cbDifferees||0);d.cycleSuivant.salaireAttendu=salaire;d.cycleSuivant.chargesFixes=projection.total;d.cycleSuivant.nombreCharges=projection.nombre;d.cycleSuivant.detailFixes=projection.items;d.cycleSuivant.marge=salaire==null?null:Math.round((salaire-projection.total-cb)*100)/100;d.cycleSuivant.methodeProjection='Échéances connues dans le cycle 28 inclus -> 27 inclus ; reports et suspensions appliqués ; salaire net bancaire moyen sur 6 versements.';}
   if(d.courtTerme&&d.courtTerme.debut){const fin=d.courtTerme.dateReference||d.referenceImport||new Date();const s=statsEconomiquesDashboard2026_(d.courtTerme.debut,fin);d.courtTerme.revenusConstates=s.revenus;d.courtTerme.depensesConstatees=s.depenses;d.courtTerme.epargne=s.epargne;d.courtTerme.operations=s.operations;}
   if(d.cyclePrecedent&&d.cyclePrecedent.debut&&d.cyclePrecedent.fin){const s=statsEconomiquesDashboard2026_(d.cyclePrecedent.debut,d.cyclePrecedent.fin);d.cyclePrecedent.revenus=s.revenus;d.cyclePrecedent.depenses=s.depenses;d.cyclePrecedent.epargne=s.epargne;d.cyclePrecedent.operations=s.operations;}
-  d.versionCorrection=DASHBOARD_CORRECTIONS_19082026_VERSION;d.diagnosticEconomique={tresorerieExclueDesRevenusDepenses:true,soldeBancaireConserveTousFlux:true,typeOperation:'sens du flux',typeCategorie:'nature économique'};
+  d.versionCorrection=DASHBOARD_CORRECTIONS_19082026_VERSION;d.sourceBudgetSoft='recalcul_secours';d.diagnosticEconomique={tresorerieExclueDesRevenusDepenses:true,soldeBancaireConserveTousFlux:true,typeOperation:'sens du flux',typeCategorie:'nature économique'};
   return JSON.parse(JSON.stringify(d));
+}
+
+function auditerDashboardSnapshotFirstBudgetSoft20260907(){
+  const t0=Date.now(),d=chargerDashboardReelV2();
+  const s=typeof chargerSnapshotGlobalBudgetSoft20260906==='function'?chargerSnapshotGlobalBudgetSoft20260906():null;
+  const e=s&&s.disponible&&s.etat||{},t=e.transversales&&e.transversales.tresorerie||{};
+  const soldeDash=Number(d&&d.courtTerme&&d.courtTerme.soldeBancaire);
+  const soldeCanon=Number(t.soldeReel);
+  const source=d&&d.source||d&&d.sourceBudgetSoft||'';
+  const erreurs=[];
+  if(source!=='snapshot_global')erreurs.push({code:'SOURCE',attendu:'snapshot_global',obtenu:source});
+  if(!d||!d.revisionBudgetSoft)erreurs.push({code:'REVISION_ABSENTE'});
+  if(d&&d.revisionBudgetSoft&&e.revisionBudgetSoft&&d.revisionBudgetSoft!==e.revisionBudgetSoft)erreurs.push({code:'REVISION',dashboard:d.revisionBudgetSoft,snapshot:e.revisionBudgetSoft});
+  if(Number.isFinite(soldeDash)&&Number.isFinite(soldeCanon)&&Math.abs(soldeDash-soldeCanon)>0.005)erreurs.push({code:'SOLDE_REEL',dashboard:soldeDash,canonique:soldeCanon});
+  const r={ok:erreurs.length===0,version:DASHBOARD_CORRECTIONS_19082026_VERSION,source:source,revisionBudgetSoft:d&&d.revisionBudgetSoft||'',dureeMs:Date.now()-t0,soldeDashboard:Number.isFinite(soldeDash)?soldeDash:null,soldeCanonique:Number.isFinite(soldeCanon)?soldeCanon:null,versionCorrection:d&&d.versionCorrection||'',erreurs:erreurs};
+  console.log(JSON.stringify(r));return r;
 }
