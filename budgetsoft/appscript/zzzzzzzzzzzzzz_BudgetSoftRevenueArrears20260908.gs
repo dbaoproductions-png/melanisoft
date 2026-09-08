@@ -1,4 +1,4 @@
-const BUDGETSOFT_REVENUE_ARREARS_20260908_VERSION='2026-09-08.3';
+const BUDGETSOFT_REVENUE_ARREARS_20260908_VERSION='2026-09-08.4';
 
 /**
  * Une recette structurelle échue mais non encaissée reste due dans la trajectoire
@@ -13,10 +13,12 @@ function normaliserRapprochementRevenuBudgetSoft20260908_(s){
 function aliasesRevenuCanonBudgetSoft20260908_(categorie){
   const c=normaliserRapprochementRevenuBudgetSoft20260908_(categorie);
   const a=[c];
-  // France Travail peut encore apparaître dans les libellés bancaires historiques
-  // sous son ancien nom Pôle emploi.
   if(c==='france travail')a.push('pole emploi','poleemploi','france travail');
   return Array.from(new Set(a.filter(Boolean)));
+}
+
+function revenuCanonMontantVariableBudgetSoft20260908_(categorie){
+  return normaliserRapprochementRevenuBudgetSoft20260908_(categorie)==='france travail';
 }
 
 function montantSigneOperationRevenuBudgetSoft20260908_(o){
@@ -45,19 +47,24 @@ function revenuCanonMoisDejaEncaisseBudgetSoft20260908_(ops,reference,categorie,
   const cible=Math.abs(Number(montant||0));
   const aliases=aliasesRevenuCanonBudgetSoft20260908_(categorie);
   const catCanon=normaliserRapprochementRevenuBudgetSoft20260908_(categorie);
+  const montantVariable=revenuCanonMontantVariableBudgetSoft20260908_(categorie);
   return (ops||[]).some(o=>{
     const d=dateOpTresorerie_(o);if(!d||d<debut||d>reference)return false;
     const signe=montantSigneOperationRevenuBudgetSoft20260908_(o);
     if(!(signe>0))return false;
-    const m=Math.abs(signe);
-    if(Math.abs(m-cible)>Math.max(1,cible*.08))return false;
 
-    // Priorité : catégorie exacte normalisée. À défaut, recherche dans tous les
-    // libellés bancaires usuels, avec alias institutionnels (ex. Pôle emploi).
     const catOp=normaliserRapprochementRevenuBudgetSoft20260908_(o&&o.categorie||'');
-    if(catOp&&catOp===catCanon)return true;
     const texte=texteOperationRevenuBudgetSoft20260908_(o);
-    return aliases.some(a=>a&&texte.includes(a));
+    const identiteSource=(catOp&&catOp===catCanon)||aliases.some(a=>a&&texte.includes(a));
+    if(!identiteSource)return false;
+
+    // France Travail : le montant mensuel est intrinsèquement variable et peut
+    // s'écarter fortement du canon. L'identité du payeur + mois comptable suffit
+    // à constater que l'occurrence mensuelle a été encaissée.
+    if(montantVariable)return true;
+
+    const m=Math.abs(signe);
+    return Math.abs(m-cible)<=Math.max(1,cible*.08);
   });
 }
 
@@ -124,10 +131,10 @@ function auditerRapprochementFranceTravailBudgetSoft20260908(){
   const c=(canon||[]).find(x=>normaliserRapprochementRevenuBudgetSoft20260908_(x.categorie)==='france travail');
   const montant=c?Math.abs(Number(c.montant||0)):0;
   const debut=new Date(reference.getFullYear(),reference.getMonth(),1,0,0,0,0);
-  const candidats=(ops||[]).filter(o=>{const d=dateOpTresorerie_(o),s=montantSigneOperationRevenuBudgetSoft20260908_(o);return d&&d>=debut&&d<=reference&&s>0;})
-    .map(o=>({date:dateOpTresorerie_(o).toISOString(),montant:montantSigneOperationRevenuBudgetSoft20260908_(o),categorie:o.categorie||'',libelle:o.libelle_bancaire||o.libelle||'',texte:texteOperationRevenuBudgetSoft20260908_(o)}))
-    .filter(x=>!montant||Math.abs(Math.abs(x.montant)-montant)<=Math.max(1,montant*.15));
-  const out={version:BUDGETSOFT_REVENUE_ARREARS_20260908_VERSION,montantCanon:montant,dejaEncaisse:revenuCanonMoisDejaEncaisseBudgetSoft20260908_(ops,reference,'France Travail',montant),candidats:candidats};
+  const aliases=aliasesRevenuCanonBudgetSoft20260908_('France Travail');
+  const candidats=(ops||[]).filter(o=>{const d=dateOpTresorerie_(o),s=montantSigneOperationRevenuBudgetSoft20260908_(o);if(!(d&&d>=debut&&d<=reference&&s>0))return false;const texte=texteOperationRevenuBudgetSoft20260908_(o);const cat=normaliserRapprochementRevenuBudgetSoft20260908_(o&&o.categorie||'');return cat==='france travail'||aliases.some(a=>a&&texte.includes(a));})
+    .map(o=>({date:dateOpTresorerie_(o).toISOString(),montant:montantSigneOperationRevenuBudgetSoft20260908_(o),categorie:o.categorie||'',libelle:o.libelle_bancaire||o.libelle||'',texte:texteOperationRevenuBudgetSoft20260908_(o)}));
+  const out={version:BUDGETSOFT_REVENUE_ARREARS_20260908_VERSION,montantCanon:montant,regleMontant:'variable_non_bloquant',dejaEncaisse:revenuCanonMoisDejaEncaisseBudgetSoft20260908_(ops,reference,'France Travail',montant),candidats:candidats};
   console.log('[AUDIT Rapprochement France Travail] '+JSON.stringify(out));return out;
 }
 
