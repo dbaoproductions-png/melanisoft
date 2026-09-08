@@ -1,4 +1,4 @@
-const TREASURY_FORECAST_DOCTRINE_20260901_VERSION='2026-09-01.4';
+const TREASURY_FORECAST_DOCTRINE_20260901_VERSION='2026-09-01.5';
 
 /**
  * Passe terminale du solde prévisionnel bancaire.
@@ -22,14 +22,13 @@ function chargerTresoreriePrevisionnelle20260901(dateCible){
   // seule l'effectivité fait entrer son flux autonome dans la trésorerie.
   lignes=filtrerActionsPlanEffectivesTresorerie20260908_(lignes,actions);
 
-  // Correction doctrinale : le prochain débit CB peut appartenir au mois suivant la
-  // dernière date bancaire réelle (ex. référence 31/08, débit 30/09). Dans ce cas,
-  // le Cerbère du cycle qui se termine le 27/09 reste bien un facteur de prévision.
-  // La pertinence de Cerbère est donc déterminée par l'alignement finCycle/debit,
-  // jamais par le numéro du jour de la date de référence bancaire.
+  // Doctrine 2026-09-08.2 : une trajectoire bancaire qui franchit plusieurs dates
+  // de débit CB doit publier un complément estimé pour CHACUN de ces débits, pas
+  // seulement pour le premier. Chaque estimation reste rattachée au cycle Cerbère
+  // aligné sur le mois de son débit bancaire.
   lignes=lignes.filter(x=>x.source!=='debit_cb_estime');
-  const debitCb=estimationDebitCbDiffereTresorerie20260901V2_(ops,reference,cible);
-  if(debitCb)lignes.push(debitCb);
+  const debitsCb=estimationsDebitsCbDiffereTresorerie20260908_(ops,reference,cible);
+  if(debitsCb.length)lignes.push.apply(lignes,debitsCb);
 
   lignes=dedoublonnerPrevisionsTresorerie20260831_(lignes);
   lignes.sort((a,b)=>new Date(a.date)-new Date(b.date)||rangCertitudeTresorerie_(a.certitude)-rangCertitudeTresorerie_(b.certitude));
@@ -95,6 +94,29 @@ function recalerFluxPlanCarteTresorerie20260901_(lignes,evenements,actions,hard,
 }
 
 /**
+ * Produit tous les compléments CB compris entre la référence bancaire et la cible.
+ * La primitive V2 reste propriétaire du calcul d'un débit donné ; ici on ne fait
+ * qu'avancer la référence juste après chaque débit pour demander le suivant.
+ */
+function estimationsDebitsCbDiffereTresorerie20260908_(ops,reference,cible){
+  const out=[],vus={};
+  let ref=new Date(reference),garde=0;
+  while(ref<cible&&garde++<12){
+    const debit=prochaineDateDebitCbTresorerie20260901_(ref);
+    if(!debit||isNaN(debit)||debit>cible)break;
+    const cle=String(debit.getTime());
+    if(vus[cle])break;
+    vus[cle]=true;
+    const ligne=estimationDebitCbDiffereTresorerie20260901V2_(ops,ref,cible);
+    if(ligne)out.push(ligne);
+    // Même si le résiduel du cycle vaut zéro, il faut continuer jusqu'au débit
+    // suivant plutôt que d'arrêter toute la trajectoire.
+    ref=new Date(debit.getTime()+1);
+  }
+  return out;
+}
+
+/**
  * Version corrigée du complément CB : Cerbère est retenu si son cycle se termine
  * dans le même mois que le prochain débit différé. Cela couvre correctement le cas
  * frontière 28/29/30/31 -> mois suivant sans confondre date bancaire réelle et phase
@@ -142,6 +164,6 @@ function recalculerSortieTresorerie20260901_(r,lignes,reference,cible){
   r.diagnostic20260831=r.diagnostic20260831||{};
   r.diagnostic20260831.passeTerminalePlanCb=true;
   r.diagnostic20260831.actionsPlanTresorerie='uniquement impact_confirme + statut Effectif/Effective';
-  r.diagnostic20260831.debitCbDoctrine='cycle Cerbère aligné sur le mois du débit, indépendamment du jour de la dernière référence bancaire';
+  r.diagnostic20260831.debitCbDoctrine='tous les débits CB jusqu’à la cible ; chaque cycle Cerbère est aligné sur le mois de son débit';
   return r;
 }
