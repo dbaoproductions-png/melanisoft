@@ -1,4 +1,4 @@
-const BUDGETSOFT_REVENUE_ARREARS_20260908_VERSION='2026-09-08.1';
+const BUDGETSOFT_REVENUE_ARREARS_20260908_VERSION='2026-09-08.2';
 
 /**
  * Une recette structurelle échue mais non encaissée reste due dans la trajectoire
@@ -8,13 +8,26 @@ const BUDGETSOFT_REVENUE_ARREARS_20260908_VERSION='2026-09-08.1';
 function revenuCanonMoisDejaEncaisseBudgetSoft20260908_(ops,reference,categorie,montant){
   const debut=new Date(reference.getFullYear(),reference.getMonth(),1,0,0,0,0);
   const cible=Math.abs(Number(montant||0));
+  const canon=normaliserLibelleTresorerie20260831_(categorie||'');
+  const motsCanon=canon.split(' ').filter(x=>x.length>=4);
   return (ops||[]).some(o=>{
     const d=dateOpTresorerie_(o);if(!d||d<debut||d>reference)return false;
     const type=String(o&&o.type||'').toLowerCase();
     const signe=Number(o&&o.montant||0);
     if(!(type==='revenu'||signe>0))return false;
-    if(String(o&&o.categorie||'').trim()!==String(categorie||'').trim())return false;
-    const m=Math.abs(signe);return Math.abs(m-cible)<=Math.max(1,cible*.08);
+    const m=Math.abs(signe);
+    const montantCompatible=Math.abs(m-cible)<=Math.max(1,cible*.08);
+    if(!montantCompatible)return false;
+
+    // Le rapprochement canon -> Réel ne doit pas dépendre d'une catégorisation parfaite.
+    // On privilégie la catégorie exacte, mais on accepte aussi un libellé bancaire qui
+    // identifie clairement la recette canonique (ex. France Travail catégorisé autrement).
+    const catOp=String(o&&o.categorie||'').trim();
+    if(catOp===String(categorie||'').trim())return true;
+    const libOp=normaliserLibelleTresorerie20260831_(
+      String(o&&o.libelle_bancaire||'')+' '+String(o&&o.libelle||'')+' '+catOp
+    );
+    return motsCanon.length&&motsCanon.some(w=>libOp.includes(w));
   });
 }
 
