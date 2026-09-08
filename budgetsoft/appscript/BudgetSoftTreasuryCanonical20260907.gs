@@ -1,4 +1,4 @@
-const BUDGETSOFT_TREASURY_CANONICAL_20260907_VERSION='2026-09-07.1';
+const BUDGETSOFT_TREASURY_CANONICAL_20260907_VERSION='2026-09-08.1';
 const BUDGETSOFT_TREASURY_CANONICAL_OWNER='construireTrajectoireTresorerieCanoniqueBudgetSoft20260907';
 
 function arrondiTresorerieCanonique20260907_(n){return Math.round((Number(n)||0)*100)/100;}
@@ -33,10 +33,12 @@ function decomposerTrajectoireTresorerieCanoniqueBudgetSoft20260907_(r){
   const soldeCalcule=arrondiTresorerieCanonique20260907_(soldeReel+sommeLignes);
   const soldePublie=arrondiTresorerieCanonique20260907_(r&&r.soldePrevisionnel);
   const pilotableProgressif=lignes.filter(x=>x.source==='pilotable');
+  const actionsPlanNonEffectives=lignes.filter(x=>x.source==='action'&&!['certain','tres_probable'].includes(String(x.certitude||'')));
   const erreurs=[];
   if(Math.abs(sommeGroupes-sommeLignes)>.01)erreurs.push('Somme des groupes différente de la somme des lignes.');
   if(Math.abs(soldeCalcule-soldePublie)>.01)erreurs.push('Solde publié non réconcilié avec le solde réel et les flux.');
   if(pilotableProgressif.length)erreurs.push('Présence interdite de pilotable progressif dans la trajectoire bancaire.');
+  if(actionsPlanNonEffectives.length)erreurs.push('Présence interdite d’Actions Plan prévues/estimées dans la trajectoire bancaire.');
   return{
     version:BUDGETSOFT_TREASURY_CANONICAL_20260907_VERSION,
     ok:erreurs.length===0,
@@ -44,7 +46,7 @@ function decomposerTrajectoireTresorerieCanoniqueBudgetSoft20260907_(r){
     variationPrevue:sommeLignes,
     soldePrevisionnel:soldePublie,
     groupes:groupes,
-    controles:{sommeGroupes:sommeGroupes,sommeLignes:sommeLignes,soldeCalcule:soldeCalcule,soldePublie:soldePublie,pilotableProgressif:pilotableProgressif.length},
+    controles:{sommeGroupes:sommeGroupes,sommeLignes:sommeLignes,soldeCalcule:soldeCalcule,soldePublie:soldePublie,pilotableProgressif:pilotableProgressif.length,actionsPlanNonEffectives:actionsPlanNonEffectives.length},
     erreurs:erreurs
   };
 }
