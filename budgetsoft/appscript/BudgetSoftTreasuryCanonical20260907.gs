@@ -75,3 +75,11 @@ function auditerTrajectoireTresorerieCanoniqueBudgetSoft20260907(dateCible){
   const out={ok:!!(r&&r.ok&&d&&d.ok),version:r&&r.version||'',proprietaire:r&&r.proprietaireBudgetSoft||'',moteurSousJacent:r&&r.moteurSousJacent||'',dateReference:r&&r.dateReference||'',dateCible:r&&r.dateCible||'',soldeReel:r&&r.soldeReel,soldePrevisionnel:r&&r.soldePrevisionnel,decomposition:d};
   console.log('[AUDIT Trajectoire canonique] '+JSON.stringify(out));return out;
 }
+
+/**
+ * Wrapper déterministe de non-régression : cible explicitement le 30/09/2026.
+ * Évite qu'une exécution manuelle sans paramètre retombe sur l'horizon par défaut.
+ */
+function auditerProjectionTresorerieAu30092026(){
+  return auditerTrajectoireTresorerieCanoniqueBudgetSoft20260907('2026-09-30');
+}
