@@ -1,33 +1,63 @@
-const BUDGETSOFT_REVENUE_ARREARS_20260908_VERSION='2026-09-08.2';
+const BUDGETSOFT_REVENUE_ARREARS_20260908_VERSION='2026-09-08.3';
 
 /**
  * Une recette structurelle échue mais non encaissée reste due dans la trajectoire
  * courante. Elle ne saute au mois suivant que lorsqu'une occurrence réelle du mois
  * courant l'a effectivement remplacée.
  */
+function normaliserRapprochementRevenuBudgetSoft20260908_(s){
+  return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim();
+}
+
+function aliasesRevenuCanonBudgetSoft20260908_(categorie){
+  const c=normaliserRapprochementRevenuBudgetSoft20260908_(categorie);
+  const a=[c];
+  // France Travail peut encore apparaître dans les libellés bancaires historiques
+  // sous son ancien nom Pôle emploi.
+  if(c==='france travail')a.push('pole emploi','poleemploi','france travail');
+  return Array.from(new Set(a.filter(Boolean)));
+}
+
+function montantSigneOperationRevenuBudgetSoft20260908_(o){
+  try{
+    if(typeof montantSigneCanoniqueBudgetSoft20260906_==='function'){
+      const n=Number(montantSigneCanoniqueBudgetSoft20260906_(o));
+      if(Number.isFinite(n))return n;
+    }
+  }catch(e){}
+  const brut=Number(o&&o.montant||0);
+  const type=String(o&&o.type||'').toLowerCase();
+  if(type==='revenu')return Math.abs(brut);
+  if(type==='depense')return-Math.abs(brut);
+  return brut;
+}
+
+function texteOperationRevenuBudgetSoft20260908_(o){
+  return normaliserRapprochementRevenuBudgetSoft20260908_([
+    o&&o.libelle_bancaire,o&&o.libelle,o&&o.description,o&&o.tiers,
+    o&&o.contrepartie,o&&o.emetteur,o&&o.categorie,o&&o.commentaire
+  ].filter(Boolean).join(' '));
+}
+
 function revenuCanonMoisDejaEncaisseBudgetSoft20260908_(ops,reference,categorie,montant){
   const debut=new Date(reference.getFullYear(),reference.getMonth(),1,0,0,0,0);
   const cible=Math.abs(Number(montant||0));
-  const canon=normaliserLibelleTresorerie20260831_(categorie||'');
-  const motsCanon=canon.split(' ').filter(x=>x.length>=4);
+  const aliases=aliasesRevenuCanonBudgetSoft20260908_(categorie);
+  const catCanon=normaliserRapprochementRevenuBudgetSoft20260908_(categorie);
   return (ops||[]).some(o=>{
     const d=dateOpTresorerie_(o);if(!d||d<debut||d>reference)return false;
-    const type=String(o&&o.type||'').toLowerCase();
-    const signe=Number(o&&o.montant||0);
-    if(!(type==='revenu'||signe>0))return false;
+    const signe=montantSigneOperationRevenuBudgetSoft20260908_(o);
+    if(!(signe>0))return false;
     const m=Math.abs(signe);
-    const montantCompatible=Math.abs(m-cible)<=Math.max(1,cible*.08);
-    if(!montantCompatible)return false;
+    if(Math.abs(m-cible)>Math.max(1,cible*.08))return false;
 
-    // Le rapprochement canon -> Réel ne doit pas dépendre d'une catégorisation parfaite.
-    // On privilégie la catégorie exacte, mais on accepte aussi un libellé bancaire qui
-    // identifie clairement la recette canonique (ex. France Travail catégorisé autrement).
-    const catOp=String(o&&o.categorie||'').trim();
-    if(catOp===String(categorie||'').trim())return true;
-    const libOp=normaliserLibelleTresorerie20260831_(
-      String(o&&o.libelle_bancaire||'')+' '+String(o&&o.libelle||'')+' '+catOp
-    );
-    return motsCanon.length&&motsCanon.some(w=>libOp.includes(w));
+    // Priorité : catégorie exacte normalisée. À défaut, recherche dans tous les
+    // libellés bancaires usuels, avec alias institutionnels (ex. Pôle emploi).
+    const catOp=normaliserRapprochementRevenuBudgetSoft20260908_(o&&o.categorie||'');
+    if(catOp&&catOp===catCanon)return true;
+    const texte=texteOperationRevenuBudgetSoft20260908_(o);
+    return aliases.some(a=>a&&texte.includes(a));
   });
 }
 
@@ -48,10 +78,10 @@ function revenusCanoniquesTresorerie20260831_(ops,lignesExistantes,reference,cib
     const cat=String(c.categorie||'').trim();if(!cat)return;
     const baseMont=Math.abs(Number(c.montant||0));if(!baseMont)return;
 
-    const hist=(ops||[]).map(o=>({o:o,d:dateOpTresorerie_(o),m:Math.abs(Number(o.montant||0))}))
+    const hist=(ops||[]).map(o=>({o:o,d:dateOpTresorerie_(o),m:Math.abs(montantSigneOperationRevenuBudgetSoft20260908_(o))}))
       .filter(x=>x.d&&x.d<=reference&&x.d>=new Date(reference.getFullYear(),reference.getMonth()-6,1)
-        &&(String(x.o.type||'').toLowerCase()==='revenu'||Number(x.o.montant||0)>0)
-        &&String(x.o.categorie||'').trim()===cat);
+        &&montantSigneOperationRevenuBudgetSoft20260908_(x.o)>0
+        &&normaliserRapprochementRevenuBudgetSoft20260908_(x.o.categorie||'')===normaliserRapprochementRevenuBudgetSoft20260908_(cat));
     const histSignif=hist.filter(x=>x.m>=Math.max(20,baseMont*.35));
     const jours=(histSignif.length?histSignif:hist).map(x=>x.d.getDate()).sort((a,b)=>a-b);
     const jour=Math.max(1,Math.min(28,jours.length?jours[Math.floor(jours.length/2)]:15));
@@ -85,6 +115,20 @@ function revenusCanoniquesTresorerie20260831_(ops,lignesExistantes,reference,cib
     }
   });
   return out;
+}
+
+function auditerRapprochementFranceTravailBudgetSoft20260908(){
+  const ops=lireTable_('Operations'),reference=new Date();
+  reference.setHours(23,59,59,999);
+  const canon=lireCanonRecettesTresorerie20260831_();
+  const c=(canon||[]).find(x=>normaliserRapprochementRevenuBudgetSoft20260908_(x.categorie)==='france travail');
+  const montant=c?Math.abs(Number(c.montant||0)):0;
+  const debut=new Date(reference.getFullYear(),reference.getMonth(),1,0,0,0,0);
+  const candidats=(ops||[]).filter(o=>{const d=dateOpTresorerie_(o),s=montantSigneOperationRevenuBudgetSoft20260908_(o);return d&&d>=debut&&d<=reference&&s>0;})
+    .map(o=>({date:dateOpTresorerie_(o).toISOString(),montant:montantSigneOperationRevenuBudgetSoft20260908_(o),categorie:o.categorie||'',libelle:o.libelle_bancaire||o.libelle||'',texte:texteOperationRevenuBudgetSoft20260908_(o)}))
+    .filter(x=>!montant||Math.abs(Math.abs(x.montant)-montant)<=Math.max(1,montant*.15));
+  const out={version:BUDGETSOFT_REVENUE_ARREARS_20260908_VERSION,montantCanon:montant,dejaEncaisse:revenuCanonMoisDejaEncaisseBudgetSoft20260908_(ops,reference,'France Travail',montant),candidats:candidats};
+  console.log('[AUDIT Rapprochement France Travail] '+JSON.stringify(out));return out;
 }
 
 function auditerRecettesCanoniques30092026BudgetSoft20260908(){
