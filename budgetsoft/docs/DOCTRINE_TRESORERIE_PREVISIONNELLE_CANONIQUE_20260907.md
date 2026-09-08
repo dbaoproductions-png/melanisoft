@@ -31,7 +31,21 @@ Pour chaque cycle :
 
 Une recette déjà encaissée et incorporée au solde réel ne peut jamais rester présente dans le prévisionnel.
 
-### 2.2 Charges fixes prévisionnelles
+#### 2.1.1 Recette échue mais non encaissée
+
+Une recette structurelle dont la date habituelle est dépassée **ne disparaît pas** et **ne saute pas automatiquement au mois suivant**.
+
+Tant qu'aucune opération réelle du mois courant ne remplace l'occurrence attendue, elle reste projetée comme **échue, toujours attendue**. Elle demeure donc dans la trajectoire du mois courant jusqu'à l'un des événements suivants :
+
+- encaissement réel rapproché ;
+- annulation explicite ;
+- transformation explicite par le Plan.
+
+La date prévisionnelle publiée peut être recalée au prochain jour futur utile afin de rester strictement après la frontière du Réel, mais cette convention de date ne change pas l'appartenance économique de l'occurrence au mois courant.
+
+Exemple normatif : un loyer mensuel attendu le 5 septembre, non encaissé au 8 septembre, reste une recette attendue de septembre ; il ne doit pas être repoussé automatiquement au 5 octobre.
+
+## 2.2 Charges fixes prévisionnelles
 
 `CF0 / Charges_fixes` fournit les charges structurelles attendues.
 
@@ -175,10 +189,11 @@ Une nouvelle révision BudgetSoft ne peut être publiée que si les contrôles s
 5. aucun `pilotable` progressif avant le prochain débit CB ;
 6. aucune charge fixe CB comptée à la fois à la date d'achat et au débit CB ;
 7. aucune recette canonique maintenue après son remplacement par le Réel ;
-8. aucune opération future certaine doublée par une prévision canonique/Plan/charge fixe ;
-9. aucune Action Plan `prévue/estimée` dans la trajectoire bancaire ; seules les Actions `Effectif/Effective` et financièrement confirmées sont admises ;
-10. aucune modification des molettes qui change un solde situé avant la date du prochain débit CB ;
-11. toute modification du moteur doit être confrontée à la supradoctrine, à cette doctrine et aux doctrines des modules consommateurs avant publication.
+8. aucune recette canonique échue mais non encaissée repoussée silencieusement au mois suivant ; elle reste attendue jusqu'à remplacement, annulation ou transformation explicite ;
+9. aucune opération future certaine doublée par une prévision canonique/Plan/charge fixe ;
+10. aucune Action Plan `prévue/estimée` dans la trajectoire bancaire ; seules les Actions `Effectif/Effective` et financièrement confirmées sont admises ;
+11. aucune modification des molettes qui change un solde situé avant la date du prochain débit CB ;
+12. toute modification du moteur doit être confrontée à la supradoctrine, à cette doctrine et aux doctrines des modules consommateurs avant publication.
 
 En cas d'échec d'un de ces contrôles, la nouvelle révision n'est pas publiée et la dernière révision cohérente reste active.
 
