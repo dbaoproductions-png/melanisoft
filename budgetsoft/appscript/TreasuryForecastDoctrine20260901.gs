@@ -1,9 +1,10 @@
-const TREASURY_FORECAST_DOCTRINE_20260901_VERSION='2026-09-01.3';
+const TREASURY_FORECAST_DOCTRINE_20260901_VERSION='2026-09-01.4';
 
 /**
  * Passe terminale du solde prévisionnel bancaire.
- * Elle ne crée aucune donnée : elle recadre seulement les dépenses Plan explicitement
- * payées par CB sur la date bancaire de débit différé.
+ * Elle ne crée aucune donnée : elle recadre les dépenses Plan explicitement payées
+ * par CB sur la date bancaire de débit différé et exclut les Actions Plan qui ne
+ * sont pas encore financièrement effectives.
  */
 function chargerTresoreriePrevisionnelle20260901(dateCible){
   const r=chargerTresoreriePrevisionnelle20260831(dateCible);
@@ -14,6 +15,12 @@ function chargerTresoreriePrevisionnelle20260901(dateCible){
   const ops=lireTable_('Operations');
   const hard=(r.lignes||[]).filter(x=>x.source==='operation_future');
   let lignes=recalerFluxPlanCarteTresorerie20260901_(r.lignes||[],evenements,actions,hard,reference,cible);
+
+  // Doctrine 2026-09-08 : une Action Plan simplement prévue ne peut pas améliorer
+  // ou dégrader le solde bancaire. Elle doit être à la fois financièrement confirmée
+  // et au statut Effectif/Effective. Le Plan reste visible comme planification, mais
+  // seule l'effectivité fait entrer son flux autonome dans la trésorerie.
+  lignes=filtrerActionsPlanEffectivesTresorerie20260908_(lignes,actions);
 
   // Correction doctrinale : le prochain débit CB peut appartenir au mois suivant la
   // dernière date bancaire réelle (ex. référence 31/08, débit 30/09). Dans ce cas,
@@ -32,6 +39,23 @@ function chargerTresoreriePrevisionnelle20260901(dateCible){
 function listerMouvementsFutursTresorerie20260901(dateCible){
   const r=chargerTresoreriePrevisionnelle20260901(dateCible||dateDansJoursTresorerie_(45));
   return {ok:r.ok,version:r.version,dateReference:r.dateReference,dateCible:r.dateCible,lignes:r.lignes||[],confiance:r.confiance,diagnostic20260831:r.diagnostic20260831||{}};
+}
+
+function normaliserStatutActionTresorerie20260908_(v){
+  return String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+function actionPlanEffectiveTresorerie20260908_(a){
+  if(!a)return false;
+  const confirme=a.impact_confirme===true||String(a.impact_confirme)==='true';
+  const statut=normaliserStatutActionTresorerie20260908_(a.statut);
+  return confirme&&['effective','effectif'].includes(statut);
+}
+function filtrerActionsPlanEffectivesTresorerie20260908_(lignes,actions){
+  const index=Object.fromEntries((actions||[]).map(a=>[String(a.id||''),a]));
+  return (lignes||[]).filter(x=>{
+    if(String(x&&x.source||'')!=='action')return true;
+    return actionPlanEffectiveTresorerie20260908_(index[String(x.sourceId||'')]);
+  });
 }
 
 function paiementCartePlanTresorerie20260901_(o){return /^(cb|carte|carte bancaire)$/i.test(String(o&&o.mode_paiement||'').trim());}
@@ -117,6 +141,7 @@ function recalculerSortieTresorerie20260901_(r,lignes,reference,cible){
   r.confiance=confianceTresorerie_(reference,cible,lignes);
   r.diagnostic20260831=r.diagnostic20260831||{};
   r.diagnostic20260831.passeTerminalePlanCb=true;
+  r.diagnostic20260831.actionsPlanTresorerie='uniquement impact_confirme + statut Effectif/Effective';
   r.diagnostic20260831.debitCbDoctrine='cycle Cerbère aligné sur le mois du débit, indépendamment du jour de la dernière référence bancaire';
   return r;
 }
