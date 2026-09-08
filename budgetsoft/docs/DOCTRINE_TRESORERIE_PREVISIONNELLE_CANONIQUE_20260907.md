@@ -1,6 +1,6 @@
 # BudgetSoft — Doctrine canonique du prévisionnel bancaire
 
-> **Document normatif — 7 septembre 2026.**
+> **Document normatif — 7 septembre 2026, renforcé le 8 septembre 2026.**
 >
 > Ce document complète et précise `DOCTRINE_TRESORERIE_PREVISIONNELLE_20260901.md`, `SUPRADOCTRINE_BUDGETSOFT_20260905.md` et les doctrines Cerbère. En cas d'ambiguïté sur la construction d'un solde prévisionnel, les règles ci-dessous sont obligatoires.
 
@@ -99,6 +99,21 @@ Il peut :
 
 Une même décision Plan ne doit jamais produire à la fois une correction du canon et un flux autonome équivalent.
 
+### 3.1 Actions Plan et trésorerie bancaire
+
+Une **Action** Plan n'entre comme flux autonome dans le solde bancaire que si :
+
+1. son impact financier est explicitement confirmé (`impact_confirme=true`) ;
+2. son statut est **Effectif/Effective** ;
+3. sa date bancaire se situe après la frontière du Réel et avant ou à la date cible ;
+4. aucune opération réelle ou future certaine ne la remplace déjà.
+
+Une Action au statut `Prévu`, `À faire`, `En cours`, ou équivalent reste une information de planification et **ne peut ni améliorer ni dégrader le solde prévisionnel**.
+
+Exemple normatif : `Demander la participation employeur Mutuelle` n'est pas une recette bancaire tant que l'action n'est pas devenue financièrement effective.
+
+Cette règle ne s'applique pas aux **Événements** Plan déjà qualifiés `Effectif/Effective`, qui suivent leur propre règle de trésorerie.
+
 ## 4. Hiérarchie de vérité
 
 Pour une même réalité bancaire :
@@ -161,8 +176,9 @@ Une nouvelle révision BudgetSoft ne peut être publiée que si les contrôles s
 6. aucune charge fixe CB comptée à la fois à la date d'achat et au débit CB ;
 7. aucune recette canonique maintenue après son remplacement par le Réel ;
 8. aucune opération future certaine doublée par une prévision canonique/Plan/charge fixe ;
-9. aucune modification des molettes qui change un solde situé avant la date du prochain débit CB ;
-10. toute modification du moteur doit être confrontée à la supradoctrine, à cette doctrine et aux doctrines des modules consommateurs avant publication.
+9. aucune Action Plan `prévue/estimée` dans la trajectoire bancaire ; seules les Actions `Effectif/Effective` et financièrement confirmées sont admises ;
+10. aucune modification des molettes qui change un solde situé avant la date du prochain débit CB ;
+11. toute modification du moteur doit être confrontée à la supradoctrine, à cette doctrine et aux doctrines des modules consommateurs avant publication.
 
 En cas d'échec d'un de ces contrôles, la nouvelle révision n'est pas publiée et la dernière révision cohérente reste active.
 
