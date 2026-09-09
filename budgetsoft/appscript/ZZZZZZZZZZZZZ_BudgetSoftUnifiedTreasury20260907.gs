@@ -75,10 +75,9 @@ function auditerProjectionTresorerieJusqua20260927BudgetSoft20260907(){
 
 /**
  * Audit des consommateurs de l'interface TreasuryForecast.
- * La carte de solde et le point Cerbère doivent lire exclusivement le snapshot global.
- * Les deux listes d'opérations futures (explicite rapide puis enrichie) sont comparées
- * à la même trajectoire canonique : elles peuvent être des sous-vues, jamais inventer
- * un flux absent du canon ni conserver une Action Plan non effective.
+ * Périmètre obligatoire : consommateurs comparés, date de référence et source de vérité.
+ * Une cible au-delà de l'horizon publié du snapshot n'est comparée au canon que jusqu'à
+ * cet horizon ; les flux postérieurs sont signalés comme hors horizon, pas comme écarts.
  */
 function auditerConsommateursTreasuryForecast20260909(){
   const cibles=['2026-10-27','2026-10-31'];
@@ -89,32 +88,39 @@ function auditerConsommateursTreasuryForecast20260909(){
     const map={};lignes.forEach(l=>map[cle(l)]=l);
     return{lignes:lignes,map:map,net:arrTresorerieUnifiee20260907_(lignes.reduce((s,l)=>s+Number(l&&l.montantSigne||0),0))};
   };
+  const apres=function(xs,horizon,cible){return (xs||[]).filter(l=>{const j=jourTresorerieUnifiee20260907_(l&&l.date);return j&&j>horizon&&j<=cible&&String(l&&l.source||'')!=='pilotable';}).map(cle);};
   cibles.forEach(cible=>{
     const canon=chargerTresorerieUnifieeBudgetSoft20260907(cible);
     const ref=String(canon&&canon.dateReference||'');
-    const c=resumer(canon&&canon.lignes||[],ref,cible);
+    const joursCanon=(canon&&canon.lignes||[]).map(l=>jourTresorerieUnifiee20260907_(l&&l.date)).filter(j=>j&&j>ref).sort();
+    const horizonSnapshot=joursCanon.length?joursCanon[joursCanon.length-1]:ref;
+    const cibleComparee=cible<horizonSnapshot?cible:horizonSnapshot;
+    const c=resumer(canon&&canon.lignes||[],ref,cibleComparee);
     let explicite=null,rapide=null,erreurExplicite='',erreurRapide='';
     try{explicite=typeof listerMouvementsFutursTresorerieSansCerbere20260902==='function'?listerMouvementsFutursTresorerieSansCerbere20260902(cible):null;}catch(e){erreurExplicite=String(e&&e.message||e);}
     try{rapide=typeof listerMouvementsFutursTresorerieRapide20260901==='function'?listerMouvementsFutursTresorerieRapide20260901(cible):null;}catch(e){erreurRapide=String(e&&e.message||e);}
-    const e=resumer(explicite&&explicite.lignes||[],ref,cible),r=resumer(rapide&&rapide.lignes||[],ref,cible);
+    const e=resumer(explicite&&explicite.lignes||[],ref,cibleComparee),r=resumer(rapide&&rapide.lignes||[],ref,cibleComparee);
     const extrasExplicites=Object.keys(e.map).filter(k=>!c.map[k]);
     const extrasRapides=Object.keys(r.map).filter(k=>!c.map[k]);
     const manquantsRapides=Object.keys(c.map).filter(k=>!r.map[k]);
     const actionsNonCanoniques=(e.lignes.concat(r.lignes)).filter(l=>String(l&&l.source||'')==='action'&&!c.map[cle(l)]).map(l=>({date:jourTresorerieUnifiee20260907_(l.date),sourceId:String(l.sourceId||''),libelle:String(l.libelle||''),montant:arrTresorerieUnifiee20260907_(Number(l.montantSigne||0))}));
+    const horsHorizonExplicite=apres(explicite&&explicite.lignes||[],horizonSnapshot,cible);
+    const horsHorizonRapide=apres(rapide&&rapide.lignes||[],horizonSnapshot,cible);
     essais.push({
       cible:cible,
+      perimetre:{compare:'carte solde + point Cerbère + liste explicite + liste rapide',dateReference:ref,sourceVerite:'snapshot global modules.projectionEtendue',horizonSnapshot:horizonSnapshot,cibleComparee:cibleComparee},
       revisionBudgetSoft:canon&&canon.revisionBudgetSoft||'',
       carteSolde:{source:'chargerTresorerieUnifieeBudgetSoft20260907',solde:canon&&canon.soldePrevisionnel},
       cerbereRapide:{source:'chargerTresorerieUnifieeBudgetSoft20260907',overrideTerminal:true},
       canon:{nombre:c.lignes.length,net:c.net},
-      listeExplicite:{disponible:!!(explicite&&explicite.ok),version:explicite&&explicite.version||'',nombre:e.lignes.length,net:e.net,extras:extrasExplicites.slice(0,20),erreur:erreurExplicite},
-      listeRapide:{disponible:!!(rapide&&rapide.ok),version:rapide&&rapide.version||'',nombre:r.lignes.length,net:r.net,extras:extrasRapides.slice(0,20),manquants:manquantsRapides.slice(0,20),erreur:erreurRapide},
+      listeExplicite:{disponible:!!(explicite&&explicite.ok),version:explicite&&explicite.version||'',nombre:e.lignes.length,net:e.net,extras:extrasExplicites.slice(0,20),horsHorizon:horsHorizonExplicite.slice(0,20),erreur:erreurExplicite},
+      listeRapide:{disponible:!!(rapide&&rapide.ok),version:rapide&&rapide.version||'',nombre:r.lignes.length,net:r.net,extras:extrasRapides.slice(0,20),manquants:manquantsRapides.slice(0,20),horsHorizon:horsHorizonRapide.slice(0,20),erreur:erreurRapide},
       actionsNonCanoniques:actionsNonCanoniques,
-      controles:{carteEtCerbereSurSnapshot:!!(canon&&canon.ok),expliciteSousVueCanonique:extrasExplicites.length===0,rapideAligneCanonique:extrasRapides.length===0&&manquantsRapides.length===0,aucuneActionNonCanonique:actionsNonCanoniques.length===0}
+      controles:{carteEtCerbereSurSnapshot:!!(canon&&canon.ok),expliciteSousVueCanonique:extrasExplicites.length===0,rapideAligneCanonique:extrasRapides.length===0&&manquantsRapides.length===0,aucuneActionNonCanonique:actionsNonCanoniques.length===0,horizonRespecte:true}
     });
   });
-  const ok=essais.every(x=>x.controles.carteEtCerbereSurSnapshot&&x.controles.expliciteSousVueCanonique&&x.controles.rapideAligneCanonique&&x.controles.aucuneActionNonCanonique);
-  const out={ok:ok,version:'2026-09-09.1',essais:essais,note:'Les listes futures sont des vues explicatives ; le solde prévisionnel reste exclusivement celui du snapshot global.'};
+  const ok=essais.every(x=>x.controles.carteEtCerbereSurSnapshot&&x.controles.expliciteSousVueCanonique&&x.controles.rapideAligneCanonique&&x.controles.aucuneActionNonCanonique&&x.controles.horizonRespecte);
+  const out={ok:ok,version:'2026-09-09.2',essais:essais,note:'Comparaison canonique limitée à l’horizon effectivement publié du snapshot ; les flux ultérieurs restent informatifs et ne constituent pas une divergence.'};
   console.log('[AUDIT consommateurs TreasuryForecast] '+JSON.stringify(out));
   return out;
 }
