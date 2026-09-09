@@ -1,4 +1,4 @@
-const CERBERE_EXPRESS_SMS_SCHEDULE_VERSION='2026-09-09.1';
+const CERBERE_EXPRESS_SMS_SCHEDULE_VERSION='2026-09-09.2';
 const CERBERE_EXPRESS_SMS_SCHEDULE_HANDLER='envoyerSmsCerbereExpressProgramme20260829';
 const CERBERE_EXPRESS_SMS_SCHEDULE_TZ='Europe/Paris';
 const CERBERE_EXPRESS_SHORT_URL_20260909='https://npondo3.s.gy/my-link';
@@ -6,11 +6,13 @@ const CERBERE_EXPRESS_SHORT_URL_20260909='https://npondo3.s.gy/my-link';
 /**
  * Override terminal du texte SMS : le lien privé long reste conservé par le moteur
  * pour la révocation/diagnostic, mais le SMS expose uniquement l'URL courte demandée.
+ * Les valeurs métier proviennent exclusivement du snapshot global BudgetSoft.
  */
 function genererSmsCerbereExpress20260827(profil){
   profil=normaliserProfilCerbereExpress20260827_(profil);
-  const s=typeof chargerSnapshotCerbereExpress20260827==='function'?chargerSnapshotCerbereExpress20260827():null;
-  const v=s&&s.disponible&&s.vue?s.vue:chargerVueCerbereExpress20260827();
+  const v=typeof lireVueCanoniqueCerbereExpressPrive20260909_==='function'
+    ? lireVueCanoniqueCerbereExpressPrive20260909_()
+    : chargerVueCerbereExpress20260827();
   const lienLong=preparerLiensPrivesCerbereExpress20260827().liens[profil];
   const meteo=v&&v.meteo||{},consigne=v&&v.consigneSaillante||{};
   const reste=Number(v&&v.pilotable&&v.pilotable.reste||0);
@@ -20,17 +22,18 @@ function genererSmsCerbereExpress20260827(profil){
     String(consigne.texte||'Cap tenu.'),
     CERBERE_EXPRESS_SHORT_URL_20260909
   ].join('\n');
-  return{ok:true,version:CERBERE_EXPRESS_SMS_SCHEDULE_VERSION,profil,texte,lien:CERBERE_EXPRESS_SHORT_URL_20260909,lienLong};
+  return{ok:true,version:CERBERE_EXPRESS_SMS_SCHEDULE_VERSION,profil,texte,lien:CERBERE_EXPRESS_SHORT_URL_20260909,lienLong,sourceBudgetSoft:String(v&&v.sourceBudgetSoft||''),revisionBudgetSoft:String(v&&v.revisionBudgetSoft||'')};
 }
 
 /**
- * Envoi programme Cerbere Express :
- * - rafraichit d'abord le snapshot ;
- * - envoie ensuite le SMS aux deux profils configures.
+ * Envoi programmé Cerbère Express :
+ * - republie d'abord le snapshot global BudgetSoft ;
+ * - envoie ensuite le SMS aux deux profils à partir de cette même révision.
  */
 function envoyerSmsCerbereExpressProgramme20260829(){
-  if(typeof rafraichirSnapshotCerbereExpress20260827==='function'){
-    rafraichirSnapshotCerbereExpress20260827();
+  if(typeof actualiserBudgetSoftSyntheseMaintenant20260907==='function'){
+    const publication=actualiserBudgetSoftSyntheseMaintenant20260907();
+    if(publication&&publication.ok===false)throw new Error('Échec du rafraîchissement du snapshot global BudgetSoft avant SMS Cerbère Express.');
   }
   return envoyerSmsOvhCerbereExpressAuxDeux20260827();
 }
