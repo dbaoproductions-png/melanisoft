@@ -15,3 +15,33 @@ function lireCorpsSnapshotCerbereExpress20260827_(props,meta){try{let raw='';for
 function encoderSnapshotCerbereExpress20260827_(texte){return Utilities.base64EncodeWebSafe(Utilities.gzip(Utilities.newBlob(String(texte||''),'application/json','cerbere-express.json')).getBytes());}
 function decoderSnapshotCerbereExpress20260827_(texte){return Utilities.ungzip(Utilities.newBlob(Utilities.base64DecodeWebSafe(String(texte||'')),'application/gzip','cerbere-express.json.gz')).getDataAsString('UTF-8');}
 function supprimerAncienSnapshotCerbereExpress20260827_(props){const toutes=props.getProperties();Object.keys(toutes).forEach(k=>{if(String(k).indexOf(CERBERE_EXPRESS_SNAPSHOT_PREFIX)===0)props.deleteProperty(k);});}
+
+/**
+ * Audit des trois chemins de lecture Cerbère Express :
+ * 1) module du snapshot global BudgetSoft (référence),
+ * 2) vue interne chargerVueCerbereExpress20260827 (doit lire le global),
+ * 3) ancien snapshot local Express encore utilisé par le lien privé/SMS.
+ * Aucun recalcul métier n'est introduit ici.
+ */
+function auditerConsommateursSnapshotCerbereExpress20260909(){
+  const global=typeof lireModuleSnapshotGlobalBudgetSoft20260906_==='function'?lireModuleSnapshotGlobalBudgetSoft20260906_('cerbereExpress'):null;
+  const vue=typeof chargerVueCerbereExpress20260827==='function'?chargerVueCerbereExpress20260827():null;
+  const local=chargerSnapshotCerbereExpress20260827();
+  const lv=local&&local.disponible?local.vue:null;
+  const pick=v=>v&&v.pilotable?{allocation:Number(v.pilotable.allocation||0),consomme:Number(v.pilotable.consomme||0),reste:Number(v.pilotable.reste||0),aVentiler:Number(v.pilotable.aVentiler||0)}:null;
+  const eq=(a,b)=>!!(a&&b&&Math.abs(a.allocation-b.allocation)<=.01&&Math.abs(a.consomme-b.consomme)<=.01&&Math.abs(a.reste-b.reste)<=.01&&Math.abs(a.aVentiler-b.aVentiler)<=.01);
+  const g=pick(global),v=pick(vue),l=pick(lv);
+  const vueAligneeGlobal=eq(g,v);
+  const localAligneGlobal=eq(g,l);
+  const fuitePotentielle=!!(local&&local.disponible&&(local.perime||!localAligneGlobal));
+  const out={
+    ok:!!(global&&global.ok!==false&&vueAligneeGlobal&&!fuitePotentielle),
+    version:'2026-09-09.1',
+    global:{disponible:!!global,source:global&&global.sourceBudgetSoft||global&&global.source||'',revisionBudgetSoft:global&&global.revisionBudgetSoft||'',version:global&&global.version||'',pilotable:g},
+    vueInterne:{disponible:!!vue,source:vue&&vue.sourceBudgetSoft||vue&&vue.performance&&vue.performance.source||'',revisionBudgetSoft:vue&&vue.revisionBudgetSoft||'',version:vue&&vue.version||'',pilotable:v},
+    snapshotLocal:{disponible:!!(local&&local.disponible),perime:!!(local&&local.perime),revision:local&&local.revision||'',revisionCourante:local&&local.revisionCourante||'',genereLe:local&&local.genereLe||'',pilotable:l},
+    controles:{vueAligneeGlobal,localAligneGlobal,fuitePotentielle,routePriveeUtiliseEncoreSnapshotLocal:true,smsUtiliseEncoreSnapshotLocal:true}
+  };
+  console.log('[AUDIT consommateurs Cerbère Express] '+JSON.stringify(out));
+  return out;
+}
