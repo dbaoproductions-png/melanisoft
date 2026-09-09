@@ -1,4 +1,4 @@
-const TREASURY_FUTURE_FAST_20260902_VERSION='2026-09-02.future-fast-1';
+const TREASURY_FUTURE_FAST_20260902_VERSION='2026-09-02.future-fast-2';
 
 /**
  * Liste rapide des mouvements bancaires futurs explicites.
@@ -51,6 +51,14 @@ function listerMouvementsFutursTresorerieSansCerbere20260902(dateCible){
     // Les flux Plan payés par CB sont bien replacés à la date de débit bancaire,
     // sans charger Cerbère pour autant.
     lignes=recalerFluxPlanCarteTresorerie20260901_(lignes,evenements,actions,hard,reference,cible);
+
+    // Doctrine canonique 08/09/2026 : une Action Plan simplement prévue reste
+    // visible dans le Plan, mais n'est jamais un flux bancaire tant qu'elle n'est
+    // pas à la fois confirmée financièrement et Effective/Effectif.
+    if(typeof filtrerActionsPlanEffectivesTresorerie20260908_==='function'){
+      lignes=filtrerActionsPlanEffectivesTresorerie20260908_(lignes,actions);
+    }
+
     lignes=lignes.filter(x=>x.source!=='pilotable'&&x.source!=='debit_cb_estime');
     lignes=dedoublonnerPrevisionsTresorerie20260831_(lignes);
     lignes.sort((a,b)=>new Date(a.date)-new Date(b.date)||rangCertitudeTresorerie_(a.certitude)-rangCertitudeTresorerie_(b.certitude));
