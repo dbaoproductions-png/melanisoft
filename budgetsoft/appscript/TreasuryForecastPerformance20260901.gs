@@ -1,4 +1,4 @@
-const TREASURY_FORECAST_PERF_20260901_VERSION='2026-09-03.perf-2';
+const TREASURY_FORECAST_PERF_20260901_VERSION='2026-09-03.perf-3';
 
 /**
  * Chemin rapide du solde prévisionnel bancaire.
@@ -69,6 +69,13 @@ function chargerTresoreriePrevisionnelleRapideInterne20260903_(dateCible,partCer
     if(debitCb)lignes.push(debitCb);
 
     lignes=recalerFluxPlanCarteTresorerie20260901_(lignes,evenements,actions,hard,reference,cible);
+
+    // Même doctrine que le propriétaire canonique : une Action Plan n'entre dans
+    // la banque que si l'impact est confirmé ET le statut Effectif/Effective.
+    if(typeof filtrerActionsPlanEffectivesTresorerie20260908_==='function'){
+      lignes=filtrerActionsPlanEffectivesTresorerie20260908_(lignes,actions);
+    }
+
     lignes=dedoublonnerPrevisionsTresorerie20260831_(lignes);
     lignes.sort((a,b)=>new Date(a.date)-new Date(b.date)||rangCertitudeTresorerie_(a.certitude)-rangCertitudeTresorerie_(b.certitude));
 
