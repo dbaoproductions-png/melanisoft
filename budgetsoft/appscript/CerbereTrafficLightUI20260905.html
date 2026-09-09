@@ -115,4 +115,28 @@
   setTimeout(tick,900);
   console.log('[BudgetSoft supradoctrine UI] '+VERSION);
 })();
+
+/* Valeur Dashboard partagée : lecture snapshot uniquement, aucun nouveau calcul. */
+(function(){'use strict';
+  let enCours=false,cache=null,cacheAt=0,timer=0;
+  const euro=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));
+  function poser(val){
+    const cycle=document.getElementById('c4-0'),ret=cycle&&cycle.querySelector('[data-ret1-card]');
+    if(!ret||!val||val.disponible!==true)return;
+    let card=cycle.querySelector('[data-pilotable-par-jour-dashboard]');
+    if(!card){card=document.createElement('div');card.className='c4-card';card.setAttribute('data-pilotable-par-jour-dashboard','');ret.insertAdjacentElement('afterend',card);}
+    card.innerHTML='<span>Pilotable disponible par jour</span><b>'+euro(val.pilotableParJour)+'</b><small>Valeur du Dashboard · aucun recalcul</small>';
+  }
+  function charger(){
+    const cycle=document.getElementById('c4-0');if(!cycle||!cycle.querySelector('[data-ret1-card]'))return;
+    if(cache&&Date.now()-cacheAt<30000){poser(cache);return;}
+    if(enCours||typeof google==='undefined'||!google.script||!google.script.run)return;enCours=true;
+    google.script.run.withSuccessHandler(r=>{enCours=false;cache=r;cacheAt=Date.now();poser(r);}).withFailureHandler(()=>{enCours=false;}).lirePilotableParJourDashboardSnapshotBudgetSoft20260909();
+  }
+  function planifier(){clearTimeout(timer);timer=setTimeout(charger,80);}
+  new MutationObserver(planifier).observe(document.documentElement,{subtree:true,childList:true});
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(charger,350));
+  document.addEventListener('click',e=>{if(e.target.closest?.('.nav-item[data-view="cerbere"]'))setTimeout(charger,250);},true);
+  setTimeout(charger,1000);
+})();
 </script>
