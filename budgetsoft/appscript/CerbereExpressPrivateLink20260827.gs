@@ -1,4 +1,4 @@
-const CERBERE_EXPRESS_PRIVATE_VERSION = '2026-08-27.4';
+const CERBERE_EXPRESS_PRIVATE_VERSION = '2026-09-09.1';
 const CERBERE_EXPRESS_PRIVATE_PROP_PREFIX = 'CERBERE_EXPRESS_TOKEN_';
 const CERBERE_EXPRESS_WEBAPP_URL_PROP = 'CERBERE_EXPRESS_WEBAPP_URL';
 
@@ -39,6 +39,19 @@ function regenererLienPriveCerbereExpress20260827(profil) {
   return preparerLiensPrivesCerbereExpress20260827().liens[profil];
 }
 
+/**
+ * Lecture canonique de la vue Express : le snapshot global BudgetSoft est prioritaire.
+ * Aucun snapshot local Express n'est consommé par la route privée ni par les SMS.
+ */
+function lireVueCanoniqueCerbereExpressPrive20260909_() {
+  if (typeof chargerVueCerbereExpress20260827 !== 'function') {
+    throw new Error('Vue canonique Cerbère Express indisponible.');
+  }
+  const vue = chargerVueCerbereExpress20260827();
+  if (!vue || vue.ok === false) throw new Error(String(vue && vue.erreur || 'Cerbère Express indisponible'));
+  return vue;
+}
+
 /** Route privée appelée par doGet(e). */
 function servirCerbereExpressPrive20260827_(e) {
   const token = String(e && e.parameter && e.parameter.t || '');
@@ -47,48 +60,42 @@ function servirCerbereExpressPrive20260827_(e) {
       .setTitle('Cerbère Express');
   }
 
-  let snapshot = typeof chargerSnapshotCerbereExpress20260827 === 'function'
-    ? chargerSnapshotCerbereExpress20260827()
-    : {ok:true,disponible:false,perime:true};
-
-  if (!snapshot || !snapshot.disponible) {
-    const initialise = typeof rafraichirSnapshotCerbereExpress20260827 === 'function'
-      ? rafraichirSnapshotCerbereExpress20260827()
-      : null;
-    snapshot = initialise && initialise.vue
-      ? {ok:true,disponible:true,perime:false,vue:initialise.vue,genereLe:initialise.genereLe||''}
-      : (initialise && initialise.snapshot ? initialise.snapshot : snapshot);
-  }
-
-  const vue = snapshot && snapshot.vue
-    ? snapshot.vue
-    : {ok:false,erreur:'Cerbère Express indisponible'};
+  let vue;
+  try { vue = lireVueCanoniqueCerbereExpressPrive20260909_(); }
+  catch (err) { vue = {ok:false,erreur:String(err && err.message || err)}; }
 
   const template = HtmlService.createTemplateFromFile('CerbereExpressMobile20260827');
   template.tokenExpress = token;
   template.vueExpressJson = JSON.stringify(vue);
   template.snapshotExpressMetaJson = JSON.stringify({
-    disponible:!!(snapshot&&snapshot.disponible),
-    perime:!!(snapshot&&snapshot.perime),
-    genereLe:String(snapshot&&snapshot.genereLe||''),
-    dureeLectureMs:Number(snapshot&&snapshot.dureeLectureMs||0)
+    disponible:!!(vue&&vue.ok!==false),
+    perime:false,
+    genereLe:String(vue&&vue.genereLe||''),
+    dureeLectureMs:0,
+    source:String(vue&&vue.sourceBudgetSoft||''),
+    revisionBudgetSoft:String(vue&&vue.revisionBudgetSoft||'')
   });
   return template.evaluate().setTitle('Cerbère Express').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
-/** Chargement RPC protégé : renvoie le snapshot, sans relancer Cerbère complet. */
+/** Chargement RPC protégé : renvoie exclusivement la vue canonique globale. */
 function chargerVueCerbereExpressPrive20260827(token) {
   if (!verifierTokenCerbereExpress20260827_(token)) throw new Error('Lien Cerbère Express invalide ou révoqué.');
-  const s = typeof chargerSnapshotCerbereExpress20260827 === 'function' ? chargerSnapshotCerbereExpress20260827() : null;
-  if (s && s.disponible && s.vue) return s.vue;
-  return chargerVueCerbereExpress20260827();
+  return lireVueCanoniqueCerbereExpressPrive20260909_();
 }
 
-/** Rafraîchissement protégé lancé en arrière-plan si le snapshot est périmé. */
+/**
+ * Rafraîchissement protégé : republie d'abord le snapshot global BudgetSoft,
+ * puis relit le module Cerbère Express de cette même révision.
+ */
 function rafraichirSnapshotCerbereExpressPrive20260827(token) {
   if (!verifierTokenCerbereExpress20260827_(token)) throw new Error('Lien Cerbère Express invalide ou révoqué.');
-  if (typeof rafraichirSnapshotCerbereExpress20260827 !== 'function') throw new Error('Moteur de snapshot Cerbère Express indisponible.');
-  return rafraichirSnapshotCerbereExpress20260827();
+  if (typeof actualiserBudgetSoftSyntheseMaintenant20260907 === 'function') {
+    const publication = actualiserBudgetSoftSyntheseMaintenant20260907();
+    if (publication && publication.ok === false) throw new Error('Échec du rafraîchissement du snapshot global BudgetSoft.');
+  }
+  const vue = lireVueCanoniqueCerbereExpressPrive20260909_();
+  return {ok:true,version:CERBERE_EXPRESS_PRIVATE_VERSION,source:'snapshot_global',revisionBudgetSoft:String(vue&&vue.revisionBudgetSoft||''),genereLe:String(vue&&vue.genereLe||''),vue};
 }
 
 /**
@@ -97,8 +104,7 @@ function rafraichirSnapshotCerbereExpressPrive20260827(token) {
  */
 function genererSmsCerbereExpress20260827(profil) {
   profil = normaliserProfilCerbereExpress20260827_(profil);
-  const s = typeof chargerSnapshotCerbereExpress20260827 === 'function' ? chargerSnapshotCerbereExpress20260827() : null;
-  const v = s && s.disponible && s.vue ? s.vue : chargerVueCerbereExpress20260827();
+  const v = lireVueCanoniqueCerbereExpressPrive20260909_();
   const lien = preparerLiensPrivesCerbereExpress20260827().liens[profil];
   const meteo = v && v.meteo || {};
   const consigne = v && v.consigneSaillante || {};
@@ -109,7 +115,7 @@ function genererSmsCerbereExpress20260827(profil) {
     String(consigne.texte || 'Cap tenu.'),
     lien
   ].join('\n');
-  return {ok:true, version:CERBERE_EXPRESS_PRIVATE_VERSION, profil, texte, lien};
+  return {ok:true, version:CERBERE_EXPRESS_PRIVATE_VERSION, profil, texte, lien, sourceBudgetSoft:String(v&&v.sourceBudgetSoft||''), revisionBudgetSoft:String(v&&v.revisionBudgetSoft||'')};
 }
 
 function auditerLiensPrivesCerbereExpress20260827() {
