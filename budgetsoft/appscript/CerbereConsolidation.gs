@@ -51,3 +51,42 @@ function reclasserImprevuCerbere20260903(idOperation,nouvelleCategorie){if(typeo
 function appreciationCockpitCerbere20260902_(base){const p=Array.isArray(base&&base.periodes)?base.periodes[0]:null;if(!p)return{niveau:'vert',emoji:'🌤️',titre:'Situation à observer',resume:'Aucun cycle courant disponible.',consigne:''};const v=p.v37||{},c=v.cockpit20260902||{},env=Array.isArray(p.enveloppes)?p.enveloppes:[],debut=new Date((p.periode||p).debut),fin=new Date((p.periode||p).fin),now=new Date(),total=Math.max(1,fin-debut),ratio=Math.max(0,Math.min(1,(now-debut)/total)),alertes=[];env.forEach(x=>{const allocation=Math.max(0,Number(x&&x.prevu||0)),reel=Math.max(0,Number(x&&x.reelNetPrevisionnel!=null?x.reelNetPrevisionnel:(x&&x.reelImpute||0)));if(!allocation&&reel<=0)return;const part=allocation>0?reel/allocation:1,ecart=(part-ratio)*100;if(reel>allocation+.009)alertes.push({niveau:2,texte:String(x.categorie||'Poste')+' dépassé'});else if(ecart>25)alertes.push({niveau:2,texte:String(x.categorie||'Poste')+' très rapide'});else if(ecart>10)alertes.push({niveau:1,texte:String(x.categorie||'Poste')+' un peu rapide'});});if(Number(c.margeARepartir||0)<-.009)alertes.push({niveau:2,texte:'Économies à trouver : '+formatEuroCockpit20260902_(Math.abs(c.margeARepartir))});const niveau=Math.max(0,...alertes.map(x=>x.niveau)),info=alertes.sort((a,b)=>b.niveau-a.niveau)[0];if(niveau>=2)return{niveau:'rouge',emoji:'⛈️',titre:'Arbitrage nécessaire',resume:'Le cycle demande un ajustement du pilotable.',consigne:info?info.texte:''};if(niveau===1)return{niveau:'orange',emoji:'🌧️',titre:'Cap à surveiller',resume:'La situation reste récupérable, mais un poste mérite l’attention.',consigne:info?info.texte:''};const marge=Number(c.margeARepartir||0);return{niveau:'vert',emoji:'🌤️',titre:'Cap tenu',resume:'Le rythme du pilotable reste compatible avec le cycle.',consigne:marge>0?'Surplus à ventiler : '+formatEuroCockpit20260902_(marge):'P1 entièrement réparti.'};}
 function auditerCockpitPilotable20260902(){const b=chargerCerbereCockpit20260902(),p=b&&b.periodes&&b.periodes[0],c=p&&p.v37&&p.v37.cockpit20260902;return{ok:!!p,periode:p&&p.periode,p0:c&&c.p0Total,p1:c&&c.p1Total,pilotableActualise:c&&c.budgetPilotableActualise,surplusP0:c&&c.surplusVsP0,marge:c&&c.margeARepartir,reparti:c&&c.budgetRepartiMolettes,aRepartir:c&&c.aRepartirDansPostes,reelPilotable:c&&c.consommePilotable,ajustementP1:c&&c.ajustementP1,reportCbCycle:c&&c.reportCbCycle};}
 function formatEuroCockpit20260902_(n){return Utilities.formatString('%.2f €',Math.round((Number(n)||0)*100)/100);}
+
+/**
+ * Audit des consommateurs Cerbère classiques.
+ * Le cockpit frais reste le moteur interactif (nécessaire après modification des molettes),
+ * mais il doit produire strictement la même vérité métier que le module Cerbère publié
+ * dans le snapshot global BudgetSoft.
+ */
+function auditerConsommateursCerbereClassique20260909(){
+  const global=typeof lireModuleSnapshotGlobalBudgetSoft20260906_==='function'?lireModuleSnapshotGlobalBudgetSoft20260906_('cerbere'):null;
+  const frais=chargerCerbereCockpit20260902();
+  const pg=global&&Array.isArray(global.periodes)?global.periodes[0]:null;
+  const pf=frais&&Array.isArray(frais.periodes)?frais.periodes[0]:null;
+  const cg=pg&&pg.v37&&pg.v37.cockpit20260902||null;
+  const cf=pf&&pf.v37&&pf.v37.cockpit20260902||null;
+  const pick=c=>c?{
+    p1:Number(c.p1Total||0),
+    pilotableActualise:Number(c.budgetPilotableActualise||0),
+    consomme:Number(c.consommePilotable||0),
+    reste:Number(c.ret1||0),
+    marge:Number(c.margeARepartir||0),
+    reportCb:Number(c.reportCbCycle||0)
+  }:null;
+  const g=pick(cg),f=pick(cf);
+  const eq=(a,b)=>!!(a&&b&&Object.keys(a).every(k=>Math.abs(Number(a[k]||0)-Number(b[k]||0))<=.01));
+  const categoriesG=pg&&Array.isArray(pg.enveloppes)?pg.enveloppes.map(x=>({categorie:String(x.categorie||''),reel:Number(x.reelNetPrevisionnel!=null?x.reelNetPrevisionnel:x.reelImpute||0),allocation:Number(x.prevu||0)})):[];
+  const categoriesF=pf&&Array.isArray(pf.enveloppes)?pf.enveloppes.map(x=>({categorie:String(x.categorie||''),reel:Number(x.reelNetPrevisionnel!=null?x.reelNetPrevisionnel:x.reelImpute||0),allocation:Number(x.prevu||0)})):[];
+  const mapG={};categoriesG.forEach(x=>mapG[x.categorie]=x);
+  const ecartsCategories=categoriesF.map(x=>{const y=mapG[x.categorie]||{};return{categorie:x.categorie,ecartReel:arrCockpit20260902_(x.reel-Number(y.reel||0)),ecartAllocation:arrCockpit20260902_(x.allocation-Number(y.allocation||0))};}).filter(x=>Math.abs(x.ecartReel)>.01||Math.abs(x.ecartAllocation)>.01);
+  const out={
+    ok:!!(global&&global.ok!==false&&frais&&frais.ok!==false&&eq(g,f)&&ecartsCategories.length===0),
+    version:'2026-09-09.1',
+    snapshotGlobal:{disponible:!!global,revisionBudgetSoft:global&&global.revisionBudgetSoft||'',version:global&&global.version||'',cycle:pg&&pg.periode||null,valeurs:g},
+    cockpitInteractif:{disponible:!!frais,version:frais&&frais.version||'',cockpitVersion:frais&&frais.cockpit20260902&&frais.cockpit20260902.version||'',cycle:pf&&pf.periode||null,valeurs:f},
+    controles:{cockpitAligneSnapshot:eq(g,f),categoriesAlignees:ecartsCategories.length===0,ecartsCategories:ecartsCategories},
+    note:'Le recalcul interactif Cerbère est autorisé ; il ne doit pas devenir une seconde vérité métier.'
+  };
+  console.log('[AUDIT consommateurs Cerbère classique] '+JSON.stringify(out));
+  return out;
+}
