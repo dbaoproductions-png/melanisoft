@@ -1,6 +1,27 @@
 const TREASURY_FORECAST_CORRECTIONS_20260831_VERSION='2026-09-01.1';
 
 /**
+ * Socle minimal requis par le correctif 20260831.
+ *
+ * Le moteur 20260831 reconstruit intégralement ses lignes et ne consomme du
+ * moteur 20260830 que le solde bancaire réel et le périmètre des comptes.
+ * On évite donc ici le calcul pilotable Cerbère 20260830, qui était ensuite
+ * supprimé sans être utilisé. Le chargeur 20260830 reste inchangé pour ses
+ * éventuels consommateurs historiques.
+ */
+function construireSocleMinimalTresorerie20260831_(){
+  const synthese=chargerSyntheseComptes20260828();
+  const comptes=(synthese&&synthese.comptes||[]).filter(function(c){return actifComptes20260828_(c.actif);});
+  const courants=comptes.filter(estCompteCourantTresorerie_);
+  const comptesBase=courants.length?courants:comptes.filter(function(c){return !estEpargneTresorerie_(c);});
+  return{
+    ok:true,
+    soldeReel:arrondiTresorerie_(comptesBase.reduce(function(s,c){return s+Number(c&&c.soldeReel||0);},0)),
+    comptes:comptesBase.map(function(c){return{id:c.id,nom:c.nom,soldeReel:c.soldeReel,dateSolde:c.dateSolde,sourceSolde:c.sourceSolde};})
+  };
+}
+
+/**
  * Prévision bancaire BudgetSoft.
  *
  * Grandeur maîtresse : solde prévisionnel du compte courant.
@@ -15,7 +36,7 @@ const TREASURY_FORECAST_CORRECTIONS_20260831_VERSION='2026-09-01.1';
  */
 function chargerTresoreriePrevisionnelle20260831(dateCible){
   return avecContexteLectureBudgetSoft20260827_('tresorerie_previsionnelle_20260901',function(){
-    const socle=chargerTresoreriePrevisionnelle20260830(dateCible);
+    const socle=construireSocleMinimalTresorerie20260831_();
     if(!socle||!socle.ok)return socle;
 
     const ops=lireTable_('Operations');
