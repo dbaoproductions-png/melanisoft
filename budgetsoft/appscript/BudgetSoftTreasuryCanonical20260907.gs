@@ -156,3 +156,80 @@ function auditerProfilInterneProjectionEtendueBudgetSoft20260910(){
   console.log('[AUDIT PERF interne projectionEtendue] '+JSON.stringify(out));
   return out;
 }
+
+/**
+ * A/B lecture seule du calcul CB multi-cycle.
+ * Baseline : primitive actuelle, qui recharge Cerbère pour chaque débit.
+ * Candidat : une seule lecture Cerbère, puis sélection du bon cycle pour chaque débit.
+ * Aucun résultat n'est publié ni injecté dans le moteur.
+ */
+function auditerCandidatCerbereUniquePourCbMultiCycleBudgetSoft20260910(){
+  const cible='2026-10-31';
+  return avecContexteLectureBudgetSoft20260827_('audit-ab-cerbere-unique-cb-20260910',function(){
+    const now=finJourTresorerie_(new Date());
+    const dateCible=finJourTresorerie_(new Date(cible));
+    const ops=lireTable_('Operations');
+
+    const tA=Date.now();
+    const baseline=estimationsDebitsCbDiffereTresorerie20260908_(ops,now,dateCible);
+    const dureeBaselineMs=Date.now()-tA;
+
+    const tC=Date.now();
+    const chargeur=typeof chargerCerbereV374==='function'?chargerCerbereV374:(typeof chargerCerbereV37==='function'?chargerCerbereV37:null);
+    const cerbere=chargeur?chargeur():null;
+    const dureeCerbereUniqueMs=Date.now()-tC;
+    const periodes=cerbere&&Array.isArray(cerbere.periodes)?cerbere.periodes:[];
+    const versionCerbere=String(cerbere&&cerbere.version||'');
+
+    const tB=Date.now();
+    const candidat=[];let ref=new Date(now),garde=0;
+    while(ref<dateCible&&garde++<12){
+      const debit=prochaineDateDebitCbTresorerie20260901_(ref);
+      if(!debit||isNaN(debit)||debit>dateCible)break;
+      const p=periodes.find(function(pp){
+        const finCycle=new Date((pp&&pp.periode||pp||{}).fin||0);
+        return !isNaN(finCycle)&&finCycle.getFullYear()===debit.getFullYear()&&finCycle.getMonth()===debit.getMonth();
+      })||null;
+      let partCerbere=0;
+      if(p){
+        const env=Array.isArray(p.enveloppes)?p.enveloppes:[];
+        partCerbere=arrondiTresorerie_(env.reduce(function(s,x){
+          const brut=x&&x.resteV37!=null?x.resteV37:(Number(x&&x.prevu||0)-Number(x&&x.reelNetPrevisionnel||x&&x.reelImpute||0)-Number(x&&x.planifie||0));
+          return s+Math.max(0,Number(brut)||0);
+        },0));
+      }
+      const partFinMois=estimationQueueCbFinMoisTresorerie20260901_(ops,ref,debit);
+      const residuel=arrondiTresorerie_(Math.max(0,partCerbere+partFinMois));
+      if(residuel>0)candidat.push({
+        id:'debit_cb_estime:'+debit.getTime(),source:'debit_cb_estime',sourceId:'cb:'+debit.getFullYear()+'-'+(debit.getMonth()+1),date:debit.toISOString(),
+        libelle:'Complément estimé du débit CB différé',categorie:'Carte à débit différé',compte:'',montantSigne:-residuel,certitude:'estime',
+        preuve:'Complément non encore connu : reste Cerbère du cycle aligné sur le débit + estimation marginale des jours 28-fin de mois',dateConventionnelle:false,
+        partCerbere:partCerbere,partFinMois:partFinMois,moteurCerbere:versionCerbere
+      });
+      ref=new Date(debit.getTime()+1);
+    }
+    const dureeAssemblageCandidatMs=Date.now()-tB;
+
+    function sig(xs){return (xs||[]).map(function(x){return{
+      date:Utilities.formatDate(new Date(x.date),Session.getScriptTimeZone(),'yyyy-MM-dd'),
+      montant:arrondiTresorerieCanonique20260907_(x.montantSigne),
+      partCerbere:arrondiTresorerieCanonique20260907_(x.partCerbere),
+      partFinMois:arrondiTresorerieCanonique20260907_(x.partFinMois),
+      moteurCerbere:String(x.moteurCerbere||'')
+    };});}
+    const a=sig(baseline),b=sig(candidat);
+    const identique=JSON.stringify(a)===JSON.stringify(b);
+    const coutCandidat=dureeCerbereUniqueMs+dureeAssemblageCandidatMs;
+    const gainPct=dureeBaselineMs>0?Math.round((1-coutCandidat/dureeBaselineMs)*1000)/10:null;
+    const out={
+      ok:identique,
+      version:'2026-09-10.1',lectureSeule:true,aucuneModification:true,cible:cible,
+      comparaison:{identiqueAuCentime:identique,baseline:a,candidat:b},
+      durees:{baselineMs:dureeBaselineMs,cerbereUniqueMs:dureeCerbereUniqueMs,assemblageCandidatMs:dureeAssemblageCandidatMs,candidatTotalMs:coutCandidat,gainPct:gainPct},
+      decision:identique?'CANDIDAT_AUTORISE_POUR_ETAPE_SUIVANTE':'REJETER_CANDIDAT',
+      doctrine:'Aucune optimisation appliquée. Une seule lecture Cerbère ne pourra être intégrée que si les deux cycles CB sont strictement identiques au centime.'
+    };
+    console.log('[AUDIT PERF A/B Cerbère unique CB multi-cycle] '+JSON.stringify(out));
+    return out;
+  });
+}
