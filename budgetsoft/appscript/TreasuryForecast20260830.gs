@@ -242,3 +242,44 @@ function resumeTresorerie_(lignes){
   (lignes||[]).forEach(x=>{const m=Number(x.montantSigne||0);if(m>=0)r.recettes+=m;else r.depenses+=Math.abs(m);if(x.source==='operation_future')r.operations_futures+=m;else if(x.source==='charge_fixe')r.charges_fixes+=m;else if(x.source==='evenement')r.evenements+=m;else if(x.source==='action')r.actions+=m;else if(x.source==='pilotable')r.pilotable+=m;});
   Object.keys(r).forEach(k=>r[k]=arrondiTresorerie_(r[k]));return r;
 }
+
+/**
+ * Audit lecture seule du socle 20260830.
+ * Il reproduit le chemin de calcul pour identifier le coût exact avant toute optimisation.
+ */
+function auditerProfilSocleTresorerie20260830BudgetSoft20260910(){
+  const tGlobal=Date.now();
+  const out=avecContexteLectureBudgetSoft20260827_('audit-profil-socle-20260830-20260910',function(){
+    const temps={};let t=Date.now();
+    const now=finJourTresorerie_(new Date());
+    const cible=normaliserDateCibleTresorerie_('2026-10-31',now);
+    temps.referenceEtCible=Date.now()-t;
+
+    t=Date.now();const synthese=chargerSyntheseComptes20260828();temps.syntheseComptes=Date.now()-t;
+    t=Date.now();const comptes=(synthese.comptes||[]).filter(c=>actifComptes20260828_(c.actif));const courants=comptes.filter(estCompteCourantTresorerie_);const comptesBase=courants.length?courants:comptes.filter(c=>!estEpargneTresorerie_(c));const soldeInitial=arrondiTresorerie_(comptesBase.reduce((s,c)=>s+Number(c.soldeReel||0),0));temps.selectionComptes=Date.now()-t;
+
+    t=Date.now();const ops=lireTable_('Operations');temps.lectureOperations=Date.now()-t;
+    t=Date.now();const charges=lireTable_('Charges_fixes');temps.lectureCharges=Date.now()-t;
+    t=Date.now();const events=lireFeuilleDynamiquePlan_('Plan_Evenements');temps.lectureEvenements=Date.now()-t;
+    t=Date.now();const actions=lireFeuilleDynamiquePlan_('Plan_Actions');temps.lectureActions=Date.now()-t;
+
+    t=Date.now();const hard=operationsFuturesTresorerie_(ops,now,cible,comptesBase);temps.operationsFutures=Date.now()-t;
+    t=Date.now();const cfs=occurrencesChargesTresorerie_(charges,hard,actions,now,cible,comptesBase);temps.chargesFixes=Date.now()-t;
+    t=Date.now();const evs=occurrencesEvenementsTresorerie_(events,hard,now,cible,comptesBase);temps.evenements=Date.now()-t;
+    t=Date.now();const acts=occurrencesActionsTresorerie_(actions,hard,now,cible,comptesBase);temps.actions=Date.now()-t;
+    t=Date.now();const pilot=estimationPilotableTresorerie_(now,cible);temps.estimationPilotableCerbere=Date.now()-t;
+
+    const lignes=[].concat(hard,cfs,evs,acts);
+    if(pilot&&Math.abs(pilot.montant)>0.009)lignes.push(pilot);
+    t=Date.now();lignes.sort((a,b)=>new Date(a.date)-new Date(b.date)||rangCertitudeTresorerie_(a.certitude)-rangCertitudeTresorerie_(b.certitude));temps.tri=Date.now()-t;
+    t=Date.now();const variation=arrondiTresorerie_(lignes.reduce((s,x)=>s+Number(x.montantSigne||0),0));const certain=arrondiTresorerie_(lignes.filter(x=>x.certitude==='certain').reduce((s,x)=>s+Number(x.montantSigne||0),0));const tresProbable=arrondiTresorerie_(lignes.filter(x=>['certain','tres_probable'].includes(x.certitude)).reduce((s,x)=>s+Number(x.montantSigne||0),0));temps.agregats=Date.now()-t;
+    t=Date.now();const confiance=confianceTresorerie_(now,cible,lignes),resume=resumeTresorerie_(lignes);temps.resumeEtConfiance=Date.now()-t;
+
+    const totalEtapesMs=Object.keys(temps).reduce((s,k)=>s+Number(temps[k]||0),0);
+    const classement=Object.keys(temps).map(k=>({etape:k,dureeMs:temps[k],partPct:totalEtapesMs?Math.round(temps[k]*1000/totalEtapesMs)/10:0})).sort((a,b)=>b.dureeMs-a.dureeMs);
+    return {ok:true,version:'2026-09-10.1',lectureSeule:true,aucuneModification:true,cible:'2026-10-31',temps:temps,totalEtapesMs:totalEtapesMs,classement:classement,volumes:{operations:(ops||[]).length,charges:(charges||[]).length,evenements:(events||[]).length,actions:(actions||[]).length,hard:hard.length,cfs:cfs.length,evs:evs.length,acts:acts.length,lignesFinales:lignes.length},signature:{version:TREASURY_FORECAST_20260830_VERSION,soldeReel:soldeInitial,variationPrevue:variation,soldePrevisionnel:arrondiTresorerie_(soldeInitial+variation),certain:arrondiTresorerie_(soldeInitial+certain),tresProbable:arrondiTresorerie_(soldeInitial+tresProbable),pilotable:pilot||null,resume:resume,confiance:confiance},doctrine:'Profilage uniquement. Aucun changement métier ni optimisation appliquée.'};
+  });
+  out.dureeTotaleMs=Date.now()-tGlobal;
+  console.log('[AUDIT PERF socle 20260830] '+JSON.stringify(out));
+  return out;
+}
