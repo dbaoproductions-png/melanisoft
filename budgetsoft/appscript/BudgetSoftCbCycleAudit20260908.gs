@@ -72,3 +72,111 @@ function auditerGardeCbMultiCycle27102026BudgetSoft20260908(){
   console.log('[AUDIT Garde CB multi-cycle] '+JSON.stringify(out));
   return out;
 }
+
+/**
+ * Produit les mêmes lignes CB multi-cycle que le moteur courant, mais à partir
+ * d'un Cerbère fourni par l'appelant. Aucun recalcul Cerbère n'est effectué ici.
+ */
+function estimationsDebitsCbDepuisCerberePrechargeAuditBudgetSoft20260910_(ops,reference,cible,cerbere){
+  const out=[],vus={};let ref=new Date(reference),garde=0;
+  while(ref<cible&&garde++<12){
+    const debit=prochaineDateDebitCbTresorerie20260901_(ref);
+    if(!debit||isNaN(debit)||debit>cible)break;
+    const cle=String(debit.getTime());if(vus[cle])break;vus[cle]=true;
+    const ligne=estimationDebitCbDiffereTresorerie20260901V2_(ops,ref,cible,cerbere);
+    if(ligne)out.push(ligne);
+    ref=new Date(debit.getTime()+1);
+  }
+  return out;
+}
+
+/** Candidat strict : même trajectoire 20260901, seul Cerbère est fourni d'avance. */
+function construireTrajectoireDepuisCerberePrechargeAuditBudgetSoft20260910_(dateCible,cerbere){
+  return avecContexteLectureBudgetSoft20260827_('audit-candidat-projection-cerbere-precharge-20260910',function(){
+    const r=typeof chargerSocleTresorerie20260831SansDebitCbLegacy20260910_==='function'
+      ?chargerSocleTresorerie20260831SansDebitCbLegacy20260910_(dateCible)
+      :chargerTresoreriePrevisionnelle20260831(dateCible);
+    if(!r||!r.ok)return r;
+    const reference=new Date(r.dateReference||new Date()),cible=new Date(r.dateCible||new Date());
+    const evenements=lireFeuilleDynamiquePlan_('Plan_Evenements');
+    const actions=lireFeuilleDynamiquePlan_('Plan_Actions');
+    const ops=lireTable_('Operations');
+    const hard=(r.lignes||[]).filter(function(x){return x.source==='operation_future';});
+    let lignes=recalerFluxPlanCarteTresorerie20260901_(r.lignes||[],evenements,actions,hard,reference,cible);
+    lignes=filtrerActionsPlanEffectivesTresorerie20260908_(lignes,actions);
+    lignes=lignes.filter(function(x){return x.source!=='debit_cb_estime';});
+    const debitsCb=estimationsDebitsCbDepuisCerberePrechargeAuditBudgetSoft20260910_(ops,reference,cible,cerbere);
+    if(debitsCb.length)lignes.push.apply(lignes,debitsCb);
+    lignes=dedoublonnerPrevisionsTresorerie20260831_(lignes);
+    lignes.sort(function(a,b){return new Date(a.date)-new Date(b.date)||rangCertitudeTresorerie_(a.certitude)-rangCertitudeTresorerie_(b.certitude);});
+    const final=recalculerSortieTresorerie20260901_(r,lignes,reference,cible);
+    const decomposition=decomposerTrajectoireTresorerieCanoniqueBudgetSoft20260907_(final);
+    final.proprietaireBudgetSoft=BUDGETSOFT_TREASURY_CANONICAL_OWNER;
+    final.moteurSousJacent='chargerTresoreriePrevisionnelle20260901';
+    final.versionContratCanonique=BUDGETSOFT_TREASURY_CANONICAL_20260907_VERSION;
+    final.decompositionCanonique=decomposition;
+    if(!decomposition.ok){final.ok=false;final.erreur='Contrat canonique de trésorerie non satisfait.';final.erreursContrat=decomposition.erreurs.slice();}
+    return final;
+  });
+}
+
+function signatureProjectionCerberePrechargeAuditBudgetSoft20260910_(r){
+  const lignes=(r&&r.lignes||[]).map(function(x){return{
+    id:String(x&&x.id||''),source:String(x&&x.source||''),sourceId:String(x&&x.sourceId||''),date:String(x&&x.date||''),
+    libelle:String(x&&x.libelle||''),categorie:String(x&&x.categorie||''),compte:String(x&&x.compte||''),
+    montantSigne:arrAuditCbCycleBudgetSoft20260908_(x&&x.montantSigne),certitude:String(x&&x.certitude||''),
+    preuve:String(x&&x.preuve||''),dateConventionnelle:!!(x&&x.dateConventionnelle),
+    partCerbere:x&&x.partCerbere!=null?arrAuditCbCycleBudgetSoft20260908_(x.partCerbere):null,
+    partFinMois:x&&x.partFinMois!=null?arrAuditCbCycleBudgetSoft20260908_(x.partFinMois):null,
+    moteurCerbere:String(x&&x.moteurCerbere||'')
+  };});
+  return{
+    ok:!!(r&&r.ok),version:String(r&&r.version||''),proprietaire:String(r&&r.proprietaireBudgetSoft||''),
+    contratVersion:String(r&&r.versionContratCanonique||''),dateReference:String(r&&r.dateReference||''),dateCible:String(r&&r.dateCible||''),
+    soldeReel:arrAuditCbCycleBudgetSoft20260908_(r&&r.soldeReel),variationPrevue:arrAuditCbCycleBudgetSoft20260908_(r&&r.variationPrevue),
+    soldePrevisionnel:arrAuditCbCycleBudgetSoft20260908_(r&&r.soldePrevisionnel),nombreLignes:lignes.length,lignes:lignes,
+    decompositionOk:!!(r&&r.decompositionCanonique&&r.decompositionCanonique.ok)
+  };
+}
+
+/**
+ * Dernier A/B lecture seule avant éventuelle intégration snapshot :
+ * baseline = projection canonique actuelle, qui recharge Cerbère ;
+ * candidat = même projection avec un Cerbère préchargé une seule fois.
+ * Le coût de préchargement est publié séparément car le snapshot calcule déjà
+ * Cerbère pour son propre module : l'objectif est d'éviter le second calcul.
+ */
+function auditerCandidatReutilisationCerbereProjectionBudgetSoft20260910(){
+  const cible='2026-10-31';
+  const tA=Date.now();
+  const baseline=construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(cible);
+  const baselineMs=Date.now()-tA;
+
+  const chargeur=typeof chargerCerbereV374==='function'?chargerCerbereV374:(typeof chargerCerbereV37==='function'?chargerCerbereV37:null);
+  const tC=Date.now();
+  const cerbere=chargeur?chargeur():null;
+  const cerberePrechargeMs=Date.now()-tC;
+
+  const tB=Date.now();
+  const candidat=construireTrajectoireDepuisCerberePrechargeAuditBudgetSoft20260910_(cible,cerbere);
+  const candidatProjectionMs=Date.now()-tB;
+
+  const a=signatureProjectionCerberePrechargeAuditBudgetSoft20260910_(baseline);
+  const b=signatureProjectionCerberePrechargeAuditBudgetSoft20260910_(candidat);
+  const identique=JSON.stringify(a)===JSON.stringify(b);
+  const cbA=(baseline&&baseline.lignes||[]).filter(function(x){return x.source==='debit_cb_estime';}).map(function(x){return{date:dateIsoJourAuditCbCycleBudgetSoft20260908_(x.date),montant:arrAuditCbCycleBudgetSoft20260908_(x.montantSigne),partCerbere:arrAuditCbCycleBudgetSoft20260908_(x.partCerbere),partFinMois:arrAuditCbCycleBudgetSoft20260908_(x.partFinMois),moteurCerbere:String(x.moteurCerbere||'')};});
+  const cbB=(candidat&&candidat.lignes||[]).filter(function(x){return x.source==='debit_cb_estime';}).map(function(x){return{date:dateIsoJourAuditCbCycleBudgetSoft20260908_(x.date),montant:arrAuditCbCycleBudgetSoft20260908_(x.montantSigne),partCerbere:arrAuditCbCycleBudgetSoft20260908_(x.partCerbere),partFinMois:arrAuditCbCycleBudgetSoft20260908_(x.partFinMois),moteurCerbere:String(x.moteurCerbere||'')};});
+  const cbIdentique=JSON.stringify(cbA)===JSON.stringify(cbB);
+  const gainProjectionPct=baselineMs>0?Math.round((1-candidatProjectionMs/baselineMs)*1000)/10:null;
+  const economieProjectionMs=baselineMs-candidatProjectionMs;
+  const decision=identique&&cbIdentique&&economieProjectionMs>=2000?'CANDIDAT_AUTORISE_POUR_INTEGRATION_SNAPSHOT':(identique&&cbIdentique?'IDENTIQUE_MAIS_GAIN_INSUFFISANT_ARRETER':'REJETER_CANDIDAT');
+  const out={
+    ok:identique&&cbIdentique,version:'2026-09-10.1',lectureSeule:true,aucuneModification:true,cible:cible,
+    comparaison:{identiqueAuCentimeEtLigneParLigne:identique,cbMultiCycleIdentique:cbIdentique,baseline:{soldeReel:a.soldeReel,variationPrevue:a.variationPrevue,soldePrevisionnel:a.soldePrevisionnel,nombreLignes:a.nombreLignes,debitsCb:cbA},candidat:{soldeReel:b.soldeReel,variationPrevue:b.variationPrevue,soldePrevisionnel:b.soldePrevisionnel,nombreLignes:b.nombreLignes,debitsCb:cbB}},
+    durees:{baselineProjectionMs:baselineMs,cerberePrechargeMs:cerberePrechargeMs,candidatProjectionCerbereDejaDisponibleMs:candidatProjectionMs,economieProjectionMs:economieProjectionMs,gainProjectionPct:gainProjectionPct},
+    decision:decision,
+    doctrine:'Aucune optimisation appliquée. Le candidat n’est intégrable au snapshot que si la trajectoire complète et les deux débits CB sont strictement identiques, avec un gain de projection d’au moins 2 s. Le coût Cerbère préchargé est séparé car le snapshot calcule déjà Cerbère pour son module propre.'
+  };
+  console.log('[AUDIT PERF A/B réutilisation Cerbère projection] '+JSON.stringify(out));
+  return out;
+}
