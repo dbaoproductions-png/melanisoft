@@ -208,3 +208,91 @@ function auditerCandidatProjectionUniqueSnapshotBudgetSoft20260910(){
   console.log('[AUDIT PERF candidat projection unique] '+JSON.stringify(out));
   return out;
 }
+
+function construireSocleMinimalTresorerie20260831Audit20260910_(){
+  const synthese=chargerSyntheseComptes20260828();
+  const comptes=(synthese&&synthese.comptes||[]).filter(function(c){return actifComptes20260828_(c.actif);});
+  const courants=comptes.filter(estCompteCourantTresorerie_);
+  const comptesBase=courants.length?courants:comptes.filter(function(c){return !estEpargneTresorerie_(c);});
+  return{
+    ok:true,
+    soldeReel:arrondiTresorerie_(comptesBase.reduce(function(s,c){return s+Number(c&&c.soldeReel||0);},0)),
+    comptes:comptesBase.map(function(c){return{id:c.id,nom:c.nom,soldeReel:c.soldeReel,dateSolde:c.dateSolde,sourceSolde:c.sourceSolde};})
+  };
+}
+
+function construireCandidatTresorerie20260831SocleMinimalAudit20260910_(dateCible){
+  return avecContexteLectureBudgetSoft20260827_('audit-candidat-socle-minimal-20260831-20260910',function(){
+    const socle=construireSocleMinimalTresorerie20260831Audit20260910_();
+    const ops=lireTable_('Operations');
+    const charges=lireTable_('Charges_fixes');
+    const evenements=lireFeuilleDynamiquePlan_('Plan_Evenements');
+    const actions=lireFeuilleDynamiquePlan_('Plan_Actions');
+    const comptes=Array.isArray(socle.comptes)?socle.comptes:[];
+    const reference=dateReferenceBancaireTresorerie20260901_(socle,ops);
+    const cible=normaliserDateCibleTresorerie_(dateCible,reference);
+    const hard=operationsFuturesTresorerie_(ops,reference,cible,comptes);
+    let lignes=hard.slice();
+    let cfs=occurrencesChargesTresorerie_(charges,hard,actions,reference,cible,comptes);
+    cfs=recalerChargesFixesCarteTresorerie20260901_(cfs,charges,ops,hard,reference,cible);
+    lignes=lignes.concat(cfs);
+    const evs=occurrencesEvenementsTresorerie_(evenements,hard,reference,cible,comptes).filter(function(x){return evenementEffectifTresorerie20260831_(x.sourceId,evenements);});
+    lignes=lignes.concat(evs);
+    lignes=completerEvenementsEffectifsTresorerie20260831_(lignes,evenements,reference,cible);
+    const acts=normaliserMontantsActionsTresorerie20260831_(occurrencesActionsTresorerie_(actions,hard,reference,cible,comptes),actions);
+    lignes=lignes.concat(acts);
+    lignes=appliquerSuppressionsTemporairesTresorerie20260831_(lignes,evenements);
+    lignes=dedoublonnerPrevisionsTresorerie20260831_(lignes);
+    const revenusCanon=revenusCanoniquesTresorerie20260831_(ops,lignes,reference,cible);
+    lignes=dedoublonnerPrevisionsTresorerie20260831_(lignes.concat(revenusCanon));
+    lignes=lignes.filter(function(x){return x.source!=='pilotable';});
+    const debitCb=estimationDebitCbDiffereTresorerie20260901_(ops,reference,cible);
+    if(debitCb)lignes.push(debitCb);
+    lignes=dedoublonnerPrevisionsTresorerie20260831_(lignes);
+    lignes.sort(function(a,b){return new Date(a.date)-new Date(b.date)||rangCertitudeTresorerie_(a.certitude)-rangCertitudeTresorerie_(b.certitude);});
+    const variation=arrondiTresorerie_(lignes.reduce(function(s,x){return s+Number(x.montantSigne||0);},0));
+    const certain=arrondiTresorerie_(lignes.filter(function(x){return x.certitude==='certain';}).reduce(function(s,x){return s+Number(x.montantSigne||0);},0));
+    const tresProbable=arrondiTresorerie_(lignes.filter(function(x){return ['certain','tres_probable'].includes(x.certitude);}).reduce(function(s,x){return s+Number(x.montantSigne||0);},0));
+    socle.version=TREASURY_FORECAST_CORRECTIONS_20260831_VERSION;
+    socle.dateReference=reference.toISOString();
+    socle.dateCible=cible.toISOString();
+    socle.lignes=lignes;
+    socle.variationPrevue=variation;
+    socle.soldePrevisionnel=arrondiTresorerie_(Number(socle.soldeReel||0)+variation);
+    socle.fourchette={certain:arrondiTresorerie_(Number(socle.soldeReel||0)+certain),tresProbable:arrondiTresorerie_(Number(socle.soldeReel||0)+tresProbable),toutesHypotheses:socle.soldePrevisionnel};
+    socle.resume=resumeTresorerie20260831_(lignes);
+    socle.confiance=confianceTresorerie_(reference,cible,lignes);
+    socle.pilotable=null;
+    socle.debitCbEstime=debitCb||null;
+    socle.diagnostic20260831={doctrine:'solde bancaire réel + seuls flux non encore incorporés',hierarchie:'estimation -> engagement connu -> opération réelle -> solde réel',dateReferenceBancaire:reference.toISOString(),revenusCanoniquesAjoutes:revenusCanon.length,lignesFinales:lignes.length,evenementsEffectifs:(evenements||[]).filter(function(e){return statutEffectifTresorerie20260831_(e.statut);}).length,suspensionsEffectives:(evenements||[]).filter(function(e){return statutEffectifTresorerie20260831_(e.statut)&&estSuspensionTemporaireTresorerie20260831_(e);}).length,debitCbEstimeAjoute:!!debitCb,debitCbDate:debitCb?debitCb.date:null,debitCbPartCerbere:debitCb?debitCb.partCerbere:0,debitCbPartFinMois:debitCb?debitCb.partFinMois:0};
+    return socle;
+  });
+}
+
+function signatureSocle20260831Audit20260910_(r){
+  const lignes=(r&&r.lignes||[]).map(function(x){return{
+    id:String(x&&x.id||''),source:String(x&&x.source||''),sourceId:String(x&&x.sourceId||''),date:String(x&&x.date||''),libelle:String(x&&x.libelle||''),categorie:String(x&&x.categorie||''),compte:String(x&&x.compte||''),montantSigne:arrAuditPerfTresorerie20260910_(x&&x.montantSigne),certitude:String(x&&x.certitude||''),preuve:String(x&&x.preuve||''),dateConventionnelle:!!(x&&x.dateConventionnelle),partCerbere:x&&x.partCerbere!=null?arrAuditPerfTresorerie20260910_(x.partCerbere):null,partFinMois:x&&x.partFinMois!=null?arrAuditPerfTresorerie20260910_(x.partFinMois):null,moteurCerbere:String(x&&x.moteurCerbere||'')};});
+  return{
+    ok:!!(r&&r.ok),version:String(r&&r.version||''),dateReference:String(r&&r.dateReference||''),dateCible:String(r&&r.dateCible||''),soldeReel:arrAuditPerfTresorerie20260910_(r&&r.soldeReel),variationPrevue:arrAuditPerfTresorerie20260910_(r&&r.variationPrevue),soldePrevisionnel:arrAuditPerfTresorerie20260910_(r&&r.soldePrevisionnel),fourchette:r&&r.fourchette||null,resume:r&&r.resume||null,confiance:r&&r.confiance||null,pilotable:r&&r.pilotable||null,debitCbEstime:r&&r.debitCbEstime?{date:String(r.debitCbEstime.date||''),montant:arrAuditPerfTresorerie20260910_(r.debitCbEstime.montantSigne),partCerbere:arrAuditPerfTresorerie20260910_(r.debitCbEstime.partCerbere),partFinMois:arrAuditPerfTresorerie20260910_(r.debitCbEstime.partFinMois),moteurCerbere:String(r.debitCbEstime.moteurCerbere||'')}:null,comptes:(r&&r.comptes||[]).map(function(c){return{id:String(c&&c.id||''),nom:String(c&&c.nom||''),soldeReel:arrAuditPerfTresorerie20260910_(c&&c.soldeReel),dateSolde:String(c&&c.dateSolde||''),sourceSolde:String(c&&c.sourceSolde||'')};}),diagnostic:r&&r.diagnostic20260831||null,lignes:lignes
+  };
+}
+
+/**
+ * A/B lecture seule : le socle 20260830 est aujourd'hui utilisé par 20260831 alors
+ * que 20260831 reconstruit ensuite toutes les lignes. Le candidat ne conserve du
+ * socle que ce qui est effectivement consommé : comptes et solde réel.
+ */
+function auditerCandidatSocleMinimalTresorerie20260831BudgetSoft20260910(){
+  const cible='2026-10-31';
+  const tA=Date.now();
+  const baseline=chargerTresoreriePrevisionnelle20260831(cible);
+  const baselineMs=Date.now()-tA;
+  const tB=Date.now();
+  const candidat=construireCandidatTresorerie20260831SocleMinimalAudit20260910_(cible);
+  const candidatMs=Date.now()-tB;
+  const a=signatureSocle20260831Audit20260910_(baseline),b=signatureSocle20260831Audit20260910_(candidat);
+  const identique=JSON.stringify(a)===JSON.stringify(b);
+  const out={ok:identique,version:'2026-09-10.1',lectureSeule:true,aucuneModification:true,cible:cible,comparaison:{identiqueAuCentimeEtLigneParLigne:identique,baseline:{soldeReel:a.soldeReel,variationPrevue:a.variationPrevue,soldePrevisionnel:a.soldePrevisionnel,nombreLignes:a.lignes.length,debitCb:a.debitCbEstime},candidat:{soldeReel:b.soldeReel,variationPrevue:b.variationPrevue,soldePrevisionnel:b.soldePrevisionnel,nombreLignes:b.lignes.length,debitCb:b.debitCbEstime}},durees:{baselineMs:baselineMs,candidatMs:candidatMs,gainPct:baselineMs>0?Math.round((1-candidatMs/baselineMs)*1000)/10:null},decision:identique?'CANDIDAT_AUTORISE_POUR_ETAPE_SUIVANTE':'REJETER_CANDIDAT',doctrine:'Aucune optimisation appliquée. Le candidat supprime seulement le calcul 20260830 inutilisé par 20260831 ; intégration interdite si la sortie métier diffère.'};
+  console.log('[AUDIT PERF A/B socle minimal 20260831] '+JSON.stringify(out));
+  return out;
+}
