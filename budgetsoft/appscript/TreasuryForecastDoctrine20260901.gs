@@ -1,4 +1,22 @@
-const TREASURY_FORECAST_DOCTRINE_20260901_VERSION='2026-09-01.5';
+const TREASURY_FORECAST_DOCTRINE_20260901_VERSION='2026-09-10.2';
+
+/**
+ * Optimisation 2026-09-10.2 : le socle 20260831 reste rétrocompatible pour ses
+ * consommateurs historiques, mais son estimation CB legacy est neutralisée pendant
+ * l'appel canonique. La passe 20260901 reconstruit immédiatement tous les débits CB
+ * via estimationsDebitsCbDiffereTresorerie20260908_, déjà validée A/B ligne par ligne.
+ */
+function chargerSocleTresorerie20260831SansDebitCbLegacy20260910_(dateCible){
+  if(typeof chargerTresoreriePrevisionnelle20260831!=='function')return null;
+  if(typeof estimationDebitCbDiffereTresorerie20260901_!=='function')return chargerTresoreriePrevisionnelle20260831(dateCible);
+  const legacy=estimationDebitCbDiffereTresorerie20260901_;
+  try{
+    estimationDebitCbDiffereTresorerie20260901_=function(){return null;};
+    return chargerTresoreriePrevisionnelle20260831(dateCible);
+  }finally{
+    estimationDebitCbDiffereTresorerie20260901_=legacy;
+  }
+}
 
 /**
  * Passe terminale du solde prévisionnel bancaire.
@@ -7,7 +25,7 @@ const TREASURY_FORECAST_DOCTRINE_20260901_VERSION='2026-09-01.5';
  * sont pas encore financièrement effectives.
  */
 function chargerTresoreriePrevisionnelle20260901(dateCible){
-  const r=chargerTresoreriePrevisionnelle20260831(dateCible);
+  const r=chargerSocleTresorerie20260831SansDebitCbLegacy20260910_(dateCible);
   if(!r||!r.ok)return r;
   const reference=new Date(r.dateReference||new Date()),cible=new Date(r.dateCible||new Date());
   const evenements=lireFeuilleDynamiquePlan_('Plan_Evenements');
@@ -175,5 +193,6 @@ function recalculerSortieTresorerie20260901_(r,lignes,reference,cible){
   r.diagnostic20260831.actionsPlanTresorerie='uniquement impact_confirme + statut Effectif/Effective';
   r.diagnostic20260831.debitCbDoctrine='tous les débits CB jusqu’à la cible ; chaque cycle Cerbère est aligné sur le mois de son débit';
   r.diagnostic20260831.optimisationCerbereCb='2026-09-10 : une seule charge Cerbère réutilisée pour tous les débits CB de la trajectoire';
+  r.diagnostic20260831.suppressionCbLegacy20260831='2026-09-10.2 : estimation legacy neutralisée uniquement sur le chemin canonique 20260901';
   return r;
 }
