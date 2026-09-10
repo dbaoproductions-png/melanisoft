@@ -109,3 +109,50 @@ function auditerTrajectoireTresorerieCanoniqueBudgetSoft20260907(dateCible){
 function auditerProjectionTresorerieAu30092026(){
   return auditerTrajectoireTresorerieCanoniqueBudgetSoft20260907('2026-09-30');
 }
+
+/**
+ * Profilage interne lecture seule du propriétaire canonique.
+ * Rejoue exactement la passe 20260901 par étapes afin de localiser le coût,
+ * sans écrire ni publier quoi que ce soit. La cible couvre deux débits CB.
+ */
+function auditerProfilInterneProjectionEtendueBudgetSoft20260910(){
+  const cible='2026-10-31',tGlobal=Date.now(),temps={};
+  const out=avecContexteLectureBudgetSoft20260827_('audit-profil-projection-etendue-20260910',function(){
+    let t=Date.now();
+    const r=chargerTresoreriePrevisionnelle20260831(cible);
+    temps.socle20260831=Date.now()-t;
+    if(!r||!r.ok)return{ok:false,version:'2026-09-10.1',lectureSeule:true,erreur:'Socle 20260831 invalide.',temps:temps};
+
+    const reference=new Date(r.dateReference||new Date()),dateCible=new Date(r.dateCible||new Date());
+    t=Date.now();const evenements=lireFeuilleDynamiquePlan_('Plan_Evenements');temps.lectureEvenements=Date.now()-t;
+    t=Date.now();const actions=lireFeuilleDynamiquePlan_('Plan_Actions');temps.lectureActions=Date.now()-t;
+    t=Date.now();const ops=lireTable_('Operations');temps.lectureOperations=Date.now()-t;
+    const hard=(r.lignes||[]).filter(x=>x.source==='operation_future');
+
+    t=Date.now();let lignes=recalerFluxPlanCarteTresorerie20260901_(r.lignes||[],evenements,actions,hard,reference,dateCible);temps.recalagePlanCb=Date.now()-t;
+    t=Date.now();lignes=filtrerActionsPlanEffectivesTresorerie20260908_(lignes,actions);temps.filtreActions=Date.now()-t;
+    t=Date.now();lignes=lignes.filter(x=>x.source!=='debit_cb_estime');temps.retraitEstimationsAnciennes=Date.now()-t;
+
+    t=Date.now();const debitsCb=estimationsDebitsCbDiffereTresorerie20260908_(ops,reference,dateCible);temps.estimationsCbMultiCycle=Date.now()-t;
+    if(debitsCb.length)lignes.push.apply(lignes,debitsCb);
+
+    t=Date.now();lignes=dedoublonnerPrevisionsTresorerie20260831_(lignes);temps.dedoublonnage=Date.now()-t;
+    t=Date.now();lignes.sort((a,b)=>new Date(a.date)-new Date(b.date)||rangCertitudeTresorerie_(a.certitude)-rangCertitudeTresorerie_(b.certitude));temps.tri=Date.now()-t;
+    t=Date.now();const final=recalculerSortieTresorerie20260901_(r,lignes,reference,dateCible);temps.recalculSortie=Date.now()-t;
+    t=Date.now();const decomposition=decomposerTrajectoireTresorerieCanoniqueBudgetSoft20260907_(final);temps.decompositionCanonique=Date.now()-t;
+
+    const totalEtapes=Object.keys(temps).reduce((s,k)=>s+Number(temps[k]||0),0);
+    const classement=Object.keys(temps).map(k=>({etape:k,dureeMs:temps[k],partPct:totalEtapes?Math.round(temps[k]/totalEtapes*1000)/10:null})).sort((a,b)=>b.dureeMs-a.dureeMs);
+    return{
+      ok:!!(final&&final.ok!==false&&decomposition&&decomposition.ok),
+      version:'2026-09-10.1',lectureSeule:true,aucuneModification:true,cible:cible,
+      temps:temps,totalEtapesMs:totalEtapes,classement:classement,
+      cb:debitsCb.map(x=>({date:x.date,montant:arrondiTresorerieCanonique20260907_(x.montantSigne),partCerbere:arrondiTresorerieCanonique20260907_(x.partCerbere),partFinMois:arrondiTresorerieCanonique20260907_(x.partFinMois),moteurCerbere:x.moteurCerbere||''})),
+      signature:{version:final.version||'',soldeReel:arrondiTresorerieCanonique20260907_(final.soldeReel),variationPrevue:arrondiTresorerieCanonique20260907_(final.variationPrevue),soldePrevisionnel:arrondiTresorerieCanonique20260907_(final.soldePrevisionnel),nombreLignes:(final.lignes||[]).length,contratOk:!!decomposition.ok},
+      doctrine:'Profilage uniquement. Aucun changement moteur autorisé sur la base de ce test seul.'
+    };
+  });
+  out.dureeTotaleMs=Date.now()-tGlobal;
+  console.log('[AUDIT PERF interne projectionEtendue] '+JSON.stringify(out));
+  return out;
+}
