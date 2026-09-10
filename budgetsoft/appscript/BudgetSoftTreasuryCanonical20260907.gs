@@ -69,6 +69,32 @@ function construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(dateCible){
   return r;
 }
 
+/**
+ * Sous-vue canonique pure d'une trajectoire déjà calculée jusqu'à un horizon plus long.
+ * Aucun recalcul métier : filtrage temporel, recomposition du solde et réapplication
+ * du même contrat canonique. Utilisée uniquement après validation A/B ligne par ligne.
+ */
+function sousVueTrajectoireTresorerieCanoniqueBudgetSoft20260910_(trajectoire,dateCible){
+  if(!trajectoire||trajectoire.ok===false)return trajectoire;
+  const cible=Utilities.formatDate(new Date(dateCible),Session.getScriptTimeZone(),'yyyy-MM-dd');
+  const copie=Object.assign({},trajectoire);
+  copie.lignes=(trajectoire.lignes||[]).filter(function(l){
+    const d=new Date(l&&l.date);
+    if(isNaN(d.getTime()))return false;
+    return Utilities.formatDate(d,Session.getScriptTimeZone(),'yyyy-MM-dd')<=cible;
+  });
+  const variation=sommeLignesTresorerieCanonique20260907_(copie.lignes);
+  copie.dateCible=cible;
+  copie.soldePrevisionnel=arrondiTresorerieCanonique20260907_(Number(copie.soldeReel||0)+variation);
+  copie.proprietaireBudgetSoft=BUDGETSOFT_TREASURY_CANONICAL_OWNER;
+  copie.moteurSousJacent='chargerTresoreriePrevisionnelle20260901';
+  copie.versionContratCanonique=BUDGETSOFT_TREASURY_CANONICAL_20260907_VERSION;
+  copie.decompositionCanonique=decomposerTrajectoireTresorerieCanoniqueBudgetSoft20260907_(copie);
+  copie.optimisationSnapshot={version:'2026-09-10.1',mode:'sous_vue_trajectoire_etendue',sansRecalculMetier:true};
+  if(!copie.decompositionCanonique.ok){copie.ok=false;copie.erreur='Contrat canonique de trésorerie non satisfait après sous-vue.';copie.erreursContrat=copie.decompositionCanonique.erreurs.slice();}
+  return copie;
+}
+
 function auditerTrajectoireTresorerieCanoniqueBudgetSoft20260907(dateCible){
   const r=construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(dateCible);
   const d=r&&r.decompositionCanonique||null;
