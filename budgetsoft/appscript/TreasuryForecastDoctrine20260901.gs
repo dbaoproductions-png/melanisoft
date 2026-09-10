@@ -1,4 +1,4 @@
-const TREASURY_FORECAST_DOCTRINE_20260901_VERSION='2026-09-10.2';
+const TREASURY_FORECAST_DOCTRINE_20260901_VERSION='2026-09-10.3';
 
 /**
  * Optimisation 2026-09-10.2 : le socle 20260831 reste rétrocompatible pour ses
@@ -20,11 +20,10 @@ function chargerSocleTresorerie20260831SansDebitCbLegacy20260910_(dateCible){
 
 /**
  * Passe terminale du solde prévisionnel bancaire.
- * Elle ne crée aucune donnée : elle recadre les dépenses Plan explicitement payées
- * par CB sur la date bancaire de débit différé et exclut les Actions Plan qui ne
- * sont pas encore financièrement effectives.
+ * Le second argument optionnel permet au snapshot global de fournir un Cerbère déjà
+ * calculé. Les appels historiques à un seul argument conservent leur comportement.
  */
-function chargerTresoreriePrevisionnelle20260901(dateCible){
+function chargerTresoreriePrevisionnelle20260901(dateCible,cerberePrecharge){
   const r=chargerSocleTresorerie20260831SansDebitCbLegacy20260910_(dateCible);
   if(!r||!r.ok)return r;
   const reference=new Date(r.dateReference||new Date()),cible=new Date(r.dateCible||new Date());
@@ -34,23 +33,17 @@ function chargerTresoreriePrevisionnelle20260901(dateCible){
   const hard=(r.lignes||[]).filter(x=>x.source==='operation_future');
   let lignes=recalerFluxPlanCarteTresorerie20260901_(r.lignes||[],evenements,actions,hard,reference,cible);
 
-  // Doctrine 2026-09-08 : une Action Plan simplement prévue ne peut pas améliorer
-  // ou dégrader le solde bancaire. Elle doit être à la fois financièrement confirmée
-  // et au statut Effectif/Effective. Le Plan reste visible comme planification, mais
-  // seule l'effectivité fait entrer son flux autonome dans la trésorerie.
   lignes=filtrerActionsPlanEffectivesTresorerie20260908_(lignes,actions);
-
-  // Doctrine 2026-09-08.2 : une trajectoire bancaire qui franchit plusieurs dates
-  // de débit CB doit publier un complément estimé pour CHACUN de ces débits, pas
-  // seulement pour le premier. Chaque estimation reste rattachée au cycle Cerbère
-  // aligné sur le mois de son débit bancaire.
   lignes=lignes.filter(x=>x.source!=='debit_cb_estime');
-  const debitsCb=estimationsDebitsCbDiffereTresorerie20260908_(ops,reference,cible);
+  const debitsCb=estimationsDebitsCbDiffereTresorerie20260908_(ops,reference,cible,cerberePrecharge);
   if(debitsCb.length)lignes.push.apply(lignes,debitsCb);
 
   lignes=dedoublonnerPrevisionsTresorerie20260831_(lignes);
   lignes.sort((a,b)=>new Date(a.date)-new Date(b.date)||rangCertitudeTresorerie_(a.certitude)-rangCertitudeTresorerie_(b.certitude));
-  return recalculerSortieTresorerie20260901_(r,lignes,reference,cible);
+  const out=recalculerSortieTresorerie20260901_(r,lignes,reference,cible);
+  out.diagnostic20260831=out.diagnostic20260831||{};
+  out.diagnostic20260831.cerberePrechargeProjection=!!cerberePrecharge;
+  return out;
 }
 
 function listerMouvementsFutursTresorerie20260901(dateCible){
@@ -91,9 +84,6 @@ function recalerFluxPlanCarteTresorerie20260901_(lignes,evenements,actions,hard,
     out.push(Object.assign({},x,{date:d.toISOString(),preuve:String(x.preuve||'Flux Plan')+' · paiement CB : débit bancaire différé fin de mois'}));
   });
 
-  // Une dépense Plan CB peut avoir eu lieu avant la date de référence tout en restant
-  // à débiter à la fin du mois. Elle doit donc être restaurée si aucune opération CB
-  // future certaine ne la remplace encore.
   (evenements||[]).forEach(e=>{
     if(!statutEffectifTresorerie20260831_(e.statut)||!paiementCartePlanTresorerie20260901_(e)||estSuspensionTemporaireTresorerie20260831_(e)||String(e.type||'').toLowerCase()!=='depense')return;
     const dr=datePlanTresorerie_(e,reference,false),base=dr.date;if(!base||isNaN(base))return;
@@ -113,17 +103,18 @@ function recalerFluxPlanCarteTresorerie20260901_(lignes,evenements,actions,hard,
 
 /**
  * Produit tous les compléments CB compris entre la référence bancaire et la cible.
- * Optimisation 2026-09-10 validée A/B : Cerbère est chargé une seule fois pour
- * l'ensemble des débits de la trajectoire. Les périodes Cerbère restent ensuite
- * sélectionnées exactement avec la même règle mois du débit / fin de cycle.
+ * Si un Cerbère préchargé est fourni, il est réutilisé sans recalcul. Sinon le
+ * comportement historique est conservé avec une seule charge Cerbère par trajectoire.
  */
-function estimationsDebitsCbDiffereTresorerie20260908_(ops,reference,cible){
+function estimationsDebitsCbDiffereTresorerie20260908_(ops,reference,cible,cerberePrecharge){
   const out=[],vus={};
-  let cerberePrecharge=null;
-  try{
-    const chargeur=typeof chargerCerbereV374==='function'?chargerCerbereV374:(typeof chargerCerbereV37==='function'?chargerCerbereV37:null);
-    if(chargeur)cerberePrecharge=chargeur();
-  }catch(e){cerberePrecharge=null;}
+  let c=cerberePrecharge||null;
+  if(!c){
+    try{
+      const chargeur=typeof chargerCerbereV374==='function'?chargerCerbereV374:(typeof chargerCerbereV37==='function'?chargerCerbereV37:null);
+      if(chargeur)c=chargeur();
+    }catch(e){c=null;}
+  }
   let ref=new Date(reference),garde=0;
   while(ref<cible&&garde++<12){
     const debit=prochaineDateDebitCbTresorerie20260901_(ref);
@@ -131,28 +122,18 @@ function estimationsDebitsCbDiffereTresorerie20260908_(ops,reference,cible){
     const cle=String(debit.getTime());
     if(vus[cle])break;
     vus[cle]=true;
-    const ligne=estimationDebitCbDiffereTresorerie20260901V2_(ops,ref,cible,cerberePrecharge);
+    const ligne=estimationDebitCbDiffereTresorerie20260901V2_(ops,ref,cible,c);
     if(ligne)out.push(ligne);
-    // Même si le résiduel du cycle vaut zéro, il faut continuer jusqu'au débit
-    // suivant plutôt que d'arrêter toute la trajectoire.
     ref=new Date(debit.getTime()+1);
   }
   return out;
 }
 
-/**
- * Version corrigée du complément CB : Cerbère est retenu si son cycle se termine
- * dans le même mois que le prochain débit différé. Cela couvre correctement le cas
- * frontière 28/29/30/31 -> mois suivant sans confondre date bancaire réelle et phase
- * budgétaire. Les jours 28-fin de mois restent estimés séparément par l'historique.
- * Le quatrième argument est optionnel pour conserver la compatibilité des appels
- * directs historiques ; s'il est omis, le comportement antérieur est conservé.
- */
 function estimationDebitCbDiffereTresorerie20260901V2_(ops,reference,cible,cerberePrecharge){
   const debit=prochaineDateDebitCbTresorerie20260901_(reference);if(debit>cible)return null;
   let partCerbere=0,moteurCerbere='',c=cerberePrecharge;
   try{
-    if(arguments.length<4){
+    if(arguments.length<4||!c){
       const chargeur=typeof chargerCerbereV374==='function'?chargerCerbereV374:(typeof chargerCerbereV37==='function'?chargerCerbereV37:null);
       if(chargeur)c=chargeur();
     }
@@ -194,5 +175,6 @@ function recalculerSortieTresorerie20260901_(r,lignes,reference,cible){
   r.diagnostic20260831.debitCbDoctrine='tous les débits CB jusqu’à la cible ; chaque cycle Cerbère est aligné sur le mois de son débit';
   r.diagnostic20260831.optimisationCerbereCb='2026-09-10 : une seule charge Cerbère réutilisée pour tous les débits CB de la trajectoire';
   r.diagnostic20260831.suppressionCbLegacy20260831='2026-09-10.2 : estimation legacy neutralisée uniquement sur le chemin canonique 20260901';
+  r.diagnostic20260831.reutilisationCerbereSnapshot='2026-09-10.3 : le snapshot peut fournir un Cerbère déjà calculé ; fallback autonome conservé';
   return r;
 }
