@@ -95,11 +95,17 @@ function recalerFluxPlanCarteTresorerie20260901_(lignes,evenements,actions,hard,
 
 /**
  * Produit tous les compléments CB compris entre la référence bancaire et la cible.
- * La primitive V2 reste propriétaire du calcul d'un débit donné ; ici on ne fait
- * qu'avancer la référence juste après chaque débit pour demander le suivant.
+ * Optimisation 2026-09-10 validée A/B : Cerbère est chargé une seule fois pour
+ * l'ensemble des débits de la trajectoire. Les périodes Cerbère restent ensuite
+ * sélectionnées exactement avec la même règle mois du débit / fin de cycle.
  */
 function estimationsDebitsCbDiffereTresorerie20260908_(ops,reference,cible){
   const out=[],vus={};
+  let cerberePrecharge=null;
+  try{
+    const chargeur=typeof chargerCerbereV374==='function'?chargerCerbereV374:(typeof chargerCerbereV37==='function'?chargerCerbereV37:null);
+    if(chargeur)cerberePrecharge=chargeur();
+  }catch(e){cerberePrecharge=null;}
   let ref=new Date(reference),garde=0;
   while(ref<cible&&garde++<12){
     const debit=prochaineDateDebitCbTresorerie20260901_(ref);
@@ -107,7 +113,7 @@ function estimationsDebitsCbDiffereTresorerie20260908_(ops,reference,cible){
     const cle=String(debit.getTime());
     if(vus[cle])break;
     vus[cle]=true;
-    const ligne=estimationDebitCbDiffereTresorerie20260901V2_(ops,ref,cible);
+    const ligne=estimationDebitCbDiffereTresorerie20260901V2_(ops,ref,cible,cerberePrecharge);
     if(ligne)out.push(ligne);
     // Même si le résiduel du cycle vaut zéro, il faut continuer jusqu'au débit
     // suivant plutôt que d'arrêter toute la trajectoire.
@@ -121,23 +127,26 @@ function estimationsDebitsCbDiffereTresorerie20260908_(ops,reference,cible){
  * dans le même mois que le prochain débit différé. Cela couvre correctement le cas
  * frontière 28/29/30/31 -> mois suivant sans confondre date bancaire réelle et phase
  * budgétaire. Les jours 28-fin de mois restent estimés séparément par l'historique.
+ * Le quatrième argument est optionnel pour conserver la compatibilité des appels
+ * directs historiques ; s'il est omis, le comportement antérieur est conservé.
  */
-function estimationDebitCbDiffereTresorerie20260901V2_(ops,reference,cible){
+function estimationDebitCbDiffereTresorerie20260901V2_(ops,reference,cible,cerberePrecharge){
   const debit=prochaineDateDebitCbTresorerie20260901_(reference);if(debit>cible)return null;
-  let partCerbere=0,moteurCerbere='';
+  let partCerbere=0,moteurCerbere='',c=cerberePrecharge;
   try{
-    const chargeur=typeof chargerCerbereV374==='function'?chargerCerbereV374:(typeof chargerCerbereV37==='function'?chargerCerbereV37:null);
-    if(chargeur){
-      const c=chargeur(),periodes=c&&Array.isArray(c.periodes)?c.periodes:[];
-      const p=periodes.find(pp=>{
-        const finCycle=new Date((pp&&pp.periode||pp||{}).fin||0);
-        return !isNaN(finCycle)&&finCycle.getFullYear()===debit.getFullYear()&&finCycle.getMonth()===debit.getMonth();
-      })||null;
-      if(p){
-        const env=Array.isArray(p.enveloppes)?p.enveloppes:[];
-        partCerbere=arrondiTresorerie_(env.reduce((s,x)=>s+Math.max(0,Number(x&&x.resteV37!=null?x.resteV37:(Number(x&&x.prevu||0)-Number(x&&x.reelNetPrevisionnel||x&&x.reelImpute||0)-Number(x&&x.planifie||0)))||0),0));
-        moteurCerbere=String(c.version||'');
-      }
+    if(arguments.length<4){
+      const chargeur=typeof chargerCerbereV374==='function'?chargerCerbereV374:(typeof chargerCerbereV37==='function'?chargerCerbereV37:null);
+      if(chargeur)c=chargeur();
+    }
+    const periodes=c&&Array.isArray(c.periodes)?c.periodes:[];
+    const p=periodes.find(pp=>{
+      const finCycle=new Date((pp&&pp.periode||pp||{}).fin||0);
+      return !isNaN(finCycle)&&finCycle.getFullYear()===debit.getFullYear()&&finCycle.getMonth()===debit.getMonth();
+    })||null;
+    if(p){
+      const env=Array.isArray(p.enveloppes)?p.enveloppes:[];
+      partCerbere=arrondiTresorerie_(env.reduce((s,x)=>s+Math.max(0,Number(x&&x.resteV37!=null?x.resteV37:(Number(x&&x.prevu||0)-Number(x&&x.reelNetPrevisionnel||x&&x.reelImpute||0)-Number(x&&x.planifie||0)))||0),0));
+      moteurCerbere=String(c&&c.version||'');
     }
   }catch(e){}
   const partFinMois=estimationQueueCbFinMoisTresorerie20260901_(ops,reference,debit);
@@ -165,5 +174,6 @@ function recalculerSortieTresorerie20260901_(r,lignes,reference,cible){
   r.diagnostic20260831.passeTerminalePlanCb=true;
   r.diagnostic20260831.actionsPlanTresorerie='uniquement impact_confirme + statut Effectif/Effective';
   r.diagnostic20260831.debitCbDoctrine='tous les débits CB jusqu’à la cible ; chaque cycle Cerbère est aligné sur le mois de son débit';
+  r.diagnostic20260831.optimisationCerbereCb='2026-09-10 : une seule charge Cerbère réutilisée pour tous les débits CB de la trajectoire';
   return r;
 }
