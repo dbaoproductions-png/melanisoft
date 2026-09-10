@@ -52,9 +52,9 @@ function decomposerTrajectoireTresorerieCanoniqueBudgetSoft20260907_(r){
 }
 
 /** Propriétaire canonique BudgetSoft du prévisionnel bancaire. */
-function construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(dateCible){
+function construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(dateCible,cerberePrecharge){
   if(typeof chargerTresoreriePrevisionnelle20260901!=='function')return{ok:false,version:BUDGETSOFT_TREASURY_CANONICAL_20260907_VERSION,erreur:'Moteur doctrinal 20260901 absent.'};
-  const r=chargerTresoreriePrevisionnelle20260901(dateCible);
+  const r=chargerTresoreriePrevisionnelle20260901(dateCible,cerberePrecharge);
   if(!r||r.ok===false)return r;
   const decomposition=decomposerTrajectoireTresorerieCanoniqueBudgetSoft20260907_(r);
   r.proprietaireBudgetSoft=BUDGETSOFT_TREASURY_CANONICAL_OWNER;
