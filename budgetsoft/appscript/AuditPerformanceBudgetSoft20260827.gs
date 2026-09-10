@@ -296,3 +296,57 @@ function auditerCandidatSocleMinimalTresorerie20260831BudgetSoft20260910(){
   console.log('[AUDIT PERF A/B socle minimal 20260831] '+JSON.stringify(out));
   return out;
 }
+
+function signatureCanoniqueCompleteAuditPerf20260910_(r){
+  const lignes=(r&&r.lignes||[]).map(function(x){return{
+    id:String(x&&x.id||''),source:String(x&&x.source||''),sourceId:String(x&&x.sourceId||''),date:String(x&&x.date||''),libelle:String(x&&x.libelle||''),categorie:String(x&&x.categorie||''),compte:String(x&&x.compte||''),montantSigne:arrAuditPerfTresorerie20260910_(x&&x.montantSigne),certitude:String(x&&x.certitude||''),preuve:String(x&&x.preuve||''),dateConventionnelle:!!(x&&x.dateConventionnelle),partCerbere:x&&x.partCerbere!=null?arrAuditPerfTresorerie20260910_(x.partCerbere):null,partFinMois:x&&x.partFinMois!=null?arrAuditPerfTresorerie20260910_(x.partFinMois):null,moteurCerbere:String(x&&x.moteurCerbere||'')};});
+  return{
+    ok:!!(r&&r.ok),version:String(r&&r.version||''),proprietaire:String(r&&r.proprietaireBudgetSoft||''),contratVersion:String(r&&r.versionContratCanonique||''),dateReference:String(r&&r.dateReference||''),dateCible:String(r&&r.dateCible||''),soldeReel:arrAuditPerfTresorerie20260910_(r&&r.soldeReel),variationPrevue:arrAuditPerfTresorerie20260910_(r&&r.variationPrevue),soldePrevisionnel:arrAuditPerfTresorerie20260910_(r&&r.soldePrevisionnel),fourchette:r&&r.fourchette||null,resume:r&&r.resume||null,confiance:r&&r.confiance||null,lignes:lignes
+  };
+}
+
+/**
+ * A/B lecture seule : la passe 20260831 calcule encore un debit_cb_estime legacy,
+ * puis la passe terminale 20260901 supprime toutes ces lignes et reconstruit les
+ * débits CB multi-cycle avec la logique canonique moderne. Le candidat neutralise
+ * uniquement cet appel legacy pendant un calcul canonique, puis restaure la fonction.
+ */
+function auditerCandidatSuppressionDebitCbLegacy20260831BudgetSoft20260910(){
+  const cible='2026-10-31';
+  const tA=Date.now();
+  const baseline=construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(cible);
+  const baselineMs=Date.now()-tA;
+
+  const original=estimationDebitCbDiffereTresorerie20260901_;
+  let candidat=null,erreur=null,candidatMs=0;
+  try{
+    estimationDebitCbDiffereTresorerie20260901_=function(){return null;};
+    const tB=Date.now();
+    candidat=construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(cible);
+    candidatMs=Date.now()-tB;
+  }catch(e){
+    erreur=String(e&&e.stack||e&&e.message||e);
+  }finally{
+    estimationDebitCbDiffereTresorerie20260901_=original;
+  }
+
+  const a=signatureCanoniqueCompleteAuditPerf20260910_(baseline),b=signatureCanoniqueCompleteAuditPerf20260910_(candidat);
+  const identique=!erreur&&JSON.stringify(a)===JSON.stringify(b);
+  const cbA=(baseline&&baseline.lignes||[]).filter(function(x){return String(x&&x.source||'')==='debit_cb_estime';}).map(function(x){return{date:jourAuditPerfTresorerie20260910_(x.date),montant:arrAuditPerfTresorerie20260910_(x.montantSigne),partCerbere:arrAuditPerfTresorerie20260910_(x.partCerbere),partFinMois:arrAuditPerfTresorerie20260910_(x.partFinMois),moteurCerbere:String(x&&x.moteurCerbere||'')};});
+  const cbB=(candidat&&candidat.lignes||[]).filter(function(x){return String(x&&x.source||'')==='debit_cb_estime';}).map(function(x){return{date:jourAuditPerfTresorerie20260910_(x.date),montant:arrAuditPerfTresorerie20260910_(x.montantSigne),partCerbere:arrAuditPerfTresorerie20260910_(x.partCerbere),partFinMois:arrAuditPerfTresorerie20260910_(x.partFinMois),moteurCerbere:String(x&&x.moteurCerbere||'')};});
+  const cbIdentiques=JSON.stringify(cbA)===JSON.stringify(cbB);
+  const out={
+    ok:identique&&cbIdentiques,
+    version:'2026-09-10.1',
+    lectureSeule:true,
+    aucuneModification:true,
+    cible:cible,
+    comparaison:{identiqueAuCentimeEtLigneParLigne:identique,cbMultiCycleIdentique:cbIdentiques,baseline:{soldeReel:a.soldeReel,variationPrevue:a.variationPrevue,soldePrevisionnel:a.soldePrevisionnel,nombreLignes:a.lignes.length,debitsCb:cbA},candidat:{soldeReel:b.soldeReel,variationPrevue:b.variationPrevue,soldePrevisionnel:b.soldePrevisionnel,nombreLignes:b.lignes.length,debitsCb:cbB}},
+    durees:{baselineMs:baselineMs,candidatMs:candidatMs,gainPct:baselineMs>0?Math.round((1-candidatMs/baselineMs)*1000)/10:null},
+    erreur:erreur,
+    decision:identique&&cbIdentiques?'CANDIDAT_AUTORISE_POUR_ETAPE_SUIVANTE':'REJETER_CANDIDAT',
+    doctrine:'Aucune optimisation appliquée. Le calcul CB legacy 20260831 ne pourra être supprimé du chemin canonique que si la trajectoire complète et tous les débits CB multi-cycle restent strictement identiques.'
+  };
+  console.log('[AUDIT PERF A/B suppression CB legacy 20260831] '+JSON.stringify(out));
+  return out;
+}
