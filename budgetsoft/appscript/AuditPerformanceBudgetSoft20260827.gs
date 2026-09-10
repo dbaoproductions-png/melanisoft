@@ -119,3 +119,92 @@ function auditerPerformanceSnapshotGlobalBudgetSoft20260909(){
   console.log('[AUDIT PERF snapshot global] '+JSON.stringify(out));
   return out;
 }
+
+function jourAuditPerfTresorerie20260910_(v){
+  const d=v instanceof Date?new Date(v):new Date(v);
+  return Utilities.formatDate(d,Session.getScriptTimeZone(),'yyyy-MM-dd');
+}
+function arrAuditPerfTresorerie20260910_(n){return Math.round(Number(n||0)*100)/100;}
+function cleLigneAuditPerfTresorerie20260910_(l){
+  return [jourAuditPerfTresorerie20260910_(l&&l.date),String(l&&l.source||''),String(l&&l.sourceId||''),arrAuditPerfTresorerie20260910_(Number(l&&l.montantSigne||0))].join('|');
+}
+function signatureProjectionAuditPerfTresorerie20260910_(r,cible){
+  const j=String(cible||'');
+  const lignes=(r&&r.lignes||[]).filter(function(l){return jourAuditPerfTresorerie20260910_(l&&l.date)<=j;});
+  const cles=lignes.map(cleLigneAuditPerfTresorerie20260910_).sort();
+  const net=arrAuditPerfTresorerie20260910_(lignes.reduce(function(s,l){return s+Number(l&&l.montantSigne||0);},0));
+  return{
+    ok:!!(r&&r.ok),
+    version:String(r&&r.version||''),
+    proprietaire:String(r&&r.proprietaireBudgetSoft||''),
+    contratVersion:String(r&&r.versionContratCanonique||''),
+    dateReference:String(r&&r.dateReference||''),
+    cible:j,
+    soldeReel:arrAuditPerfTresorerie20260910_(Number(r&&r.soldeReel||0)),
+    nombreLignes:lignes.length,
+    net:net,
+    soldeCible:arrAuditPerfTresorerie20260910_(Number(r&&r.soldeReel||0)+net),
+    cles:cles
+  };
+}
+
+/**
+ * Candidat A/B sans écriture : peut-on calculer UNE trajectoire canonique jusqu'à
+ * la fin bancaire du cycle suivant, puis réutiliser sa sous-vue jusqu'au 27,
+ * au lieu de recalculer une seconde fois toute la projection pour la garde CB ?
+ *
+ * Aucune modification du snapshot. L'optimisation ne sera envisagée que si les
+ * signatures métier jusqu'au 27 sont strictement identiques, ligne par ligne.
+ */
+function auditerCandidatProjectionUniqueSnapshotBudgetSoft20260910(){
+  const maintenant=new Date();
+  const finCourant=typeof dateFinCycleCanonBudgetSoft20260906_==='function'?dateFinCycleCanonBudgetSoft20260906_(maintenant):new Date(maintenant.getFullYear(),maintenant.getMonth(),27,12,0,0,0);
+  const finSuivant=new Date(finCourant.getFullYear(),finCourant.getMonth()+1,finCourant.getDate(),12,0,0,0);
+  const finBancaire=new Date(finSuivant.getFullYear(),finSuivant.getMonth()+1,0,23,59,59,999);
+  const cible27=jourAuditPerfTresorerie20260910_(finSuivant);
+  const cibleFinMois=jourAuditPerfTresorerie20260910_(finBancaire);
+
+  const tA=Date.now();
+  const baseline=construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(cible27);
+  const dureeBaselineMs=Date.now()-tA;
+
+  const tB=Date.now();
+  const etendue=construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(cibleFinMois);
+  const dureeEtendueMs=Date.now()-tB;
+
+  const a=signatureProjectionAuditPerfTresorerie20260910_(baseline,cible27);
+  const b=signatureProjectionAuditPerfTresorerie20260910_(etendue,cible27);
+  const mapA={};a.cles.forEach(function(k){mapA[k]=(mapA[k]||0)+1;});
+  const mapB={};b.cles.forEach(function(k){mapB[k]=(mapB[k]||0)+1;});
+  const toutes=Array.from(new Set(a.cles.concat(b.cles))).sort();
+  const differences=toutes.filter(function(k){return Number(mapA[k]||0)!==Number(mapB[k]||0);}).slice(0,50).map(function(k){return{cle:k,baseline:Number(mapA[k]||0),candidate:Number(mapB[k]||0)};});
+  const metaIdentique=a.ok===b.ok&&a.version===b.version&&a.proprietaire===b.proprietaire&&a.contratVersion===b.contratVersion&&a.dateReference===b.dateReference&&a.soldeReel===b.soldeReel&&a.nombreLignes===b.nombreLignes&&a.net===b.net&&a.soldeCible===b.soldeCible;
+  const identique=metaIdentique&&differences.length===0;
+
+  let gardeCandidate=null;
+  if(etendue&&etendue.ok!==false&&typeof prochaineDateDebitCbTresorerie20260901_==='function'){
+    const publiees=(etendue.lignes||[]).filter(function(x){return String(x&&x.source||'')==='debit_cb_estime';});
+    const attendues=[];let ref=new Date(etendue.dateReference||maintenant),g=0;
+    while(ref<finBancaire&&g++<12){const d=prochaineDateDebitCbTresorerie20260901_(ref);if(!d||isNaN(d)||d>finBancaire)break;const j=jourAuditPerfTresorerie20260910_(d);if(attendues.indexOf(j)<0)attendues.push(j);ref=new Date(d.getTime()+1);}
+    const parDate={};publiees.forEach(function(x){const j=jourAuditPerfTresorerie20260910_(x.date);(parDate[j]=parDate[j]||[]).push(x);});
+    const formulesOk=publiees.every(function(x){return Math.abs(Math.abs(arrAuditPerfTresorerie20260910_(x.montantSigne))-arrAuditPerfTresorerie20260910_(Math.max(0,Number(x.partCerbere||0))+Math.max(0,Number(x.partFinMois||0))))<=.01;});
+    gardeCandidate={ok:attendues.every(function(j){return(parDate[j]||[]).length===1;})&&Object.keys(parDate).every(function(j){return parDate[j].length===1;})&&formulesOk,datesAttendues:attendues,publiees:publiees.map(function(x){return{date:jourAuditPerfTresorerie20260910_(x.date),montant:arrAuditPerfTresorerie20260910_(x.montantSigne),partCerbere:arrAuditPerfTresorerie20260910_(x.partCerbere),partFinMois:arrAuditPerfTresorerie20260910_(x.partFinMois)};}),formulesOk:formulesOk};
+  }
+
+  const gainTheoriqueMs=dureeBaselineMs;
+  const out={
+    ok:identique&&!!(gardeCandidate&&gardeCandidate.ok),
+    version:'2026-09-10.1',
+    lectureSeule:true,
+    aucuneModification:true,
+    ciblePublication:cible27,
+    cibleCalculUnique:cibleFinMois,
+    durees:{projectionBaseline27Ms:dureeBaselineMs,projectionEtendueFinMoisMs:dureeEtendueMs,gainTheoriqueSnapshotMs:gainTheoriqueMs},
+    comparaison:{identiqueAuCentimeEtLigneParLigne:identique,metaIdentique:metaIdentique,differences: differences,baseline:{version:a.version,proprietaire:a.proprietaire,contratVersion:a.contratVersion,dateReference:a.dateReference,soldeReel:a.soldeReel,nombreLignes:a.nombreLignes,net:a.net,soldeCible:a.soldeCible},candidateSousVue:{version:b.version,proprietaire:b.proprietaire,contratVersion:b.contratVersion,dateReference:b.dateReference,soldeReel:b.soldeReel,nombreLignes:b.nombreLignes,net:b.net,soldeCible:b.soldeCible}},
+    gardeCbCandidate:gardeCandidate,
+    decision:identique&&gardeCandidate&&gardeCandidate.ok?'CANDIDAT_AUTORISE_POUR_ETAPE_SUIVANTE':'REJETER_CANDIDAT',
+    doctrine:'Aucune optimisation appliquée. Le candidat ne peut être intégré au builder que si cette sortie est verte.'
+  };
+  console.log('[AUDIT PERF candidat projection unique] '+JSON.stringify(out));
+  return out;
+}
