@@ -9,6 +9,18 @@ function chargerCerbereExpress20260827() {
   const cerbere = typeof chargerCerbereCockpit20260902==='function'
     ? chargerCerbereCockpit20260902()
     : chargerCerbereV374();
+  const out=composerCerbereExpressDepuisCockpit20260910_(cerbere);
+  if(out&&out.performance){out.performance.dureeMs=Date.now()-t0;out.performance.source='cockpit Cerbère';}
+  return out;
+}
+
+/**
+ * Composition pure d'Express depuis un cockpit Cerbère déjà calculé.
+ * Aucun recalcul budgétaire autonome : cette primitive est le chemin optimisé
+ * utilisé par le snapshot global après validation A/B stricte du 10/09/2026.
+ */
+function composerCerbereExpressDepuisCockpit20260910_(cerbere) {
+  const t0=Date.now();
   if (!cerbere || cerbere.ok === false) return cerbere || {ok:false, erreur:'Cerbère indisponible'};
 
   const ps=Array.isArray(cerbere.periodes)?cerbere.periodes:[];
@@ -61,7 +73,7 @@ function chargerCerbereExpress20260827() {
     cockpitVersion:String(cerbere.cockpit20260902&&cerbere.cockpit20260902.version||''),
     genereLe:Utilities.formatDate(maintenant,Session.getScriptTimeZone(),"yyyy-MM-dd'T'HH:mm:ss"),
     doctrine:'Express présente les valeurs déjà validées par le cockpit Cerbère ; aucun recalcul budgétaire autonome.',
-    performance:{dureeMs:Date.now()-t0,source:'cockpit Cerbère'},
+    performance:{dureeMs:Date.now()-t0,source:'cockpit Cerbère précalculé'},
     cycle:{debut:formatDateExpress_(debut),fin:formatDateExpress_(fin),jour:progression.jour,jours:progression.jours,progressionPct:arrExpress_(progression.ratio*100)},
     referenceP1:{totalP0:arrExpress_(c.p0Total||0),totalP1:totalAllocation,ecartP1P0:arrExpress_(c.surplusVsP0||0),source:'v37.cockpit20260902'},
     pilotable:{allocation:totalAllocation,consomme:totalConsomme,reste:totalReste,reparti,aVentiler,lignes},
