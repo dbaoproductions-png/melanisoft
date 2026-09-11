@@ -1,4 +1,4 @@
-const BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION='2026-09-10.3';
+const BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION='2026-09-11.1';
 
 /**
  * Adapte le chargeur Cerbère classique à une base déjà calculée sans modifier son
@@ -14,6 +14,55 @@ function composerCerbereCockpitDepuisBaseSnapshotBudgetSoft20260910_(base){
     return chargerCerbereCockpit20260902();
   }finally{
     chargerCerbereV374=chargeurOriginal;
+  }
+}
+
+/**
+ * Optimisation 2026-09-11.1 : sur le seul chemin snapshot, Cerbère réutilise les
+ * tableaux déjà chargés par chargerToutesLesDonnees(). Les chargeurs autonomes
+ * V33/V374 restent inchangés. Les substitutions sont strictement locales et
+ * restaurées dans finally.
+ */
+function trouverTableSnapshotCerbere20260911_(sources,nom){
+  if(!sources||typeof sources!=='object')return null;
+  const cible=String(nom||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const cles=Object.keys(sources);
+  for(let i=0;i<cles.length;i++){
+    const k=cles[i],nk=String(k).toLowerCase().replace(/[^a-z0-9]/g,'');
+    if(nk===cible&&Array.isArray(sources[k]))return{cle:k,valeur:sources[k]};
+  }
+  return null;
+}
+
+function chargerCerbereBaseDepuisSourcesSnapshotBudgetSoft20260911_(sources){
+  const chargeurBase=typeof chargerCerbereV374==='function'?chargerCerbereV374:(typeof chargerCerbereV37==='function'?chargerCerbereV37:null);
+  if(!chargeurBase)return{base:null,partage:false,reutilisees:[]};
+  if(typeof lireTable_!=='function'||typeof lireTablePlanCerbere_!=='function'||typeof lireFeuilleDynamiqueCerbereV3_!=='function'||typeof lireAjustementsCerbereV33_!=='function')return{base:chargeurBase(),partage:false,reutilisees:[]};
+
+  const map={},reutilisees=[];
+  ['Operations','Charges_fixes','Comptes','Parametres','Categories'].forEach(function(n){
+    const x=trouverTableSnapshotCerbere20260911_(sources,n);
+    if(x){map[n]=x.valeur;reutilisees.push({table:n,source:x.cle,lignes:x.valeur.length});}
+  });
+
+  const prechargePlan={
+    objectifs:lireTablePlanCerbere_('Plan_Objectifs'),
+    actions:lireFeuilleDynamiqueCerbereV3_('Plan_Actions'),
+    evenements:lireTablePlanCerbere_('Plan_Evenements'),
+    ajustements:lireAjustementsCerbereV33_()
+  };
+  const originaux={lireTable:lireTable_,lirePlanTable:lireTablePlanCerbere_,lirePlanDyn:lireFeuilleDynamiqueCerbereV3_,lireAjust:lireAjustementsCerbereV33_};
+  try{
+    lireTable_=function(nom){const n=String(nom||'');return Object.prototype.hasOwnProperty.call(map,n)?map[n]:originaux.lireTable.apply(this,arguments);};
+    lireTablePlanCerbere_=function(nom){const n=String(nom||'');if(n==='Plan_Objectifs')return prechargePlan.objectifs;if(n==='Plan_Evenements')return prechargePlan.evenements;return originaux.lirePlanTable.apply(this,arguments);};
+    lireFeuilleDynamiqueCerbereV3_=function(nom){if(String(nom||'')==='Plan_Actions')return prechargePlan.actions;return originaux.lirePlanDyn.apply(this,arguments);};
+    lireAjustementsCerbereV33_=function(){return prechargePlan.ajustements;};
+    return{base:chargeurBase(),partage:true,reutilisees:reutilisees};
+  }finally{
+    lireTable_=originaux.lireTable;
+    lireTablePlanCerbere_=originaux.lirePlanTable;
+    lireFeuilleDynamiqueCerbereV3_=originaux.lirePlanDyn;
+    lireAjustementsCerbereV33_=originaux.lireAjust;
   }
 }
 
@@ -41,14 +90,17 @@ function reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(origine){
       const cibleCalculUnique=Utilities.formatDate(finBancaireSuivante,Session.getScriptTimeZone(),'yyyy-MM-dd');
       const tresorerieComptable=prendre('tresorerieComptable',()=>typeof construireTresorerieComptableCanoniqueBudgetSoft20260906_==='function'?construireTresorerieComptableCanoniqueBudgetSoft20260906_(sources,comptes,finCourant,maintenant):null);
 
-      // Optimisation 2026-09-10.3 : une seule base Cerbère brute alimente d'abord
-      // la projection CB multi-cycle, puis le cockpit Cerbère/Express.
-      let cerbereBase=null,cerbereBaseMs=0;
+      // Une seule base Cerbère brute alimente d'abord la projection CB multi-cycle,
+      // puis le cockpit/Express. Depuis 2026-09-11.1, cette base réutilise les données
+      // déjà chargées par le snapshot ; les chargeurs autonomes restent inchangés.
+      let cerbereBase=null,cerbereBaseMs=0,cerberePartageDonnees=false,cerbereTablesReutilisees=[];
       const tCerbereBase=Date.now();
       try{
-        const chargeurBase=typeof chargerCerbereV374==='function'?chargerCerbereV374:(typeof chargerCerbereV37==='function'?chargerCerbereV37:null);
-        if(chargeurBase)cerbereBase=chargeurBase();
-      }catch(e){cerbereBase=null;}
+        const charge=chargerCerbereBaseDepuisSourcesSnapshotBudgetSoft20260911_(sources);
+        cerbereBase=charge&&charge.base||null;
+        cerberePartageDonnees=!!(charge&&charge.partage);
+        cerbereTablesReutilisees=charge&&charge.reutilisees||[];
+      }catch(e){cerbereBase=null;cerberePartageDonnees=false;cerbereTablesReutilisees=[];}
       cerbereBaseMs=Date.now()-tCerbereBase;
 
       let projectionCalculUnique=null;
@@ -103,6 +155,7 @@ function reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(origine){
       modules.optimisationProjectionUnique={version:'2026-09-10.1',active:true,ciblePublication:cibleSuivante,cibleCalculUnique:cibleCalculUnique,sousVueSansRecalculMetier:!!(projectionEtendue&&projectionEtendue.optimisationSnapshot&&projectionEtendue.optimisationSnapshot.sansRecalculMetier),gardeCbSansRecalculMetier:!!(gardeCbMultiCycle&&gardeCbMultiCycle.sansRecalculMetier)};
       modules.optimisationExpressDepuisCerbere={version:'2026-09-10.1',active:true,sansRecalculCerbere:true,source:'cerbere déjà calculé par le snapshot'};
       modules.optimisationCerberePartage={version:'2026-09-10.1',active:!!(cerbereBase&&cerbereBase.ok!==false),uneSeuleBaseCerbere:true,projectionDepuisBasePrecalculee:!!(projectionCalculUnique&&projectionCalculUnique.diagnostic20260831&&projectionCalculUnique.diagnostic20260831.cerberePrechargeProjection),cockpitDepuisMemeBase:!!(cerbereBase&&cerbereBase.ok!==false),dureeBaseCerbereMs:cerbereBaseMs};
+      modules.optimisationCerbereDonneesPartagees={version:'2026-09-11.1',active:cerberePartageDonnees,source:'chargerToutesLesDonnees',chargeursAutonomesInchanges:true,reutilisation:cerbereTablesReutilisees,dureeBaseCerbereMs:cerbereBaseMs};
       const provisoire={modules:modules,erreurs:erreurs,transversales:transversales},coherence=typeof auditerCoherenceRevisionBudgetSoft20260906_==='function'?auditerCoherenceRevisionBudgetSoft20260906_(provisoire):{ok:true,version:'absent',erreurs:[],avertissements:[]},revision=empreinteRevisionGlobaleBudgetSoft20260906_(genereLe,modules);
       return serialiserEtatGlobalBudgetSoft20260906_({ok:erreurs.length===0&&coherence.ok===true&&unite.ok===true&&contrat&&contrat.ok===true&&gardeRecettesCanoniques&&gardeRecettesCanoniques.ok===true&&gardeCbMultiCycle&&gardeCbMultiCycle.ok===true,publie:false,version:BUDGETSOFT_GLOBAL_SNAPSHOT_VERSION,versionConstructeur:BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION,versionDoctrine:'2026-09-06',versionDoctrineTresorerie:'2026-09-07-canonique',revisionBudgetSoft:revision,genereLe:genereLe,origine:String(origine||'manuel_synthese'),erreurs:erreurs,coherence:coherence,uniteTresorerie:unite,transversales:transversales,modules:modules,performance:{dureeMs:Date.now()-t0,modules:perf}});
     };
@@ -110,8 +163,8 @@ function reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(origine){
     if(!etat||!etat.revisionBudgetSoft)throw new Error('Etat global BudgetSoft synthèse invalide.');
     if(etat.ok!==true){etat.publie=false;etat.message='Nouvelle révision non publiée : doctrine/unité/contrat/gardes R0 et CB multi-cycle non garantis ; ancienne révision conservée.';console.log('[SNAPSHOT Synthese] '+JSON.stringify({ok:false,dureeMs:Date.now()-t0,performance:perf,erreurs:etat.erreurs,coherence:etat.coherence,uniteTresorerie:etat.uniteTresorerie,contratTresorerie:etat.modules&&etat.modules.projectionEtendue&&etat.modules.projectionEtendue.decompositionCanonique||null,gardeRecettesCanoniques:etat.modules&&etat.modules.gardeRecettesCanoniques||null,gardeCbMultiCycle:etat.modules&&etat.modules.gardeCbMultiCycle||null}));return etat;}
     etat.publie=true;ecrireSnapshotGlobalBudgetSoft20260906_(etat);archiverEtatBudgetSoftSiNecessaire20260906_(etat,String(origine||'manuel_synthese'));
-    const dash=etat.modules&&etat.modules.dashboard||{},proj=etat.modules&&etat.modules.projectionEtendue||{};console.log('[SNAPSHOT Synthese] '+JSON.stringify({ok:true,revisionBudgetSoft:etat.revisionBudgetSoft,dureeMs:Date.now()-t0,performance:perf,dashboardVersion:dash.version||'',projectionVersion:proj.version||'',projectionOwner:proj.proprietaireBudgetSoft||'',contratVersion:proj.versionContratCanonique||'',optimisationProjectionUnique:etat.modules&&etat.modules.optimisationProjectionUnique||null,optimisationExpressDepuisCerbere:etat.modules&&etat.modules.optimisationExpressDepuisCerbere||null,optimisationCerberePartage:etat.modules&&etat.modules.optimisationCerberePartage||null,gardeRecettesCanoniques:etat.modules&&etat.modules.gardeRecettesCanoniques||null,gardeCbMultiCycle:etat.modules&&etat.modules.gardeCbMultiCycle||null,uniteTresorerie:etat.uniteTresorerie,sourceBruteStockee:!!(etat.modules&&etat.modules.sources)}));return etat;
+    const dash=etat.modules&&etat.modules.dashboard||{},proj=etat.modules&&etat.modules.projectionEtendue||{};console.log('[SNAPSHOT Synthese] '+JSON.stringify({ok:true,revisionBudgetSoft:etat.revisionBudgetSoft,dureeMs:Date.now()-t0,performance:perf,dashboardVersion:dash.version||'',projectionVersion:proj.version||'',projectionOwner:proj.proprietaireBudgetSoft||'',contratVersion:proj.versionContratCanonique||'',optimisationProjectionUnique:etat.modules&&etat.modules.optimisationProjectionUnique||null,optimisationExpressDepuisCerbere:etat.modules&&etat.modules.optimisationExpressDepuisCerbere||null,optimisationCerberePartage:etat.modules&&etat.modules.optimisationCerberePartage||null,optimisationCerbereDonneesPartagees:etat.modules&&etat.modules.optimisationCerbereDonneesPartagees||null,gardeRecettesCanoniques:etat.modules&&etat.modules.gardeRecettesCanoniques||null,gardeCbMultiCycle:etat.modules&&etat.modules.gardeCbMultiCycle||null,uniteTresorerie:etat.uniteTresorerie,sourceBruteStockee:!!(etat.modules&&etat.modules.sources)}));return etat;
   }finally{lock.releaseLock();}
 }
 function actualiserBudgetSoftSyntheseMaintenant20260907(){return reconstruireSnapshotGlobalSyntheseBudgetSoft20260907('manuel_force_synthese');}
-function auditerSnapshotDashboardSynthesePublie20260907(){const s=chargerSnapshotGlobalBudgetSoft20260906(),e=s&&s.disponible&&s.etat,m=e&&e.modules||{},d=m.dashboard||{},p=m.projectionEtendue||{},contrat=p.decompositionCanonique||null,g=m.gardeRecettesCanoniques||null,gcb=m.gardeCbMultiCycle||null;const r={ok:!!(e&&e.ok&&e.uniteTresorerie&&e.uniteTresorerie.ok&&contrat&&contrat.ok&&g&&g.ok&&gcb&&gcb.ok&&d.version===BUDGETSOFT_DASHBOARD_SYNTHESE_VERSION&&!m.sources),revisionBudgetSoft:e&&e.revisionBudgetSoft||'',dashboardVersion:d.version||'',versionCorrection:d.versionCorrection||'',projectionVersion:p.version||'',projectionOwner:p.proprietaireBudgetSoft||'',contratVersion:p.versionContratCanonique||'',versionDoctrineTresorerie:e&&e.versionDoctrineTresorerie||'',gardeRecettesCanoniques:g,gardeCbMultiCycle:gcb,optimisationProjectionUnique:m.optimisationProjectionUnique||null,optimisationExpressDepuisCerbere:m.optimisationExpressDepuisCerbere||null,optimisationCerberePartage:m.optimisationCerberePartage||null,uniteTresorerie:e&&e.uniteTresorerie||null,contratTresorerie:contrat,solde:d.courtTerme&&d.courtTerme.soldeBancaire,pilotable:d.courtTerme&&d.courtTerme.pilotableDisponible,progression:d.courtTerme&&d.courtTerme.progression,sourceBruteStockee:!!m.sources,performance:e&&e.performance||null};console.log(JSON.stringify(r));return r;}
+function auditerSnapshotDashboardSynthesePublie20260907(){const s=chargerSnapshotGlobalBudgetSoft20260906(),e=s&&s.disponible&&s.etat,m=e&&e.modules||{},d=m.dashboard||{},p=m.projectionEtendue||{},contrat=p.decompositionCanonique||null,g=m.gardeRecettesCanoniques||null,gcb=m.gardeCbMultiCycle||null;const r={ok:!!(e&&e.ok&&e.uniteTresorerie&&e.uniteTresorerie.ok&&contrat&&contrat.ok&&g&&g.ok&&gcb&&gcb.ok&&d.version===BUDGETSOFT_DASHBOARD_SYNTHESE_VERSION&&!m.sources),revisionBudgetSoft:e&&e.revisionBudgetSoft||'',dashboardVersion:d.version||'',versionCorrection:d.versionCorrection||'',projectionVersion:p.version||'',projectionOwner:p.proprietaireBudgetSoft||'',contratVersion:p.versionContratCanonique||'',versionDoctrineTresorerie:e&&e.versionDoctrineTresorerie||'',gardeRecettesCanoniques:g,gardeCbMultiCycle:gcb,optimisationProjectionUnique:m.optimisationProjectionUnique||null,optimisationExpressDepuisCerbere:m.optimisationExpressDepuisCerbere||null,optimisationCerberePartage:m.optimisationCerberePartage||null,optimisationCerbereDonneesPartagees:m.optimisationCerbereDonneesPartagees||null,uniteTresorerie:e&&e.uniteTresorerie||null,contratTresorerie:contrat,solde:d.courtTerme&&d.courtTerme.soldeBancaire,pilotable:d.courtTerme&&d.courtTerme.pilotableDisponible,progression:d.courtTerme&&d.courtTerme.progression,sourceBruteStockee:!!m.sources,performance:e&&e.performance||null};console.log(JSON.stringify(r));return r;}
