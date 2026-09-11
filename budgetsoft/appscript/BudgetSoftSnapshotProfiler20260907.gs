@@ -145,3 +145,69 @@ function auditerProfilInterneCerbereV374StableBudgetSoft20260911(){
   };
   console.log('[AUDIT PERF profil interne Cerbère V374 stable] '+JSON.stringify(out));return out;
 }
+
+/**
+ * Profil ciblé de chargerCerbereV37() sans modification métier.
+ * Le second passage enveloppe temporairement ses dépendances pour attribuer le coût
+ * au moteur roulant, aux lectures, au dédoublonnage, aux prévisions Plan et à la
+ * sérialisation. Toutes les fonctions originales sont restaurées dans finally.
+ */
+function auditerProfilInterneCerbereV37BudgetSoft20260911(){
+  const tGlobal=Date.now();
+  const t0=Date.now();
+  const baseline=avecContexteLectureBudgetSoft20260827_('audit-profil-cerbere-v37-baseline-20260911',function(){return chargerCerbereV37();});
+  const baselineMs=Date.now()-t0;
+  const statsBaseline=(typeof BUDGETSOFT_READ_CONTEXT_LAST_STATS_!=='undefined'&&BUDGETSOFT_READ_CONTEXT_LAST_STATS_)?BUDGETSOFT_READ_CONTEXT_LAST_STATS_:null;
+
+  const mesures={};
+  function ajouter(nom,ms){const x=mesures[nom]||(mesures[nom]={appels:0,dureeMs:0});x.appels++;x.dureeMs+=ms;}
+  const originaux={
+    roulant:chargerCerbereRoulant,
+    lireTable:lireTable_,
+    lirePlan:typeof lireFeuilleDynamiquePlan_==='function'?lireFeuilleDynamiquePlan_:null,
+    dedup:typeof dedoublonnerOperationsCartesBudgetSoft_==='function'?dedoublonnerOperationsCartesBudgetSoft_:null,
+    previsions:previsionsEvenementsV371_,
+    serialiser:serialiserCerberePourClient_
+  };
+  let instrumente=null,erreur=null,instrumenteMs=0;
+  try{
+    chargerCerbereRoulant=function(){const t=Date.now();try{return originaux.roulant.apply(this,arguments);}finally{ajouter('chargerCerbereRoulant',Date.now()-t);}};
+    lireTable_=function(nom){const t=Date.now();try{return originaux.lireTable.apply(this,arguments);}finally{ajouter('lireTable:'+String(nom||''),Date.now()-t);}};
+    if(originaux.lirePlan)lireFeuilleDynamiquePlan_=function(nom){const t=Date.now();try{return originaux.lirePlan.apply(this,arguments);}finally{ajouter('lirePlan:'+String(nom||''),Date.now()-t);}};
+    if(originaux.dedup)dedoublonnerOperationsCartesBudgetSoft_=function(){const t=Date.now();try{return originaux.dedup.apply(this,arguments);}finally{ajouter('dedoublonnageOperations',Date.now()-t);}};
+    previsionsEvenementsV371_=function(){const t=Date.now();try{return originaux.previsions.apply(this,arguments);}finally{ajouter('previsionsEvenementsV371',Date.now()-t);}};
+    serialiserCerberePourClient_=function(){const t=Date.now();try{return originaux.serialiser.apply(this,arguments);}finally{ajouter('serialisationClient',Date.now()-t);}};
+    const t1=Date.now();
+    instrumente=avecContexteLectureBudgetSoft20260827_('audit-profil-cerbere-v37-instrumente-20260911',function(){return chargerCerbereV37();});
+    instrumenteMs=Date.now()-t1;
+  }catch(e){
+    erreur=String(e&&e.stack||e&&e.message||e);
+  }finally{
+    chargerCerbereRoulant=originaux.roulant;
+    lireTable_=originaux.lireTable;
+    if(originaux.lirePlan)lireFeuilleDynamiquePlan_=originaux.lirePlan;
+    if(originaux.dedup)dedoublonnerOperationsCartesBudgetSoft_=originaux.dedup;
+    previsionsEvenementsV371_=originaux.previsions;
+    serialiserCerberePourClient_=originaux.serialiser;
+  }
+  const statsInstrumente=(typeof BUDGETSOFT_READ_CONTEXT_LAST_STATS_!=='undefined'&&BUDGETSOFT_READ_CONTEXT_LAST_STATS_)?BUDGETSOFT_READ_CONTEXT_LAST_STATS_:null;
+  const a=normaliserObjetProfilCerbere20260911_(baseline,''),b=normaliserObjetProfilCerbere20260911_(instrumente,'');
+  const identique=!erreur&&JSON.stringify(a)===JSON.stringify(b);
+  const diffs=identique?[]:premieresDifferencesProfilCerbere20260911_(a,b,20);
+  const roulantMs=Number(mesures.chargerCerbereRoulant&&mesures.chargerCerbereRoulant.dureeMs||0);
+  const details=Object.keys(mesures).map(function(k){return{etape:k,appels:mesures[k].appels,dureeMs:mesures[k].dureeMs,partPct:instrumenteMs?Math.round(mesures[k].dureeMs/instrumenteMs*1000)/10:null};}).sort(function(x,y){return y.dureeMs-x.dureeMs;});
+  const perfInterne=instrumente&&instrumente.diagnostic&&instrumente.diagnostic.performanceV37||null;
+  const out={
+    ok:identique&&!!(instrumente&&instrumente.ok!==false),version:'2026-09-11.4',lectureSeule:true,aucuneModification:true,
+    perimetre:{compare:'chargerCerbereV37() courant vs le même chargeur avec enveloppes chronométriques temporaires',sourceVerite:'chargerCerbereV37 / CerbereV37.gs',objectif:'localiser le coût sans modifier les calculs métier'},
+    comparaison:{identiqueMetierStable:identique,differences:diffs,versionBaseline:String(baseline&&baseline.version||''),versionInstrumentee:String(instrumente&&instrumente.version||'')},
+    temps:{baselineMs:baselineMs,instrumenteMs:instrumenteMs,roulantInclusifMs:roulantMs,horsRoulantApproxMs:Math.max(0,instrumenteMs-roulantMs),dureeTotaleMs:Date.now()-tGlobal},
+    details:details,
+    performanceV37Existante:perfInterne,
+    lectures:{baseline:statsBaseline,instrumente:statsInstrumente},
+    erreur:erreur,
+    decision:identique?'PROFIL_V37_VALIDE_POUR_CHOISIR_LEVIER':'PROFIL_V37_INVALIDE_NE_RIEN_OPTIMISER',
+    doctrine:'Profil uniquement. Aucune optimisation de production appliquée ; tout candidat devra passer un A/B strict puis les gardes du snapshot.'
+  };
+  console.log('[AUDIT PERF profil interne Cerbère V37] '+JSON.stringify(out));return out;
+}
