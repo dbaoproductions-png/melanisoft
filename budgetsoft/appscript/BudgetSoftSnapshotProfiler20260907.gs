@@ -56,7 +56,7 @@ function profilerReconstructionSnapshotBudgetSoft20260907(){
 function estChampVolatilProfilCerbere20260911_(cle,chemin){
   const k=String(cle||'').toLowerCase(),p=String(chemin||'').toLowerCase();
   if(['duree_ms','dureems','serializationms','generele','generatedat','timestamp','horodatage'].includes(k))return true;
-  if(/(^|\.)(timings?|performance|performancepost35)(\.|$)/.test(p))return true;
+  if(/(^|\.)(timings?|performance|performancepost35|performancev37)(\.|$)/.test(p))return true;
   return false;
 }
 
@@ -136,8 +136,8 @@ function auditerProfilInterneCerbereV374StableBudgetSoft20260911(){
   const classement=Object.keys(etapes).map(function(k){return{etape:k,dureeMs:Number(etapes[k]||0),partPct:total?Math.round(Number(etapes[k]||0)/total*1000)/10:null};}).sort(function(x,y){return y.dureeMs-x.dureeMs;});
   const periodes=(instrumente&&instrumente.periodes||[]).map(function(p){const v=p&&p.v37||{};return{cle:String(p&&p.periode&&p.periode.cle||p&&p.periode&&p.periode.debut||''),ret1:Math.round(Number(v.ret1||0)*100)/100,sct1:Math.round(Number(v.sct1||0)*100)/100,restePilotable:Math.round(Number(p&&p.resteBudgetPilotable||0)*100)/100};});
   const out={
-    ok:identique&&!!(instrumente&&instrumente.ok!==false),version:'2026-09-11.2',lectureSeule:true,aucuneModification:true,
-    perimetre:{compare:'chargerCerbereV374() courant vs reconstruction instrumentée couche par couche',sourceVerite:'chargerCerbereV374 / CerberePilotageV374.gs',moteurAttendu:'3.7.24',comparaison:'payload complet hors seuls champs volatils performance/horodatage'},
+    ok:identique&&!!(instrumente&&instrumente.ok!==false),version:'2026-09-11.3',lectureSeule:true,aucuneModification:true,
+    perimetre:{compare:'chargerCerbereV374() courant vs reconstruction instrumentée couche par couche',sourceVerite:'chargerCerbereV374 / CerberePilotageV374.gs',moteurAttendu:'3.7.24',comparaison:'payload complet hors seuls champs volatils performance/horodatage, dont diagnostic.performanceV37'},
     comparaison:{identiqueMetierStable:identique,differences:diffs,versionBaseline:String(baseline&&baseline.version||''),versionInstrumentee:String(instrumente&&instrumente.version||''),nombrePeriodesBaseline:(baseline&&baseline.periodes||[]).length,nombrePeriodesInstrumentee:(instrumente&&instrumente.periodes||[]).length},
     temps:{baselineMs:baselineMs,reconstructionEtapesMs:total,dureeTotaleMs:Date.now()-tGlobal},etapes:etapes,classement:classement,lectures:{baseline:statsBaseline,etapes:statsEtapes},signatureMetier:{periodes:periodes},
     decision:identique?'PROFIL_CERBERE_VALIDE_POUR_CHOISIR_LEVIER':'PROFIL_CERBERE_INVALIDE_NE_RIEN_OPTIMISER',
