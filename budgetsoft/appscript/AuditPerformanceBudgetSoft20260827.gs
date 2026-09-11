@@ -350,3 +350,92 @@ function auditerCandidatSuppressionDebitCbLegacy20260831BudgetSoft20260910(){
   console.log('[AUDIT PERF A/B suppression CB legacy 20260831] '+JSON.stringify(out));
   return out;
 }
+
+/**
+ * Profil courant de la projection étendue telle qu'elle est réellement calculée
+ * par le snapshot 2026-09-10.3 : Cerbère est préchargé une fois puis transmis au
+ * moteur canonique. Audit strictement lecture seule, avec périmètre explicite.
+ */
+function auditerProfilProjectionEtendueCouranteBudgetSoft20260911(){
+  const cible='2026-10-31';
+  const tGlobal=Date.now();
+  const temps={};
+  const chargeurCerbere=typeof chargerCerbereV374==='function'?chargerCerbereV374:(typeof chargerCerbereV37==='function'?chargerCerbereV37:null);
+  let cerbere=null;
+  let t=Date.now();
+  try{if(chargeurCerbere)cerbere=chargeurCerbere();}catch(e){cerbere=null;}
+  temps.cerberePrecharge=Date.now()-t;
+  if(!cerbere||cerbere.ok===false){
+    const ko={ok:false,version:'2026-09-11.1',lectureSeule:true,aucuneModification:true,perimetre:{compare:'projection canonique courante avec Cerbère préchargé vs reconstruction instrumentée des mêmes étapes',dateReference:'date de référence bancaire calculée par le moteur',horizon:cible,sourceVerite:'construireTrajectoireTresorerieCanoniqueBudgetSoft20260907 / chargerTresoreriePrevisionnelle20260901'},erreur:'Cerbère préchargé indisponible.',temps:temps};
+    console.log('[AUDIT PERF profil projection courante] '+JSON.stringify(ko));return ko;
+  }
+
+  t=Date.now();
+  const baseline=avecContexteLectureBudgetSoft20260827_('audit-profil-projection-courante-baseline-20260911',function(){
+    return construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(cible,cerbere);
+  });
+  temps.baselineCanonique=Date.now()-t;
+  const statsBaseline=(typeof BUDGETSOFT_READ_CONTEXT_LAST_STATS_!=='undefined'&&BUDGETSOFT_READ_CONTEXT_LAST_STATS_)?BUDGETSOFT_READ_CONTEXT_LAST_STATS_:null;
+
+  const etapes={};
+  const reconstruit=avecContexteLectureBudgetSoft20260827_('audit-profil-projection-courante-etapes-20260911',function(){
+    let ts=Date.now();
+    const r=chargerSocleTresorerie20260831SansDebitCbLegacy20260910_(cible);
+    etapes.socle20260831SansCbLegacy=Date.now()-ts;
+    if(!r||!r.ok)return r;
+    const reference=new Date(r.dateReference||new Date()),dateCible=new Date(r.dateCible||new Date());
+
+    ts=Date.now();const evenements=lireFeuilleDynamiquePlan_('Plan_Evenements');etapes.lectureEvenements=Date.now()-ts;
+    ts=Date.now();const actions=lireFeuilleDynamiquePlan_('Plan_Actions');etapes.lectureActions=Date.now()-ts;
+    ts=Date.now();const ops=lireTable_('Operations');etapes.lectureOperations=Date.now()-ts;
+    ts=Date.now();const hard=(r.lignes||[]).filter(function(x){return x.source==='operation_future';});etapes.extractionOperationsFutures=Date.now()-ts;
+    ts=Date.now();let lignes=recalerFluxPlanCarteTresorerie20260901_(r.lignes||[],evenements,actions,hard,reference,dateCible);etapes.recalagePlanCb=Date.now()-ts;
+    ts=Date.now();lignes=filtrerActionsPlanEffectivesTresorerie20260908_(lignes,actions);etapes.filtreActionsPlan=Date.now()-ts;
+    ts=Date.now();lignes=lignes.filter(function(x){return x.source!=='debit_cb_estime';});etapes.retraitAnciennesEstimationsCb=Date.now()-ts;
+    ts=Date.now();const debitsCb=estimationsDebitsCbDiffereTresorerie20260908_(ops,reference,dateCible,cerbere);etapes.cbMultiCycleDepuisCerberePrecharge=Date.now()-ts;
+    if(debitsCb.length)lignes.push.apply(lignes,debitsCb);
+    ts=Date.now();lignes=dedoublonnerPrevisionsTresorerie20260831_(lignes);etapes.dedoublonnage=Date.now()-ts;
+    ts=Date.now();lignes.sort(function(a,b){return new Date(a.date)-new Date(b.date)||rangCertitudeTresorerie_(a.certitude)-rangCertitudeTresorerie_(b.certitude);});etapes.tri=Date.now()-ts;
+    ts=Date.now();const final=recalculerSortieTresorerie20260901_(r,lignes,reference,dateCible);etapes.recalculSortie=Date.now()-ts;
+    final.diagnostic20260831=final.diagnostic20260831||{};
+    final.diagnostic20260831.cerberePrechargeProjection=true;
+    ts=Date.now();const decomposition=decomposerTrajectoireTresorerieCanoniqueBudgetSoft20260907_(final);etapes.decompositionCanonique=Date.now()-ts;
+    final.proprietaireBudgetSoft=BUDGETSOFT_TREASURY_CANONICAL_OWNER;
+    final.moteurSousJacent='chargerTresoreriePrevisionnelle20260901';
+    final.versionContratCanonique=BUDGETSOFT_TREASURY_CANONICAL_20260907_VERSION;
+    final.decompositionCanonique=decomposition;
+    if(!decomposition.ok){final.ok=false;final.erreur='Contrat canonique de trésorerie non satisfait.';final.erreursContrat=decomposition.erreurs.slice();}
+    return final;
+  });
+  const statsEtapes=(typeof BUDGETSOFT_READ_CONTEXT_LAST_STATS_!=='undefined'&&BUDGETSOFT_READ_CONTEXT_LAST_STATS_)?BUDGETSOFT_READ_CONTEXT_LAST_STATS_:null;
+
+  const sigA=signatureCanoniqueCompleteAuditPerf20260910_(baseline);
+  const sigB=signatureCanoniqueCompleteAuditPerf20260910_(reconstruit);
+  const identique=JSON.stringify(sigA)===JSON.stringify(sigB);
+  const totalEtapes=Object.keys(etapes).reduce(function(s,k){return s+Number(etapes[k]||0);},0);
+  const classement=Object.keys(etapes).map(function(k){return{etape:k,dureeMs:Number(etapes[k]||0),partPct:totalEtapes?Math.round(Number(etapes[k]||0)/totalEtapes*1000)/10:null};}).sort(function(a,b){return b.dureeMs-a.dureeMs;});
+  const cb=(reconstruit&&reconstruit.lignes||[]).filter(function(x){return String(x&&x.source||'')==='debit_cb_estime';}).map(function(x){return{date:jourAuditPerfTresorerie20260910_(x.date),montant:arrAuditPerfTresorerie20260910_(x.montantSigne),partCerbere:arrAuditPerfTresorerie20260910_(x.partCerbere),partFinMois:arrAuditPerfTresorerie20260910_(x.partFinMois),moteurCerbere:String(x&&x.moteurCerbere||'')};});
+  const out={
+    ok:identique&&!!(baseline&&baseline.ok)&&!!(reconstruit&&reconstruit.ok),
+    version:'2026-09-11.1',
+    lectureSeule:true,
+    aucuneModification:true,
+    perimetre:{
+      compare:'projection canonique courante avec Cerbère préchargé vs reconstruction instrumentée des mêmes étapes',
+      dateReference:String(reconstruit&&reconstruit.dateReference||''),
+      horizon:cible,
+      sourceVerite:'construireTrajectoireTresorerieCanoniqueBudgetSoft20260907 / chargerTresoreriePrevisionnelle20260901',
+      configurationSnapshot:'Cerbère préchargé puis transmis au moteur canonique (2026-09-10.3)'
+    },
+    comparaison:{identiqueAuCentimeEtLigneParLigne:identique,baseline:{version:sigA.version,soldeReel:sigA.soldeReel,variationPrevue:sigA.variationPrevue,soldePrevisionnel:sigA.soldePrevisionnel,nombreLignes:sigA.lignes.length},reconstruction:{version:sigB.version,soldeReel:sigB.soldeReel,variationPrevue:sigB.variationPrevue,soldePrevisionnel:sigB.soldePrevisionnel,nombreLignes:sigB.lignes.length}},
+    temps:{cerberePrecharge:temps.cerberePrecharge,baselineCanonique:temps.baselineCanonique,reconstructionEtapes:totalEtapes,dureeTotale:Date.now()-tGlobal},
+    etapes:etapes,
+    classement:classement,
+    lectures:{baseline:statsBaseline,etapes:statsEtapes},
+    debitsCb:cb,
+    decision:identique?'PROFIL_VALIDE_POUR_CHOISIR_LE_PROCHAIN_LEVIER':'PROFIL_INVALIDE_NE_RIEN_OPTIMISER',
+    doctrine:'Profil uniquement. Ne modifier aucun calcul métier sur cette seule mesure ; le prochain candidat devra passer un A/B strict puis les gardes du snapshot.'
+  };
+  console.log('[AUDIT PERF profil projection courante] '+JSON.stringify(out));
+  return out;
+}
