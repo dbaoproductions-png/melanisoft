@@ -117,3 +117,75 @@ function lirePlanDynamiqueDirectBudgetSoft20260905_(nom){const n=String(nom||'')
 function lireRapprochementsCfDirectBudgetSoft20260905_(){return lireMemoDirectBudgetSoft20260905_('RAPPRO_CF',function(){return typeof lireRapprochementsChargesFixes==='function'?lireRapprochementsChargesFixes():[];});}
 
 function lireDernieresStatsLectureBudgetSoft20260827(){return BUDGETSOFT_READ_CONTEXT_LAST_STATS_||{ok:false,version:BUDGETSOFT_READ_CONTEXT_VERSION,message:'Aucune mesure dans cette exécution.'};}
+
+/**
+ * Profil lecture seule du mécanisme de mémoïsation/clonage BudgetSoft.
+ * Il ne modifie ni les lecteurs ni les calculs métier : il charge un jeu représentatif
+ * de sources dans un contexte isolé, puis mesure sur le mémo courant le coût du
+ * JSON.stringify, du JSON.parse, du chemin normal de clone et d'un accès direct.
+ * Les mesures sont des micro-benchmarks diagnostiques : elles se chevauchent et ne
+ * doivent pas être additionnées comme des étapes du snapshot.
+ */
+function auditerProfilClonageContexteLectureBudgetSoft20260911(){
+  const version='2026-09-11.10',tGlobal=Date.now(),mesures=[],erreurs=[];
+  const repetitionsClone=20,repetitionsStringify=10,repetitionsDirect=100;
+  const defs=[
+    {cle:'TABLE:Operations',lire:function(){return lireTable_('Operations');}},
+    {cle:'TABLE:Charges_fixes',lire:function(){return lireTable_('Charges_fixes');}},
+    {cle:'TABLE:Comptes',lire:function(){return lireTable_('Comptes');}},
+    {cle:'TABLE:Parametres',lire:function(){return lireTable_('Parametres');}},
+    {cle:'TABLE:Categories',lire:function(){return lireTable_('Categories');}},
+    {cle:'PLAN_TABLE:Plan_Objectifs',lire:function(){return typeof lireTablePlanCerbere_==='function'?lireTablePlanCerbere_('Plan_Objectifs'):[];}},
+    {cle:'PLAN_TABLE:Plan_Evenements',lire:function(){return typeof lireTablePlanCerbere_==='function'?lireTablePlanCerbere_('Plan_Evenements'):[];}},
+    {cle:'PLAN_DYN:Plan_Actions',lire:function(){return typeof lireFeuilleDynamiquePlan_==='function'?lireFeuilleDynamiquePlan_('Plan_Actions'):[];}},
+    {cle:'PLAN_DYN:Plan_Evenements',lire:function(){return typeof lireFeuilleDynamiquePlan_==='function'?lireFeuilleDynamiquePlan_('Plan_Evenements'):[];}},
+    {cle:'RAPPRO_CF',lire:function(){return typeof lireRapprochementsChargesFixes==='function'?lireRapprochementsChargesFixes():[];}},
+    {cle:'CERBERE_DYN:Controles_releves',lire:function(){return typeof lireFeuilleDynamiqueCerbereV379_==='function'?lireFeuilleDynamiqueCerbereV379_('Controles_releves'):[];}}
+  ];
+  try{
+    avecContexteLectureBudgetSoft20260827_('audit-profil-clonage-contexte-20260911',function(){
+      defs.forEach(function(def){
+        try{
+          const tPremier=Date.now();def.lire();const premierAppelMs=Date.now()-tPremier;
+          const ctx=BUDGETSOFT_READ_CONTEXT_ACTIVE_,json=ctx&&ctx.memoJson&&ctx.memoJson[def.cle],memo=ctx&&ctx.memo&&ctx.memo[def.cle];
+          if(json==null){mesures.push({cle:def.cle,premierAppelMs:premierAppelMs,disponible:false});return;}
+          const empreinteAvant=json;
+          let t=Date.now();for(let i=0;i<repetitionsStringify;i++)JSON.stringify(memo);const stringifyMs=Date.now()-t;
+          t=Date.now();for(let i=0;i<repetitionsClone;i++)JSON.parse(json);const parsePurMs=Date.now()-t;
+          t=Date.now();for(let i=0;i<repetitionsClone;i++)def.lire();const cheminCloneMs=Date.now()-t;
+          t=Date.now();for(let i=0;i<repetitionsDirect;i++)lireMemoDirectBudgetSoft20260905_(def.cle,function(){return null;});const accesDirectMs=Date.now()-t;
+          const empreinteApres=JSON.stringify(ctx.memo[def.cle]);
+          let octets=null;try{octets=Utilities.newBlob(json,'application/json').getBytes().length;}catch(e){}
+          const cloneUnitaire=cheminCloneMs/repetitionsClone,directUnitaire=accesDirectMs/repetitionsDirect;
+          mesures.push({
+            cle:def.cle,disponible:true,premierAppelMs:premierAppelMs,
+            lignes:Array.isArray(memo)?memo.length:(memo&&Array.isArray(memo.lignes)?memo.lignes.length:0),
+            tailleJsonCaracteres:json.length,tailleJsonOctets:octets,
+            stringifyBenchmarkMs:stringifyMs,stringifyUnitaireMs:Math.round(stringifyMs/repetitionsStringify*1000)/1000,
+            parsePurBenchmarkMs:parsePurMs,parsePurUnitaireMs:Math.round(parsePurMs/repetitionsClone*1000)/1000,
+            cheminCloneBenchmarkMs:cheminCloneMs,cheminCloneUnitaireMs:Math.round(cloneUnitaire*1000)/1000,
+            accesDirectBenchmarkMs:accesDirectMs,accesDirectUnitaireMs:Math.round(directUnitaire*1000)/1000,
+            economieTheoriquePar100AccesMs:Math.round(Math.max(0,cloneUnitaire-directUnitaire)*100*10)/10,
+            memoInchange:empreinteAvant===empreinteApres
+          });
+        }catch(e){erreurs.push({cle:def.cle,erreur:String(e&&e.message||e)});}
+      });
+      return true;
+    });
+  }catch(e){erreurs.push({cle:'contexte',erreur:String(e&&e.stack||e&&e.message||e)});}
+  const stats=(typeof BUDGETSOFT_READ_CONTEXT_LAST_STATS_!=='undefined'&&BUDGETSOFT_READ_CONTEXT_LAST_STATS_)?BUDGETSOFT_READ_CONTEXT_LAST_STATS_:null;
+  mesures.forEach(function(m){const s=stats&&stats.parTable&&stats.parTable[m.cle];m.lecturePhysiqueMs=s?Number(s.dureeLectureMs||0):null;m.appelsContexte=s?Number(s.appels||0):null;m.reutilisationsContexte=s?Number(s.reutilisations||0):null;m.reutilisationsDirectesContexte=s?Number(s.reutilisationsDirectes||0):null;});
+  const topClone=mesures.filter(function(m){return m.disponible;}).slice().sort(function(a,b){return Number(b.cheminCloneUnitaireMs||0)-Number(a.cheminCloneUnitaireMs||0);}).map(function(m){return{cle:m.cle,tailleJsonOctets:m.tailleJsonOctets,cheminCloneUnitaireMs:m.cheminCloneUnitaireMs,parsePurUnitaireMs:m.parsePurUnitaireMs,economieTheoriquePar100AccesMs:m.economieTheoriquePar100AccesMs};});
+  const tousInchanges=mesures.filter(function(m){return m.disponible;}).every(function(m){return m.memoInchange===true;});
+  const out={
+    ok:erreurs.length===0&&tousInchanges,version:version,lectureSeule:true,aucuneModification:true,
+    perimetre:{compare:'coût de lecture physique, sérialisation JSON, parse/clone du cache et accès direct sur un jeu représentatif de sources BudgetSoft',reference:new Date().toISOString(),sourceVerite:'BudgetSoftReadContext20260827.gs / avecContexteLectureBudgetSoft20260827_',mode:'micro-benchmark dans un contexte isolé ; aucune reconstruction ni publication de snapshot'},
+    repetitions:{clone:repetitionsClone,stringify:repetitionsStringify,direct:repetitionsDirect},
+    mesures:mesures,topClone:topClone,statsContexte:stats,erreurs:erreurs,
+    controles:{memosInchanges:tousInchanges,aucuneEcriture:true},
+    dureeTotaleMs:Date.now()-tGlobal,
+    decision:erreurs.length===0&&tousInchanges?'PROFIL_CLONAGE_VALIDE_POUR_CHOISIR_LEVIER':'PROFIL_CLONAGE_INVALIDE_NE_RIEN_OPTIMISER',
+    doctrine:'Mesures de micro-benchmark non additives. Aucun accès direct ne doit être généralisé sans A/B strict prouvant l’absence de mutation, puis passage des gardes du snapshot.'
+  };
+  console.log('[AUDIT PERF clonage contexte lecture] '+JSON.stringify(out));return out;
+}
