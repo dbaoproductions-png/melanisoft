@@ -48,3 +48,68 @@ function construireCf0Cerbere363_(charges,periodes){const actives=(charges||[]).
 function construireFenetreRoulanteCerbere363_(periodes,stats){const m=periodes[0],n=periodes[1];if(!m||!n)return null;const tresM=Number(m.capaciteTresorerie||0),tresN=Number(n.capaciteTresorerie||0),budM=Number(m.resteBudgetPilotable||0),budN=Number(n.resteBudgetPilotable||0),recOk=[m,n].every(p=>Math.abs(Number(p.roulant&&p.roulant.reconciliation&&p.roulant.reconciliation.ecart||0))<.01),orp=Object.keys((m.roulant&&m.roulant.orphelines)||{}).length+Object.keys((n.roulant&&n.roulant.orphelines)||{}).length;let niveau='vert',titre='Trajectoire pilotable saine sur deux mois';if(!recOk){niveau='rouge';titre='Calcul incomplet : ventilation non réconciliée';}else if(tresM<-.009||tresN<-.009){niveau='rouge';titre='Risque de trésorerie sur la fenêtre roulante';}else if(budM<-.009||budN<-.009||orp>0){niveau='orange';titre='Vigilance sur les enveloppes pilotables';}else if(Number(n.roulant&&n.roulant.cbHeritee||0)>Number(n.budgetReparti||0)*.6){niveau='orange';titre='Vigilance : M+1 est déjà fortement engagé';}const raisons=[];if(budM<-.009)raisons.push('M dépasse ses enveloppes pilotables de '+arrondirCerbereV3_(Math.abs(budM))+' €');if(budN<-.009)raisons.push('M+1 dépasse déjà ses enveloppes pilotables de '+arrondirCerbereV3_(Math.abs(budN))+' €');if(tresM<-.009)raisons.push('trésorerie globale M négative de '+arrondirCerbereV3_(Math.abs(tresM))+' €');if(tresN<-.009)raisons.push('trésorerie globale M+1 négative de '+arrondirCerbereV3_(Math.abs(tresN))+' €');if(Number(n.roulant&&n.roulant.cbHeritee||0)>0)raisons.push(arrondirCerbereV3_(n.roulant.cbHeritee)+' € de CB pilotables déjà imputés à M+1');if(Number(n.roulant&&n.roulant.horsPilotable&&n.roulant.horsPilotable.total||0)>0)raisons.push(arrondirCerbereV3_(n.roulant.horsPilotable.total)+' € hors enveloppes pèsent aussi sur M+1');if(Number(n.engagementsPlanifies||0)>0)raisons.push(arrondirCerbereV3_(n.engagementsPlanifies)+' € de Plan à venir sur M+1');if(orp>0)raisons.push(orp+' catégorie(s) orpheline(s) à classer');if(Number(stats&&stats.doublonsCbRetires||0)>0)raisons.push(stats.doublonsCbRetires+' doublon(s) CB neutralisé(s)');if(!raisons.length)raisons.push('enveloppes pilotables et trésorerie globale restent soutenables sur M et M+1');return{niveau,titre,raisons,resteM:arrondirCerbereV3_(budM),resteM1:arrondirCerbereV3_(budN),tresorerieM:arrondirCerbereV3_(tresM),tresorerieM1:arrondirCerbereV3_(tresN)};}
 function assurerDiversDansPeriodeCerbere363_(p){const e=p.enveloppes||(p.enveloppes=[]);if(e.some(x=>String(x.categorie||'').trim()==='Divers'))return;const i=e.findIndex(x=>String(x.categorie||'').trim()==='Épargne'),l={categorie:'Divers',canon:0,monetaire:0,pluxee:0,nature:'ajustable',prevu:0,planifie:0};if(i>=0)e.splice(i,0,l);else e.push(l);}
 function sommeObjetCerbere363_(o){return Object.keys(o||{}).reduce((s,k)=>s+Number(o[k]||0),0);}
+
+/**
+ * Profil ciblé du moteur roulant. Lecture seule : le second passage enveloppe
+ * temporairement les dépendances directes de chargerCerbereRoulant(), puis restaure
+ * strictement les fonctions originales. Aucune logique métier n'est modifiée.
+ */
+function auditerProfilInterneCerbereRoulantBudgetSoft20260911(){
+  const tGlobal=Date.now();
+  const t0=Date.now();
+  const baseline=avecContexteLectureBudgetSoft20260827_('audit-profil-cerbere-roulant-baseline-20260911',function(){return chargerCerbereRoulant();});
+  const baselineMs=Date.now()-t0;
+  const statsBaseline=(typeof BUDGETSOFT_READ_CONTEXT_LAST_STATS_!=='undefined'&&BUDGETSOFT_READ_CONTEXT_LAST_STATS_)?BUDGETSOFT_READ_CONTEXT_LAST_STATS_:null;
+  const mesures={};
+  function ajouter(nom,ms){const x=mesures[nom]||(mesures[nom]={appels:0,dureeMs:0});x.appels++;x.dureeMs+=ms;}
+  const originaux={
+    v33:chargerCerbereV33,
+    lireTable:lireTable_,
+    ventilation:construireVentilationOperationsBudgetSoft_,
+    cf0:construireCf0Cerbere363_,
+    fenetre:construireFenetreRoulanteCerbere363_,
+    serialiser:serialiserCerberePourClient_
+  };
+  let instrumente=null,erreur=null,instrumenteMs=0;
+  try{
+    chargerCerbereV33=function(){const t=Date.now();try{return originaux.v33.apply(this,arguments);}finally{ajouter('chargerCerbereV33',Date.now()-t);}};
+    lireTable_=function(nom){const t=Date.now();try{return originaux.lireTable.apply(this,arguments);}finally{ajouter('lireTable:'+String(nom||''),Date.now()-t);}};
+    construireVentilationOperationsBudgetSoft_=function(){const t=Date.now();try{return originaux.ventilation.apply(this,arguments);}finally{ajouter('construireVentilationOperations',Date.now()-t);}};
+    construireCf0Cerbere363_=function(){const t=Date.now();try{return originaux.cf0.apply(this,arguments);}finally{ajouter('construireCf0',Date.now()-t);}};
+    construireFenetreRoulanteCerbere363_=function(){const t=Date.now();try{return originaux.fenetre.apply(this,arguments);}finally{ajouter('construireFenetreRoulante',Date.now()-t);}};
+    serialiserCerberePourClient_=function(){const t=Date.now();try{return originaux.serialiser.apply(this,arguments);}finally{ajouter('serialisationClient',Date.now()-t);}};
+    const t1=Date.now();
+    instrumente=avecContexteLectureBudgetSoft20260827_('audit-profil-cerbere-roulant-instrumente-20260911',function(){return chargerCerbereRoulant();});
+    instrumenteMs=Date.now()-t1;
+  }catch(e){
+    erreur=String(e&&e.stack||e&&e.message||e);
+  }finally{
+    chargerCerbereV33=originaux.v33;
+    lireTable_=originaux.lireTable;
+    construireVentilationOperationsBudgetSoft_=originaux.ventilation;
+    construireCf0Cerbere363_=originaux.cf0;
+    construireFenetreRoulanteCerbere363_=originaux.fenetre;
+    serialiserCerberePourClient_=originaux.serialiser;
+  }
+  const statsInstrumente=(typeof BUDGETSOFT_READ_CONTEXT_LAST_STATS_!=='undefined'&&BUDGETSOFT_READ_CONTEXT_LAST_STATS_)?BUDGETSOFT_READ_CONTEXT_LAST_STATS_:null;
+  const normaliser=typeof normaliserObjetProfilCerbere20260911_==='function'?normaliserObjetProfilCerbere20260911_:function(v){return v;};
+  const differ=typeof premieresDifferencesProfilCerbere20260911_==='function'?premieresDifferencesProfilCerbere20260911_:function(){return[];};
+  const a=normaliser(baseline,''),b=normaliser(instrumente,'');
+  const identique=!erreur&&JSON.stringify(a)===JSON.stringify(b);
+  const diffs=identique?[]:differ(a,b,20);
+  const v33Ms=Number(mesures.chargerCerbereV33&&mesures.chargerCerbereV33.dureeMs||0);
+  const ventilationMs=Number(mesures.construireVentilationOperations&&mesures.construireVentilationOperations.dureeMs||0);
+  const details=Object.keys(mesures).map(function(k){return{etape:k,appels:mesures[k].appels,dureeMs:mesures[k].dureeMs,partPct:instrumenteMs?Math.round(mesures[k].dureeMs/instrumenteMs*1000)/10:null};}).sort(function(x,y){return y.dureeMs-x.dureeMs;});
+  const out={
+    ok:identique&&!!(instrumente&&instrumente.ok!==false),version:'2026-09-11.5',lectureSeule:true,aucuneModification:true,
+    perimetre:{compare:'chargerCerbereRoulant() courant vs le même chargeur avec enveloppes chronométriques temporaires',sourceVerite:'chargerCerbereRoulant / CerbereRolling.gs',objectif:'séparer coût V33, lectures et ventilation sans toucher au métier'},
+    comparaison:{identiqueMetierStable:identique,differences:diffs,versionBaseline:String(baseline&&baseline.version||''),versionInstrumentee:String(instrumente&&instrumente.version||'')},
+    temps:{baselineMs:baselineMs,instrumenteMs:instrumenteMs,v33InclusifMs:v33Ms,ventilationMs:ventilationMs,horsV33ApproxMs:Math.max(0,instrumenteMs-v33Ms),dureeTotaleMs:Date.now()-tGlobal},
+    details:details,
+    lectures:{baseline:statsBaseline,instrumente:statsInstrumente},
+    erreur:erreur,
+    decision:identique?'PROFIL_ROULANT_VALIDE_POUR_CHOISIR_LEVIER':'PROFIL_ROULANT_INVALIDE_NE_RIEN_OPTIMISER',
+    doctrine:'Profil uniquement. Aucune optimisation de production appliquée ; tout candidat devra passer un A/B strict puis les gardes du snapshot.'
+  };
+  console.log('[AUDIT PERF profil interne Cerbère roulant] '+JSON.stringify(out));return out;
+}
