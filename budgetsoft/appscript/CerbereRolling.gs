@@ -113,3 +113,39 @@ function auditerProfilInterneCerbereRoulantBudgetSoft20260911(){
   };
   console.log('[AUDIT PERF profil interne Cerbère roulant] '+JSON.stringify(out));return out;
 }
+
+/** Profil ciblé de chargerCerbereV33() : lecture seule, instrumentation temporaire. */
+function auditerProfilInterneCerbereV33BudgetSoft20260911(){
+  const tGlobal=Date.now(),t0=Date.now();
+  const baseline=avecContexteLectureBudgetSoft20260827_('audit-profil-cerbere-v33-baseline-20260911',function(){return chargerCerbereV33();});
+  const baselineMs=Date.now()-t0;
+  const statsBaseline=(typeof BUDGETSOFT_READ_CONTEXT_LAST_STATS_!=='undefined'&&BUDGETSOFT_READ_CONTEXT_LAST_STATS_)?BUDGETSOFT_READ_CONTEXT_LAST_STATS_:null;
+  const mesures={};
+  function ajouter(nom,ms){const x=mesures[nom]||(mesures[nom]={appels:0,dureeMs:0});x.appels++;x.dureeMs+=ms;}
+  const originaux={canonDep:chargerCanonCerbereV1,heritage:construireHeritageP0CerbereV3_,canonRec:chargerCanonRecettesCerbereV1,lireTable:lireTable_,lirePlanTable:lireTablePlanCerbere_,lirePlanDyn:lireFeuilleDynamiqueCerbereV3_,periodes:construirePeriodesCerbereV2_,indexer:indexerDonneesCerbereV35_,reel:construireReelLegerCerbereV3_,ajust:lireAjustementsCerbereV33_,calcul:calculerPeriodeCerbereV35_,enrichir:enrichirPeriodePilotableV35_,serialiser:serialiserCerberePourClient_};
+  let instrumente=null,erreur=null,instrumenteMs=0;
+  try{
+    chargerCanonCerbereV1=function(){const t=Date.now();try{return originaux.canonDep.apply(this,arguments);}finally{ajouter('chargerCanonDepenses',Date.now()-t);}};
+    construireHeritageP0CerbereV3_=function(){const t=Date.now();try{return originaux.heritage.apply(this,arguments);}finally{ajouter('construireHeritageP0',Date.now()-t);}};
+    chargerCanonRecettesCerbereV1=function(){const t=Date.now();try{return originaux.canonRec.apply(this,arguments);}finally{ajouter('chargerCanonRecettes',Date.now()-t);}};
+    lireTable_=function(nom){const t=Date.now();try{return originaux.lireTable.apply(this,arguments);}finally{ajouter('lireTable:'+String(nom||''),Date.now()-t);}};
+    lireTablePlanCerbere_=function(nom){const t=Date.now();try{return originaux.lirePlanTable.apply(this,arguments);}finally{ajouter('lirePlanTable:'+String(nom||''),Date.now()-t);}};
+    lireFeuilleDynamiqueCerbereV3_=function(nom){const t=Date.now();try{return originaux.lirePlanDyn.apply(this,arguments);}finally{ajouter('lirePlanDyn:'+String(nom||''),Date.now()-t);}};
+    construirePeriodesCerbereV2_=function(){const t=Date.now();try{return originaux.periodes.apply(this,arguments);}finally{ajouter('construirePeriodes',Date.now()-t);}};
+    indexerDonneesCerbereV35_=function(){const t=Date.now();try{return originaux.indexer.apply(this,arguments);}finally{ajouter('indexerDonneesV35',Date.now()-t);}};
+    construireReelLegerCerbereV3_=function(){const t=Date.now();try{return originaux.reel.apply(this,arguments);}finally{ajouter('construireReelLeger',Date.now()-t);}};
+    lireAjustementsCerbereV33_=function(){const t=Date.now();try{return originaux.ajust.apply(this,arguments);}finally{ajouter('lireAjustementsV33',Date.now()-t);}};
+    calculerPeriodeCerbereV35_=function(){const t=Date.now();try{return originaux.calcul.apply(this,arguments);}finally{ajouter('calculerPeriodeV35',Date.now()-t);}};
+    enrichirPeriodePilotableV35_=function(){const t=Date.now();try{return originaux.enrichir.apply(this,arguments);}finally{ajouter('enrichirPeriodePilotableV35',Date.now()-t);}};
+    serialiserCerberePourClient_=function(){const t=Date.now();try{return originaux.serialiser.apply(this,arguments);}finally{ajouter('serialisationClient',Date.now()-t);}};
+    const t1=Date.now();instrumente=avecContexteLectureBudgetSoft20260827_('audit-profil-cerbere-v33-instrumente-20260911',function(){return chargerCerbereV33();});instrumenteMs=Date.now()-t1;
+  }catch(e){erreur=String(e&&e.stack||e&&e.message||e);}finally{
+    chargerCanonCerbereV1=originaux.canonDep;construireHeritageP0CerbereV3_=originaux.heritage;chargerCanonRecettesCerbereV1=originaux.canonRec;lireTable_=originaux.lireTable;lireTablePlanCerbere_=originaux.lirePlanTable;lireFeuilleDynamiqueCerbereV3_=originaux.lirePlanDyn;construirePeriodesCerbereV2_=originaux.periodes;indexerDonneesCerbereV35_=originaux.indexer;construireReelLegerCerbereV3_=originaux.reel;lireAjustementsCerbereV33_=originaux.ajust;calculerPeriodeCerbereV35_=originaux.calcul;enrichirPeriodePilotableV35_=originaux.enrichir;serialiserCerberePourClient_=originaux.serialiser;
+  }
+  const statsInstrumente=(typeof BUDGETSOFT_READ_CONTEXT_LAST_STATS_!=='undefined'&&BUDGETSOFT_READ_CONTEXT_LAST_STATS_)?BUDGETSOFT_READ_CONTEXT_LAST_STATS_:null;
+  const normaliser=typeof normaliserObjetProfilCerbere20260911_==='function'?normaliserObjetProfilCerbere20260911_:function(v){return v;},differ=typeof premieresDifferencesProfilCerbere20260911_==='function'?premieresDifferencesProfilCerbere20260911_:function(){return[];};
+  const a=normaliser(baseline,''),b=normaliser(instrumente,''),identique=!erreur&&JSON.stringify(a)===JSON.stringify(b),diffs=identique?[]:differ(a,b,20);
+  const details=Object.keys(mesures).map(function(k){return{etape:k,appels:mesures[k].appels,dureeMs:mesures[k].dureeMs,partPct:instrumenteMs?Math.round(mesures[k].dureeMs/instrumenteMs*1000)/10:null};}).sort(function(x,y){return y.dureeMs-x.dureeMs;});
+  const out={ok:identique&&!!(instrumente&&instrumente.ok!==false),version:'2026-09-11.6',lectureSeule:true,aucuneModification:true,perimetre:{compare:'chargerCerbereV33() courant vs le même chargeur instrumenté',sourceVerite:'chargerCerbereV33 / CerbereV33.gs',objectif:'séparer canons, lectures, indexation, réel léger et construction P1-P6'},comparaison:{identiqueMetierStable:identique,differences:diffs,versionBaseline:String(baseline&&baseline.version||''),versionInstrumentee:String(instrumente&&instrumente.version||'')},temps:{baselineMs:baselineMs,instrumenteMs:instrumenteMs,dureeTotaleMs:Date.now()-tGlobal},details:details,timingsV33Existants:instrumente&&instrumente.diagnostic&&instrumente.diagnostic.timings||null,lectures:{baseline:statsBaseline,instrumente:statsInstrumente},erreur:erreur,decision:identique?'PROFIL_V33_VALIDE_POUR_CHOISIR_LEVIER':'PROFIL_V33_INVALIDE_NE_RIEN_OPTIMISER',doctrine:'Profil uniquement. Aucune optimisation de production appliquée ; tout candidat devra passer un A/B strict puis les gardes du snapshot.'};
+  console.log('[AUDIT PERF profil interne Cerbère V33] '+JSON.stringify(out));return out;
+}
