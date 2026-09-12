@@ -1,4 +1,4 @@
-const BUDGETSOFT_SNAPSHOT_EXHAUSTIVITY_20260912_VERSION='2026-09-12.1';
+const BUDGETSOFT_SNAPSHOT_EXHAUSTIVITY_20260912_VERSION='2026-09-12.2';
 
 /**
  * Garde architecturale : inventaire des lecteurs réellement servis par les UI
@@ -26,7 +26,7 @@ function manifesteLecteursSnapshotBudgetSoft20260912_(){
     {vue:'cerbere_express',fonction:'chargerVueCerbereExpress20260827',statut:'DANS_SNAPSHOT',role:'vue Cerbère Express'},
     {vue:'patrimoine',fonction:'chargerPatrimoine',statut:'DANS_SNAPSHOT',role:'patrimoine'},
     {vue:'credits',fonction:'chargerCreditsEtDettesV2',statut:'DANS_SNAPSHOT',role:'crédits et dettes'},
-    {vue:'analyses',fonction:'chargerAnalysesBudgetairesV23',statut:'A_INTEGRER',role:'analyses budgétaires'},
+    {vue:'analyses',fonction:'chargerAnalysesBudgetairesV23',statut:'DANS_SNAPSHOT',role:'analyses budgétaires 3/6/12 servies depuis modules.analyses ; moteur source inchangé'},
     {vue:'ia',fonction:'chargerConseillerFinancier',statut:'A_INTEGRER',role:'conseiller financier / recommandations'},
     {vue:'engagements_bancaires',fonction:'chargerEngagementsBancairesFuturs',statut:'A_INTEGRER',role:'engagements bancaires futurs du cycle'},
     {vue:'budget_prefetch',fonction:'chargerBudgetPeriode',statut:'A_INTEGRER',role:'budget de période préchargé par l’interface'},
@@ -63,8 +63,13 @@ function auditerExhaustiviteSnapshotBudgetSoft20260912(){
     revisionBudgetSoft=etat&&etat.revisionBudgetSoft||'';
   }catch(e){}
 
+  let analyses=null;
+  try{analyses=typeof auditerAnalysesSnapshotBudgetSoft20260912==='function'?auditerAnalysesSnapshotBudgetSoft20260912():null;}catch(e){analyses={ok:false,erreur:String(e&&e.message||e)};}
+  const integrationsInvalides=[];
+  if(lecteurs.some(function(x){return x.vue==='analyses'&&x.statut==='DANS_SNAPSHOT';})&&(!analyses||analyses.ok!==true))integrationsInvalides.push({vue:'analyses',code:'SNAPSHOT_INVALIDE'});
+
   const resultat={
-    ok:aIntegrer.length===0&&fonctionsAbsentes.length===0&&!!revisionBudgetSoft,
+    ok:aIntegrer.length===0&&fonctionsAbsentes.length===0&&integrationsInvalides.length===0&&!!revisionBudgetSoft,
     version:BUDGETSOFT_SNAPSHOT_EXHAUSTIVITY_20260912_VERSION,
     revisionBudgetSoft:revisionBudgetSoft,
     compteurs:{
@@ -77,6 +82,8 @@ function auditerExhaustiviteSnapshotBudgetSoft20260912(){
     aIntegrer:aIntegrer,
     horsSnapshotParNature:manifesteEffetsHorsSnapshotBudgetSoft20260912_(),
     fonctionsAbsentes:fonctionsAbsentes,
+    integrationsInvalides:integrationsInvalides,
+    controles:{analyses:analyses},
     regle:'Aucun lecteur pur d’interface ne peut rester hors de la revisionBudgetSoft commune.'
   };
   console.log('[AUDIT exhaustivite snapshot] '+JSON.stringify(resultat));
