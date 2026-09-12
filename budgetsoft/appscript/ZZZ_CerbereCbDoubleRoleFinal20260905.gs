@@ -16,20 +16,14 @@
  * 2) débit bancaire en C2 => contrainte comptable de construction de P1(C2),
  *    sans seconde consommation par catégorie.
  */
-const CERBERE_CB_DOUBLE_ROLE_FINAL_VERSION='2026-09-12.p1-doctrine-2';
+const CERBERE_CB_DOUBLE_ROLE_FINAL_VERSION='2026-09-12.p1-doctrine-3';
 
-function chargerCerbereCockpit20260902(){
-  try{
-    if(typeof chargerCerbereDepuisSnapshotGlobalBudgetSoft20260906==='function'){
-      const snapshot=chargerCerbereDepuisSnapshotGlobalBudgetSoft20260906();
-      if(snapshot&&snapshot.ok!==false&&snapshot.source==='snapshot_global'){
-        snapshot.sourceBudgetSoft='snapshot_global';
-        snapshot.versionSnapshotFirst=CERBERE_CB_DOUBLE_ROLE_FINAL_VERSION;
-        return snapshot;
-      }
-    }
-  }catch(e){}
-
+/**
+ * Recalcul frais autoritaire du cockpit P1, sans lecture du snapshot global.
+ * Cette fonction factorise exactement le pipeline de secours de l'entrée publique
+ * afin que l'audit puisse prouver les valeurs réellement recalculées.
+ */
+function recalculerCerbereCockpitP1Frais20260912_(){
   const executer=function(){
     const t0=Date.now(),base=chargerCerbereCockpitBaseRapide20260903_();if(!base||base.ok===false)return base;
     const post=base.diagnostic&&base.diagnostic.performancePost35||{couches:[]},timings=Array.isArray(post.couches)?post.couches:[];
@@ -47,13 +41,27 @@ function chargerCerbereCockpit20260902(){
       performance:perf,
       doctrine:'P1 : photographie comptable SS1 + Rt1 - dépenses non pilotables - CB héritées non déjà provisionnées ; puis guide de vie consommé à la date d’engagement. Les écarts de recettes/charges alimentent le surplus ou déficit à ventiler.'
     };
-    base.sourceBudgetSoft='recalcul_secours';
+    base.sourceBudgetSoft='recalcul_frais_p1';
     base.versionSnapshotFirst=CERBERE_CB_DOUBLE_ROLE_FINAL_VERSION;
     const ts=Date.now(),out=serialiserCerberePourClient_(base),serializationMs=Date.now()-ts;
     if(out&&out.cockpit20260902&&out.cockpit20260902.performance){out.cockpit20260902.performance.serializationMs=serializationMs;out.cockpit20260902.performance.dureeMs=Date.now()-t0;}
     return out;
   };
-  return typeof avecContexteLectureBudgetSoft20260827_==='function'?avecContexteLectureBudgetSoft20260827_('cerbere-cockpit-p1-doctrine-20260912',executer):executer();
+  return typeof avecContexteLectureBudgetSoft20260827_==='function'?avecContexteLectureBudgetSoft20260827_('cerbere-cockpit-p1-frais-20260912',executer):executer();
+}
+
+function chargerCerbereCockpit20260902(){
+  try{
+    if(typeof chargerCerbereDepuisSnapshotGlobalBudgetSoft20260906==='function'){
+      const snapshot=chargerCerbereDepuisSnapshotGlobalBudgetSoft20260906();
+      if(snapshot&&snapshot.ok!==false&&snapshot.source==='snapshot_global'){
+        snapshot.sourceBudgetSoft='snapshot_global';
+        snapshot.versionSnapshotFirst=CERBERE_CB_DOUBLE_ROLE_FINAL_VERSION;
+        return snapshot;
+      }
+    }
+  }catch(e){}
+  return recalculerCerbereCockpitP1Frais20260912_();
 }
 
 function jourCivilP1Cerbere20260912_(d){
@@ -200,8 +208,6 @@ function appliquerDoctrineP1ComptableGuideVieCerbere20260912_(base){
   const ss1=arr(Number(v.ss1||0));
   const herite=calculerCbHeriteesP1Cerbere20260912_(p);
 
-  // L'ajustement humain est conservé comme delta explicite ; les variations
-  // économiques de Rt1/CFt1/HEt1, elles, modifient automatiquement la capacité.
   const ajustement=arr(Number(c.ajustementP1||0));
   const avantHeritage=arr(ss1+rt1-cft1-het1);
   const capacite=arr(Math.max(0,avantHeritage-Number(herite.montant||0)));
@@ -264,11 +270,13 @@ function appliquerDoctrineP1ComptableGuideVieCerbere20260912_(base){
 }
 
 function auditerP1DoctrineComptableGuideVie20260912(){
-  const c=chargerCerbereCockpit20260902(),p=c&&Array.isArray(c.periodes)?c.periodes[0]:null,v=p&&p.v37||{},k=v.cockpit20260902||{};
+  const c=recalculerCerbereCockpitP1Frais20260912_(),p=c&&Array.isArray(c.periodes)?c.periodes[0]:null,v=p&&p.v37||{},k=v.cockpit20260902||{};
   const cf=v&&v.cft1Audit20260912||k&&k.detailActualise&&k.detailActualise.chargesFixesAudit||null;
   return{
     ok:!!(c&&c.ok!==false&&p&&k),
     version:CERBERE_CB_DOUBLE_ROLE_FINAL_VERSION,
+    source:c&&c.sourceBudgetSoft||'',
+    recalculFrais:!!(c&&c.sourceBudgetSoft==='recalcul_frais_p1'),
     periode:p&&p.periode||null,
     decomposition:k.detailActualise||null,
     chargesFixes:{total:Number(v&&v.cft1||0),audit:cf,ecartAncien:cf&&Number(cf.ecartVsAncien||0)},
