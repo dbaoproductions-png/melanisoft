@@ -1,4 +1,4 @@
-const AUDIT_CF_ABSENTES_HET1_20260826_VERSION='1.1.0';
+const AUDIT_CF_ABSENTES_HET1_20260826_VERSION='1.2.0';
 
 /**
  * Audit LECTURE SEULE des vraies charges fixes candidates relevées dans HEt1.
@@ -42,4 +42,50 @@ function auditerCfAbsentesHEt1Aout2026(){
 
   console.log('=== FIN AUDIT DETAILLE CF ABSENTES ===');
   return {ok:true,lectureSeule:true,version:AUDIT_CF_ABSENTES_HET1_20260826_VERSION,sortie};
+}
+
+/**
+ * Audit intermodule ciblé Avanssur.
+ * Vérifie le propriétaire canonique du rapprochement sans aucune écriture :
+ * - référentiel Charges_fixes ;
+ * - Operations.charge_fixe_id ;
+ * - table canonique de rapprochements si elle est disponible.
+ */
+function auditerRapprochementIntermoduleAvanssur20260912(){
+  const CF_1290='5f1a2b1a-dc1a-4366-9a37-f1cd2e823c1c';
+  const CF_B='433feb19-297f-41fa-80fa-d7e64e40ae36';
+  const CF_C='7b48a001-708b-4a3d-a390-3f420a2f0c58';
+  const OP_1285='d3c5df17-d65a-4383-8a05-341fdc684eab';
+  const operations=Array.isArray(lireTable_('Operations'))?lireTable_('Operations'):[];
+  const charges=Array.isArray(lireTable_('Charges_fixes'))?lireTable_('Charges_fixes'):[];
+  const rapprochements=typeof lireRapprochementsChargesFixes==='function'?(lireRapprochementsChargesFixes()||[]):[];
+  const idsCf=[CF_1290,CF_B,CF_C];
+  const chargesCible=charges.filter(c=>idsCf.indexOf(String(c&&c.id||''))>=0).map(c=>({
+    id:String(c.id||''),libelle:String(c.libelle||''),categorie:String(c.categorie||''),montant:Math.abs(Number(c.montant||0)),actif:c.actif,jour_execution:c.jour_execution
+  }));
+  const opsCible=operations.filter(o=>String(o&&o.id||'')===OP_1285||idsCf.indexOf(String(o&&o.charge_fixe_id||''))>=0).map(o=>({
+    id:String(o.id||''),date:String(o.date_comptable||o.date||''),libelle:String(o.libelle||o.libelle_bancaire||''),categorie:String(o.categorie||''),montant:Math.abs(Number(o.montant||0)),charge_fixe_id:String(o.charge_fixe_id||'')
+  }));
+  const rapprochementsCible=(rapprochements||[]).filter(r=>String(r&&r.operation_id||'')===OP_1285||idsCf.indexOf(String(r&&r.charge_fixe_id||''))>=0).map(r=>({
+    operation_id:String(r.operation_id||''),charge_fixe_id:String(r.charge_fixe_id||''),statut:String(r.statut||r.decision||''),score:r.score==null?null:Number(r.score)
+  }));
+  const op1285=opsCible.find(o=>o.id===OP_1285)||null;
+  const resultat={
+    ok:true,lectureSeule:true,version:AUDIT_CF_ABSENTES_HET1_20260826_VERSION,
+    ids:{cf1290:CF_1290,cfB:CF_B,cfC:CF_C,op1285:OP_1285},
+    charge1290:chargesCible.find(c=>c.id===CF_1290)||null,
+    chargeB:chargesCible.find(c=>c.id===CF_B)||null,
+    chargeC:chargesCible.find(c=>c.id===CF_C)||null,
+    operation1285:op1285,
+    operationsLiees:opsCible,
+    rapprochementsCanoniques:rapprochementsCible,
+    diagnostic:{
+      operation1285LieeA:String(op1285&&op1285.charge_fixe_id||''),
+      cibleHistorique1290Existe:!!chargesCible.find(c=>c.id===CF_1290),
+      tableRapprochementsDisponible:typeof lireRapprochementsChargesFixes==='function',
+      nombreRapprochementsCibles:rapprochementsCible.length
+    }
+  };
+  console.log('[AUDIT RAPPRO CF INTERMODULE AVANSSUR 20260912] '+JSON.stringify(resultat));
+  return resultat;
 }
