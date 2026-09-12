@@ -1,9 +1,9 @@
-const AUDIT_CF_ABSENTES_HET1_20260826_VERSION='1.0.0';
+const AUDIT_CF_ABSENTES_HET1_20260826_VERSION='1.1.0';
 
 /**
- * Audit LECTURE SEULE des vrais AUCUN_CANDIDAT relevés dans HEt1.
+ * Audit LECTURE SEULE des vraies charges fixes candidates relevées dans HEt1.
  * But : documenter l'opération et rechercher l'historique comparable dans Operations
- * avant toute création/modification de Charges_fixes.
+ * ainsi que les entrées Charges_fixes avant toute création/modification de lien.
  *
  * IMPORTANT : aucune écriture ; aucune règle Cerbère spécifique.
  * Usage : auditerCfAbsentesHEt1Aout2026()
@@ -20,6 +20,7 @@ function auditerCfAbsentesHEt1Aout2026(){
   const familles=[
     {nom:'Carrefour PASS mensualité 168',match:o=>/carrefour banque/.test(texte(o))&&Math.abs(montant(o)-168)<.011},
     {nom:'Avanssur',match:o=>/avanssur/.test(texte(o))},
+    {nom:'Floa',match:o=>/\bfloa\b/.test(texte(o))},
     {nom:'Google 2,99',match:o=>/google/.test(texte(o))&&Math.abs(montant(o)-2.99)<.011},
     {nom:'Amazon Digital 3,99',match:o=>/amazon digital/.test(texte(o))&&Math.abs(montant(o)-3.99)<.011}
   ];
@@ -34,9 +35,9 @@ function auditerCfAbsentesHEt1Aout2026(){
     const cfs=charges.filter(c=>f.match(c));
     console.log('--- '+f.nom+' ---');
     console.log('Operations historiques : '+ops.length+' | Charges_fixes correspondantes : '+cfs.length);
-    ops.forEach((o,i)=>console.log('OP '+(i+1)+' | '+dateIso(o)+' | '+montant(o).toFixed(2)+' EUR | '+String(o.categorie||'')+' | '+String(o.libelle||o.libelle_bancaire||'')+' | id='+String(o.id||'')));
+    ops.forEach((o,i)=>console.log('OP '+(i+1)+' | '+dateIso(o)+' | '+montant(o).toFixed(2)+' EUR | '+String(o.categorie||'')+' | '+String(o.libelle||o.libelle_bancaire||'')+' | id='+String(o.id||'')+' | charge_fixe_id='+String(o.charge_fixe_id||'')));
     cfs.forEach((c,i)=>console.log('CF '+(i+1)+' | '+montant(c).toFixed(2)+' EUR | '+String(c.categorie||'')+' | '+String(c.libelle||c.libelle_bancaire||'')+' | id='+String(c.id||'')));
-    sortie.push({famille:f.nom,operations:ops.map(o=>({id:String(o.id||''),date:dateIso(o),montant:montant(o),categorie:String(o.categorie||''),libelle:String(o.libelle||o.libelle_bancaire||'')})),chargesFixes:cfs.map(c=>({id:String(c.id||''),montant:montant(c),categorie:String(c.categorie||''),libelle:String(c.libelle||c.libelle_bancaire||'')}))});
+    sortie.push({famille:f.nom,operations:ops.map(o=>({id:String(o.id||''),date:dateIso(o),montant:montant(o),categorie:String(o.categorie||''),libelle:String(o.libelle||o.libelle_bancaire||''),charge_fixe_id:String(o.charge_fixe_id||'')})),chargesFixes:cfs.map(c=>({id:String(c.id||''),montant:montant(c),categorie:String(c.categorie||''),libelle:String(c.libelle||c.libelle_bancaire||'')}))});
   });
 
   console.log('=== FIN AUDIT DETAILLE CF ABSENTES ===');
