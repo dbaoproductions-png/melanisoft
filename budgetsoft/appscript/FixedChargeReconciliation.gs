@@ -48,3 +48,54 @@ function deciderRapprochementChargeFixe(id,decision){if(typeof rapprocherPrevisi
 function marquerOperationRapprocheeChargeFixe_(rapprochement){
   const operations=lireTable_('Operations'),o=operations.find(x=>String(x.id)===String(rapprochement.operation_id));if(!o)return;const marqueur='[CHARGE_FIXE:'+String(rapprochement.charge_fixe_id)+']',commentaire=String(o.commentaire||'');enregistrerLigne('Operations',{id:o.id,date:o.date,libelle:o.libelle,categorie:o.categorie,compte:o.compte,montant:Math.abs(Number(o.montant||0)),type:o.type,commentaire:commentaire.includes(marqueur)?commentaire:[commentaire,marqueur].filter(Boolean).join(' '),cree_le:o.cree_le||''});
 }
+
+/**
+ * Profil lecture seule des lecteurs physiques les plus coûteux vus dans Cerbère.
+ * Le lecteur RAPPRO_CF courant appelle initialiserRapprochementsChargesFixes_(),
+ * qui réapplique du formatage ; ce profil n'appelle volontairement PAS ce chemin.
+ * Il mesure une lecture pure équivalente de RAPPRO_CF, Controles_releves,
+ * Parametres et Operations, en ventilant accès feuille / dimensions / getValues /
+ * mapping. Aucun write SpreadsheetApp n'est exécuté.
+ */
+function auditerProfilLecteursPhysiquesCerbereBudgetSoft20260912(){
+  const version='2026-09-12.1',tGlobal=Date.now(),mesures=[],erreurs=[];
+  const ss=SpreadsheetApp.getActiveSpreadsheet();
+  function chrono_(fn){const t=Date.now(),v=fn();return{v:v,ms:Date.now()-t};}
+  function mapper_(headers,rows){return rows.filter(function(r){return r.some(function(v){return v!==''&&v!==null;});}).map(function(r){const o={};headers.forEach(function(h,i){if(h)o[h]=r[i] instanceof Date?r[i].toISOString():r[i];});return o;});}
+  function profilerFeuille_(nom,headersFixes){
+    const m={source:nom,etapes:{},lignes:0,colonnes:0,tailleJson:0};
+    let x=chrono_(function(){return ss.getSheetByName(nom);});m.etapes.getSheetByNameMs=x.ms;const sh=x.v;
+    if(!sh){m.disponible=false;mesures.push(m);return null;}
+    m.disponible=true;
+    x=chrono_(function(){return{r:sh.getLastRow(),c:sh.getLastColumn()};});m.etapes.dimensionsMs=x.ms;const lr=x.v.r,lc=x.v.c;m.lignes=Math.max(0,lr-1);m.colonnes=lc;
+    if(lr<2||lc<1){m.resultat=[];mesures.push(m);return[];}
+    let headers=headersFixes||null;
+    if(headers){
+      m.etapes.lectureEntetesMs=0;
+    }else{
+      x=chrono_(function(){return sh.getRange(1,1,1,lc).getValues()[0].map(function(v){return String(v||'').trim();});});m.etapes.lectureEntetesMs=x.ms;headers=x.v;
+    }
+    const largeur=headersFixes?headersFixes.length:lc;
+    x=chrono_(function(){return sh.getRange(2,1,lr-1,largeur).getValues();});m.etapes.lectureValeursMs=x.ms;
+    const rows=x.v;
+    x=chrono_(function(){return mapper_(headers,rows);});m.etapes.mappingMs=x.ms;m.resultat=x.v;
+    x=chrono_(function(){return JSON.stringify(m.resultat);});m.etapes.serialisationControleMs=x.ms;m.tailleJson=x.v.length;
+    m.totalMesureMs=Object.keys(m.etapes).reduce(function(s,k){return s+Number(m.etapes[k]||0);},0);
+    mesures.push(m);return m.resultat;
+  }
+  try{
+    const rappro=profilerFeuille_(FIXED_CHARGE_MATCH_SHEET,FIXED_CHARGE_MATCH_HEADERS);
+    const controles=profilerFeuille_('Controles_releves',null);
+    let t=Date.now(),parametres=lireTable_('Parametres');mesures.push({source:'TABLE:Parametres via lireTable_',disponible:true,lignes:Array.isArray(parametres)?parametres.length:0,totalMesureMs:Date.now()-t});
+    t=Date.now();let operations=lireTable_('Operations');mesures.push({source:'TABLE:Operations via lireTable_',disponible:true,lignes:Array.isArray(operations)?operations.length:0,totalMesureMs:Date.now()-t});
+    if(typeof lireFeuilleDynamiqueCerbereV379_==='function'){
+      t=Date.now();const dyn=lireFeuilleDynamiqueCerbereV379_('Rapprochements_charges_fixes');const dynMs=Date.now()-t;
+      const a=JSON.stringify(rappro||[]),b=JSON.stringify((dyn||[]).map(function(o){const z={};FIXED_CHARGE_MATCH_HEADERS.forEach(function(h){z[h]=o&&Object.prototype.hasOwnProperty.call(o,h)?o[h]:'';});return z;}));
+      mesures.push({source:'RAPPRO_CF comparaison lecteur dynamique pur',disponible:true,lignes:(dyn||[]).length,totalMesureMs:dynMs,identiqueAux16Colonnes:a===b});
+    }
+  }catch(e){erreurs.push(String(e&&e.stack||e&&e.message||e));}
+  const classement=mesures.slice().sort(function(a,b){return Number(b.totalMesureMs||0)-Number(a.totalMesureMs||0);}).map(function(m){return{source:m.source,totalMesureMs:Number(m.totalMesureMs||0),lignes:Number(m.lignes||0),etapes:m.etapes||null,identiqueAux16Colonnes:m.identiqueAux16Colonnes};});
+  const comparaison=mesures.find(function(m){return m.source==='RAPPRO_CF comparaison lecteur dynamique pur';});
+  const out={ok:erreurs.length===0&&(!comparaison||comparaison.identiqueAux16Colonnes===true),version:version,lectureSeule:true,aucuneModification:true,perimetre:{compare:'lectures physiques Cerbère coûteuses, sans cache et sans écriture',reference:new Date().toISOString(),sourceVerite:'feuilles réelles + lecteurs purs',attention:'lireRapprochementsChargesFixes() courant n’est pas appelé car il passe par initialiserRapprochementsChargesFixes_(), qui réapplique le formatage'},mesures:mesures,classement:classement,erreurs:erreurs,dureeTotaleMs:Date.now()-tGlobal,decision:erreurs.length===0&&(!comparaison||comparaison.identiqueAux16Colonnes===true)?'PROFIL_LECTEURS_PHYSIQUES_VALIDE_POUR_CHOISIR_LEVIER':'PROFIL_LECTEURS_PHYSIQUES_INVALIDE_NE_RIEN_OPTIMISER',doctrine:'Profil uniquement. Le candidat naturel est de séparer initialisation/formatage de RAPPRO_CF et lecture pure, mais aucune intégration avant A/B strict puis gardes snapshot.'};
+  console.log('[AUDIT PERF lecteurs physiques Cerbère] '+JSON.stringify(out));return out;
+}
