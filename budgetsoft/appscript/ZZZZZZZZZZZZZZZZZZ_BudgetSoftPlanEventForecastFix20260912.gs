@@ -1,12 +1,17 @@
-const BUDGETSOFT_PLAN_EVENT_FORECAST_FIX_20260912_VERSION='2026-09-12.2';
+const BUDGETSOFT_PLAN_EVENT_FORECAST_FIX_20260912_VERSION='2026-09-12.3';
 
 /**
  * Doctrine corrigée :
  * - un Événement standard de type recette/depense représente un flux futur connu ;
- *   il appartient donc au prévisionnel dès qu'il n'est ni réalisé/rapproché ni annulé ;
+ *   il appartient donc au prévisionnel tant qu'aucune preuve bancaire ne l'a clos ;
+ * - un simple statut déclaratif (« Réalisé », « Réalisé à rapprocher »...) n'est PAS
+ *   une preuve de réalisation : seuls operation_reelle_id ou un rapprochement confirmé
+ *   autorisent la sortie du prévisionnel ;
  * - un Événement Effective dont la date prévue est dépassée ne disparaît pas : tant
- *   qu'il n'est pas rapproché/réalisé, il reste dû et est reporté au prochain jour
- *   de projection, tout en conservant sa date prévue d'origine dans la preuve ;
+ *   qu'il n'est pas rapproché/réalisé avec preuve, il reste dû et est reporté au prochain
+ *   jour de projection, tout en conservant sa date prévue d'origine dans la preuve ;
+ * - un événement déclaré « Réalisé à rapprocher » mais sans opération réelle liée reste
+ *   également dû et est traité comme un flux en retard ;
  * - les événements techniques (suspension, déplacement, réserve...) conservent la
  *   doctrine historique : ils ne modifient la trésorerie qu'une fois Effective ;
  * - les Actions Plan restent régies séparément par impact_confirme + statut Effective.
@@ -14,8 +19,15 @@ const BUDGETSOFT_PLAN_EVENT_FORECAST_FIX_20260912_VERSION='2026-09-12.2';
 function statutNormaliseEvenementPlanForecast20260912_(v){
   return String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 }
-function statutFinalEvenementPlanForecast20260912_(v){
-  return ['realise','realisee','realises','realisees','rapproche','rapprochee','annule','annulee','abandonne','abandonnee'].includes(statutNormaliseEvenementPlanForecast20260912_(v));
+function statutAnnuleEvenementPlanForecast20260912_(v){
+  return ['annule','annulee','abandonne','abandonnee'].includes(statutNormaliseEvenementPlanForecast20260912_(v));
+}
+function statutRapprocheEvenementPlanForecast20260912_(v){
+  return ['rapproche','rapprochee'].includes(statutNormaliseEvenementPlanForecast20260912_(v));
+}
+function statutDeclareRealiseEvenementPlanForecast20260912_(v){
+  const s=statutNormaliseEvenementPlanForecast20260912_(v);
+  return s==='realise'||s==='realisee'||s==='realises'||s==='realisees'||s.indexOf('realise a rapprocher')===0||s.indexOf('realisee a rapprocher')===0;
 }
 function statutEffectiveEvenementPlanForecast20260912_(v){
   return ['effectif','effective','effectifs','effectives'].includes(statutNormaliseEvenementPlanForecast20260912_(v));
@@ -23,6 +35,18 @@ function statutEffectiveEvenementPlanForecast20260912_(v){
 function evenementStandardPlanForecast20260912_(e){
   const type=String(e&&e.type||'').trim().toLowerCase();
   return type==='recette'||type==='depense';
+}
+function evenementProuveClosPlanForecast20260912_(e){
+  if(!e)return true;
+  if(statutAnnuleEvenementPlanForecast20260912_(e.statut))return true;
+  if(statutRapprocheEvenementPlanForecast20260912_(e.statut))return true;
+  if(String(e.operation_reelle_id||e.operationReelleId||'').trim())return true;
+  const r=statutNormaliseEvenementPlanForecast20260912_(e.rapprochement_statut||e.rapprochementStatut||'');
+  return ['rapproche','rapprochee','realise','realisee'].includes(r);
+}
+function statutFinalEvenementPlanForecast20260912_(v){
+  // Compatibilité : cette fonction ne doit plus considérer « Réalisé » seul comme final.
+  return statutAnnuleEvenementPlanForecast20260912_(v)||statutRapprocheEvenementPlanForecast20260912_(v);
 }
 function dateJourSuivantPlanForecast20260912_(reference){
   const d=new Date(reference);d.setDate(d.getDate()+1);d.setHours(12,0,0,0);return d;
@@ -34,27 +58,27 @@ function isoPlanForecast20260912_(d){
 /** Décision d'entrée des occurrences standard dans la trajectoire. */
 evenementEffectifTresorerie20260831_=function(id,evenements){
   const e=(evenements||[]).find(function(x){return String(x&&x.id||'')===String(id||'');});
-  if(!e||statutFinalEvenementPlanForecast20260912_(e.statut))return false;
+  if(!e||evenementProuveClosPlanForecast20260912_(e))return false;
   if(statutEffectiveEvenementPlanForecast20260912_(e.statut))return true;
+  if(statutDeclareRealiseEvenementPlanForecast20260912_(e.statut))return evenementStandardPlanForecast20260912_(e);
   return evenementStandardPlanForecast20260912_(e);
 };
 
 /**
  * Complément terminal : le moteur historique ne fabrique aucune occurrence lorsque
  * la date de l'événement est déjà <= à la référence bancaire. On réinjecte donc les
- * seuls événements standard Effective encore non rapprochés comme « flux en retard ».
+ * événements standard encore dus dont le statut indique qu'ils sont certains/effectifs
+ * ou déclarés réalisés à rapprocher, mais qui n'ont aucune preuve bancaire de réalisation.
  */
 completerEvenementsEffectifsTresorerie20260831_=function(lignes,evenements,reference,cible){
   const out=(lignes||[]).slice();
   const report=dateJourSuivantPlanForecast20260912_(reference);
   (evenements||[]).forEach(function(e){
     if(!evenementStandardPlanForecast20260912_(e))return;
-    if(!statutEffectiveEvenementPlanForecast20260912_(e.statut)||statutFinalEvenementPlanForecast20260912_(e.statut))return;
+    if(evenementProuveClosPlanForecast20260912_(e))return;
     if(typeof estSuspensionTemporaireTresorerie20260831_==='function'&&estSuspensionTemporaireTresorerie20260831_(e))return;
-    if(String(e.operation_reelle_id||'').trim())return;
-    const rapprochement=statutNormaliseEvenementPlanForecast20260912_(e.rapprochement_statut||'');
-    if(['rapproche','rapprochee','realise','realisee'].includes(rapprochement))return;
 
+    const statutEligibleRetard=statutEffectiveEvenementPlanForecast20260912_(e.statut)||statutDeclareRealiseEvenementPlanForecast20260912_(e.statut);
     const dr=datePlanTresorerie_(e,reference,false),base=dr&&dr.date;
     if(!base||isNaN(base))return;
     const n=(e.fractionne===true||String(e.fractionne)==='true')?Math.max(1,Number(e.nombre_fois||1)):1;
@@ -67,14 +91,15 @@ completerEvenementsEffectifsTresorerie20260831_=function(lignes,evenements,refer
       if(i){if(per==='annuel')origine.setFullYear(origine.getFullYear()+i);else origine.setMonth(origine.getMonth()+i);}
       if(origine>cible)continue;
       const enRetard=origine<=reference;
+      if(enRetard&&!statutEligibleRetard)continue;
       const d=enRetard?new Date(report):origine;
       if(d<=reference||d>cible)continue;
       if(out.some(function(x){return x.source==='evenement'&&String(x.sourceId||'')===String(e.id||'')&&Math.abs(new Date(x.date)-d)<43200000;}))continue;
       const type=String(e.type||'depense').toLowerCase();
       const montant=(type==='recette'?1:-1)*(total/n);
       const preuve=enRetard
-        ?'Événement Effective en retard · date prévue '+isoPlanForecast20260912_(origine)+' · maintenu au prévisionnel jusqu’au rapprochement'
-        :preuveDatePlanTresorerie_('Événement Effective du Plan',dr);
+        ?'Événement encore dû · date prévue '+isoPlanForecast20260912_(origine)+' · aucune opération réelle/rapprochement confirmé · maintenu au prévisionnel'
+        :preuveDatePlanTresorerie_('Événement du Plan',dr);
       out.push({
         id:'event:'+String(e.id||'')+':'+i+(enRetard?':retard':''),
         source:'evenement',sourceId:e.id||'',date:d.toISOString(),
@@ -97,20 +122,18 @@ function auditerEvenementsPrevusTresorerieBudgetSoft20260912(){
   const attendus=[];
 
   (evenements||[]).forEach(function(ev){
-    if(!evenementStandardPlanForecast20260912_(ev)||statutFinalEvenementPlanForecast20260912_(ev.statut))return;
-    if(String(ev.operation_reelle_id||'').trim())return;
-    const rapprochement=statutNormaliseEvenementPlanForecast20260912_(ev.rapprochement_statut||'');
-    if(['rapproche','rapprochee','realise','realisee'].includes(rapprochement))return;
+    if(!evenementStandardPlanForecast20260912_(ev)||evenementProuveClosPlanForecast20260912_(ev))return;
     const dr=datePlanTresorerie_(ev,reference,false),origine=dr&&dr.date;
     if(!origine||isNaN(origine)||origine>fin)return;
-    const effective=statutEffectiveEvenementPlanForecast20260912_(ev.statut);
-    if(origine<=reference&&!effective)return;
+    const eligibleRetard=statutEffectiveEvenementPlanForecast20260912_(ev.statut)||statutDeclareRealiseEvenementPlanForecast20260912_(ev.statut);
+    if(origine<=reference&&!eligibleRetard)return;
     const dateProjection=origine<=reference?report:origine;
     if(dateProjection<=reference||dateProjection>fin)return;
     attendus.push({
       id:String(ev.id||''),libelle:String(ev.libelle||''),type:String(ev.type||'').toLowerCase(),
       datePrevue:isoDashboardSynthese20260907_(origine),dateProjection:isoDashboardSynthese20260907_(dateProjection),
-      enRetard:origine<=reference,montant:Math.abs(Number(ev.montant||0)),statut:String(ev.statut||'')
+      enRetard:origine<=reference,montant:Math.abs(Number(ev.montant||0)),statut:String(ev.statut||''),
+      operationReelleId:String(ev.operation_reelle_id||ev.operationReelleId||''),preuveCloture:false
     });
   });
 
