@@ -6,14 +6,18 @@ function auditerP1DoctrineComptableGuideVieCompact20260912(){
   const k=v.cockpit20260902||{};
   const d=c&&c.diagnostic&&c.diagnostic.p1Doctrine20260912||{};
   const cf=v&&v.cft1Audit20260912||k&&k.detailActualise&&k.detailActualise.chargesFixesAudit||{};
+  const rt1Due=c&&c.diagnostic&&c.diagnostic.rt1EvenementsCertainsDus20260912||{};
   const resultat={
     ok:!!(c&&c.ok!==false&&p&&k),
     version:CERBERE_CB_DOUBLE_ROLE_FINAL_VERSION,
+    inputsFixVersion:typeof CERBERE_P1_INPUTS_FIX_20260912_VERSION!=='undefined'?CERBERE_P1_INPUTS_FIX_20260912_VERSION:'',
     source:c&&c.sourceBudgetSoft||'',
     recalculFrais:!!(c&&c.sourceBudgetSoft==='recalcul_frais_p1'),
     periode:p&&p.periode||null,
     ss1:Number(d.ss1||0),
     rt1:Number(d.rt1||0),
+    rt1EvenementsCertainsDus:Number(rt1Due.montant||0),
+    rt1EvenementsCertainsDusNombre:Number(rt1Due.nombre||0),
     cft1:Number(d.cft1||0),
     cft1Brut:Number(cf.brutAvantSuspensions||0),
     suspensions:Number(cf.suspensions||0),
