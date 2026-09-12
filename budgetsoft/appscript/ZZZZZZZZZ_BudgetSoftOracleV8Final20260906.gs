@@ -65,3 +65,23 @@ function auditerOracleBudgetSoft80_20260906(){
   console.log(JSON.stringify(r));
   return r;
 }
+
+/*
+ * 2026-09-12 — intégration minimale validée par A/B V374 puis gardes snapshot.
+ * La lecture des rapprochements de charges fixes ne doit plus réinitialiser ni
+ * reformater la feuille. Les chemins de création/modification conservent leur appel
+ * explicite à initialiserRapprochementsChargesFixes_().
+ * Override terminal volontaire pour ne pas modifier les chargeurs autonomes Cerbère.
+ */
+function lireRapprochementsChargesFixes(){
+  const dyn=typeof lireFeuilleDynamiqueCerbereV379_==='function'
+    ?lireFeuilleDynamiqueCerbereV379_(FIXED_CHARGE_MATCH_SHEET)
+    :[];
+  return (dyn||[]).map(function(o){
+    const z={};
+    FIXED_CHARGE_MATCH_HEADERS.forEach(function(h){
+      z[h]=o&&Object.prototype.hasOwnProperty.call(o,h)?o[h]:'';
+    });
+    return z;
+  });
+}
