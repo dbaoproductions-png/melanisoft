@@ -1,10 +1,9 @@
-const BUDGETSOFT_ENGAGEMENTS_SNAPSHOT_20260912_VERSION='2026-09-12.1';
+const BUDGETSOFT_ENGAGEMENTS_SNAPSHOT_20260912_VERSION='2026-09-12.2';
 
 // Le moteur métier existant reste autoritaire. On ne remplace que son mode de
 // publication/lecture afin qu'une UI fonctionnelle ne possède plus sa propre
 // photographie du budget.
 var chargerEngagementsBancairesFutursSource20260912_=chargerEngagementsBancairesFuturs;
-var ecrireSnapshotGlobalBudgetSoftAvantEngagements20260912_=ecrireSnapshotGlobalBudgetSoft20260906_;
 
 function construireModuleEngagementsBancairesSnapshotBudgetSoft20260912_(dashboardRevision){
   const t0=Date.now();
@@ -61,25 +60,11 @@ chargerEngagementsBancairesFuturs=function(){
 };
 
 /**
- * Extension atomique du writer déjà enrichi par Analyses. Le module Engagements
- * est construit avant l'écriture physique, puis le writer précédent poursuit la
- * chaîne (notamment intégration Analyses + écriture des chunks).
+ * Important : ce fichier ne surcharge plus ecrireSnapshotGlobalBudgetSoft20260906_.
+ * Le writer terminal unique se trouve dans
+ * ZZZZZZZZZZZZZZZZ_BudgetSoftAnalysesSnapshot20260912.gs et appelle explicitement
+ * construireModuleEngagementsBancairesSnapshotBudgetSoft20260912_().
  */
-ecrireSnapshotGlobalBudgetSoft20260906_=function(etat){
-  if(!etat||!etat.revisionBudgetSoft)throw new Error('Snapshot global invalide avant intégration Engagements bancaires.');
-  etat.modules=etat.modules||{};
-  const module=construireModuleEngagementsBancairesSnapshotBudgetSoft20260912_(etat.modules.dashboard||null);
-  module.revisionBudgetSoft=etat.revisionBudgetSoft;
-  etat.modules.engagementsBancaires=module;
-  etat.optimisations=Object.assign({},etat.optimisations||{},{
-    engagementsBancairesSnapshot:{
-      version:BUDGETSOFT_ENGAGEMENTS_SNAPSHOT_20260912_VERSION,
-      moteurMetierInchange:true,
-      dashboardRevisionInjecte:true
-    }
-  });
-  return ecrireSnapshotGlobalBudgetSoftAvantEngagements20260912_(etat);
-};
 
 function auditerEngagementsBancairesSnapshotBudgetSoft20260912(){
   const s=chargerSnapshotGlobalBudgetSoft20260906();
