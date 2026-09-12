@@ -132,22 +132,28 @@ jobs:
           import json, sys
           data=json.load(open('/tmp/get-content-response.json'))
           target='ZZZ_CerbereCbDoubleRoleFinal20260905'
-          expected_version="CERBERE_CB_DOUBLE_ROLE_FINAL_VERSION='2026-09-12.p1-doctrine-2'"
+          audit_target='ZZZ_CerbereP1AuditCompact20260912'
+          expected_version="CERBERE_CB_DOUBLE_ROLE_FINAL_VERSION='2026-09-12.p1-doctrine-3'"
           expected_function='function auditerP1DoctrineComptableGuideVie20260912()'
+          expected_compact='function auditerP1DoctrineComptableGuideVieCompact20260912()'
           files={f.get('name'):f for f in data.get('files',[])}
           print('Apps Script files returned:', len(files))
           if target not in files:
               print('VERIFY FAIL: target file missing from Apps Script TEST:', target)
               sys.exit(1)
+          if audit_target not in files:
+              print('VERIFY FAIL: compact audit file missing from Apps Script TEST:', audit_target)
+              sys.exit(1)
           src=files[target].get('source','')
+          audit_src=files[audit_target].get('source','')
           print('Verified file:', target)
           print('Contains expected P1 version:', expected_version in src)
           print('Contains P1 audit function:', expected_function in src)
-          if expected_version not in src or expected_function not in src:
+          print('Contains compact P1 audit function:', expected_compact in audit_src)
+          if expected_version not in src or expected_function not in src or expected_compact not in audit_src:
               print('VERIFY FAIL: Apps Script TEST content does not match pushed BudgetSoft source.')
-              print('First 240 chars of target source:', repr(src[:240]))
               sys.exit(1)
-          print('VERIFY OK: Apps Script TEST contains P1 doctrine-2 and audit function.')
+          print('VERIFY OK: Apps Script TEST contains P1 doctrine-3 and compact audit function.')
           PY
 
       - name: Create Apps Script version (best effort)
