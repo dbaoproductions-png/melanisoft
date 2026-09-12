@@ -1,4 +1,4 @@
-const BUDGETSOFT_PROJECTION_SUBVIEW_DUE_FIX_20260912_VERSION='2026-09-12.2';
+const BUDGETSOFT_PROJECTION_SUBVIEW_DUE_FIX_20260912_VERSION='2026-09-12.3';
 
 function statutRecetteEncoreDueProjection20260912_(ev){
   if(!ev||String(ev.type||'').trim().toLowerCase()!=='recette')return false;
@@ -7,11 +7,6 @@ function statutRecetteEncoreDueProjection20260912_(ev){
   return ['effective','effectif','effectives','effectifs','realise a rapprocher','realisee a rapprocher'].includes(n);
 }
 
-/**
- * Vrai point de correction du moteur 20260831 : une recette certaine encore due
- * ne disparait jamais parce que sa date planifiee est passee. Elle est reportee
- * au lendemain de la frontiere bancaire, jusqu'a preuve reelle de son encaissement.
- */
 completerEvenementsEffectifsTresorerie20260831_=function(lignes,evenements,reference,cible){
   const out=(lignes||[]).slice(),debut=debutJourTresorerie20260831_(reference);
   const report=new Date(reference);report.setDate(report.getDate()+1);report.setHours(12,0,0,0);
@@ -26,34 +21,16 @@ completerEvenementsEffectifsTresorerie20260831_=function(lignes,evenements,refer
       if(origine>cible)continue;
       const type=String(e.type||'depense').toLowerCase();if(!['depense','recette'].includes(type))continue;
       let d=new Date(origine);
-      if(d<debut){
-        if(!(encoreDue&&type==='recette'))continue;
-        d=new Date(report);
-      }
+      if(d<debut){if(!(encoreDue&&type==='recette'))continue;d=new Date(report);}
       if(d>cible)continue;
       if(out.some(function(x){return x.source==='evenement'&&String(x.sourceId||'')===String(e.id||'')&&Math.abs(new Date(x.date)-d)<43200000;}))continue;
       const m=(type==='recette'?1:-1)*(total/n);
-      out.push({
-        id:'event:'+String(e.id||'')+':'+i,
-        source:'evenement',sourceId:e.id||'',date:d.toISOString(),
-        libelle:e.libelle||'Événement',categorie:e.categorie||'',compte:e.compte||'',
-        montantSigne:arrondiTresorerie_(m),certitude:'tres_probable',
-        preuve:encoreDue&&origine<debut
-          ?'Événement certain encore dû · échéance dépassée reportée après la frontière bancaire · aucune opération réelle ni rapprochement confirmé'
-          :preuveDatePlanTresorerie_('Événement effectif du Plan',dr),
-        dateConventionnelle:!!dr.conventionnelle,
-        enRetard:encoreDue&&origine<debut,
-        datePrevueOrigine:encoreDue&&origine<debut&&typeof isoRevenuePublicationFix20260912_==='function'?isoRevenuePublicationFix20260912_(origine):''
-      });
+      out.push({id:'event:'+String(e.id||'')+':'+i,source:'evenement',sourceId:e.id||'',date:d.toISOString(),libelle:e.libelle||'Événement',categorie:e.categorie||'',compte:e.compte||'',montantSigne:arrondiTresorerie_(m),certitude:'tres_probable',preuve:encoreDue&&origine<debut?'Événement certain encore dû · échéance dépassée reportée après la frontière bancaire · aucune opération réelle ni rapprochement confirmé':preuveDatePlanTresorerie_('Événement effectif du Plan',dr),dateConventionnelle:!!dr.conventionnelle,enRetard:encoreDue&&origine<debut,datePrevueOrigine:encoreDue&&origine<debut&&typeof isoRevenuePublicationFix20260912_==='function'?isoRevenuePublicationFix20260912_(origine):''});
     }
   });
   return out;
 };
 
-/**
- * Garde secondaire de sous-vue : conserve les lignes du propriétaire canonique et
- * complete, si necessaire, une recette certaine encore due avant de recalculer le contrat.
- */
 sousVueTrajectoireTresorerieCanoniqueBudgetSoft20260910_=function(trajectoire,dateCible){
   if(!trajectoire||trajectoire.ok===false)return trajectoire;
   const tz=Session.getScriptTimeZone();
@@ -81,7 +58,7 @@ sousVueTrajectoireTresorerieCanoniqueBudgetSoft20260910_=function(trajectoire,da
   copie.dateCible=cible;copie.variationPrevue=variation;copie.soldePrevisionnel=Math.round((Number(copie.soldeReel||0)+Number(variation||0))*100)/100;
   copie.proprietaireBudgetSoft='construireTrajectoireTresorerieCanoniqueBudgetSoft20260907';copie.moteurSousJacent='chargerTresoreriePrevisionnelle20260901';copie.versionContratCanonique=typeof BUDGETSOFT_TREASURY_CANONICAL_20260907_VERSION!=='undefined'?BUDGETSOFT_TREASURY_CANONICAL_20260907_VERSION:'';copie.versionProjectionSubviewDueFix=BUDGETSOFT_PROJECTION_SUBVIEW_DUE_FIX_20260912_VERSION;copie.evenementsCertainsDusInjectesSousVue=ajoutes.map(function(l){return{sourceId:l.sourceId,libelle:l.libelle,montant:l.montantSigne,date:l.date};});
   if(typeof decomposerTrajectoireTresorerieCanoniqueBudgetSoft20260907_==='function'){copie.decompositionCanonique=decomposerTrajectoireTresorerieCanoniqueBudgetSoft20260907_(copie);if(!copie.decompositionCanonique.ok){copie.ok=false;copie.erreur='Contrat canonique de trésorerie non satisfait après conservation des événements certains dus dans la sous-vue.';copie.erreursContrat=(copie.decompositionCanonique.erreurs||[]).slice();}}
-  copie.optimisationSnapshot={version:'2026-09-12.2',mode:'sous_vue_trajectoire_etendue',sansRecalculMetier:true,conservationEvenementsCertainsDus:true};
+  copie.optimisationSnapshot={version:'2026-09-12.3',mode:'sous_vue_trajectoire_etendue',sansRecalculMetier:true,conservationEvenementsCertainsDus:true};
   return copie;
 };
 
@@ -91,4 +68,21 @@ function auditerEvenementCertainRetardeTresorerieBudgetSoft20260912(){
   const lignes=(r&&r.lignes||[]).filter(function(l){return String(l&&l.sourceId||'')===id;});
   const out={ok:!!(r&&r.ok&&lignes.length),version:BUDGETSOFT_PROJECTION_SUBVIEW_DUE_FIX_20260912_VERSION,dateReference:r&&r.dateReference||'',dateCible:r&&r.dateCible||'',lignes:lignes};
   console.log('[AUDIT evenement certain retarde tresorerie] '+JSON.stringify(out));return out;
+}
+
+function auditerChaineProjectionSnapshotEvenementCertainBudgetSoft20260912(){
+  const id='1d207b7c-b59f-41f9-aade-babee152d967',maintenant=new Date();
+  const finCourant=typeof dateFinCycleCanonBudgetSoft20260906_==='function'?dateFinCycleCanonBudgetSoft20260906_(maintenant):new Date(maintenant.getFullYear(),maintenant.getMonth(),27);
+  const finSuivant=new Date(finCourant.getFullYear(),finCourant.getMonth()+1,finCourant.getDate());
+  const finBancaireSuivante=new Date(finSuivant.getFullYear(),finSuivant.getMonth()+1,0,23,59,59,999);
+  const cibleSuivante=Utilities.formatDate(finSuivant,Session.getScriptTimeZone(),'yyyy-MM-dd');
+  const cibleCalculUnique=Utilities.formatDate(finBancaireSuivante,Session.getScriptTimeZone(),'yyyy-MM-dd');
+  let sources=null,cerbereBase=null;
+  try{sources=chargerToutesLesDonnees();const charge=chargerCerbereBaseDepuisSourcesSnapshotBudgetSoft20260911_(sources);cerbereBase=charge&&charge.base||null;}catch(e){return{ok:false,version:BUDGETSOFT_PROJECTION_SUBVIEW_DUE_FIX_20260912_VERSION,etape:'preparation',erreur:String(e&&e.message||e)};}
+  const complet=construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(cibleCalculUnique,cerbereBase&&cerbereBase.ok!==false?cerbereBase:null);
+  const sousVue=complet&&complet.ok!==false?sousVueTrajectoireTresorerieCanoniqueBudgetSoft20260910_(complet,cibleSuivante):complet;
+  function lignesId(r){return (r&&r.lignes||[]).filter(function(l){return String(l&&l.sourceId||'')===id;});}
+  const lignesComplet=lignesId(complet),lignesSousVue=lignesId(sousVue);
+  const out={ok:!!(complet&&complet.ok&&sousVue&&sousVue.ok&&lignesSousVue.length),version:BUDGETSOFT_PROJECTION_SUBVIEW_DUE_FIX_20260912_VERSION,cibleCalculUnique:cibleCalculUnique,cibleSousVue:cibleSuivante,complet:{ok:!!(complet&&complet.ok),dateReference:complet&&complet.dateReference||'',dateCible:complet&&complet.dateCible||'',version:complet&&complet.version||'',versionRevenueIntermodule:complet&&complet.versionRevenueIntermodule||'',proprietaire:complet&&complet.proprietaireBudgetSoft||'',lignes:lignesComplet},sousVue:{ok:!!(sousVue&&sousVue.ok),dateReference:sousVue&&sousVue.dateReference||'',dateCible:sousVue&&sousVue.dateCible||'',versionProjectionSubviewDueFix:sousVue&&sousVue.versionProjectionSubviewDueFix||'',optimisationSnapshot:sousVue&&sousVue.optimisationSnapshot||null,lignes:lignesSousVue}};
+  console.log('[AUDIT chaine projection snapshot evenement certain] '+JSON.stringify(out));return out;
 }
