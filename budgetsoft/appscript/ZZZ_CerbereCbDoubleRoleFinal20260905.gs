@@ -16,7 +16,7 @@
  * 2) débit bancaire en C2 => contrainte comptable de construction de P1(C2),
  *    sans seconde consommation par catégorie.
  */
-const CERBERE_CB_DOUBLE_ROLE_FINAL_VERSION='2026-09-12.p1-doctrine-1';
+const CERBERE_CB_DOUBLE_ROLE_FINAL_VERSION='2026-09-12.p1-doctrine-2';
 
 function chargerCerbereCockpit20260902(){
   try{
@@ -59,6 +59,73 @@ function chargerCerbereCockpit20260902(){
 function jourCivilP1Cerbere20260912_(d){
   d=dateCockpit20260902_(d);
   return d?Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()):NaN;
+}
+
+function dernierJourMoisP1Cerbere20260912_(annee,mois){return new Date(annee,mois+1,0).getDate();}
+function occurrenceMensuelleP1Cerbere20260912_(debut,fin,jour){
+  jour=Math.max(1,Math.min(31,Math.round(Number(jour||1))));
+  const candidats=[];
+  for(let m=0;m<=1;m++){
+    const base=new Date(debut.getFullYear(),debut.getMonth()+m,1);
+    const j=Math.min(jour,dernierJourMoisP1Cerbere20260912_(base.getFullYear(),base.getMonth()));
+    const d=new Date(base.getFullYear(),base.getMonth(),j);
+    if(jourCivilP1Cerbere20260912_(d)>=jourCivilP1Cerbere20260912_(debut)&&jourCivilP1Cerbere20260912_(d)<=jourCivilP1Cerbere20260912_(fin))candidats.push(d);
+  }
+  return candidats.length?candidats[0]:null;
+}
+function estActifP1Cerbere20260912_(v){const s=String(v==null?'':v).trim().toLowerCase();return s==='1'||s==='true'||s==='oui'||s==='actif';}
+function estRapprochementValideP1Cerbere20260912_(r){
+  const s=String(r&&r.statut||r&&r.decision||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  return /valide|rapproch/.test(s)&&!/a valider|propose/.test(s);
+}
+
+/**
+ * Reconstruction explicable de CFt1.
+ * Autorités : Charges_fixes pour la prévision ; charge_fixe_id ou rapprochement
+ * explicitement validé pour le Réel. Aucun rapprochement heuristique silencieux.
+ * Pour le cycle courant, toutes les charges actives sont mensuelles ; les autres
+ * fréquences restent signalées et conservent la valeur moteur tant qu'elles ne
+ * sont pas couvertes par une occurrence explicite.
+ */
+function reconstruireChargesFixesReevalueesP1Cerbere20260912_(p,v){
+  const periode=p&&p.periode||p||{},debut=dateCockpit20260902_(periode.debut),fin=dateCockpit20260902_(periode.fin);
+  if(!debut||!fin)return{ok:false,erreur:'bornes période invalides',total:Number(v&&v.cft1||0)};
+  const charges=lireTable_('Charges_fixes')||[],ops0=lireTable_('Operations')||[];
+  const operations=typeof dedoublonnerOperationsCartesBudgetSoft_==='function'?dedoublonnerOperationsCartesBudgetSoft_(ops0):ops0;
+  const rapprochements=typeof lireRapprochementsChargesFixes==='function'?lireRapprochementsChargesFixes():[];
+  const opParId={};operations.forEach(o=>{const id=String(o&&o.id||'').trim();if(id)opParId[id]=o;});
+  const lienValide={};
+  (rapprochements||[]).forEach(r=>{if(!estRapprochementValideP1Cerbere20260912_(r))return;const opId=String(r&&r.operation_id||'').trim(),cfId=String(r&&r.charge_fixe_id||'').trim();if(opId&&cfId)lienValide[opId]=cfId;});
+  const reelsParCf={};
+  operations.forEach(o=>{
+    const m=Number(o&&o.montant||0);if(!Number.isFinite(m)||m>=0)return;
+    const d=typeof dateOperationBanqueV377_==='function'?dateOperationBanqueV377_(o):dateCockpit20260902_(o&&(o.date_comptable||o.date));
+    if(!d||jourCivilP1Cerbere20260912_(d)<jourCivilP1Cerbere20260912_(debut)||jourCivilP1Cerbere20260912_(d)>jourCivilP1Cerbere20260912_(fin))return;
+    const opId=String(o&&o.id||'').trim();
+    const cfId=String(o&&o.charge_fixe_id||'').trim()||(opId&&lienValide[opId]||'');
+    if(!cfId)return;
+    reelsParCf[cfId]=Number(reelsParCf[cfId]||0)+Math.abs(m);
+  });
+
+  let brut=0;const lignes=[],nonMensuelles=[];
+  (charges||[]).forEach(c=>{
+    if(!estActifP1Cerbere20260912_(c&&c.actif))return;
+    const freq=String(c&&c.frequence||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    if(freq&&freq.indexOf('mens')<0){nonMensuelles.push({id:String(c&&c.id||''),libelle:String(c&&c.libelle||''),frequence:String(c&&c.frequence||''),montant:Number(c&&c.montant||0)});return;}
+    const occ=occurrenceMensuelleP1Cerbere20260912_(debut,fin,c&&c.jour_execution);
+    if(!occ)return;
+    const dd=dateCockpit20260902_(c&&c.date_debut),df=dateCockpit20260902_(c&&c.date_fin);
+    if(dd&&jourCivilP1Cerbere20260912_(dd)>jourCivilP1Cerbere20260912_(occ))return;
+    if(df&&jourCivilP1Cerbere20260912_(df)<jourCivilP1Cerbere20260912_(occ))return;
+    const id=String(c&&c.id||''),prevu=Math.abs(Number(c&&c.montant||0)),aReel=Object.prototype.hasOwnProperty.call(reelsParCf,id),retenu=aReel?Number(reelsParCf[id]):prevu;
+    brut+=retenu;
+    lignes.push({id:id,libelle:String(c&&c.libelle||''),date:Utilities.formatDate(occ,Session.getScriptTimeZone(),'yyyy-MM-dd'),prevu:arrCockpit20260902_(prevu),reel:aReel?arrCockpit20260902_(retenu):null,retenu:arrCockpit20260902_(retenu),source:aReel?'réel explicite':'prévision'});
+  });
+  brut=arrCockpit20260902_(brut);
+  const suspension=arrCockpit20260902_(Math.max(0,Number(v&&v.correctionSuspensions20260903||0)));
+  const total=arrCockpit20260902_(Math.max(0,brut-suspension));
+  const ancien=arrCockpit20260902_(Number(v&&v.cft1||0));
+  return{ok:nonMensuelles.length===0,total:total,brutAvantSuspensions:brut,suspensions:suspension,ancienMoteur:ancien,ecartVsAncien:arrCockpit20260902_(total-ancien),lignes:lignes,nonMensuelles:nonMensuelles,doctrine:'prévision Charges_fixes remplacée uniquement par un Réel explicitement lié/validé ; suspension retranchée une seule fois'};
 }
 
 function calculerCbHeriteesP1Cerbere20260912_(p){
@@ -126,7 +193,9 @@ function appliquerDoctrineP1ComptableGuideVieCerbere20260912_(base){
   const p0=arr(c.p0Total!=null?c.p0Total:env.reduce((s,x)=>s+Math.max(0,Number(x&&x.canon||0)),0));
   const allocation=arr(c.budgetRepartiMolettes!=null?c.budgetRepartiMolettes:env.reduce((s,x)=>s+Math.max(0,Number(x&&x.prevu||0)),0));
   const consomme=arr(c.consommePilotable!=null?c.consommePilotable:env.reduce((s,x)=>s+Math.max(0,Number(x&&x.reelNetPrevisionnel||0)),0));
-  const rt1=arr(Number(v.rt1||0)),cft1=arr(Number(v.cft1||0));
+  const rt1=arr(Number(v.rt1||0));
+  const cfReconstruite=reconstruireChargesFixesReevalueesP1Cerbere20260912_(p,v);
+  const cft1=arr(cfReconstruite&&cfReconstruite.ok?cfReconstruite.total:Number(v.cft1||0));
   const het1=arr(Math.max(0,Number(v.het1!=null?v.het1:(v.horsPilotableAControler||0))));
   const ss1=arr(Number(v.ss1||0));
   const herite=calculerCbHeriteesP1Cerbere20260912_(p);
@@ -140,6 +209,9 @@ function appliquerDoctrineP1ComptableGuideVieCerbere20260912_(base){
   const reste=arr(cible-consomme);
   const marge=arr(cible-allocation);
 
+  v.cft1=cft1;
+  v.chargesFixesTotal=cft1;
+  v.cft1Audit20260912=cfReconstruite;
   c.p0Total=p0;
   c.p1Total=cible;
   c.p1Cible=cible;
@@ -160,12 +232,13 @@ function appliquerDoctrineP1ComptableGuideVieCerbere20260912_(base){
     soldeAvantSalaireSS1:ss1,
     recettesReevaluees:rt1,
     chargesFixesReevaluees:cft1,
+    chargesFixesAudit:cfReconstruite,
     horsPilotableEtImprevus:het1,
     cbHeriteesCycle:arr(herite.montant),
     cbHeriteesNombre:herite.nombre,
     cbHeriteesExcluesCf:arr(herite.excluesCf)
   });
-  c.formuleActualisee='P1 = SS1 avant salaire + Rt1 - CFt1 - HEt1 - CB héritées de M-1 non déjà provisionnées + ajustement manuel';
+  c.formuleActualisee='P1 = SS1 avant salaire + Rt1 - CFt1 explicable - HEt1 - CB héritées de M-1 non déjà provisionnées + ajustement manuel';
   c.formuleVentilation='Surplus/déficit à ventiler = P1 courant - somme des molettes ; les écarts Rt1/CFt1/HEt1 modifient la capacité, les dépenses pilotables consomment les molettes à leur date d’engagement.';
   c.datePilotable='dépense pilotable : date d’achat/engagement ; trésorerie : date bancaire ; le règlement CB technique ne recompte jamais la dépense';
 
@@ -180,23 +253,25 @@ function appliquerDoctrineP1ComptableGuideVieCerbere20260912_(base){
   base.diagnostic.p1Doctrine20260912={
     version:CERBERE_CB_DOUBLE_ROLE_FINAL_VERSION,
     periode:p&&p.periode||null,
-    ss1:ss1,rt1:rt1,cft1:cft1,het1:het1,
+    ss1:ss1,rt1:rt1,cft1:cft1,cft1Audit:cfReconstruite,het1:het1,
     cbHeritees:arr(herite.montant),cbHeriteesNombre:herite.nombre,cbHeriteesExcluesCf:arr(herite.excluesCf),
     capacite:capacite,ajustement:ajustement,p1:cible,p0:p0,
     consommePilotable:consomme,restePilotable:reste,
     allocations:allocation,surplusDeficitVsP0:arr(cible-p0),surplusDeficitAVentiler:marge,
-    doctrine:'P1 comptable dynamique pour recettes/charges non pilotables ; consommation pilotable quotidienne indépendante de la date bancaire.'
+    doctrine:'P1 comptable dynamique pour recettes/charges non pilotables ; CFt1 reconstruit depuis le référentiel et les liens réels explicites ; consommation pilotable quotidienne indépendante de la date bancaire.'
   };
   return base;
 }
 
 function auditerP1DoctrineComptableGuideVie20260912(){
   const c=chargerCerbereCockpit20260902(),p=c&&Array.isArray(c.periodes)?c.periodes[0]:null,v=p&&p.v37||{},k=v.cockpit20260902||{};
+  const cf=v&&v.cft1Audit20260912||k&&k.detailActualise&&k.detailActualise.chargesFixesAudit||null;
   return{
     ok:!!(c&&c.ok!==false&&p&&k),
     version:CERBERE_CB_DOUBLE_ROLE_FINAL_VERSION,
     periode:p&&p.periode||null,
     decomposition:k.detailActualise||null,
+    chargesFixes:{total:Number(v&&v.cft1||0),audit:cf,ecartAncien:cf&&Number(cf.ecartVsAncien||0)},
     p0:Number(k.p0Total||0),
     p1:Number(k.p1Total||0),
     consommePilotable:Number(k.consommePilotable||0),
