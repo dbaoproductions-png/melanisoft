@@ -117,6 +117,39 @@ jobs:
           print('Apps Script source updated:', d.get('scriptId','OK'))
           PY
 
+      - name: Verify Apps Script TEST source after push
+        run: |
+          set -euo pipefail
+          HTTP_CODE=$(curl -sS -o /tmp/get-content-response.json -w '%{http_code}' \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            "https://script.googleapis.com/v1/projects/$SCRIPT_ID/content")
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "Apps Script getContent failed with HTTP $HTTP_CODE"
+            python3 -m json.tool /tmp/get-content-response.json || cat /tmp/get-content-response.json
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json, sys
+          data=json.load(open('/tmp/get-content-response.json'))
+          target='ZZZ_CerbereCbDoubleRoleFinal20260905'
+          expected_version="CERBERE_CB_DOUBLE_ROLE_FINAL_VERSION='2026-09-12.p1-doctrine-2'"
+          expected_function='function auditerP1DoctrineComptableGuideVie20260912()'
+          files={f.get('name'):f for f in data.get('files',[])}
+          print('Apps Script files returned:', len(files))
+          if target not in files:
+              print('VERIFY FAIL: target file missing from Apps Script TEST:', target)
+              sys.exit(1)
+          src=files[target].get('source','')
+          print('Verified file:', target)
+          print('Contains expected P1 version:', expected_version in src)
+          print('Contains P1 audit function:', expected_function in src)
+          if expected_version not in src or expected_function not in src:
+              print('VERIFY FAIL: Apps Script TEST content does not match pushed BudgetSoft source.')
+              print('First 240 chars of target source:', repr(src[:240]))
+              sys.exit(1)
+          print('VERIFY OK: Apps Script TEST contains P1 doctrine-2 and audit function.')
+          PY
+
       - name: Create Apps Script version (best effort)
         run: |
           set -euo pipefail
