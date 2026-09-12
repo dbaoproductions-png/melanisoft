@@ -1,25 +1,90 @@
-const BUDGETSOFT_PLAN_EVENT_FORECAST_FIX_20260912_VERSION='2026-09-12.1';
+const BUDGETSOFT_PLAN_EVENT_FORECAST_FIX_20260912_VERSION='2026-09-12.2';
 
 /**
  * Doctrine corrigée :
  * - un Événement standard de type recette/depense représente un flux futur connu ;
  *   il appartient donc au prévisionnel dès qu'il n'est ni réalisé/rapproché ni annulé ;
+ * - un Événement Effective dont la date prévue est dépassée ne disparaît pas : tant
+ *   qu'il n'est pas rapproché/réalisé, il reste dû et est reporté au prochain jour
+ *   de projection, tout en conservant sa date prévue d'origine dans la preuve ;
  * - les événements techniques (suspension, déplacement, réserve...) conservent la
  *   doctrine historique : ils ne modifient la trésorerie qu'une fois Effective ;
  * - les Actions Plan restent régies séparément par impact_confirme + statut Effective.
- *
- * Le moteur 20260831 appelle ce helper pour décider si une occurrence d'événement
- * entre dans la trajectoire. On corrige uniquement cette décision, sans déplacer
- * ni dupliquer les calculs de montant/date/dédoublonnage.
  */
+function statutNormaliseEvenementPlanForecast20260912_(v){
+  return String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+function statutFinalEvenementPlanForecast20260912_(v){
+  return ['realise','realisee','realises','realisees','rapproche','rapprochee','annule','annulee','abandonne','abandonnee'].includes(statutNormaliseEvenementPlanForecast20260912_(v));
+}
+function statutEffectiveEvenementPlanForecast20260912_(v){
+  return ['effectif','effective','effectifs','effectives'].includes(statutNormaliseEvenementPlanForecast20260912_(v));
+}
+function evenementStandardPlanForecast20260912_(e){
+  const type=String(e&&e.type||'').trim().toLowerCase();
+  return type==='recette'||type==='depense';
+}
+function dateJourSuivantPlanForecast20260912_(reference){
+  const d=new Date(reference);d.setDate(d.getDate()+1);d.setHours(12,0,0,0);return d;
+}
+function isoPlanForecast20260912_(d){
+  return Utilities.formatDate(new Date(d),Session.getScriptTimeZone(),'yyyy-MM-dd');
+}
+
+/** Décision d'entrée des occurrences standard dans la trajectoire. */
 evenementEffectifTresorerie20260831_=function(id,evenements){
   const e=(evenements||[]).find(function(x){return String(x&&x.id||'')===String(id||'');});
-  if(!e)return false;
-  const statut=String(e.statut||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  if(['realise','realisee','realises','realisees','rapproche','rapprochee','annule','annulee','abandonne','abandonnee'].includes(statut))return false;
-  if(['effectif','effective','effectifs','effectives'].includes(statut))return true;
-  const type=String(e.type||'').trim().toLowerCase();
-  return type==='recette'||type==='depense';
+  if(!e||statutFinalEvenementPlanForecast20260912_(e.statut))return false;
+  if(statutEffectiveEvenementPlanForecast20260912_(e.statut))return true;
+  return evenementStandardPlanForecast20260912_(e);
+};
+
+/**
+ * Complément terminal : le moteur historique ne fabrique aucune occurrence lorsque
+ * la date de l'événement est déjà <= à la référence bancaire. On réinjecte donc les
+ * seuls événements standard Effective encore non rapprochés comme « flux en retard ».
+ */
+completerEvenementsEffectifsTresorerie20260831_=function(lignes,evenements,reference,cible){
+  const out=(lignes||[]).slice();
+  const report=dateJourSuivantPlanForecast20260912_(reference);
+  (evenements||[]).forEach(function(e){
+    if(!evenementStandardPlanForecast20260912_(e))return;
+    if(!statutEffectiveEvenementPlanForecast20260912_(e.statut)||statutFinalEvenementPlanForecast20260912_(e.statut))return;
+    if(typeof estSuspensionTemporaireTresorerie20260831_==='function'&&estSuspensionTemporaireTresorerie20260831_(e))return;
+    if(String(e.operation_reelle_id||'').trim())return;
+    const rapprochement=statutNormaliseEvenementPlanForecast20260912_(e.rapprochement_statut||'');
+    if(['rapproche','rapprochee','realise','realisee'].includes(rapprochement))return;
+
+    const dr=datePlanTresorerie_(e,reference,false),base=dr&&dr.date;
+    if(!base||isNaN(base))return;
+    const n=(e.fractionne===true||String(e.fractionne)==='true')?Math.max(1,Number(e.nombre_fois||1)):1;
+    const per=String(e.periodicite_fractionnement||'mensuel').toLowerCase();
+    const total=Math.abs(Number(e.montant||0));
+    if(!total)return;
+
+    for(let i=0;i<n;i++){
+      const origine=new Date(base);
+      if(i){if(per==='annuel')origine.setFullYear(origine.getFullYear()+i);else origine.setMonth(origine.getMonth()+i);}
+      if(origine>cible)continue;
+      const enRetard=origine<=reference;
+      const d=enRetard?new Date(report):origine;
+      if(d<=reference||d>cible)continue;
+      if(out.some(function(x){return x.source==='evenement'&&String(x.sourceId||'')===String(e.id||'')&&Math.abs(new Date(x.date)-d)<43200000;}))continue;
+      const type=String(e.type||'depense').toLowerCase();
+      const montant=(type==='recette'?1:-1)*(total/n);
+      const preuve=enRetard
+        ?'Événement Effective en retard · date prévue '+isoPlanForecast20260912_(origine)+' · maintenu au prévisionnel jusqu’au rapprochement'
+        :preuveDatePlanTresorerie_('Événement Effective du Plan',dr);
+      out.push({
+        id:'event:'+String(e.id||'')+':'+i+(enRetard?':retard':''),
+        source:'evenement',sourceId:e.id||'',date:d.toISOString(),
+        libelle:e.libelle||'Événement',categorie:e.categorie||'',compte:e.compte||'',
+        montantSigne:arrondiTresorerie_(montant),certitude:'tres_probable',preuve:preuve,
+        dateConventionnelle:!!dr.conventionnelle,datePrevueOrigine:isoPlanForecast20260912_(origine),enRetard:enRetard
+      });
+    }
+  });
+  return out;
 };
 
 function auditerEvenementsPrevusTresorerieBudgetSoft20260912(){
@@ -27,24 +92,36 @@ function auditerEvenementsPrevusTresorerieBudgetSoft20260912(){
   const e=s&&s.disponible&&s.etat,m=e&&e.modules||{},proj=m.projectionEtendue||{},dash=m.dashboard||{},ct=dash.courtTerme||{};
   const reference=dateDashboardSynthese20260907_(ct.dateReference||new Date());
   const fin=dateDashboardSynthese20260907_(ct.fin||new Date());
+  const report=dateJourSuivantPlanForecast20260912_(reference);
   const evenements=lireFeuilleDynamiquePlan_('Plan_Evenements');
   const attendus=[];
+
   (evenements||[]).forEach(function(ev){
-    const type=String(ev&&ev.type||'').toLowerCase();
-    if(type!=='recette'&&type!=='depense')return;
-    const statut=String(ev&&ev.statut||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-    if(['realise','realisee','realises','realisees','rapproche','rapprochee','annule','annulee','abandonne','abandonnee'].includes(statut))return;
-    const dr=datePlanTresorerie_(ev,reference,false),d=dr&&dr.date;
-    if(!d||isNaN(d)||d<=reference||d>fin)return;
-    attendus.push({id:String(ev.id||''),libelle:String(ev.libelle||''),type:type,date:isoDashboardSynthese20260907_(d),montant:Math.abs(Number(ev.montant||0)),statut:String(ev.statut||'')});
+    if(!evenementStandardPlanForecast20260912_(ev)||statutFinalEvenementPlanForecast20260912_(ev.statut))return;
+    if(String(ev.operation_reelle_id||'').trim())return;
+    const rapprochement=statutNormaliseEvenementPlanForecast20260912_(ev.rapprochement_statut||'');
+    if(['rapproche','rapprochee','realise','realisee'].includes(rapprochement))return;
+    const dr=datePlanTresorerie_(ev,reference,false),origine=dr&&dr.date;
+    if(!origine||isNaN(origine)||origine>fin)return;
+    const effective=statutEffectiveEvenementPlanForecast20260912_(ev.statut);
+    if(origine<=reference&&!effective)return;
+    const dateProjection=origine<=reference?report:origine;
+    if(dateProjection<=reference||dateProjection>fin)return;
+    attendus.push({
+      id:String(ev.id||''),libelle:String(ev.libelle||''),type:String(ev.type||'').toLowerCase(),
+      datePrevue:isoDashboardSynthese20260907_(origine),dateProjection:isoDashboardSynthese20260907_(dateProjection),
+      enRetard:origine<=reference,montant:Math.abs(Number(ev.montant||0)),statut:String(ev.statut||'')
+    });
   });
+
   const lignes=(proj&&Array.isArray(proj.lignes)?proj.lignes:[]).filter(function(l){return String(l&&l.source||'')==='evenement';});
   const controles=attendus.map(function(a){
     const ll=lignes.filter(function(l){return String(l&&l.sourceId||'')===a.id;});
     const somme=Math.round(ll.reduce(function(t,l){return t+Number(l&&l.montantSigne||0);},0)*100)/100;
     const attenduSigne=Math.round((a.type==='recette'?1:-1)*a.montant*100)/100;
-    return Object.assign({},a,{ok:Math.abs(somme-attenduSigne)<0.01,sommeProjection:somme,lignesProjection:ll.map(function(l){return{date:l.date,libelle:l.libelle,montantSigne:l.montantSigne,certitude:l.certitude};})});
+    return Object.assign({},a,{ok:Math.abs(somme-attenduSigne)<0.01,sommeProjection:somme,lignesProjection:ll.map(function(l){return{date:l.date,libelle:l.libelle,montantSigne:l.montantSigne,certitude:l.certitude,enRetard:!!l.enRetard,datePrevueOrigine:l.datePrevueOrigine||''};})});
   });
+
   const recettesFutures=(proj&&Array.isArray(proj.lignes)?proj.lignes:[]).filter(function(l){
     const d=dateDashboardSynthese20260907_(l&&l.date),montant=Number(l&&l.montantSigne||0);
     return d&&d>reference&&d<=fin&&montant>0;
@@ -57,7 +134,7 @@ function auditerEvenementsPrevusTresorerieBudgetSoft20260912(){
     revisionBudgetSoft:e&&e.revisionBudgetSoft||'',
     cycle:{dateReference:ct.dateReference||'',fin:ct.fin||''},
     dashboard:{revenusConstates:Number(ct.revenusConstates||0),revenusAttendus:Number(ct.revenusAttendus||0),revenusAttendusCalcules:attenduDashboard},
-    recettesFutures:recettesFutures.map(function(l){return{source:l.source,sourceId:l.sourceId||'',date:l.date,libelle:l.libelle,montantSigne:l.montantSigne,certitude:l.certitude};}),
+    recettesFutures:recettesFutures.map(function(l){return{source:l.source,sourceId:l.sourceId||'',date:l.date,libelle:l.libelle,montantSigne:l.montantSigne,certitude:l.certitude,enRetard:!!l.enRetard,datePrevueOrigine:l.datePrevueOrigine||''};}),
     totalRecettesFutures:totalFutur,
     evenementsAttendus:controles
   };
