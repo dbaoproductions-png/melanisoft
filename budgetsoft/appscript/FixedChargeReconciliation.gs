@@ -135,3 +135,46 @@ function auditerProfilLecteursPhysiquesCerbereCompactBudgetSoft20260912(){
   const out={ok:erreurs.length===0&&(!comparaison||comparaison.identiqueAux16Colonnes===true),version:version,lectureSeule:true,aucuneModification:true,perimetre:{compare:'lectures physiques Cerbère coûteuses, sans cache et sans écriture',sourceVerite:'feuilles réelles + lecteurs purs',mode:'sortie compacte sans données métier'},mesures:mesures,classement:classement,erreurs:erreurs,dureeTotaleMs:Date.now()-tGlobal,decision:erreurs.length===0&&(!comparaison||comparaison.identiqueAux16Colonnes===true)?'PROFIL_LECTEURS_PHYSIQUES_COMPACT_VALIDE':'PROFIL_LECTEURS_PHYSIQUES_COMPACT_INVALIDE'};
   console.log('[AUDIT PERF lecteurs physiques Cerbère compact] '+JSON.stringify(out));return out;
 }
+
+/**
+ * A/B strict V374 : lecteur RAPPRO_CF courant vs lecteur dynamique pur.
+ * Le baseline réapplique le formatage historique de la feuille (aucune donnée métier
+ * n'est modifiée) ; le candidat est strictement en lecture seule. Aucun chemin de
+ * production n'est remplacé : la substitution du lecteur est temporaire et restaurée.
+ */
+function auditerCandidatLecturePureRapproCfCerbereV374BudgetSoft20260912(){
+  const version='2026-09-12.3',tGlobal=Date.now();
+  function statsCompactes_(s){const r=s&&s.parTable&&s.parTable.RAPPRO_CF||null;return s?{appels:Number(s.appels||0),lecturesFeuille:Number(s.lecturesFeuille||0),reutilisations:Number(s.reutilisations||0),clonesParParse:Number(s.clonesParParse||0),dureeMs:Number(s.dureeMs||0),rapproCf:r?{appels:Number(r.appels||0),lecturesFeuille:Number(r.lecturesFeuille||0),reutilisations:Number(r.reutilisations||0),dureeLectureMs:Number(r.dureeLectureMs||0),lignes:Number(r.lignes||0)}:null}:null;}
+  function lirePur_(){
+    const dyn=typeof lireFeuilleDynamiqueCerbereV379_==='function'?lireFeuilleDynamiqueCerbereV379_(FIXED_CHARGE_MATCH_SHEET):[];
+    return (dyn||[]).map(function(o){const z={};FIXED_CHARGE_MATCH_HEADERS.forEach(function(h){z[h]=o&&Object.prototype.hasOwnProperty.call(o,h)?o[h]:'';});return z;});
+  }
+  let baseline=null,candidat=null,baselineMs=0,candidatMs=0,statsBaseline=null,statsCandidat=null,erreur=null;
+  const original=lireRapprochementsChargesFixes;
+  try{
+    let t=Date.now();
+    baseline=avecContexteLectureBudgetSoft20260827_('audit-ab-v374-rapprocf-baseline-20260912',function(){return chargerCerbereV374();});
+    baselineMs=Date.now()-t;statsBaseline=typeof BUDGETSOFT_READ_CONTEXT_LAST_STATS_!=='undefined'?BUDGETSOFT_READ_CONTEXT_LAST_STATS_:null;
+    lireRapprochementsChargesFixes=lirePur_;
+    t=Date.now();
+    candidat=avecContexteLectureBudgetSoft20260827_('audit-ab-v374-rapprocf-pur-20260912',function(){return chargerCerbereV374();});
+    candidatMs=Date.now()-t;statsCandidat=typeof BUDGETSOFT_READ_CONTEXT_LAST_STATS_!=='undefined'?BUDGETSOFT_READ_CONTEXT_LAST_STATS_:null;
+  }catch(e){erreur=String(e&&e.stack||e&&e.message||e);}finally{lireRapprochementsChargesFixes=original;}
+  const normaliser=typeof normaliserObjetProfilCerbere20260911_==='function'?normaliserObjetProfilCerbere20260911_:function(v){return v;};
+  const a=normaliser(baseline,''),b=normaliser(candidat,'');
+  const identique=!erreur&&JSON.stringify(a)===JSON.stringify(b);
+  const diffs=identique?[]:(typeof premieresDifferencesProfilCerbere20260911_==='function'?premieresDifferencesProfilCerbere20260911_(a,b,20):[{chemin:'comparaison',a:'différent',b:'différent'}]);
+  const gainMs=baselineMs-candidatMs,gainPct=baselineMs?Math.round(gainMs/baselineMs*1000)/10:null;
+  const out={
+    ok:identique&&!!(candidat&&candidat.ok!==false),version:version,
+    lectureSeuleCandidat:true,aucuneModificationMetier:true,formatageBaselineReapplique:true,
+    perimetre:{compare:'chargerCerbereV374() courant vs même V374 avec lireRapprochementsChargesFixes remplacé temporairement par une lecture dynamique pure',sourceVerite:'chargerCerbereV374 / Rapprochements_charges_fixes réel',reference:'même classeur, deux contextes de lecture indépendants',effetSecondaireBaseline:'réapplication du formatage historique de Rapprochements_charges_fixes uniquement ; aucune donnée métier modifiée'},
+    comparaison:{identiqueMetierStable:identique,differences:diffs,versionBaseline:String(baseline&&baseline.version||''),versionCandidat:String(candidat&&candidat.version||'')},
+    temps:{baselineMs:baselineMs,candidatMs:candidatMs,gainMs:gainMs,gainPct:gainPct,dureeTotaleMs:Date.now()-tGlobal},
+    lectures:{baseline:statsCompactes_(statsBaseline),candidat:statsCompactes_(statsCandidat)},
+    erreur:erreur,
+    decision:identique?'CANDIDAT_RAPPRO_CF_PUR_VALIDE_A_PASSER_AUX_GARDES':'CANDIDAT_RAPPRO_CF_PUR_REFUSE',
+    doctrine:'A/B strict uniquement. Aucune intégration de production avant identité métier stable, gain confirmé puis gardes du snapshot.'
+  };
+  console.log('[AUDIT A/B V374 RAPPRO_CF pur] '+JSON.stringify(out));return out;
+}
