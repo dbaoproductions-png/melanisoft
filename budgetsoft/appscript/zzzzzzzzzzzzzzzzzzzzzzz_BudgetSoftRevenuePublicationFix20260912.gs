@@ -1,4 +1,4 @@
-const BUDGETSOFT_REVENUE_PUBLICATION_FIX_20260912_VERSION='2026-09-12.5';
+const BUDGETSOFT_REVENUE_PUBLICATION_FIX_20260912_VERSION='2026-09-12.6';
 
 function arrRevenuePublicationFix20260912_(n){return Math.round(Number(n||0)*100)/100;}
 function normRevenuePublicationFix20260912_(v){return String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');}
@@ -14,7 +14,7 @@ function evenementClosProuveRevenuePublicationFix20260912_(ev){
 }
 function evenementsRecettesCertainesDuesRevenuePublicationFix20260912_(reference,debutCycle,finCycle){
   let evs=[];try{evs=lireFeuilleDynamiquePlan_('Plan_Evenements')||[];}catch(e){return[];}
-  const ref=dateRevenuePublicationFix20260912_(reference||new Date()),debut=dateRevenuePublicationFix20260912_(debutCycle),fin=dateRevenuePublicationFix20260912_(finCycle);if(!ref||!debut||!fin)return[];
+  const ref=dateRevenuePublicationFix20260912_(reference||new Date()),fin=dateRevenuePublicationFix20260912_(finCycle);if(!ref||!fin)return[];
   return evs.filter(function(ev){
     if(String(ev&&ev.type||'').trim().toLowerCase()!=='recette')return false;
     if(evenementClosProuveRevenuePublicationFix20260912_(ev))return false;
@@ -22,7 +22,9 @@ function evenementsRecettesCertainesDuesRevenuePublicationFix20260912_(reference
     if(!['effective','effectif','effectives','effectifs','realise a rapprocher','realisee a rapprocher'].includes(st))return false;
     let d=null;try{const dr=datePlanTresorerie_(ev,ref,false);d=dr&&dr.date?dateRevenuePublicationFix20260912_(dr.date):null;}catch(e){}
     if(!d)d=dateRevenuePublicationFix20260912_(ev.date_effet||ev.date_prevue);
-    return !!(d&&d>=debut&&d<=fin);
+    // Une recette certaine non rapprochee reste due meme si sa date d'origine est
+    // anterieure au debut du cycle courant. Le retard ne constitue jamais une cloture.
+    return !!(d&&d<=fin);
   });
 }
 
