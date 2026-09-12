@@ -1,11 +1,12 @@
-const CERBERE_CORRECTIFS_COMPTABLES_V3710_VERSION='3.7.10';
+const CERBERE_CORRECTIFS_COMPTABLES_V3710_VERSION='3.7.10.1';
 
 /**
  * Passe comptable ciblée 3.7.10.
  * Ne touche ni à P0/P1, ni à l'UI, ni au Plan, ni à l'historisation R0.
  * Elle corrige uniquement trois briques auditées sur le classeur réel :
  * - SS1 depuis le relevé PDF certifié le plus proche de la frontière 27/28 ;
- * - exclusion des mouvements de trésorerie des recettes économiques Rt1 ;
+ * - exclusion des mouvements techniques de trésorerie des recettes économiques Rt1,
+ *   avec maintien des remboursements santé positifs comme recettes ;
  * - occurrences de charges fixes comparées au jour civil (pas à l'heure).
  */
 function appliquerCorrectifsComptablesV3710_(base){
@@ -41,18 +42,29 @@ function appliquerCorrectifsComptablesV3710_(base){
       v.ss1Statut='projeté depuis la fin Cerbère corrigée de la période précédente';
     }
 
-    // Rt1 : les catégories de type tresorerie ne sont jamais des revenus économiques.
+    // Rt1 : un mouvement technique de trésorerie reste exclu des revenus économiques.
+    // Exception doctrinale : un remboursement santé positif est une vraie recette et reste dans Rt1.
     if(i===0){
-      let tresoreriePositive=0;const detail={};
+      let tresoreriePositiveExclue=0,remboursementsSanteConserves=0;
+      const detailExclu={},detailSante={};
       operations.forEach(o=>{
         const d=dateOperationBanqueV377_(o),m=Number(o&&o.montant||0),cat=String(o&&o.categorie||'').trim();
         if(!d||!dateDansCycleV377_(d,periode)||m<=0||typesCat[cat]!=='tresorerie')return;
-        tresoreriePositive+=m;detail[cat]=arrV377_(Number(detail[cat]||0)+m);
+        if(estRemboursementSanteCerbereV3710_(o,cat)){
+          remboursementsSanteConserves+=m;
+          detailSante[cat]=arrV377_(Number(detailSante[cat]||0)+m);
+          return;
+        }
+        tresoreriePositiveExclue+=m;
+        detailExclu[cat]=arrV377_(Number(detailExclu[cat]||0)+m);
       });
-      v.rt1=arrV377_(Number(v.rt1||0)-tresoreriePositive);
+      v.rt1=arrV377_(Number(v.rt1||0)-tresoreriePositiveExclue);
       v.rt1Audit=v.rt1Audit&&typeof v.rt1Audit==='object'?v.rt1Audit:{};
-      v.rt1Audit.tresorerieExclue=arrV377_(tresoreriePositive);
-      v.rt1Audit.tresorerieExclueDetail=detail;
+      v.rt1Audit.tresorerieExclue=arrV377_(tresoreriePositiveExclue);
+      v.rt1Audit.tresorerieExclueDetail=detailExclu;
+      v.rt1Audit.remboursementsSanteConserves=arrV377_(remboursementsSanteConserves);
+      v.rt1Audit.remboursementsSanteConservesDetail=detailSante;
+      v.rt1Audit.doctrineTresorerie='mouvements techniques exclus ; remboursements santé positifs conservés comme recettes';
     }
 
     // CFt1 : même doctrine qu'en 3.7.9, mais dates normalisées au jour civil.
@@ -80,8 +92,20 @@ function appliquerCorrectifsComptablesV3710_(base){
 
   base.version=CERBERE_CORRECTIFS_COMPTABLES_V3710_VERSION;
   base.diagnostic=base.diagnostic||{};
-  base.diagnostic.correctifs_3710='SS1 relevé proche + trésorerie exclue de Rt1 + CF au jour civil';
+  base.diagnostic.correctifs_3710='SS1 relevé proche + trésorerie technique exclue de Rt1 + remboursements santé conservés + CF au jour civil';
   return base;
+}
+
+/**
+ * Une catégorie de type trésorerie peut malgré tout porter un revenu économique réel.
+ * Pour éviter de requalifier les virements internes, l'exception est volontairement
+ * limitée aux remboursements de santé explicitement catégorisés.
+ */
+function estRemboursementSanteCerbereV3710_(operation,categorie){
+  const cat=normaliserV377_(categorie||'');
+  if(cat.indexOf('remboursement')>=0&&cat.indexOf('sante')>=0)return true;
+  const txt=normaliserV377_(String(operation&&operation.libelle||'')+' '+String(operation&&operation.libelle_bancaire||''));
+  return cat.indexOf('sante')>=0&&(/mutuelle|assurance maladie|cpam|prestation sante/.test(txt));
 }
 
 function calculerSS1ReleveProcheV3710_(operations,controles,periode){
