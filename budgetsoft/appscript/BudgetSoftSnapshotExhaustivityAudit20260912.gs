@@ -1,4 +1,4 @@
-const BUDGETSOFT_SNAPSHOT_EXHAUSTIVITY_20260912_VERSION='2026-09-12.2';
+const BUDGETSOFT_SNAPSHOT_EXHAUSTIVITY_20260912_VERSION='2026-09-12.3';
 
 /**
  * Garde architecturale : inventaire des lecteurs réellement servis par les UI
@@ -27,8 +27,8 @@ function manifesteLecteursSnapshotBudgetSoft20260912_(){
     {vue:'patrimoine',fonction:'chargerPatrimoine',statut:'DANS_SNAPSHOT',role:'patrimoine'},
     {vue:'credits',fonction:'chargerCreditsEtDettesV2',statut:'DANS_SNAPSHOT',role:'crédits et dettes'},
     {vue:'analyses',fonction:'chargerAnalysesBudgetairesV23',statut:'DANS_SNAPSHOT',role:'analyses budgétaires 3/6/12 servies depuis modules.analyses ; moteur source inchangé'},
-    {vue:'ia',fonction:'chargerConseillerFinancier',statut:'A_INTEGRER',role:'conseiller financier / recommandations'},
-    {vue:'engagements_bancaires',fonction:'chargerEngagementsBancairesFuturs',statut:'A_INTEGRER',role:'engagements bancaires futurs du cycle'},
+    {vue:'ia',fonction:'',statut:'DANS_SNAPSHOT',role:'vue statique « Conseiller IA » ; aucun lecteur serveur fonctionnel à intégrer avant le sprint dédié'},
+    {vue:'engagements_bancaires',fonction:'chargerEngagementsBancairesFuturs',statut:'DANS_SNAPSHOT',role:'engagements bancaires futurs servis depuis modules.engagementsBancaires ; moteur source inchangé'},
     {vue:'budget_prefetch',fonction:'chargerBudgetPeriode',statut:'A_INTEGRER',role:'budget de période préchargé par l’interface'},
     {vue:'pluxee_prefetch',fonction:'chargerPluxee',statut:'A_INTEGRER',role:'registre Pluxee préchargé par l’interface'},
     {vue:'tresorerie_previsionnelle',fonction:'chargerTresorerieUnifieeBudgetSoft20260907',statut:'DANS_SNAPSHOT',role:'trésorerie prévisionnelle canonique'},
@@ -63,10 +63,13 @@ function auditerExhaustiviteSnapshotBudgetSoft20260912(){
     revisionBudgetSoft=etat&&etat.revisionBudgetSoft||'';
   }catch(e){}
 
-  let analyses=null;
+  let analyses=null,engagementsBancaires=null;
   try{analyses=typeof auditerAnalysesSnapshotBudgetSoft20260912==='function'?auditerAnalysesSnapshotBudgetSoft20260912():null;}catch(e){analyses={ok:false,erreur:String(e&&e.message||e)};}
+  try{engagementsBancaires=typeof auditerEngagementsBancairesSnapshotBudgetSoft20260912==='function'?auditerEngagementsBancairesSnapshotBudgetSoft20260912():null;}catch(e){engagementsBancaires={ok:false,erreur:String(e&&e.message||e)};}
+
   const integrationsInvalides=[];
   if(lecteurs.some(function(x){return x.vue==='analyses'&&x.statut==='DANS_SNAPSHOT';})&&(!analyses||analyses.ok!==true))integrationsInvalides.push({vue:'analyses',code:'SNAPSHOT_INVALIDE'});
+  if(lecteurs.some(function(x){return x.vue==='engagements_bancaires'&&x.statut==='DANS_SNAPSHOT';})&&(!engagementsBancaires||engagementsBancaires.ok!==true))integrationsInvalides.push({vue:'engagements_bancaires',code:'SNAPSHOT_INVALIDE'});
 
   const resultat={
     ok:aIntegrer.length===0&&fonctionsAbsentes.length===0&&integrationsInvalides.length===0&&!!revisionBudgetSoft,
@@ -83,7 +86,7 @@ function auditerExhaustiviteSnapshotBudgetSoft20260912(){
     horsSnapshotParNature:manifesteEffetsHorsSnapshotBudgetSoft20260912_(),
     fonctionsAbsentes:fonctionsAbsentes,
     integrationsInvalides:integrationsInvalides,
-    controles:{analyses:analyses},
+    controles:{analyses:analyses,engagementsBancaires:engagementsBancaires},
     regle:'Aucun lecteur pur d’interface ne peut rester hors de la revisionBudgetSoft commune.'
   };
   console.log('[AUDIT exhaustivite snapshot] '+JSON.stringify(resultat));
