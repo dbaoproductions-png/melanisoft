@@ -1,4 +1,4 @@
-const BUDGETSOFT_ANALYSES_SNAPSHOT_20260912_VERSION='2026-09-12.1';
+const BUDGETSOFT_ANALYSES_SNAPSHOT_20260912_VERSION='2026-09-12.2';
 
 // Capture le moteur métier autoritaire avant de remplacer uniquement son point
 // d'entrée public. Les calculs Analyses eux-mêmes restent inchangés.
@@ -61,17 +61,29 @@ chargerAnalysesBudgetairesV23=function(nombrePeriodes){
 };
 
 /**
- * Point d'insertion atomique : tous les constructeurs globaux publient via cette
- * fonction. Analyses est calculé avant l'écriture des chunks ; si son calcul
- * échoue, aucun nouveau snapshot n'est publié et l'ancienne révision reste active.
+ * Writer terminal unique des extensions snapshot 2026-09-12.
+ * Analyses et Engagements bancaires sont construits avant l'écriture physique.
+ * Aucun autre fichier ne doit surcharger ce writer : on évite ainsi les chaînes
+ * d'override inter-fichiers non déterministes dans Apps Script.
  */
 function ecrireSnapshotGlobalBudgetSoft20260906_(etat){
-  if(!etat||!etat.revisionBudgetSoft)throw new Error('Snapshot global invalide avant intégration Analyses.');
+  if(!etat||!etat.revisionBudgetSoft)throw new Error('Snapshot global invalide avant intégration des extensions 2026-09-12.');
   etat.modules=etat.modules||{};
+
   const analyses=construireModuleAnalysesSnapshotBudgetSoft20260912_();
   analyses.revisionBudgetSoft=etat.revisionBudgetSoft;
   etat.modules.analyses=analyses;
-  etat.optimisations=Object.assign({},etat.optimisations||{},{analysesSnapshot:{version:BUDGETSOFT_ANALYSES_SNAPSHOT_20260912_VERSION,variantes:[3,6,12],moteurMetierInchange:true}});
+
+  if(typeof construireModuleEngagementsBancairesSnapshotBudgetSoft20260912_==='function'){
+    const engagements=construireModuleEngagementsBancairesSnapshotBudgetSoft20260912_(etat.modules.dashboard||null);
+    engagements.revisionBudgetSoft=etat.revisionBudgetSoft;
+    etat.modules.engagementsBancaires=engagements;
+  }
+
+  etat.optimisations=Object.assign({},etat.optimisations||{},
+    {analysesSnapshot:{version:BUDGETSOFT_ANALYSES_SNAPSHOT_20260912_VERSION,variantes:[3,6,12],moteurMetierInchange:true}},
+    etat.modules.engagementsBancaires?{engagementsBancairesSnapshot:{version:etat.modules.engagementsBancaires.version||'',moteurMetierInchange:true,dashboardRevisionInjecte:true}}:{}
+  );
 
   const props=PropertiesService.getDocumentProperties(),json=JSON.stringify(etat),zip=encoderEtatGlobalBudgetSoft20260906_(json),parts=[];
   for(let i=0;i<zip.length;i+=BUDGETSOFT_GLOBAL_SNAPSHOT_CHUNK)parts.push(zip.slice(i,i+BUDGETSOFT_GLOBAL_SNAPSHOT_CHUNK));
