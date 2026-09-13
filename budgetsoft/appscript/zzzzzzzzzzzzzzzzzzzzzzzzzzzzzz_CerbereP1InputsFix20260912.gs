@@ -2,10 +2,10 @@
  * Corrections terminales des entrées P1 — 2026-09-12.
  * Objectif : corriger les propriétaires d'entrée sans dupliquer les calculs P1.
  * - Rt1 : maintenir les recettes certaines en retard tant qu'aucune preuve de réalisation n'existe.
- * - CFt1 : reconnaître les suspensions/reports explicites même si l'action est déjà positive.
+ * - CFt1 : normaliser les suspensions/reports sans les retrancher deux fois.
  * - CB héritées : n'exclure des CB que les liens CF explicites/validés, jamais un rapprochement heuristique.
  */
-const CERBERE_P1_INPUTS_FIX_20260912_VERSION='2026-09-12.1';
+const CERBERE_P1_INPUTS_FIX_20260912_VERSION='2026-09-13.2';
 
 function normP1InputsFix20260912_(v){return String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');}
 function dateP1InputsFix20260912_(v){const d=v instanceof Date?new Date(v):new Date(v||0);return isNaN(d)?null:d;}
@@ -35,7 +35,7 @@ function corrigerRt1EvenementsCertainsDusP1InputsFix20260912_(base){
     const st=normP1InputsFix20260912_(ev&&ev.statut);
     if(!['effective','effectif','effectives','effectifs','realise a rapprocher','realisee a rapprocher'].includes(st))return;
     let d=null;try{if(typeof datePlanTresorerie_==='function'){const dr=datePlanTresorerie_(ev,ref,false);d=dr&&dr.date?dateP1InputsFix20260912_(dr.date):null;}}catch(e){}
-    if(!d)d=dateP1InputsFix20260912_(ev&& (ev.date_effet||ev.date_prevue));
+    if(!d)d=dateP1InputsFix20260912_(ev&&(ev.date_effet||ev.date_prevue));
     if(!d||d>ref||(fin&&d>fin))return;
     const m=Math.abs(Number(ev&&ev.montant||0));if(!Number.isFinite(m)||m<=0)return;
     total+=m;lignes.push({id:String(ev.id||''),libelle:String(ev.libelle||''),montant:arrP1InputsFix20260912_(m),date:d.toISOString(),statut:String(ev.statut||'')});
@@ -47,8 +47,11 @@ function corrigerRt1EvenementsCertainsDusP1InputsFix20260912_(base){
   return {montant:total,nombre:lignes.length,lignes:lignes};
 }
 
-/* Override du correcteur Actions/Événements :
- * une suspension/report explicite est une charge évitée, quel que soit le signe déjà normalisé par Plan.
+/*
+ * Override du correcteur Actions/Événements.
+ * La passe Cerbère 3.7.24 a déjà intégré l'effet CF des événements du cycle.
+ * Ici on normalise seulement la carte et on publie le montant de suspension pour
+ * la reconstruction explicable CFt1/CFt2. Aucune seconde soustraction de v.cft1.
  */
 function corrigerSuspensionsActionsEvenements20260903_(base){
   (Array.isArray(base&&base.periodes)?base.periodes:[]).forEach(p=>{
@@ -67,8 +70,8 @@ function corrigerSuspensionsActionsEvenements20260903_(base){
     });
     correctionCf=arrP1InputsFix20260912_(correctionCf);
     if(correctionCf>0){
-      v.cft1=arrP1InputsFix20260912_(Math.max(0,Number(v.cft1||0)-correctionCf));
       v.correctionSuspensions20260903=correctionCf;
+      v.correctionSuspensionsDejaAppliqueeParMoteur=true;
       if(deltaNet&&v.actionsEvenementsResume&&Number.isFinite(Number(v.actionsEvenementsResume.net)))v.actionsEvenementsResume.net=arrP1InputsFix20260912_(Number(v.actionsEvenementsResume.net)+deltaNet);
     }
   });
