@@ -5,9 +5,9 @@
  * molettes ». P reste désormais une sortie du moteur comptable ; EP est la
  * décision portée par BudgetSoftEnvelopePilotable20260913.
  *
- * Aucune formule P n'est recalculée dans l'UI : on republie les propriétaires.
+ * Une donnée, un propriétaire, un calcul, plusieurs consommateurs.
  */
-const CERBERE_COCKPIT_CARD_OWNER_GUARD_20260912_VERSION='2026-09-13.2';
+const CERBERE_COCKPIT_CARD_OWNER_GUARD_20260912_VERSION='2026-09-13.3';
 
 /* Compatibilité historique : l'ancien ajustement manuel de P est neutralisé. */
 function lireAjustementP1Cerbere20260903_(cle){return 0;}
@@ -61,24 +61,39 @@ function appliquerDoctrineP1ComptableGuideVieCerbere20260912_(base){
 }
 
 /**
- * C2 : le report CB connu reste factuel ; seule la part non consommée d'EP1 est
- * estimée. L'estimation est distincte du Réel et ne touche jamais les molettes C2.
+ * C2 : P2 est reconstruit avec la même formule comptable que P1 :
+ * SS2 avant salaire + Rt2 - CFt2 - HEt2 - report CB C1.
+ * Le report CB = CB déjà engagées de C1 + part EP1 différée estimée.
  */
 function appliquerReportCbCycleSuivant20260905_(base){
   const ps=Array.isArray(base&&base.periodes)?base.periodes:[];if(ps.length<2)return base;
-  const calc=calculerReportCbCycleSuivant20260905_(base),reel=Math.max(0,Number(calc.montant||0)),p1=ps[0],p2=ps[1],v=p2.v37||(p2.v37={}),c=v.cockpit20260902||(v.cockpit20260902={});
+  const calc=calculerReportCbCycleSuivant20260905_(base),reel=Math.max(0,Number(calc.montant||0)),p1=ps[0],p2=ps[1],v=p2.v37||(p2.v37={}),c=v.cockpit20260902||(v.cockpit20260902={}),arr=arrCockpit20260902_;
   let impactEp={differe:0,immediat:0,resteAEngager:0,tauxDifferePct:0,profil:null};
   try{if(typeof calculerImpactPrevisionnelEpBudgetSoft20260913_==='function')impactEp=calculerImpactPrevisionnelEpBudgetSoft20260913_(p1,lireTable_('Operations')||[],new Date())||impactEp;}catch(e){}
-  const estime=Math.max(0,Number(impactEp.differe||0)),report=arrCockpit20260902_(reel+estime);
-  const avant=Math.max(0,Number(c.p1AvantReportCb!=null?c.p1AvantReportCb:(c.p1Total!=null?c.p1Total:(c.p1Cible!=null?c.p1Cible:(p2.budgetReparti!=null?p2.budgetReparti:0)))));
-  const apres=Math.max(0,arrCockpit20260902_(avant-report)),cons=Math.max(0,Number(c.consommePilotable||0)),p0=Math.max(0,Number(c.p0Total||0));
-  c.p1AvantReportCb=avant;c.reportCbCycle=report;c.cbDejaEngagee=arrCockpit20260902_(reel);c.cbEpEstimee=arrCockpit20260902_(estime);
-  c.p1Total=apres;c.p1Cible=apres;c.ajustementP1=0;c.pSoutenable=apres;c.budgetPilotableActualise=apres;c.ret1=arrCockpit20260902_(apres-cons);c.pDisponible=c.ret1;c.surplusVsP0=arrCockpit20260902_(apres-p0);c.margeARepartir=0;c.aRepartirDansPostes=0;
+  const estime=Math.max(0,Number(impactEp.differe||0)),report=arr(reel+estime);
+
+  const cfReconstruite=typeof reconstruireChargesFixesReevalueesP1Cerbere20260912_==='function'?reconstruireChargesFixesReevalueesP1Cerbere20260912_(p2,v):null;
+  const ss2=arr(Number(v.ss1||0));
+  const rt2=arr(Number(v.rt1||0));
+  const cft2=arr(cfReconstruite&&cfReconstruite.ok?cfReconstruite.total:Number(v.cft1||0));
+  const het2=arr(Math.max(0,Number(v.het1!=null?v.het1:(v.horsPilotableAControler||0))));
+  const avant=arr(ss2+rt2-cft2-het2);
+  const apres=Math.max(0,arr(avant-report));
+  const cons=Math.max(0,Number(c.consommePilotable||0)),p0=Math.max(0,Number(c.p0Total||0));
+
+  v.cft1=cft2;v.chargesFixesTotal=cft2;v.cft1Audit20260912=cfReconstruite;
+  v.reportCbCycle=report;v.cbDejaEngagee=arr(reel);v.cbEpEstimee=arr(estime);v.p1AvantReportCb=avant;v.p1ApresReportCb=apres;
+  c.p1AvantReportCb=avant;c.reportCbCycle=report;c.cbDejaEngagee=arr(reel);c.cbEpEstimee=arr(estime);
+  c.p1Total=apres;c.p1Cible=apres;c.ajustementP1=0;c.pSoutenable=apres;c.budgetPilotableActualise=apres;c.ret1=arr(apres-cons);c.pDisponible=c.ret1;c.surplusVsP0=arr(apres-p0);c.margeARepartir=0;c.aRepartirDansPostes=0;
+  c.soldeInitialReference=ss2;c.soldeInitialSource=String(v.ss1Statut||'frontière Cerbère · avant salaire');
+  c.detailActualise=Object.assign({},c.detailActualise||{},{soldeAvantSalaireSS1:ss2,recettesReevaluees:rt2,chargesFixesReevaluees:cft2,chargesFixesAudit:cfReconstruite,horsPilotableEtImprevus:het2,reportCbCycle:report,cbDejaEngagee:arr(reel),cbEpEstimee:arr(estime)});
+  c.formuleActualisee='P2 = SS2 avant salaire + Rt2 - CFt2 explicable - HEt2 - report CB C1';
   c.doctrineCb='C2 : CB déjà engagées de C1 + estimation de la seule part CB différée de l’EP1 restant ; aucune double imputation par catégorie.';
-  v.reportCbCycle=report;v.cbDejaEngagee=arrCockpit20260902_(reel);v.cbEpEstimee=arrCockpit20260902_(estime);v.p1AvantReportCb=avant;v.p1ApresReportCb=apres;
   p2.resteBudgetPilotable=c.ret1;
+
   base.diagnostic=base.diagnostic||{};
-  base.diagnostic.cbDoubleRole={version:'2026-09-13.ep-1',montant:report,connu:arrCockpit20260902_(reel),epDiffereEstime:arrCockpit20260902_(estime),epImmediatEstime:arrCockpit20260902_(impactEp.immediat||0),epResteAEngager:arrCockpit20260902_(impactEp.resteAEngager||0),tauxDifferePct:Number(impactEp.tauxDifferePct||0),nombre:calc.lignes.length,debutFenetre:calc.debutFenetre,dateImpact:calc.dateImpact,selection:calc.diagnostic||{},lignes:calc.lignes.slice(0,50),p2Avant:avant,p2Apres:apres,doctrine:'impact C2 = CB C1 connues + part différée estimée de l’EP1 non consommé'};
+  base.diagnostic.p2Doctrine20260913={version:CERBERE_COCKPIT_CARD_OWNER_GUARD_20260912_VERSION,periode:p2&&p2.periode||null,ss2:ss2,rt2:rt2,cft2:cft2,cft2Audit:cfReconstruite,het2:het2,reportCb:report,cbDejaEngagee:arr(reel),cbEpEstimee:arr(estime),p2AvantReport:avant,p2:apres,formule:'SS2 + Rt2 - CFt2 - HEt2 - report CB C1'};
+  base.diagnostic.cbDoubleRole={version:'2026-09-13.ep-2',montant:report,connu:arr(reel),epDiffereEstime:arr(estime),epImmediatEstime:arr(impactEp.immediat||0),epResteAEngager:arr(impactEp.resteAEngager||0),tauxDifferePct:Number(impactEp.tauxDifferePct||0),nombre:calc.lignes.length,debutFenetre:calc.debutFenetre,dateImpact:calc.dateImpact,selection:calc.diagnostic||{},lignes:calc.lignes.slice(0,50),p2Avant:avant,p2Apres:apres,doctrine:'P2 = SS2 + Rt2 - CFt2 - HEt2 - (CB C1 connues + part différée estimée de l’EP1 non consommé)'};
   if(typeof enrichirEnvelopePilotableBudgetSoft20260913_==='function')enrichirEnvelopePilotableBudgetSoft20260913_(base);
   return base;
 }
@@ -96,11 +111,12 @@ function sauvegarderPilotageCerbere20260903(d){
 
 function estSnapshotCerbereP1FraisValide20260912_(s){
   if(!s||s.ok===false)return false;
-  const p=Array.isArray(s.periodes)&&s.periodes.length?s.periodes[0]:null,d=s&&s.diagnostic&&s.diagnostic.p1Doctrine20260912||null,ep=s&&s.diagnostic&&s.diagnostic.enveloppePilotable20260913||null,due=s&&s.diagnostic&&s.diagnostic.rt1EvenementsCertainsDus20260912||null;
-  if(!p||!d||!due||!ep)return false;
+  const p=Array.isArray(s.periodes)&&s.periodes.length?s.periodes[0]:null,d=s&&s.diagnostic&&s.diagnostic.p1Doctrine20260912||null,ep=s&&s.diagnostic&&s.diagnostic.enveloppePilotable20260913||null,due=s&&s.diagnostic&&s.diagnostic.rt1EvenementsCertainsDus20260912||null,p2=s&&s.diagnostic&&s.diagnostic.p2Doctrine20260913||null;
+  if(!p||!d||!due||!ep||!p2)return false;
   if(String(due.version||'')!==String(typeof CERBERE_P1_INPUTS_FIX_20260912_VERSION!=='undefined'?CERBERE_P1_INPUTS_FIX_20260912_VERSION:''))return false;
-  const n=x=>Number(x||0),arr=x=>Math.round(n(x)*100)/100,attendu=arr(n(d.ss1)+n(d.rt1)-n(d.cft1)-n(d.het1)-n(d.cbHeritees));
-  return Math.abs(attendu-n(d.p1))<0.011&&Math.abs(n(ep.ep)-n(d.allocations))<0.011;
+  if(String(p2.version||'')!==CERBERE_COCKPIT_CARD_OWNER_GUARD_20260912_VERSION)return false;
+  const n=x=>Number(x||0),arr=x=>Math.round(n(x)*100)/100,attendu=arr(n(d.ss1)+n(d.rt1)-n(d.cft1)-n(d.het1)-n(d.cbHeritees)),attenduP2=Math.max(0,arr(n(p2.ss2)+n(p2.rt2)-n(p2.cft2)-n(p2.het2)-n(p2.reportCb)));
+  return Math.abs(attendu-n(d.p1))<0.011&&Math.abs(n(ep.ep)-n(d.allocations))<0.011&&Math.abs(attenduP2-n(p2.p2))<0.011;
 }
 
 function publierValeursCartesDepuisOwnerP120260912_(base){
@@ -133,4 +149,12 @@ function auditerValeursCartesCerbereOwner20260912(){
   const out={ok:!!p,version:CERBERE_COCKPIT_CARD_OWNER_GUARD_20260912_VERSION,source:x&&x.sourceBudgetSoft||'',p:{carte:Number(c.p1Total||0),disponible:Number(c.ret1||0),owner:Number(d.p1||0),ownerDisponible:Number(d.restePilotable||0)},ep:{carte:Number(c.epTotal||0),disponible:Number(c.epDisponible||0),owner:Number(e.ep||0),ownerDisponible:Number(e.epDisponible||0),source:String(c.epSource||'')},construction:{rt1:Number(v.rt1||0),cft1:Number(v.cft1||0),het1:Number(v.het1Reel||0)},sansRecalculMetier:true};
   out.ok=out.ok&&Math.abs(out.p.carte-out.p.owner)<.011&&Math.abs(out.p.disponible-out.p.ownerDisponible)<.011&&Math.abs(out.ep.carte-out.ep.owner)<.011&&Math.abs(out.ep.disponible-out.ep.ownerDisponible)<.011;
   console.log('[AUDIT CARTES CERBERE OWNER 20260913] '+JSON.stringify(out));return out;
+}
+
+function auditerCycleSuivantCerbere20260913(){
+  const x=recalculerCerbereCockpitP1Frais20260912_(),p=x&&Array.isArray(x.periodes)?x.periodes[1]:null,v=p&&p.v37||{},c=v.cockpit20260902||{},d=x&&x.diagnostic&&x.diagnostic.p2Doctrine20260913||{},cf=d.cft2Audit||{};
+  const attendu=Math.max(0,arrCockpit20260902_(Number(d.ss2||0)+Number(d.rt2||0)-Number(d.cft2||0)-Number(d.het2||0)-Number(d.reportCb||0)));
+  const out={ok:!!p&&Math.abs(attendu-Number(d.p2||0))<.011,version:CERBERE_COCKPIT_CARD_OWNER_GUARD_20260912_VERSION,source:x&&x.sourceBudgetSoft||'',periode:p&&p.periode||null,ss2:Number(d.ss2||0),ss2Statut:String(v.ss1Statut||''),rt2:Number(d.rt2||0),cft2:Number(d.cft2||0),cft2Brut:Number(cf.brutAvantSuspensions||0),suspensions:Number(cf.suspensions||0),het2:Number(d.het2||0),reportCb:Number(d.reportCb||0),cbDejaEngagee:Number(d.cbDejaEngagee||0),cbEpEstimee:Number(d.cbEpEstimee||0),p2AvantReport:Number(d.p2AvantReport||0),p2:Number(d.p2||0),p2Carte:Number(c.pSoutenable!=null?c.pSoutenable:c.p1Total||0),attendu:attendu,formule:'SS2 + Rt2 - CFt2 - HEt2 - report CB'};
+  out.ok=out.ok&&Math.abs(out.p2-out.p2Carte)<.011;
+  console.log('[AUDIT CYCLE SUIVANT CERBERE 20260913] '+JSON.stringify(out));return out;
 }
