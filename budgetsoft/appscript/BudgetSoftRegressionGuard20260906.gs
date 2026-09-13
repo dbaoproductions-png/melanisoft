@@ -1,4 +1,4 @@
-const BUDGETSOFT_REGRESSION_GUARD_VERSION='2026-09-06.8';
+const BUDGETSOFT_REGRESSION_GUARD_VERSION='2026-09-13.1';
 
 function arrRegressionBudgetSoft20260906_(n){return Math.round(Number(n||0)*100)/100;}
 function ecartRegressionBudgetSoft20260906_(a,b){return arrRegressionBudgetSoft20260906_(Number(a||0)-Number(b||0));}
@@ -44,11 +44,21 @@ function auditerCoherenceRevisionBudgetSoft20260906_(etat){
   }
 
   const ps=Array.isArray(cerb&&cerb.periodes)?cerb.periodes:[];
-  const c1=ps[0]&&ps[0].v37&&ps[0].v37.cockpit20260902||{};
-  const c2=ps[1]&&ps[1].v37&&ps[1].v37.cockpit20260902||{};
+  const p1=ps[0]||{},p2=ps[1]||{},c1=p1&&p1.v37&&p1.v37.cockpit20260902||{},c2=p2&&p2.v37&&p2.v37.cockpit20260902||{};
   if(express&&express.ok&&ps.length){
-    if(Number.isFinite(Number(c1.p1Total))&&Number.isFinite(Number(express.pilotable&&express.pilotable.allocation))&&!proche(c1.p1Total,express.pilotable&&express.pilotable.allocation))err('CERBERE_EXPRESS_P1','Cerbère Express diverge du P1 de Cerbère.',{cerbere:c1.p1Total,express:express.pilotable&&express.pilotable.allocation});
-    if(Number.isFinite(Number(c2.reportCbCycle))&&Number.isFinite(Number(express.contexte&&express.contexte.cbDejaEngageeM1))&&!proche(c2.reportCbCycle,express.contexte&&express.contexte.cbDejaEngageeM1))err('CERBERE_EXPRESS_CB','Cerbère Express diverge de l’engagement CB publié par Cerbère.',{cerbere:c2.reportCbCycle,express:express.contexte&&express.contexte.cbDejaEngageeM1});
+    const ep1=p1&&p1.enveloppePilotable||{};
+    const epTotal=Number.isFinite(Number(ep1.total))?Number(ep1.total):Number(c1.epTotal);
+    const epDisponible=Number.isFinite(Number(ep1.reste))?Number(ep1.reste):Number(c1.epDisponible);
+    const expressAllocation=Number(express.pilotable&&express.pilotable.allocation);
+    const expressReste=Number(express.pilotable&&express.pilotable.reste);
+    const expressDecisionEp=Number(express.decision&&express.decision.ep);
+    const expressDecisionReste=Number(express.decision&&express.decision.epDisponible);
+    if(Number.isFinite(epTotal)&&Number.isFinite(expressAllocation)&&!proche(epTotal,expressAllocation))err('CERBERE_EXPRESS_EP','Cerbère Express diverge de l’EP de Cerbère.',{cerbereEp:epTotal,expressAllocation});
+    if(Number.isFinite(epTotal)&&Number.isFinite(expressDecisionEp)&&!proche(epTotal,expressDecisionEp))err('CERBERE_EXPRESS_EP_DECISION','La décision EP de Cerbère Express diverge de l’owner EP.',{cerbereEp:epTotal,expressDecisionEp});
+    if(Number.isFinite(epDisponible)&&Number.isFinite(expressReste)&&!proche(epDisponible,expressReste))err('CERBERE_EXPRESS_EP_RESTE','Cerbère Express diverge de l’EP disponible de Cerbère.',{cerbereEpDisponible:epDisponible,expressReste});
+    if(Number.isFinite(epDisponible)&&Number.isFinite(expressDecisionReste)&&!proche(epDisponible,expressDecisionReste))err('CERBERE_EXPRESS_EP_DECISION_RESTE','La décision EP disponible de Cerbère Express diverge de l’owner EP.',{cerbereEpDisponible:epDisponible,expressDecisionReste});
+    const reportC2=Number(c2.reportCbCycle),expressReport=Number(express.decision&&express.decision.reportCbCycleSuivant);
+    if(Number.isFinite(reportC2)&&Number.isFinite(expressReport)&&!proche(reportC2,expressReport))err('CERBERE_EXPRESS_CB','Cerbère Express diverge du report CB/EP publié par Cerbère.',{cerbere:reportC2,express:expressReport});
   }
 
   if(etat&&Array.isArray(etat.erreurs)&&etat.erreurs.length)warn('MODULES_EN_ERREUR','Un ou plusieurs modules ont échoué pendant la reconstruction.',etat.erreurs);
