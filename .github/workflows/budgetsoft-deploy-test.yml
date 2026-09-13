@@ -2,6 +2,12 @@ name: BudgetSoft - Deploy TEST
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - budgetsoft-import-lab
+    paths:
+      - 'budgetsoft/appscript/**'
+      - '.github/workflows/budgetsoft-deploy-test.yml'
 
 permissions:
   contents: read
