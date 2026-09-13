@@ -1,4 +1,4 @@
-const CERBERE_EXPRESS_PRIVATE_VERSION = '2026-09-09.1';
+const CERBERE_EXPRESS_PRIVATE_VERSION = '2026-09-13.1';
 const CERBERE_EXPRESS_PRIVATE_PROP_PREFIX = 'CERBERE_EXPRESS_TOKEN_';
 const CERBERE_EXPRESS_WEBAPP_URL_PROP = 'CERBERE_EXPRESS_WEBAPP_URL';
 
@@ -31,7 +31,6 @@ function preparerLiensPrivesCerbereExpress20260827() {
   return out;
 }
 
-/** Révoque un lien et en génère un nouveau pour le profil choisi. */
 function regenererLienPriveCerbereExpress20260827(profil) {
   profil = normaliserProfilCerbereExpress20260827_(profil);
   const props = PropertiesService.getScriptProperties();
@@ -39,16 +38,14 @@ function regenererLienPriveCerbereExpress20260827(profil) {
   return preparerLiensPrivesCerbereExpress20260827().liens[profil];
 }
 
-/**
- * Lecture canonique de la vue Express : le snapshot global BudgetSoft est prioritaire.
- * Aucun snapshot local Express n'est consommé par la route privée ni par les SMS.
- */
+/** Vue canonique Express : exclusivement la décision EP publiée par le snapshot global. */
 function lireVueCanoniqueCerbereExpressPrive20260909_() {
-  if (typeof chargerVueCerbereExpress20260827 !== 'function') {
-    throw new Error('Vue canonique Cerbère Express indisponible.');
-  }
+  if (typeof chargerVueCerbereExpress20260827 !== 'function') throw new Error('Vue canonique Cerbère Express indisponible.');
   const vue = chargerVueCerbereExpress20260827();
   if (!vue || vue.ok === false) throw new Error(String(vue && vue.erreur || 'Cerbère Express indisponible'));
+  if (!vue.decision || !vue.pilotable || Object.prototype.hasOwnProperty.call(vue,'contexte') || Object.prototype.hasOwnProperty.call(vue,'referenceP1')) {
+    throw new Error('Vue Cerbère Express non conforme à la doctrine EP-only.');
+  }
   return vue;
 }
 
@@ -64,7 +61,7 @@ function servirCerbereExpressPrive20260827_(e) {
   try { vue = lireVueCanoniqueCerbereExpressPrive20260909_(); }
   catch (err) { vue = {ok:false,erreur:String(err && err.message || err)}; }
 
-  const template = HtmlService.createTemplateFromFile('CerbereExpressMobile20260827');
+  const template = HtmlService.createTemplateFromFile('CerbereExpressEpMobile20260913');
   template.tokenExpress = token;
   template.vueExpressJson = JSON.stringify(vue);
   template.snapshotExpressMetaJson = JSON.stringify({
@@ -78,16 +75,11 @@ function servirCerbereExpressPrive20260827_(e) {
   return template.evaluate().setTitle('Cerbère Express').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
-/** Chargement RPC protégé : renvoie exclusivement la vue canonique globale. */
 function chargerVueCerbereExpressPrive20260827(token) {
   if (!verifierTokenCerbereExpress20260827_(token)) throw new Error('Lien Cerbère Express invalide ou révoqué.');
   return lireVueCanoniqueCerbereExpressPrive20260909_();
 }
 
-/**
- * Rafraîchissement protégé : republie d'abord le snapshot global BudgetSoft,
- * puis relit le module Cerbère Express de cette même révision.
- */
 function rafraichirSnapshotCerbereExpressPrive20260827(token) {
   if (!verifierTokenCerbereExpress20260827_(token)) throw new Error('Lien Cerbère Express invalide ou révoqué.');
   if (typeof actualiserBudgetSoftSyntheseMaintenant20260907 === 'function') {
@@ -98,10 +90,7 @@ function rafraichirSnapshotCerbereExpressPrive20260827(token) {
   return {ok:true,version:CERBERE_EXPRESS_PRIVATE_VERSION,source:'snapshot_global',revisionBudgetSoft:String(vue&&vue.revisionBudgetSoft||''),genereLe:String(vue&&vue.genereLe||''),vue};
 }
 
-/**
- * Prépare le SMS V1 sans l'envoyer : météo + chiffre global + UNE consigne + lien.
- * profil = principal | conjointe.
- */
+/** SMS Express = uniquement le décidé : EP restante + consigne d'achat + lien. */
 function genererSmsCerbereExpress20260827(profil) {
   profil = normaliserProfilCerbereExpress20260827_(profil);
   const v = lireVueCanoniqueCerbereExpressPrive20260909_();
@@ -111,11 +100,11 @@ function genererSmsCerbereExpress20260827(profil) {
   const reste = Number(v && v.pilotable && v.pilotable.reste || 0);
   const texte = [
     'Cerbere - ' + String(meteo.libelle || 'Situation'),
-    'Pilotable : ' + formaterEurosSmsCerbereExpress20260827_(reste),
+    'EP restante : ' + formaterEurosSmsCerbereExpress20260827_(reste),
     String(consigne.texte || 'Cap tenu.'),
     lien
   ].join('\n');
-  return {ok:true, version:CERBERE_EXPRESS_PRIVATE_VERSION, profil, texte, lien, sourceBudgetSoft:String(v&&v.sourceBudgetSoft||''), revisionBudgetSoft:String(v&&v.revisionBudgetSoft||'')};
+  return {ok:true, version:CERBERE_EXPRESS_PRIVATE_VERSION, profil, texte, lien, epRestante:reste, sourceBudgetSoft:String(v&&v.sourceBudgetSoft||''), revisionBudgetSoft:String(v&&v.revisionBudgetSoft||'')};
 }
 
 function auditerLiensPrivesCerbereExpress20260827() {
@@ -132,7 +121,9 @@ function auditerLiensPrivesCerbereExpress20260827() {
     tokensDistincts: principal !== conjointe,
     urlDisponible: !!(configuree || ScriptApp.getService().getUrl()),
     urlProductionConfiguree: !!configuree,
-    urlProductionExec: !!(configuree && /\/exec(?:\?|$)/.test(configuree))
+    urlProductionExec: !!(configuree && /\/exec(?:\?|$)/.test(configuree)),
+    template:'CerbereExpressEpMobile20260913',
+    doctrine:'EP-only'
   };
   console.log(JSON.stringify(out));
   return out;
