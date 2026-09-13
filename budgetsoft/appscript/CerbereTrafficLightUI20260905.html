@@ -20,26 +20,66 @@
   const style=document.createElement('style');style.textContent='.credit-group-total-20260906{margin-left:auto;text-align:right;display:flex;flex-direction:column;gap:2px}.credit-group-total-20260906 span{font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.04em}.credit-group-total-20260906 strong{font-size:18px;color:#183d32}';document.head.appendChild(style);function tick(){installerDoctrineOperations();chargerTotauxCredits();}document.addEventListener('DOMContentLoaded',()=>setTimeout(tick,300));document.addEventListener('click',e=>{if(e.target.closest?.('.nav-item[data-view]'))setTimeout(tick,180);},true);new MutationObserver(()=>{clearTimeout(window.__budgetsoftDoctrineTick);window.__budgetsoftDoctrineTick=setTimeout(tick,80);}).observe(document.documentElement,{childList:true,subtree:true});setTimeout(tick,900);console.log('[BudgetSoft supradoctrine UI] '+VERSION);
 })();
 
-/* EP / P : adaptateur de présentation seulement. Les valeurs P viennent du serveur. */
+/* EP / P : adaptateur de présentation seulement. P reste lecture seule ; EP reste la somme des molettes. */
 (function(){'use strict';
-  const VERSION='2026-09-13.1',euro=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));let owner=null,enCours=false,timer=0;
+  const VERSION='2026-09-13.4',euro=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));let owner=null,enCours=false,timer=0;
   function setCard(card,label,valeur,texte,cls){if(!card)return;const s=card.querySelector('span'),b=card.querySelector('b'),sm=card.querySelector('small');if(s)s.textContent=label;if(b)b.textContent=euro(valeur);if(sm)sm.textContent=texte||'';card.classList.toggle('warn',cls==='warn');card.classList.toggle('ok',cls==='ok');}
   function draftEp(cycle){return [...cycle.querySelectorAll('.c4-line .c4-amount')].reduce((s,x)=>s+Math.max(0,Number(x.value||0)),0);}
-  function draftConsomme(cycle){const info=cycle.dataset.epConsomme;return Number(info||0);}
-  function appliquerCycle(cycle,o,index){if(!cycle||!o)return;cycle.dataset.epConsomme=String(o.epConsomme||0);const epDraft=draftEp(cycle)||Number(o.ep||0),epReste=epDraft-Number(o.epConsomme||0),p=Number(o.p||0),pDisp=Number(o.pDisponible||0),gap=epDraft-p;
+  function nombreDepuisTexte_(v){const n=Number(String(v||'').replace(/[\u00a0\u202f\s€]/g,'').replace(',','.').replace(/[^0-9.-]/g,''));return Number.isFinite(n)?Math.max(0,n):0;}
+  function normaliserLibelles_(cycle){
+    cycle.querySelectorAll('.c4-point span').forEach(s=>{if((s.textContent||'').trim()==='Premier jour du cycle')s.textContent='Solde initial de référence';});
+    cycle.querySelectorAll('[data-ep-p-gap-card]').forEach(n=>n.remove());
+    cycle.querySelectorAll('.c4-effect-row').forEach(row=>{
+      const titre=(row.querySelector('strong')?.textContent||'').trim();
+      const btn=row.querySelector('[data-event-reconcile]');
+      if(btn){btn.textContent='À rapprocher';btn.title="Événement encore prévu : le rapprochement ne doit être fait qu'après présence d'une opération bancaire réelle.";}
+      if(/suspension/i.test(titre)){
+        const etat=row.querySelector('em');
+        if(etat)etat.textContent='Suspension prévue · charge évitée';
+        const montant=row.querySelector('b');
+        if(montant)montant.title='Effet budgétaire positif : charge fixe suspendue, ce montant n’est pas une recette encaissée.';
+      }
+    });
+  }
+  function redistribuerEp_(cycle,cible){
+    cible=Math.max(0,Math.round(Number(cible||0)));const rows=[...cycle.querySelectorAll('.c4-line')];if(!rows.length)return;
+    const amounts=rows.map(r=>r.querySelector('.c4-amount')),ranges=rows.map(r=>r.querySelector('.c4-range'));
+    const actuels=amounts.map(x=>Math.max(0,Number(x&&x.value||0)));let base=actuels.reduce((s,n)=>s+n,0);
+    let poids=actuels.slice();
+    if(base<=0){poids=rows.map(r=>{const spans=r.querySelectorAll(':scope > span');return spans.length?nombreDepuisTexte_(spans[0].textContent):0;});base=poids.reduce((s,n)=>s+n,0);}
+    if(base<=0){poids=rows.map((_,i)=>i===0?1:0);base=1;}
+    const bruts=poids.map(n=>cible*n/base),vals=bruts.map(Math.floor);let reste=cible-vals.reduce((s,n)=>s+n,0);
+    const ordre=bruts.map((n,i)=>({i,f:n-Math.floor(n)})).sort((a,b)=>b.f-a.f||a.i-b.i);
+    for(let k=0;k<reste;k++)vals[ordre[k%ordre.length].i]++;
+    vals.forEach((v,i)=>{if(amounts[i])amounts[i].value=v;if(ranges[i])ranges[i].value=Math.min(Number(ranges[i].max||v),v);});
+    const dernier=amounts.filter(Boolean).pop();if(dernier)dernier.dispatchEvent(new Event('input',{bubbles:true}));
+  }
+  function configurerReglageGlobal_(cycle,epDraft){
+    const target=cycle.querySelector('.c4-target');if(!target)return;const sp=target.querySelector('span'),inp=target.querySelector('[data-p1-target]'),sm=target.querySelector('small');
+    if(sp)sp.textContent='Ajuster l’EP globale';
+    if(inp&&document.activeElement!==inp){inp.value=Math.round(epDraft);inp.disabled=false;inp.title='Le total choisi est réparti proportionnellement dans les molettes afin que EP reste leur somme.';}
+    target.querySelectorAll('[data-p1-d]').forEach(b=>{b.style.display='';});
+    if(sm)sm.textContent='Le réglage global redimensionne proportionnellement les molettes · EP = somme des allocations.';
+  }
+  function appliquerCycle(cycle,o,index){if(!cycle||!o)return;cycle.dataset.epConsomme=String(o.epConsomme||0);const epDraft=draftEp(cycle)||Number(o.ep||0),epReste=epDraft-Number(o.epConsomme||0),p=Number(o.p||0),pDisp=Number(o.pDisponible||0);
     setCard(cycle.querySelector('[data-p1-card]'),index===0?'EP1 · enveloppe pilotable décidée':'EP2 · enveloppe pilotable décidée',epDraft,'Somme des molettes · décision modifiable','');
     setCard(cycle.querySelector('[data-ret1-card]'),'EP encore disponible',epReste,'EP − réel pilotable consommé',epReste<0?'warn':'ok');
     setCard(cycle.querySelector('[data-surplus-p0-card]'),index===0?'P1 soutenable':'P2 soutenable',p,'Indicateur de réalité · lecture seule',p<0?'warn':'ok');
     const pCard=cycle.querySelector('[data-margin-card]');setCard(pCard,index===0?'Reste soutenable selon P1':'Reste soutenable selon P2',pDisp,'P − réel pilotable consommé',pDisp<0?'warn':'ok');
-    let gapCard=cycle.querySelector('[data-ep-p-gap-card]');if(!gapCard&&pCard){gapCard=document.createElement('div');gapCard.className='c4-card';gapCard.setAttribute('data-ep-p-gap-card','');pCard.insertAdjacentElement('afterend',gapCard);}setCard(gapCard,'Écart EP − P',gap,'Décision par rapport à la soutenabilité',gap>0?'warn':'ok');
-    const target=cycle.querySelector('.c4-target');if(target){const sp=target.querySelector('span');if(sp)sp.textContent='EP · somme des molettes';const inp=target.querySelector('[data-p1-target]');if(inp){inp.value=epDraft;inp.disabled=true;inp.title='EP est la somme des molettes';}target.querySelectorAll('[data-p1-d]').forEach(b=>{b.style.display='none';});const sm=target.querySelector('small');if(sm)sm.textContent='La décision EP est portée exclusivement par les allocations ci-dessous.';}
+    cycle.querySelectorAll('[data-ep-p-gap-card]').forEach(n=>n.remove());
+    configurerReglageGlobal_(cycle,epDraft);
     const head=cycle.querySelector('.c4-head');if(head){const spans=head.querySelectorAll('span');if(spans[2])spans[2].textContent='Allocation EP';}
-    const save=cycle.querySelector('[data-save]');if(save)save.textContent='Valider EP '+(cycle.querySelector('header h3')?.textContent||'');const reset=cycle.querySelector('[data-reset]');if(reset&&reset.textContent==='Mode P0')reset.textContent='Réinitialiser EP à P0';
+    const save=cycle.querySelector('[data-save]');if(save)save.textContent='Valider EP '+(cycle.querySelector('header h3')?.textContent||'');const reset=cycle.querySelector('[data-reset]');if(reset&&/Mode P0|Réinitialiser EP à P0/.test(reset.textContent||''))reset.textContent='Réinitialiser EP à P0';
+    normaliserLibelles_(cycle);
   }
   function appliquer(){if(!owner)return;appliquerCycle(document.getElementById('c4-0'),owner.courant,0);appliquerCycle(document.getElementById('c4-1'),owner.suivant,1);}
   function charger(){if(enCours||typeof google==='undefined'||!google.script||!google.script.run)return;enCours=true;google.script.run.withSuccessHandler(r=>{enCours=false;if(r&&r.ok){owner=r;appliquer();}}).withFailureHandler(()=>{enCours=false;}).chargerEtatEnvelopePilotableBudgetSoft20260913();}
-  function planifier(){clearTimeout(timer);timer=setTimeout(()=>{appliquer();if(!owner)charger();},40);}document.addEventListener('input',e=>{if(e.target&&e.target.closest&&e.target.closest('.c4-line'))planifier();},true);document.addEventListener('change',planifier,true);document.addEventListener('click',e=>{if(e.target.closest?.('.nav-item[data-view="cerbere"]'))setTimeout(charger,180);if(e.target.closest?.('[data-save]'))setTimeout(charger,900);},true);new MutationObserver(planifier).observe(document.documentElement,{subtree:true,childList:true});document.addEventListener('DOMContentLoaded',()=>setTimeout(charger,450));setTimeout(charger,1000);
-  const st=document.createElement('style');st.textContent='[data-ep-p-gap-card]{border-left:3px solid #9bbcb0}.c4-target [data-p1-target][disabled]{opacity:.8;background:#f4f7f6}';document.head.appendChild(st);console.log('[Cerbère UI EP/P] '+VERSION);
+  function planifier(){clearTimeout(timer);timer=setTimeout(()=>{appliquer();if(!owner)charger();},50);}
+  document.addEventListener('input',e=>{const inp=e.target&&e.target.closest?.('[data-p1-target]');if(inp){e.stopImmediatePropagation();return;}if(e.target&&e.target.closest&&e.target.closest('.c4-line'))planifier();},true);
+  document.addEventListener('change',e=>{const inp=e.target&&e.target.closest?.('[data-p1-target]');if(inp){e.stopImmediatePropagation();const cycle=inp.closest('.c4-cycle');if(cycle)redistribuerEp_(cycle,inp.value);setTimeout(planifier,0);}},true);
+  document.addEventListener('click',e=>{const d=e.target&&e.target.closest?.('[data-p1-d]');if(d){e.preventDefault();e.stopImmediatePropagation();const cycle=d.closest('.c4-cycle'),inp=cycle&&cycle.querySelector('[data-p1-target]');if(cycle&&inp){const cible=Math.max(0,Number(inp.value||draftEp(cycle))+Number(d.dataset.p1D||0));inp.value=Math.round(cible);redistribuerEp_(cycle,cible);}setTimeout(planifier,0);return;}if(e.target.closest?.('.nav-item[data-view="cerbere"]'))setTimeout(charger,180);if(e.target.closest?.('[data-save]'))setTimeout(charger,900);},true);
+  new MutationObserver(planifier).observe(document.documentElement,{subtree:true,childList:true});document.addEventListener('DOMContentLoaded',()=>setTimeout(charger,450));setTimeout(charger,1000);
+  const st=document.createElement('style');st.textContent='[data-ep-p-gap-card]{display:none!important}.c4-target [data-p1-target]{opacity:1;background:#fff}.c4-status-link{white-space:nowrap}';document.head.appendChild(st);console.log('[Cerbère UI EP/P] '+VERSION);
 })();
 
 /* Valeur EP/jour partagée : lecture owner uniquement. */
