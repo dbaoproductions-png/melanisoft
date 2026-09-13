@@ -1,142 +1,47 @@
 <script>
 (function(){'use strict';
   const COLORS={vert:'#2f7d63',orange:'#c18a25',rouge:'#ba5148'};
-  function montant(txt){
-    const s=String(txt||'').replace(/[^0-9,.-]/g,'').replace(/\.(?=.*\.)/g,'').replace(',','.');
-    const n=Number(s);return Number.isFinite(n)?n:0;
-  }
-  function dateFrCourte(s){
-    const m=String(s||'').trim().match(/^(\d{2})\/(\d{2})\/(\d{2,4})$/);if(!m)return null;
-    const y=Number(m[3])<100?2000+Number(m[3]):Number(m[3]);
-    return new Date(y,Number(m[2])-1,Number(m[1]),12);
-  }
-  function progressionCycle(cycle){
-    const txt=cycle&&cycle.querySelector('header > span')?cycle.querySelector('header > span').textContent:'';
-    const m=String(txt||'').match(/(\d{2}\/\d{2}\/\d{2,4})\s*→\s*(\d{2}\/\d{2}\/\d{2,4})/);if(!m)return 0;
-    const a=dateFrCourte(m[1]),z=dateFrCourte(m[2]),n=new Date();if(!a||!z)return 0;
-    const day=d=>Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())/86400000;
-    const jours=Math.max(1,Math.round(day(z)-day(a))+1),jour=Math.max(1,Math.min(jours,Math.floor(day(n)-day(a))+1));
-    return jour/jours;
-  }
-  function niveau(allocation,consomme,progression){
-    if(consomme>allocation+.009||(allocation<=0&&consomme>0))return'rouge';
-    if(allocation>0&&consomme/allocation>progression+.0001)return'orange';
-    return'vert';
-  }
-  function libellesP2(){
-    const c2=document.getElementById('c4-1');if(!c2)return;
-    const walker=document.createTreeWalker(c2,NodeFilter.SHOW_TEXT);
-    let n;while((n=walker.nextNode())){if(n.nodeValue&&/\bP1\b/.test(n.nodeValue))n.nodeValue=n.nodeValue.replace(/\bP1\b/g,'P2');}
-  }
-  function appliquer(){
-    libellesP2();
-    document.querySelectorAll('.c4-cycle').forEach(cycle=>{
-      const prog=progressionCycle(cycle);
-      cycle.querySelectorAll('.c4-line').forEach(row=>{
-        const range=row.querySelector('.c4-range');if(!range)return;
-        const spans=row.querySelectorAll(':scope > span');
-        const reel=spans.length>1?Math.max(0,montant(spans[1].textContent)):0;
-        const allocation=Math.max(0,Number(range.value||0));
-        const n=niveau(allocation,reel,prog);
-        range.dataset.traffic=n;
-        range.style.accentColor=COLORS[n];
-        row.classList.toggle('traffic-orange',n==='orange');
-        row.classList.toggle('traffic-rouge',n==='rouge');
-      });
-    });
-  }
-  let timer=0;function planifier(){clearTimeout(timer);timer=setTimeout(appliquer,20);}
-  document.addEventListener('input',e=>{if(e.target&&e.target.classList&&e.target.classList.contains('c4-range'))planifier();},true);
-  document.addEventListener('change',planifier,true);
-  new MutationObserver(planifier).observe(document.documentElement,{subtree:true,childList:true,characterData:true});
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',appliquer);else appliquer();
+  function montant(txt){const s=String(txt||'').replace(/[^0-9,.-]/g,'').replace(/\.(?=.*\.)/g,'').replace(',','.');const n=Number(s);return Number.isFinite(n)?n:0;}
+  function dateFrCourte(s){const m=String(s||'').trim().match(/^(\d{2})\/(\d{2})\/(\d{2,4})$/);if(!m)return null;const y=Number(m[3])<100?2000+Number(m[3]):Number(m[3]);return new Date(y,Number(m[2])-1,Number(m[1]),12);}
+  function progressionCycle(cycle){const txt=cycle&&cycle.querySelector('header > span')?cycle.querySelector('header > span').textContent:'';const m=String(txt||'').match(/(\d{2}\/\d{2}\/\d{2,4})\s*→\s*(\d{2}\/\d{2}\/\d{2,4})/);if(!m)return 0;const a=dateFrCourte(m[1]),z=dateFrCourte(m[2]),n=new Date();if(!a||!z)return 0;const day=d=>Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())/86400000;const jours=Math.max(1,Math.round(day(z)-day(a))+1),jour=Math.max(1,Math.min(jours,Math.floor(day(n)-day(a))+1));return jour/jours;}
+  function niveau(allocation,consomme,progression){if(consomme>allocation+.009||(allocation<=0&&consomme>0))return'rouge';if(allocation>0&&consomme/allocation>progression+.0001)return'orange';return'vert';}
+  function appliquer(){document.querySelectorAll('.c4-cycle').forEach(cycle=>{const prog=progressionCycle(cycle);cycle.querySelectorAll('.c4-line').forEach(row=>{const range=row.querySelector('.c4-range');if(!range)return;const spans=row.querySelectorAll(':scope > span'),reel=spans.length>1?Math.max(0,montant(spans[1].textContent)):0,allocation=Math.max(0,Number(range.value||0)),n=niveau(allocation,reel,prog);range.dataset.traffic=n;range.style.accentColor=COLORS[n];row.classList.toggle('traffic-orange',n==='orange');row.classList.toggle('traffic-rouge',n==='rouge');});});}
+  let timer=0;function planifier(){clearTimeout(timer);timer=setTimeout(appliquer,20);}document.addEventListener('input',e=>{if(e.target&&e.target.classList&&e.target.classList.contains('c4-range'))planifier();},true);document.addEventListener('change',planifier,true);new MutationObserver(planifier).observe(document.documentElement,{subtree:true,childList:true,characterData:true});if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',appliquer);else appliquer();
   const st=document.createElement('style');st.textContent='.c4-range[data-traffic="orange"]{accent-color:#c18a25}.c4-range[data-traffic="rouge"]{accent-color:#ba5148}.c4-line.traffic-orange [data-reste]{color:#926509;font-weight:800}.c4-line.traffic-rouge [data-reste]{color:#a73f38;font-weight:800}';document.head.appendChild(st);
 })();
 
-/*
- * Supradoctrine BudgetSoft 2026-09-06 :
- * - l'écran Opérations suit la date comptable ; une ligne future reste dans « Futures » ;
- * - Cerbère/Cerbère Express conservent seuls leur lecture anticipée des achats CB ;
- * - les groupes de crédits affichent leurs agrégats, sans recalcul autonome dans l'UI.
- */
 (function(){'use strict';
-  const VERSION='2026-09-06.1';
-  const finAujourdhui=()=>{const d=new Date();d.setHours(23,59,59,999);return d;};
-  const dateComptable=o=>{const v=o&&((o.date_comptable!==undefined&&o.date_comptable!==null&&o.date_comptable!=='')?o.date_comptable:o.date);const d=v?new Date(v):null;return d&&!isNaN(d)?d:null;};
-  const estComptabilisee=o=>{const d=dateComptable(o);return !d||d<=finAujourdhui();};
-
-  function installerDoctrineOperations(){
-    const courant=window.operationsFiltrees;
-    if(typeof courant!=='function'||courant.__dateComptable20260906)return;
-    const completBase=typeof courant.__complet==='function'?courant.__complet:courant;
-    const completFiltre=function(){return (completBase.apply(this,arguments)||[]).filter(estComptabilisee);};
-    const filtre=function(){return (courant.apply(this,arguments)||[]).filter(estComptabilisee);};
-    filtre.__dateComptable20260906=true;
-    if(courant.__limiteOperations20260828)filtre.__limiteOperations20260828=true;
-    filtre.__complet=completFiltre;
-    window.operationsFiltrees=filtre;
-    try{if(window.state&&state.currentView==='operations'&&typeof rendreListeOperations==='function')rendreListeOperations();}catch(e){}
-  }
-
-  const euro=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));
-  let creditsEnCours=false,creditsCache=null,creditsCacheAt=0;
-  function poserTotal(h2,label,valeur){
-    const panel=h2&&h2.closest('.panel');if(!panel)return;
-    const heading=panel.querySelector('.panel-heading');if(!heading)return;
-    let badge=heading.querySelector('[data-credit-total-20260906="'+label+'"]');
-    if(!badge){badge=document.createElement('div');badge.dataset.creditTotal20260906=label;badge.className='credit-group-total-20260906';heading.appendChild(badge);}
-    badge.innerHTML='<span>'+label+'</span><strong>'+euro(valeur)+'</strong>';
-  }
-  function appliquerTotauxCredits(data){
-    const zone=document.getElementById('generic-view');if(!zone||!data)return;
-    const hs=[...zone.querySelectorAll('.panel-heading h2')];
-    const hAm=hs.find(h=>/Crédits amortissables/i.test(h.textContent||''));
-    const hRev=hs.find(h=>/Crédits renouvelables/i.test(h.textContent||''));
-    const am=Array.isArray(data.amortissables)?data.amortissables:[];
-    const rev=Array.isArray(data.renouvelables)?data.renouvelables:[];
-    const capitalAm=am.reduce((s,c)=>s+Math.max(0,Number(c&&c.capital_restant||0)),0);
-    const encoursRev=rev.reduce((s,c)=>s+Math.max(0,Number(c&&c.capital_restant||0)),0);
-    if(hAm)poserTotal(hAm,'Capital restant dû',capitalAm);
-    if(hRev)poserTotal(hRev,'Encours total',encoursRev);
-  }
-  function chargerTotauxCredits(){
-    const zone=document.getElementById('generic-view');
-    if(!zone||!/[Cc]rédits amortissables/.test(zone.textContent||''))return;
-    if(creditsCache&&Date.now()-creditsCacheAt<15000){appliquerTotauxCredits(creditsCache);return;}
-    if(creditsEnCours)return;creditsEnCours=true;
-    google.script.run.withSuccessHandler(d=>{creditsEnCours=false;creditsCache=d;creditsCacheAt=Date.now();appliquerTotauxCredits(d);}).withFailureHandler(()=>{creditsEnCours=false;}).chargerCreditsEtDettesV2();
-  }
-
-  const style=document.createElement('style');style.textContent='.credit-group-total-20260906{margin-left:auto;text-align:right;display:flex;flex-direction:column;gap:2px}.credit-group-total-20260906 span{font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.04em}.credit-group-total-20260906 strong{font-size:18px;color:#183d32}';document.head.appendChild(style);
-  function tick(){installerDoctrineOperations();chargerTotauxCredits();}
-  document.addEventListener('DOMContentLoaded',()=>setTimeout(tick,300));
-  document.addEventListener('click',e=>{if(e.target.closest?.('.nav-item[data-view]'))setTimeout(tick,180);},true);
-  new MutationObserver(()=>{clearTimeout(window.__budgetsoftDoctrineTick);window.__budgetsoftDoctrineTick=setTimeout(tick,80);}).observe(document.documentElement,{childList:true,subtree:true});
-  setTimeout(tick,900);
-  console.log('[BudgetSoft supradoctrine UI] '+VERSION);
+  const VERSION='2026-09-06.1',finAujourdhui=()=>{const d=new Date();d.setHours(23,59,59,999);return d;},dateComptable=o=>{const v=o&&((o.date_comptable!==undefined&&o.date_comptable!==null&&o.date_comptable!=='')?o.date_comptable:o.date);const d=v?new Date(v):null;return d&&!isNaN(d)?d:null;},estComptabilisee=o=>{const d=dateComptable(o);return !d||d<=finAujourdhui();};
+  function installerDoctrineOperations(){const courant=window.operationsFiltrees;if(typeof courant!=='function'||courant.__dateComptable20260906)return;const completBase=typeof courant.__complet==='function'?courant.__complet:courant,completFiltre=function(){return(completBase.apply(this,arguments)||[]).filter(estComptabilisee);},filtre=function(){return(courant.apply(this,arguments)||[]).filter(estComptabilisee);};filtre.__dateComptable20260906=true;if(courant.__limiteOperations20260828)filtre.__limiteOperations20260828=true;filtre.__complet=completFiltre;window.operationsFiltrees=filtre;try{if(window.state&&state.currentView==='operations'&&typeof rendreListeOperations==='function')rendreListeOperations();}catch(e){}}
+  const euro=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));let creditsEnCours=false,creditsCache=null,creditsCacheAt=0;
+  function poserTotal(h2,label,valeur){const panel=h2&&h2.closest('.panel');if(!panel)return;const heading=panel.querySelector('.panel-heading');if(!heading)return;let badge=heading.querySelector('[data-credit-total-20260906="'+label+'"]');if(!badge){badge=document.createElement('div');badge.dataset.creditTotal20260906=label;badge.className='credit-group-total-20260906';heading.appendChild(badge);}badge.innerHTML='<span>'+label+'</span><strong>'+euro(valeur)+'</strong>';}
+  function appliquerTotauxCredits(data){const zone=document.getElementById('generic-view');if(!zone||!data)return;const hs=[...zone.querySelectorAll('.panel-heading h2')],hAm=hs.find(h=>/Crédits amortissables/i.test(h.textContent||'')),hRev=hs.find(h=>/Crédits renouvelables/i.test(h.textContent||'')),am=Array.isArray(data.amortissables)?data.amortissables:[],rev=Array.isArray(data.renouvelables)?data.renouvelables:[];if(hAm)poserTotal(hAm,'Capital restant dû',am.reduce((s,c)=>s+Math.max(0,Number(c&&c.capital_restant||0)),0));if(hRev)poserTotal(hRev,'Encours total',rev.reduce((s,c)=>s+Math.max(0,Number(c&&c.capital_restant||0)),0));}
+  function chargerTotauxCredits(){const zone=document.getElementById('generic-view');if(!zone||!/[Cc]rédits amortissables/.test(zone.textContent||''))return;if(creditsCache&&Date.now()-creditsCacheAt<15000){appliquerTotauxCredits(creditsCache);return;}if(creditsEnCours)return;creditsEnCours=true;google.script.run.withSuccessHandler(d=>{creditsEnCours=false;creditsCache=d;creditsCacheAt=Date.now();appliquerTotauxCredits(d);}).withFailureHandler(()=>{creditsEnCours=false;}).chargerCreditsEtDettesV2();}
+  const style=document.createElement('style');style.textContent='.credit-group-total-20260906{margin-left:auto;text-align:right;display:flex;flex-direction:column;gap:2px}.credit-group-total-20260906 span{font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.04em}.credit-group-total-20260906 strong{font-size:18px;color:#183d32}';document.head.appendChild(style);function tick(){installerDoctrineOperations();chargerTotauxCredits();}document.addEventListener('DOMContentLoaded',()=>setTimeout(tick,300));document.addEventListener('click',e=>{if(e.target.closest?.('.nav-item[data-view]'))setTimeout(tick,180);},true);new MutationObserver(()=>{clearTimeout(window.__budgetsoftDoctrineTick);window.__budgetsoftDoctrineTick=setTimeout(tick,80);}).observe(document.documentElement,{childList:true,subtree:true});setTimeout(tick,900);console.log('[BudgetSoft supradoctrine UI] '+VERSION);
 })();
 
-/* Valeur Dashboard partagée : lecture snapshot uniquement, aucun nouveau calcul. */
+/* EP / P : adaptateur de présentation seulement. Les valeurs P viennent du serveur. */
 (function(){'use strict';
-  let enCours=false,cache=null,cacheAt=0,timer=0;
-  const euro=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));
-  function poser(val){
-    const cycle=document.getElementById('c4-0'),ret=cycle&&cycle.querySelector('[data-ret1-card]');
-    if(!ret||!val||val.disponible!==true)return;
-    let card=cycle.querySelector('[data-pilotable-par-jour-dashboard]');
-    if(!card){card=document.createElement('div');card.className='c4-card';card.setAttribute('data-pilotable-par-jour-dashboard','');ret.insertAdjacentElement('afterend',card);}
-    card.innerHTML='<span>Pilotable disponible par jour</span><b>'+euro(val.pilotableParJour)+'</b><small>Valeur du Dashboard · aucun recalcul</small>';
+  const VERSION='2026-09-13.1',euro=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));let owner=null,enCours=false,timer=0;
+  function setCard(card,label,valeur,texte,cls){if(!card)return;const s=card.querySelector('span'),b=card.querySelector('b'),sm=card.querySelector('small');if(s)s.textContent=label;if(b)b.textContent=euro(valeur);if(sm)sm.textContent=texte||'';card.classList.toggle('warn',cls==='warn');card.classList.toggle('ok',cls==='ok');}
+  function draftEp(cycle){return [...cycle.querySelectorAll('.c4-line .c4-amount')].reduce((s,x)=>s+Math.max(0,Number(x.value||0)),0);}
+  function draftConsomme(cycle){const info=cycle.dataset.epConsomme;return Number(info||0);}
+  function appliquerCycle(cycle,o,index){if(!cycle||!o)return;cycle.dataset.epConsomme=String(o.epConsomme||0);const epDraft=draftEp(cycle)||Number(o.ep||0),epReste=epDraft-Number(o.epConsomme||0),p=Number(o.p||0),pDisp=Number(o.pDisponible||0),gap=epDraft-p;
+    setCard(cycle.querySelector('[data-p1-card]'),index===0?'EP1 · enveloppe pilotable décidée':'EP2 · enveloppe pilotable décidée',epDraft,'Somme des molettes · décision modifiable','');
+    setCard(cycle.querySelector('[data-ret1-card]'),'EP encore disponible',epReste,'EP − réel pilotable consommé',epReste<0?'warn':'ok');
+    setCard(cycle.querySelector('[data-surplus-p0-card]'),index===0?'P1 soutenable':'P2 soutenable',p,'Indicateur de réalité · lecture seule',p<0?'warn':'ok');
+    const pCard=cycle.querySelector('[data-margin-card]');setCard(pCard,index===0?'Reste soutenable selon P1':'Reste soutenable selon P2',pDisp,'P − réel pilotable consommé',pDisp<0?'warn':'ok');
+    let gapCard=cycle.querySelector('[data-ep-p-gap-card]');if(!gapCard&&pCard){gapCard=document.createElement('div');gapCard.className='c4-card';gapCard.setAttribute('data-ep-p-gap-card','');pCard.insertAdjacentElement('afterend',gapCard);}setCard(gapCard,'Écart EP − P',gap,'Décision par rapport à la soutenabilité',gap>0?'warn':'ok');
+    const target=cycle.querySelector('.c4-target');if(target){const sp=target.querySelector('span');if(sp)sp.textContent='EP · somme des molettes';const inp=target.querySelector('[data-p1-target]');if(inp){inp.value=epDraft;inp.disabled=true;inp.title='EP est la somme des molettes';}target.querySelectorAll('[data-p1-d]').forEach(b=>{b.style.display='none';});const sm=target.querySelector('small');if(sm)sm.textContent='La décision EP est portée exclusivement par les allocations ci-dessous.';}
+    const head=cycle.querySelector('.c4-head');if(head){const spans=head.querySelectorAll('span');if(spans[2])spans[2].textContent='Allocation EP';}
+    const save=cycle.querySelector('[data-save]');if(save)save.textContent='Valider EP '+(cycle.querySelector('header h3')?.textContent||'');const reset=cycle.querySelector('[data-reset]');if(reset&&reset.textContent==='Mode P0')reset.textContent='Réinitialiser EP à P0';
   }
-  function charger(){
-    const cycle=document.getElementById('c4-0');if(!cycle||!cycle.querySelector('[data-ret1-card]'))return;
-    if(cache&&Date.now()-cacheAt<30000){poser(cache);return;}
-    if(enCours||typeof google==='undefined'||!google.script||!google.script.run)return;enCours=true;
-    google.script.run.withSuccessHandler(r=>{enCours=false;cache=r;cacheAt=Date.now();poser(r);}).withFailureHandler(()=>{enCours=false;}).lirePilotableParJourDashboardSnapshotBudgetSoft20260909();
-  }
-  function planifier(){clearTimeout(timer);timer=setTimeout(charger,80);}
-  new MutationObserver(planifier).observe(document.documentElement,{subtree:true,childList:true});
-  document.addEventListener('DOMContentLoaded',()=>setTimeout(charger,350));
-  document.addEventListener('click',e=>{if(e.target.closest?.('.nav-item[data-view="cerbere"]'))setTimeout(charger,250);},true);
-  setTimeout(charger,1000);
+  function appliquer(){if(!owner)return;appliquerCycle(document.getElementById('c4-0'),owner.courant,0);appliquerCycle(document.getElementById('c4-1'),owner.suivant,1);}
+  function charger(){if(enCours||typeof google==='undefined'||!google.script||!google.script.run)return;enCours=true;google.script.run.withSuccessHandler(r=>{enCours=false;if(r&&r.ok){owner=r;appliquer();}}).withFailureHandler(()=>{enCours=false;}).chargerEtatEnvelopePilotableBudgetSoft20260913();}
+  function planifier(){clearTimeout(timer);timer=setTimeout(()=>{appliquer();if(!owner)charger();},40);}document.addEventListener('input',e=>{if(e.target&&e.target.closest&&e.target.closest('.c4-line'))planifier();},true);document.addEventListener('change',planifier,true);document.addEventListener('click',e=>{if(e.target.closest?.('.nav-item[data-view="cerbere"]'))setTimeout(charger,180);if(e.target.closest?.('[data-save]'))setTimeout(charger,900);},true);new MutationObserver(planifier).observe(document.documentElement,{subtree:true,childList:true});document.addEventListener('DOMContentLoaded',()=>setTimeout(charger,450));setTimeout(charger,1000);
+  const st=document.createElement('style');st.textContent='[data-ep-p-gap-card]{border-left:3px solid #9bbcb0}.c4-target [data-p1-target][disabled]{opacity:.8;background:#f4f7f6}';document.head.appendChild(st);console.log('[Cerbère UI EP/P] '+VERSION);
 })();
+
+/* Valeur EP/jour partagée : lecture owner uniquement. */
+(function(){'use strict';let enCours=false,cache=null,cacheAt=0,timer=0;const euro=n=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));function poser(val){const cycle=document.getElementById('c4-0'),ret=cycle&&cycle.querySelector('[data-ret1-card]');if(!ret||!val||val.disponible!==true)return;let card=cycle.querySelector('[data-pilotable-par-jour-dashboard]');if(!card){card=document.createElement('div');card.className='c4-card';card.setAttribute('data-pilotable-par-jour-dashboard','');ret.insertAdjacentElement('afterend',card);}card.innerHTML='<span>EP disponible par jour</span><b>'+euro(val.pilotableParJour)+'</b><small>Owner EP · aucun recalcul P</small>';}function charger(){const cycle=document.getElementById('c4-0');if(!cycle||!cycle.querySelector('[data-ret1-card]'))return;if(cache&&Date.now()-cacheAt<30000){poser(cache);return;}if(enCours||typeof google==='undefined'||!google.script||!google.script.run)return;enCours=true;google.script.run.withSuccessHandler(r=>{enCours=false;cache=r;cacheAt=Date.now();poser(r);}).withFailureHandler(()=>{enCours=false;}).lirePilotableParJourDashboardSnapshotBudgetSoft20260909();}function planifier(){clearTimeout(timer);timer=setTimeout(charger,80);}new MutationObserver(planifier).observe(document.documentElement,{subtree:true,childList:true});document.addEventListener('DOMContentLoaded',()=>setTimeout(charger,350));document.addEventListener('click',e=>{if(e.target.closest?.('.nav-item[data-view="cerbere"]'))setTimeout(charger,250);},true);setTimeout(charger,1000);})();
 </script>
