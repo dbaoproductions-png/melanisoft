@@ -6,11 +6,11 @@
  * - P1 reste inchangé : une variation d'EP1 n'entre jamais dans P1 ;
  * - le brouillon EP1 est injecté dans une copie du cockpit final ;
  * - l'impact bancaire est recalculé par le moteur canonique de trésorerie ;
- * - C2 est recalculé par le propriétaire du report CB (connu + part EP différée).
+ * - C2 est recalculé par le propriétaire du report CB et par la formule P2 canonique.
  *
  * Une donnée, un propriétaire, un calcul, plusieurs consommateurs.
  */
-const CERBERE_EP_PREVIEW_20260913_VERSION='2026-09-13.3';
+const CERBERE_EP_PREVIEW_20260913_VERSION='2026-09-13.4';
 
 function arrCerbereEpPreview20260913_(n){return Math.round(Number(n||0)*100)/100;}
 function dateCerbereEpPreview20260913_(v){const d=v instanceof Date?new Date(v):new Date(v||0);return isNaN(d.getTime())?null:d;}
@@ -34,7 +34,8 @@ function appliquerBrouillonEpCerberePreview20260913_(p,postes){
 }
 
 function extraireP2CerbereEpPreview20260913_(base){
-  const p=base&&Array.isArray(base.periodes)?base.periodes[1]:null,v=p&&p.v37||{},c=v.cockpit20260902||{},ss=Number(v.ss1);
+  const p=base&&Array.isArray(base.periodes)?base.periodes[1]:null,v=p&&p.v37||{},c=v.cockpit20260902||{};
+  const ss=Number(c.soldeInitialReference!=null?c.soldeInitialReference:v.ss1);
   return{
     p2:arrCerbereEpPreview20260913_(Number(c.pSoutenable!=null?c.pSoutenable:c.p1Total||0)),
     p2Disponible:arrCerbereEpPreview20260913_(Number(c.pDisponible!=null?c.pDisponible:c.ret1||0)),
@@ -43,7 +44,7 @@ function extraireP2CerbereEpPreview20260913_(base){
     cbEpEstimee:arrCerbereEpPreview20260913_(Number(c.cbEpEstimee!=null?c.cbEpEstimee:v.cbEpEstimee||0)),
     p2AvantReport:arrCerbereEpPreview20260913_(Number(c.p1AvantReportCb!=null?c.p1AvantReportCb:v.p1AvantReportCb||0)),
     soldeInitialReference:Number.isFinite(ss)?arrCerbereEpPreview20260913_(ss):null,
-    soldeInitialSource:String(v.ss1Statut||'frontière Cerbère · avant salaire')
+    soldeInitialSource:String(c.soldeInitialSource||v.ss1Statut||'frontière Cerbère · avant salaire')
   };
 }
 
@@ -89,7 +90,7 @@ function simulerImpactEpCerbere20260913(d){
     soldesParDate:soldesParDate,
     soldes:{finC1:soldeFin1Apres,finC2:soldeFin2Apres,deltaFinC1:Number.isFinite(soldeFin1Avant)?arrCerbereEpPreview20260913_(soldeFin1Apres-soldeFin1Avant):null,deltaFinC2:Number.isFinite(soldeFin2Avant)?arrCerbereEpPreview20260913_(soldeFin2Apres-soldeFin2Avant):null},
     dates:{debutC1:debut1,milieuC1:milieu1,finC1:fin1,debutC2:debut2,milieuC2:milieu2,finC2:fin2},
-    doctrine:'Une hausse d’EP1 ne modifie pas P1. Elle augmente la part EP restant à engager : part immédiate sur C1 et part CB différée sur C2 ; cette dernière réduit P2 via le report CB. Le solde initial de référence C2 reste une frontière avant salaire, symétrique de C1.'
+    doctrine:'Une hausse d’EP1 ne modifie pas P1. Elle augmente la part EP restant à engager : part immédiate sur C1 et part CB différée sur C2 ; cette dernière réduit P2 via le report CB. Le solde initial de référence C2 part du SS2 canonique avant salaire puis ne varie que de la part immédiate supplémentaire d’EP1.'
   };
   console.log('[SIMULATION EP Cerbère] '+JSON.stringify(out));return out;
 }
