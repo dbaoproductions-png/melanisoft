@@ -10,7 +10,7 @@
  *
  * Une donnée, un propriétaire, un calcul, plusieurs consommateurs.
  */
-const CERBERE_EP_PREVIEW_20260913_VERSION='2026-09-13.1';
+const CERBERE_EP_PREVIEW_20260913_VERSION='2026-09-13.2';
 
 function arrCerbereEpPreview20260913_(n){return Math.round(Number(n||0)*100)/100;}
 function dateCerbereEpPreview20260913_(v){const d=v instanceof Date?new Date(v):new Date(v||0);return isNaN(d.getTime())?null:d;}
@@ -45,10 +45,6 @@ function extraireP2CerbereEpPreview20260913_(base){
   };
 }
 
-/**
- * RPC UI. Reçoit les allocations brouillon du C1 uniquement.
- * Ne sauvegarde rien ; retourne les conséquences prévisionnelles de la décision.
- */
 function simulerImpactEpCerbere20260913(d){
   d=d||{};
   const original=chargerCerbereCockpit20260902();
@@ -98,9 +94,12 @@ function simulerImpactEpCerbere20260913(d){
 
 function auditerSimulationEpCerbere20260913(){
   const c=chargerCerbereCockpit20260902(),p=c&&c.periodes&&c.periodes[0];if(!p)return{ok:false,erreur:'C1 absent'};
-  const postes=(p.enveloppes||[]).map(x=>({categorie:x.categorie,montant:Number(x.prevu||0)}));
-  if(postes.length)postes[0].montant=Number(postes[0].montant||0)+50;
+  const postes=(p.enveloppes||[]).map(x=>({categorie:String(x&&x.categorie||'').trim(),montant:Number(x&&x.prevu||0)}));
+  const i=postes.findIndex(x=>x.categorie);
+  if(i<0){const out={ok:false,version:CERBERE_EP_PREVIEW_20260913_VERSION,erreur:'Aucune catégorie EP pilotable identifiable pour le stimulus +50.'};console.log('[AUDIT Simulation EP Cerbère] '+JSON.stringify(out));return out;}
+  const categorieTest=postes[i].categorie,avantCategorie=Number(postes[i].montant||0);postes[i].montant=avantCategorie+50;
   const r=simulerImpactEpCerbere20260913({cle:p.clePilotage,postes:postes});
-  const out={ok:!!(r&&r.ok&&Math.abs(Number(r.ep&&r.ep.delta||0)-50)<.01&&Number(r.cycleSuivant&&r.cycleSuivant.deltaReportCb||0)>0&&Number(r.cycleSuivant&&r.cycleSuivant.deltaP2||0)<0),version:CERBERE_EP_PREVIEW_20260913_VERSION,simulation:r};
+  const checks={deltaEp50:!!(r&&r.ok&&Math.abs(Number(r.ep&&r.ep.delta||0)-50)<.01),reportC2Augmente:!!(r&&r.ok&&Number(r.cycleSuivant&&r.cycleSuivant.deltaReportCb||0)>0),p2Baisse:!!(r&&r.ok&&Number(r.cycleSuivant&&r.cycleSuivant.deltaP2||0)<0),finC2Baisse:!!(r&&r.ok&&Number(r.soldes&&r.soldes.deltaFinC2||0)<0)};
+  const out={ok:Object.values(checks).every(Boolean),version:CERBERE_EP_PREVIEW_20260913_VERSION,stimulus:{categorie:categorieTest,avant:avantCategorie,apres:avantCategorie+50,delta:50},checks:checks,simulation:r};
   console.log('[AUDIT Simulation EP Cerbère] '+JSON.stringify(out));return out;
 }
