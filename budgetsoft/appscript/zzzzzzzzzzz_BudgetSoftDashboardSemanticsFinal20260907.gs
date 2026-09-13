@@ -1,4 +1,4 @@
-const BUDGETSOFT_DASHBOARD_SEMANTICS_FINAL_VERSION='2026-09-13.2';
+const BUDGETSOFT_DASHBOARD_SEMANTICS_FINAL_VERSION='2026-09-13.3';
 
 /*
  * Couche sémantique finale du Dashboard.
@@ -15,7 +15,9 @@ function corrigerSemantiqueDashboardBudgetSoft20260907_(d){
   if(c.epDisponible!=null){c.pilotableDisponible=Number(c.epDisponible);c.pilotableSemantique='alias EP disponible';}
   if(s.ep!=null){s.epPrevisionnel=Number(s.ep);s.pilotablePrevisionnel=Number(s.ep);s.pilotableSemantique='alias EP du cycle suivant';}
   r.courtTerme=c;r.cycleSuivant=s;r.versionSemantique=BUDGETSOFT_DASHBOARD_SEMANTICS_FINAL_VERSION;
-  r.provenance=r.provenance||{};r.provenance.semantiqueEpP='aucun recalcul · données déjà injectées depuis le contexte de la même révision';
+  r.provenance=r.provenance||{};
+  r.provenance.semantiqueEpP='aucun recalcul · données déjà injectées depuis le contexte de la même révision';
+  if(s.sourceProjection&&s.soldeJ1!=null&&s.soldeMiCycle!=null&&s.soldeFinCycle!=null)r.provenance.previsionsCycleSuivant='projectionEtendue canonique · soldes C2 publiés par le propriétaire de trésorerie de la même révision';
   return r;
 }
 
