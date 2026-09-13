@@ -9,26 +9,41 @@
   function ratio(a,b){return `${fmt(a)} / ${fmt(b)}`;}
   function render(d){
     const c=d&&d.courtTerme||{},s=d&&d.cycleSuivant||{},p=d&&d.cyclePrecedent||{},a=document.getElementById('dash-current'),b=document.getElementById('dash-forecast'),z=document.getElementById('dash-previous');
-    if(a)a.innerHTML=`<div class="panel-heading"><div><span class="panel-kicker">Priorité</span><h2>Chiffres clés de ${ech((c.libelle||'').replace(/\s+\d{4}$/,''))}</h2></div><span class="badge" style="font-size:20px;font-weight:800;padding:8px 13px">${ech(c.joursRestants==null?'—':c.joursRestants+' jours restants')}</span></div><div class="helper-text">${ech(c.libelle||'Cycle')} · ${dfr(c.debut)} → ${dfr(c.fin)} · données au ${dfr(c.dateReference)}</div>${grille(
+    if(a)a.innerHTML=`<div class="panel-heading"><div><span class="panel-kicker">Priorité</span><h2>Chiffres clés de ${ech((c.libelle||'').replace(/\s+\d{4}$/,''))}</h2></div><span class="badge" style="font-size:20px;font-weight:800;padding:8px 13px">${ech(c.joursRestants==null?'—':c.joursRestants+' jours restants')}</span></div><div class="helper-text">${ech(c.libelle||'Cycle')} · ${dfr(c.debut)} → ${dfr(c.fin)} · données au ${dfr(c.dateReference)}</div>`+
+    `<div class="helper-text" style="margin-top:12px;font-weight:700">DÉCISION DE PILOTAGE</div>${grille(
+      carte('EP · enveloppe pilotable décidée',fmt(c.ep),'Somme des molettes · initialement P0',true)+
+      carte('EP encore disponible',fmt(c.epDisponible),`EP − ${fmt(c.epConsomme)} déjà consommés`,true)+
+      carte('EP disponible par jour',fmt(c.pilotableParJour),c.joursRestants?'Sur '+c.joursRestants+' jour(s)':'Fin du cycle'),3)}`+
+    `<div class="helper-text" style="margin-top:14px;font-weight:700">INDICATEURS POUR DÉCIDER</div>${grille(
+      carte('P1 soutenable',fmt(c.pSoutenable),'Capacité calculée par Cerbère · lecture seule',true)+
+      carte('Reste soutenable selon P1',fmt(c.pDisponible),'P1 − réel pilotable consommé',true)+
+      carte('Écart EP − P1',fmt(c.ecartEpP),'Décision au-dessus / au-dessous de la soutenabilité'),3)}`+
+    grille(
       carte('Solde bancaire réel',fmt(c.soldeBancaire),'Valeur comptable canonique')+
       carte('Solde prévisionnel à mi-cycle',fmt(c.soldeMiCycle),'Projection au milieu du cycle')+
       carte('Solde prévisionnel au dernier jour',fmt(c.soldeFinCycle),'Projection au '+dfr(c.fin))+
       carte('Recettes au jour J / attendues',ratio(c.revenusConstates,c.revenusAttendus),'Constaté / projection du cycle')+
-      carte('Dépenses au jour J / attendues',ratio(c.depensesConstatees,c.depensesAttendues),'Constaté / projection du cycle'),5)}${grille(
+      carte('Dépenses au jour J / attendues',ratio(c.depensesConstatees,c.depensesAttendues),'Constaté / projection du cycle'),5)+
+    grille(
       carte('CB différées engagées',fmt(c.cbDifferees),c.nombreCb==null?'Source Cerbère':(c.nombreCb||0)+' opération(s)')+
       carte('Prélèvements bancaires à venir',fmt(c.prelevements),(c.nombrePrelevements||0)+' opération(s)')+
-      carte('Charges fixes restantes',fmt(c.chargesFixes),(c.nombreCharges||0)+' charge(s)')+
-      carte('Pilotable encore disponible',fmt(c.pilotableDisponible),'Source Cerbère Express',true)+
-      carte('Pilotable disponible par jour',fmt(c.pilotableParJour),c.joursRestants?'Sur '+c.joursRestants+' jour(s)':'Fin du cycle',true),5)}${grille(carte('Résultat constaté du cycle',fmt(c.resultat),'Recettes - dépenses bancaires réelles'),1)}`;
-    const noteProjection=s.sourceProjection==='moteur_tresorerie_previsionnelle'?'Moteur de trésorerie prévisionnelle':'Projection de trésorerie';
-    if(b)b.innerHTML=`<div class="panel-heading"><div><span class="panel-kicker">Anticipation</span><h2>Cycle suivant · ${ech(s.libelle||'')}</h2></div><span class="badge">Prévision</span></div><div class="helper-text">${dfr(s.debut)} → ${dfr(s.fin)} · projection bancaire issue du moteur prévisionnel</div>${grille(
+      carte('Charges fixes restantes',fmt(c.chargesFixes),(c.nombreCharges||0)+' charge(s)'),3)+
+    grille(carte('Résultat constaté du cycle',fmt(c.resultat),'Recettes - dépenses bancaires réelles'),1);
+    const noteProjection=s.sourceProjection==='tresorerie_unifiee_snapshot'?'Projection canonique intermodule':'Projection de trésorerie';
+    if(b)b.innerHTML=`<div class="panel-heading"><div><span class="panel-kicker">Anticipation</span><h2>Cycle suivant · ${ech(s.libelle||'')}</h2></div><span class="badge">Prévision</span></div><div class="helper-text">${dfr(s.debut)} → ${dfr(s.fin)} · la décision EP1 est déjà répercutée dans la trajectoire bancaire et P2</div>`+
+    `<div class="helper-text" style="margin-top:12px;font-weight:700">DÉCISION</div>${grille(
+      carte('EP2 · enveloppe décidée',fmt(s.ep),'Par défaut P0, modifiable par les molettes')+
+      carte('P2 soutenable',fmt(s.pSoutenable),'Après impact bancaire de C1')+
+      carte('Écart EP2 − P2',fmt(s.ecartEpP),'Décision vs soutenabilité'),3)}`+
+    grille(
       carte('Solde prévisionnel à J1',fmt(s.soldeJ1),noteProjection)+
       carte('Solde prévisionnel à mi-cycle',fmt(s.soldeMiCycle),noteProjection)+
       carte('Solde prévisionnel au dernier jour',fmt(s.soldeFinCycle),noteProjection)+
       carte('Recettes prévisionnelles',fmt(s.revenusPrevisionnels),noteProjection)+
       carte('Dépenses prévisionnelles',fmt(s.depensesPrevisionnelles),noteProjection)+
-      carte('CB différées engagées',fmt(s.cbDifferees),'Source Cerbère Express')+
-      carte('Pilotable prévisionnel',fmt(s.pilotablePrevisionnel),'Source Cerbère Express',true),4)}`;
+      carte('CB déjà engagées C1→C2',fmt(s.cbDejaEngagee),'Réel connu')+
+      carte('Part différée estimée de l’EP1',fmt(s.cbEpEstimee),'Estimation sur EP1 restant')+
+      carte('Impact CB total sur C2',fmt(s.reportCbCycle),'Connu + estimation EP'),4);
     if(z)z.innerHTML=`<div class="panel-heading"><div><span class="panel-kicker">Repère</span><h2>Cycle précédent · ${ech(p.libelle||'')}</h2></div><span class="badge">${p.operations||0} opération(s)</span></div><div class="helper-text">${dfr(p.debut)} → ${dfr(p.fin)}</div>${grille(
       carte('Solde à J1',fmt(p.soldeJ1),'Solde d’ouverture, avant les mouvements du premier jour')+
       carte('Solde à mi-cycle',fmt(p.soldeMiCycle),'Milieu du cycle')+
@@ -36,7 +51,7 @@
       carte('Recettes budgétaires',fmt(p.revenus),'Opérations de type revenu')+
       carte('Dépenses budgétaires',fmt(p.depenses),'Opérations de type dépense')+
       carte('CB différées engagées',fmt(p.cbDifferees),p.cbDifferees==null?'Historique non encore publié':'Constaté')+
-      carte('Pilotable initial du cycle',fmt(p.pilotableInitial),p.pilotableInitial==null?'Historique non encore publié':'Source Cerbère'),4)}`;
+      carte('Pilotable initial du cycle',fmt(p.pilotableInitial),p.pilotableInitial==null?'Historique non encore publié':'Repère historique'),4)}`;
   }
   function charger(){google.script.run.withSuccessHandler(render).withFailureHandler(e=>{const x=document.getElementById('dash-current');if(x)x.innerHTML='<div class="error">Erreur dashboard : '+ech(e&&e.message||e)+'</div>';}).chargerDashboardSyntheseV3BudgetSoft20260907();}
   window.chargerDashboardTroisCadres=charger;document.addEventListener('DOMContentLoaded',()=>{structure();setTimeout(charger,250);});const ancien=typeof rendreDashboard==='function'?rendreDashboard:null;if(ancien)window.rendreDashboard=function(data){ancien(data);structure();setTimeout(charger,50);};const r=document.getElementById('refresh-button');if(r)r.addEventListener('click',()=>setTimeout(charger,250));
