@@ -10,7 +10,7 @@
  *
  * Une donnée, un propriétaire, un calcul, plusieurs consommateurs.
  */
-const CERBERE_EP_PREVIEW_20260913_VERSION='2026-09-13.2';
+const CERBERE_EP_PREVIEW_20260913_VERSION='2026-09-13.3';
 
 function arrCerbereEpPreview20260913_(n){return Math.round(Number(n||0)*100)/100;}
 function dateCerbereEpPreview20260913_(v){const d=v instanceof Date?new Date(v):new Date(v||0);return isNaN(d.getTime())?null:d;}
@@ -34,14 +34,16 @@ function appliquerBrouillonEpCerberePreview20260913_(p,postes){
 }
 
 function extraireP2CerbereEpPreview20260913_(base){
-  const p=base&&Array.isArray(base.periodes)?base.periodes[1]:null,v=p&&p.v37||{},c=v.cockpit20260902||{};
+  const p=base&&Array.isArray(base.periodes)?base.periodes[1]:null,v=p&&p.v37||{},c=v.cockpit20260902||{},ss=Number(v.ss1);
   return{
     p2:arrCerbereEpPreview20260913_(Number(c.pSoutenable!=null?c.pSoutenable:c.p1Total||0)),
     p2Disponible:arrCerbereEpPreview20260913_(Number(c.pDisponible!=null?c.pDisponible:c.ret1||0)),
     reportCbCycle:arrCerbereEpPreview20260913_(Number(c.reportCbCycle!=null?c.reportCbCycle:v.reportCbCycle||0)),
     cbDejaEngagee:arrCerbereEpPreview20260913_(Number(c.cbDejaEngagee!=null?c.cbDejaEngagee:v.cbDejaEngagee||0)),
     cbEpEstimee:arrCerbereEpPreview20260913_(Number(c.cbEpEstimee!=null?c.cbEpEstimee:v.cbEpEstimee||0)),
-    p2AvantReport:arrCerbereEpPreview20260913_(Number(c.p1AvantReportCb!=null?c.p1AvantReportCb:v.p1AvantReportCb||0))
+    p2AvantReport:arrCerbereEpPreview20260913_(Number(c.p1AvantReportCb!=null?c.p1AvantReportCb:v.p1AvantReportCb||0)),
+    soldeInitialReference:Number.isFinite(ss)?arrCerbereEpPreview20260913_(ss):null,
+    soldeInitialSource:String(v.ss1Statut||'frontière Cerbère · avant salaire')
   };
 }
 
@@ -54,8 +56,7 @@ function simulerImpactEpCerbere20260913(d){
   const cle=String(d.cle||'').trim();
   if(cle&&cle!==String(courant0.clePilotage||''))return{ok:false,version:CERBERE_EP_PREVIEW_20260913_VERSION,erreur:'La simulation intercycle est réservée au cycle courant.',horizon:'C1→C2'};
 
-  const epAvant=calculerEnvelopePilotableBudgetSoft20260913_(courant0);
-  const p2Avant=extraireP2CerbereEpPreview20260913_(original);
+  const epAvant=calculerEnvelopePilotableBudgetSoft20260913_(courant0),p2Avant=extraireP2CerbereEpPreview20260913_(original);
   const base=cloneCerbereEpPreview20260913_(original),ps=base.periodes||[],courant=ps[0],suivant=ps[1];
   appliquerBrouillonEpCerberePreview20260913_(courant,d.postes||[]);
   if(typeof enrichirEnvelopePilotableBudgetSoft20260913_==='function')enrichirEnvelopePilotableBudgetSoft20260913_(base);
@@ -69,37 +70,37 @@ function simulerImpactEpCerbere20260913(d){
   if(!projection||projection.ok===false)return{ok:false,version:CERBERE_EP_PREVIEW_20260913_VERSION,erreur:'Projection canonique indisponible.'};
 
   const soldesParDate={};[debut1,milieu1,fin1,debut2,milieu2,fin2].filter(Boolean).forEach(j=>soldesParDate[j]=pointTrajectoireCerbereEpPreview20260913_(projection,j));
-  let impact={resteAEngager:0,immediat:0,differe:0,tauxDifferePct:0};
-  try{impact=calculerImpactPrevisionnelEpBudgetSoft20260913_(courant,lireTable_('Operations')||[],new Date(projection.dateReference||new Date()))||impact;}catch(e){}
+  const ops=lireTable_('Operations')||[],reference=new Date(projection.dateReference||new Date());
+  let impactAvant={resteAEngager:0,immediat:0,differe:0,tauxDifferePct:0},impact={resteAEngager:0,immediat:0,differe:0,tauxDifferePct:0};
+  try{impactAvant=calculerImpactPrevisionnelEpBudgetSoft20260913_(courant0,ops,reference)||impactAvant;}catch(e){}
+  try{impact=calculerImpactPrevisionnelEpBudgetSoft20260913_(courant,ops,reference)||impact;}catch(e){}
+  const deltaImmediat=arrCerbereEpPreview20260913_(Number(impact.immediat||0)-Number(impactAvant.immediat||0));
+  if(Number.isFinite(Number(p2Avant.soldeInitialReference)))p2Apres.soldeInitialReference=arrCerbereEpPreview20260913_(Number(p2Avant.soldeInitialReference)-deltaImmediat);
 
   let baseCanon=null;try{baseCanon=chargerTresorerieUnifieeBudgetSoft20260907(fin2);}catch(e){}
-  const soldeFin2Avant=baseCanon&&baseCanon.ok?pointTrajectoireCerbereEpPreview20260913_(baseCanon,fin2):null;
-  const soldeFin1Avant=baseCanon&&baseCanon.ok?pointTrajectoireCerbereEpPreview20260913_(baseCanon,fin1):null;
+  const soldeFin2Avant=baseCanon&&baseCanon.ok?pointTrajectoireCerbereEpPreview20260913_(baseCanon,fin2):null,soldeFin1Avant=baseCanon&&baseCanon.ok?pointTrajectoireCerbereEpPreview20260913_(baseCanon,fin1):null;
   const soldeFin1Apres=soldesParDate[fin1],soldeFin2Apres=soldesParDate[fin2];
 
   const out={
-    ok:true,version:CERBERE_EP_PREVIEW_20260913_VERSION,mode:'simulation_non_persistée',proprietaireEp:BUDGETSOFT_EP_OWNER_20260913,
-    proprietaireTresorerie:'chargerTresoreriePrevisionnelle20260901',cle:String(courant.clePilotage||''),
+    ok:true,version:CERBERE_EP_PREVIEW_20260913_VERSION,mode:'simulation_non_persistée',proprietaireEp:BUDGETSOFT_EP_OWNER_20260913,proprietaireTresorerie:'chargerTresoreriePrevisionnelle20260901',cle:String(courant.clePilotage||''),
     ep:{avant:epAvant.total,apres:epApres.total,delta:arrCerbereEpPreview20260913_(epApres.total-epAvant.total),consomme:epApres.consomme,reste:epApres.reste},
-    impact:{resteAEngager:arrCerbereEpPreview20260913_(impact.resteAEngager||0),immediat:arrCerbereEpPreview20260913_(impact.immediat||0),differe:arrCerbereEpPreview20260913_(impact.differe||0),tauxDifferePct:Number(impact.tauxDifferePct||0)},
-    cycleSuivant:Object.assign({},p2Apres,{deltaReportCb:arrCerbereEpPreview20260913_(p2Apres.reportCbCycle-p2Avant.reportCbCycle),deltaP2:arrCerbereEpPreview20260913_(p2Apres.p2-p2Avant.p2)}),
+    impact:{resteAEngager:arrCerbereEpPreview20260913_(impact.resteAEngager||0),immediat:arrCerbereEpPreview20260913_(impact.immediat||0),differe:arrCerbereEpPreview20260913_(impact.differe||0),tauxDifferePct:Number(impact.tauxDifferePct||0),deltaImmediat:deltaImmediat},
+    cycleSuivant:Object.assign({},p2Apres,{deltaReportCb:arrCerbereEpPreview20260913_(p2Apres.reportCbCycle-p2Avant.reportCbCycle),deltaP2:arrCerbereEpPreview20260913_(p2Apres.p2-p2Avant.p2),deltaSoldeInitialReference:Number.isFinite(Number(p2Avant.soldeInitialReference))?arrCerbereEpPreview20260913_(Number(p2Apres.soldeInitialReference)-Number(p2Avant.soldeInitialReference)):null}),
     soldesParDate:soldesParDate,
     soldes:{finC1:soldeFin1Apres,finC2:soldeFin2Apres,deltaFinC1:Number.isFinite(soldeFin1Avant)?arrCerbereEpPreview20260913_(soldeFin1Apres-soldeFin1Avant):null,deltaFinC2:Number.isFinite(soldeFin2Avant)?arrCerbereEpPreview20260913_(soldeFin2Apres-soldeFin2Avant):null},
     dates:{debutC1:debut1,milieuC1:milieu1,finC1:fin1,debutC2:debut2,milieuC2:milieu2,finC2:fin2},
-    doctrine:'Une hausse d’EP1 ne modifie pas P1. Elle augmente la part EP restant à engager : part immédiate sur C1 et part CB différée sur C2 ; cette dernière réduit P2 via le report CB.'
+    doctrine:'Une hausse d’EP1 ne modifie pas P1. Elle augmente la part EP restant à engager : part immédiate sur C1 et part CB différée sur C2 ; cette dernière réduit P2 via le report CB. Le solde initial de référence C2 reste une frontière avant salaire, symétrique de C1.'
   };
-  console.log('[SIMULATION EP Cerbère] '+JSON.stringify(out));
-  return out;
+  console.log('[SIMULATION EP Cerbère] '+JSON.stringify(out));return out;
 }
 
 function auditerSimulationEpCerbere20260913(){
   const c=chargerCerbereCockpit20260902(),p=c&&c.periodes&&c.periodes[0];if(!p)return{ok:false,erreur:'C1 absent'};
-  const postes=(p.enveloppes||[]).map(x=>({categorie:String(x&&x.categorie||'').trim(),montant:Number(x&&x.prevu||0)}));
-  const i=postes.findIndex(x=>x.categorie);
+  const postes=(p.enveloppes||[]).map(x=>({categorie:String(x&&x.categorie||'').trim(),montant:Number(x&&x.prevu||0)})),i=postes.findIndex(x=>x.categorie);
   if(i<0){const out={ok:false,version:CERBERE_EP_PREVIEW_20260913_VERSION,erreur:'Aucune catégorie EP pilotable identifiable pour le stimulus +50.'};console.log('[AUDIT Simulation EP Cerbère] '+JSON.stringify(out));return out;}
   const categorieTest=postes[i].categorie,avantCategorie=Number(postes[i].montant||0);postes[i].montant=avantCategorie+50;
   const r=simulerImpactEpCerbere20260913({cle:p.clePilotage,postes:postes});
-  const checks={deltaEp50:!!(r&&r.ok&&Math.abs(Number(r.ep&&r.ep.delta||0)-50)<.01),reportC2Augmente:!!(r&&r.ok&&Number(r.cycleSuivant&&r.cycleSuivant.deltaReportCb||0)>0),p2Baisse:!!(r&&r.ok&&Number(r.cycleSuivant&&r.cycleSuivant.deltaP2||0)<0),finC2Baisse:!!(r&&r.ok&&Number(r.soldes&&r.soldes.deltaFinC2||0)<0)};
+  const checks={deltaEp50:!!(r&&r.ok&&Math.abs(Number(r.ep&&r.ep.delta||0)-50)<.01),reportC2Augmente:!!(r&&r.ok&&Number(r.cycleSuivant&&r.cycleSuivant.deltaReportCb||0)>0),p2Baisse:!!(r&&r.ok&&Number(r.cycleSuivant&&r.cycleSuivant.deltaP2||0)<0),finC2Baisse:!!(r&&r.ok&&Number(r.soldes&&r.soldes.deltaFinC2||0)<0),soldeInitialC2AvantSalaire:!!(r&&r.ok&&Number.isFinite(Number(r.cycleSuivant&&r.cycleSuivant.soldeInitialReference)))};
   const out={ok:Object.values(checks).every(Boolean),version:CERBERE_EP_PREVIEW_20260913_VERSION,stimulus:{categorie:categorieTest,avant:avantCategorie,apres:avantCategorie+50,delta:50},checks:checks,simulation:r};
   console.log('[AUDIT Simulation EP Cerbère] '+JSON.stringify(out));return out;
 }
