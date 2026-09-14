@@ -1,1 +1,48 @@
-<script>/* Plan UI remplacée par Plan V5.4 */</script>
+<script>
+(function(){
+  'use strict';
+  const VERSION='2026-09-14.1';
+
+  function corrigerActionsStructurellesCerbere(){
+    document.querySelectorAll('.c4-effect-row').forEach(row=>{
+      const meta=(row.querySelector('small')?.textContent||'').trim();
+      if(!/^Action\b/i.test(meta))return;
+      const btn=row.querySelector('[data-event-reconcile]');
+      if(!btn)return;
+      const em=document.createElement('em');
+      em.textContent='À réaliser';
+      em.title='Cette action se clôture dans le Plan par réalisation ; aucun rapprochement bancaire n’est attendu.';
+      btn.replaceWith(em);
+    });
+  }
+
+  function franciserStatutPlan(){
+    document.querySelectorAll('.p54-status').forEach(el=>{
+      if(el.textContent.trim()==='Effective')el.textContent='Réalisée';
+    });
+    document.querySelectorAll('#p54-s option').forEach(o=>{
+      if(o.value==='Effective')o.textContent='Réalisée';
+    });
+    document.querySelectorAll('.p54-metrics span').forEach(el=>{
+      if(/action\(s\) effective\(s\)/i.test(el.textContent||''))el.textContent=el.textContent.replace(/effective\(s\)/i,'réalisée(s)');
+    });
+  }
+
+  function appliquerDoctrineUI(){
+    corrigerActionsStructurellesCerbere();
+    franciserStatutPlan();
+  }
+
+  function installer(){
+    appliquerDoctrineUI();
+    const root=document.getElementById('generic-view')||document.body;
+    const obs=new MutationObserver(()=>queueMicrotask(appliquerDoctrineUI));
+    obs.observe(root,{childList:true,subtree:true});
+  }
+
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',installer,{once:true});
+  else installer();
+
+  window.PLAN_STRUCTURAL_ACTIONS_UI_20260914_VERSION=VERSION;
+})();
+</script>
