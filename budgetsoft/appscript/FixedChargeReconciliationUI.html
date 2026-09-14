@@ -1,6 +1,6 @@
 <script>
 (function(){
-  const VERSION='2026-09-14.1';
+  const VERSION='2026-09-14.2';
   let vue=null,chargementVue=false,chargeeLe=0,propositions=[],propositionsChargees=false,restaurationEnCours=false,requeteRapprochements=0,rapprochementsEnCours=false,afficherInactives=false;
   const q=id=>document.getElementById(id);
   const n=v=>{const x=Number(v||0);return Number.isFinite(x)?x:0};
@@ -39,7 +39,7 @@
     const cards=section.querySelector('.cards');
     if(cards&&!cards.dataset.review20260828){
       cards.dataset.review20260828='1';
-      cards.innerHTML=`<article class="card metric-card"><span>Charges fixes applicables</span><strong id="fixed-charge-count">—</strong><small id="fixed-charge-count-note">Charges actives du référentiel applicables au cycle</small></article><article class="card metric-card"><span>Référence mensuelle du cycle</span><strong id="fixed-charge-monthly-total">—</strong><small>Équivalent mensuel des charges applicables</small></article><article class="card metric-card"><span>Charges fixes payées · cycle précédent</span><strong id="fixed-charge-real-prev">—</strong><small id="fixed-charge-prev-cycle">Opérations réellement rapprochées</small></article><article class="card metric-card"><span>Charges fixes payées · cycle en cours</span><strong id="fixed-charge-real-current">—</strong><small id="fixed-charge-current-cycle">Constaté à la dernière date bancaire</small></article><article class="card metric-card"><span>Rapprochements à valider</span><strong id="fixed-charge-match-count">…</strong><small>Opérations réelles avec une proposition</small></article>`;
+      cards.innerHTML=`<article class="card metric-card"><span>Charges fixes applicables</span><strong id="fixed-charge-count">—</strong><small id="fixed-charge-count-note">Charges actives du référentiel applicables au cycle</small></article><article class="card metric-card"><span>Référence mensuelle du cycle</span><strong id="fixed-charge-monthly-total">—</strong><small>Équivalent mensuel des charges applicables</small></article><article class="card metric-card"><span>Charges fixes payées · cycle en cours</span><strong id="fixed-charge-real-prev">—</strong><small id="fixed-charge-prev-cycle">Opérations réellement rapprochées</small></article><article class="card metric-card"><span>Charges fixes payées · cycle suivant</span><strong id="fixed-charge-real-current">—</strong><small id="fixed-charge-current-cycle">Opérations réellement rapprochées</small></article><article class="card metric-card"><span>Rapprochements à valider</span><strong id="fixed-charge-match-count">…</strong><small>Opérations réelles avec une proposition</small></article>`;
     }
     const panel=section.querySelector('.fixed-charge-panel');if(panel){
       panel.querySelector('h2').textContent='Charges fixes par catégorie';
@@ -50,7 +50,7 @@
       }
       const cb=q('fixed-show-inactive');if(cb&&!cb.dataset.bound){cb.dataset.bound='1';cb.checked=afficherInactives;cb.addEventListener('change',()=>{afficherInactives=cb.checked;renduCharges();});}
     }
-    const controle=q('fixed-charge-matches-list')?.closest('.card.panel');if(controle){const p=controle.querySelector('.helper-text');if(p)p.textContent='Analyse ciblée sur le cycle précédent et le cycle en cours. Le compte bancaire n’est plus un critère éliminatoire à lui seul.';const b=controle.querySelector('.panel-heading button');if(b){b.onclick=()=>window.chargerRapprochementsChargesFixesUI(true);b.textContent='Actualiser';}}
+    const controle=q('fixed-charge-matches-list')?.closest('.card.panel');if(controle){const p=controle.querySelector('.helper-text');if(p)p.textContent='Analyse ciblée sur le cycle en cours et le cycle suivant. Le compte bancaire n’est plus un critère éliminatoire à lui seul.';const b=controle.querySelector('.panel-heading button');if(b){b.onclick=()=>window.chargerRapprochementsChargesFixesUI(true);b.textContent='Actualiser';}}
   }
 
   function preparerSelects(){
@@ -59,7 +59,7 @@
     if(typeof remplirCategories==='function'&&q('fixed-charge-category'))remplirCategories('fixed-charge-category',cats);
   }
 
-  function renduCartes(){if(!vue)return;const s=vue.synthese||{},c=vue.cycles||{};q('fixed-charge-count').textContent=String(s.chargesApplicables??s.chargesActives??0);if(q('fixed-charge-count-note'))q('fixed-charge-count-note').textContent=`${s.chargesActives??0} active(s) dans le référentiel`;q('fixed-charge-monthly-total').textContent=money.format(n(s.montantMensuel));q('fixed-charge-real-prev').textContent=money.format(n(s.reelCyclePrecedent));q('fixed-charge-real-current').textContent=money.format(n(s.reelCycleCourant));if(q('fixed-charge-prev-cycle'))q('fixed-charge-prev-cycle').textContent=c.precedent?`${formaterDate(c.precedent.debut)} → ${formaterDate(c.precedent.fin)}`:'Cycle précédent';if(q('fixed-charge-current-cycle'))q('fixed-charge-current-cycle').textContent=c.courant?`${formaterDate(c.courant.debut)} → ${formaterDate(c.courant.fin)} · constaté au ${formaterDate(c.derniereDateBanque)}`:'Cycle en cours';}
+  function renduCartes(){if(!vue)return;const s=vue.synthese||{},c=vue.cycles||{};q('fixed-charge-count').textContent=String(s.chargesApplicables??s.chargesActives??0);if(q('fixed-charge-count-note'))q('fixed-charge-count-note').textContent=`${s.chargesActives??0} active(s) dans le référentiel`;q('fixed-charge-monthly-total').textContent=money.format(n(s.montantMensuel));q('fixed-charge-real-prev').textContent=money.format(n(s.reelCyclePrecedent));q('fixed-charge-real-current').textContent=money.format(n(s.reelCycleCourant));if(q('fixed-charge-prev-cycle'))q('fixed-charge-prev-cycle').textContent=c.precedent?`${formaterDate(c.precedent.debut)} → ${formaterDate(c.precedent.fin)}`:'Cycle en cours';if(q('fixed-charge-current-cycle'))q('fixed-charge-current-cycle').textContent=c.courant?`${formaterDate(c.courant.debut)} → ${formaterDate(c.courant.fin)}`:'Cycle suivant';}
   function mensuel(c){const m=Math.abs(n(c.montant));switch(String(c.frequence||'Mensuelle').toLowerCase()){case'quotidienne':return m*30.4375;case'hebdomadaire':return m*52/12;case'trimestrielle':return m/3;case'semestrielle':return m/6;case'annuelle':return m/12;default:return m}}
 
   function renduCharges(){
