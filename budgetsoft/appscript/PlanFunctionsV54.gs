@@ -1,4 +1,4 @@
-const PLAN_FUNCTIONS_V54_VERSION='5.4.3';
+const PLAN_FUNCTIONS_V54_VERSION='5.4.4';
 const PLAN_V54_CACHE_TTL=45;
 
 function cachePlanV54_(){return CacheService.getScriptCache();}
@@ -65,6 +65,12 @@ function normaliserStatutPlanV54_(s){
   return 'Prévue';
 }
 
+function actionSuppressionChargeFixeRealiseeV54_(d){
+  return String(d&&d.fonction_plan||'').toUpperCase()==='SUPPRIMER'&&
+    String(d&&d.source_type||'')==='charge_fixe'&&!!String(d&&d.source_id||'').trim()&&
+    normaliserStatutPlanV54_(d&&d.statut)==='Effective';
+}
+
 function enregistrerActionPlanV54(d){
   assurerPlanFunctionsV5_();
   d=Object.assign({},d||{});
@@ -91,14 +97,27 @@ function enregistrerActionPlanV54(d){
     else if(d.source_type==='charge_fixe'&&d.source_id){const cf=lireTable_('Charges_fixes').find(x=>String(x.id)===String(d.source_id));if(cf)d.valeur_depart=Math.abs(Number(cf.montant||0));}
     else if(f==='REMBOURSER'&&(d.source_type==='credit'||d.source_type==='dette'))d.valeur_depart=capitalSourcePlanV4_(d.source_type,d.source_id);
   }
+
+  // Doctrine 2026-09-14 : pour SUPPRIMER une charge fixe, le passage explicite à
+  // Réalisée est en lui-même la confirmation structurelle. Il ne dépend plus des
+  // deux cases techniques de l'ancien formulaire. L'effet financier durable est
+  // ensuite porté exclusivement par Charges_fixes via date_fin.
+  if(actionSuppressionChargeFixeRealiseeV54_(d)){
+    d.impact_confirme=true;
+    d.reevaluer_charges_fixes=true;
+    if(!d.date_effet)d.date_effet=old.date_effet||Utilities.formatDate(new Date(),Session.getScriptTimeZone(),'yyyy-MM-dd');
+  }
+
   d.dernier_recalcul=new Date().toISOString();
   upsertDynamiquePlanV4_('Plan_Actions',d);
-  if(d.impact_confirme&&d.reevaluer_charges_fixes&&d.source_type==='charge_fixe'&&f==='SUPPRIMER'&&d.statut==='Effective'){
-    try{cloturerChargeFixeDepuisActionV3(d.id,d.date_effet);}catch(e){}
+
+  if(actionSuppressionChargeFixeRealiseeV54_(d)){
+    cloturerChargeFixeDepuisActionV3(d.id,d.date_effet);
   }
+
   try{recalculerPlanBudgetSoft_('action_v54');}catch(e){}
   invaliderCachePlanV54_();
-  return {ok:true,id:d.id,libelle:d.libelle};
+  return {ok:true,id:d.id,libelle:d.libelle,action_structurelle_realisee:actionSuppressionChargeFixeRealiseeV54_(d),date_fin_charge_fixe:actionSuppressionChargeFixeRealiseeV54_(d)?d.date_effet:''};
 }
 
 function enregistrerEvenementPlanV54(d){
