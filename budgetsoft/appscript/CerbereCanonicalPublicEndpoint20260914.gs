@@ -6,7 +6,7 @@
  * Le calcul métier reste propriétaire des moteurs Cerbère / Charges_fixes ; cette
  * entrée ne fait que servir la révision globale cohérente déjà construite.
  */
-const CERBERE_CANONICAL_PUBLIC_ENDPOINT_20260914_VERSION='2026-09-14.1';
+const CERBERE_CANONICAL_PUBLIC_ENDPOINT_20260914_VERSION='2026-09-14.2';
 
 function chargerCerbereCockpitCanonique20260914(){
   const t0=Date.now();
