@@ -72,14 +72,17 @@ function reconstruireChargesFixesReevalueesP1Cerbere20260912_(p,v){
 function estSnapshotCerbereP1FraisValide20260912_(s){
   if(!s||s.ok===false)return false;
   const p=Array.isArray(s.periodes)&&s.periodes.length?s.periodes[0]:null;
-  const d=s&&s.diagnostic&&s.diagnostic.p1Doctrine20260912||null,ep=s&&s.diagnostic&&s.diagnostic.enveloppePilotable20260913||null,due=s&&s.diagnostic&&s.diagnostic.rt1EvenementsCertainsDus20260912||null,p2=s&&s.diagnostic&&s.diagnostic.p2Doctrine20260913||null,ss2=s&&s.diagnostic&&s.diagnostic.ss2Canonique20260913||null;
-  if(!p||!d||!due||!ep||!p2||!ss2)return false;
+  const d=s&&s.diagnostic&&s.diagnostic.p1Doctrine20260912||null,ep=s&&s.diagnostic&&s.diagnostic.enveloppePilotable20260913||null,due=s&&s.diagnostic&&s.diagnostic.rt1EvenementsCertainsDus20260912||null,p2=s&&s.diagnostic&&s.diagnostic.p2Doctrine20260913||null,ss2=s&&s.diagnostic&&s.diagnostic.ss2Canonique20260913||null,build=s&&s.diagnostic&&s.diagnostic.cfSnapshotBuild20260914||null;
+  if(!p||!d||!due||!ep||!p2||!ss2||!build)return false;
   if(String(due.version||'')!==String(typeof CERBERE_P1_INPUTS_FIX_20260912_VERSION!=='undefined'?CERBERE_P1_INPUTS_FIX_20260912_VERSION:''))return false;
   if(String(p2.version||'')!==String(typeof CERBERE_COCKPIT_CARD_OWNER_GUARD_20260912_VERSION!=='undefined'?CERBERE_COCKPIT_CARD_OWNER_GUARD_20260912_VERSION:''))return false;
   if(String(p2.frontiereVersion||'')!==String(typeof CERBERE_C2_CANONICAL_OPENING_20260913_VERSION!=='undefined'?CERBERE_C2_CANONICAL_OPENING_20260913_VERSION:''))return false;
   if(!ss2.frontiere||ss2.frontiere.ok!==true)return false;
-  if(String(d&&d.cft1Audit&&d.cft1Audit.ownerVersion||'')!==CERBERE_FIXED_CHARGE_OWNER_FINAL_20260914_VERSION)return false;
-  if(String(p2&&p2.cft2Audit&&p2.cft2Audit.ownerVersion||'')!==CERBERE_FIXED_CHARGE_OWNER_FINAL_20260914_VERSION)return false;
+  const buildVersion=String(typeof BUDGETSOFT_CERBERE_CF_SNAPSHOT_BUILD_20260914_VERSION!=='undefined'?BUDGETSOFT_CERBERE_CF_SNAPSHOT_BUILD_20260914_VERSION:'2026-09-14.4');
+  if(String(build.version||'')!==buildVersion)return false;
+  const owner1=String(d&&d.cft1Audit&&d.cft1Audit.ownerVersion||''),owner2=String(p2&&p2.cft2Audit&&p2.cft2Audit.ownerVersion||'');
+  const ownerOk=v=>v===CERBERE_FIXED_CHARGE_OWNER_FINAL_20260914_VERSION||v===buildVersion;
+  if(!ownerOk(owner1)||!ownerOk(owner2))return false;
   const n=x=>Number(x||0),arr=x=>Math.round(n(x)*100)/100;
   const attenduP1=arr(n(d.ss1)+n(d.rt1)-n(d.cft1)-n(d.het1)-n(d.cbHeritees)),attenduP2=Math.max(0,arr(n(p2.ss2)+n(p2.rt2)-n(p2.cft2)-n(p2.het2)-n(p2.reportCb)));
   return Math.abs(attenduP1-n(d.p1))<.011&&Math.abs(n(ep.ep)-n(d.allocations))<.011&&Math.abs(attenduP2-n(p2.p2))<.011&&Math.abs(n(ss2.frontiere.ss2)-n(p2.ss2))<.011;
@@ -101,8 +104,8 @@ function chargerCerbereCockpit20260902(){
 }
 
 function auditerOwnerChargesFixesCerbere20260914(){
-  const r=chargerCerbereCockpit20260902(),p1=r&&r.diagnostic&&r.diagnostic.p1Doctrine20260912||{},p2=r&&r.diagnostic&&r.diagnostic.p2Doctrine20260913||{};
+  const r=chargerCerbereCockpit20260902(),p1=r&&r.diagnostic&&r.diagnostic.p1Doctrine20260912||{},p2=r&&r.diagnostic&&r.diagnostic.p2Doctrine20260913||{},build=r&&r.diagnostic&&r.diagnostic.cfSnapshotBuild20260914||{};
   const o1=String(p1&&p1.cft1Audit&&p1.cft1Audit.ownerVersion||''),o2=String(p2&&p2.cft2Audit&&p2.cft2Audit.ownerVersion||'');
-  const out={ok:o1===CERBERE_FIXED_CHARGE_OWNER_FINAL_20260914_VERSION&&o2===CERBERE_FIXED_CHARGE_OWNER_FINAL_20260914_VERSION,version:CERBERE_FIXED_CHARGE_OWNER_FINAL_20260914_VERSION,source:r&&r.sourceBudgetSoft||'',c1:{cf:Number(p1.cft1||0),ownerVersion:o1},c2:{cf:Number(p2.cft2||0),p2:Number(p2.p2||0),ownerVersion:o2}};
+  const out={ok:estSnapshotCerbereP1FraisValide20260912_(r),version:CERBERE_FIXED_CHARGE_OWNER_FINAL_20260914_VERSION,source:r&&r.sourceBudgetSoft||'',cfBuildVersion:String(build.version||''),c1:{cf:Number(p1.cft1||0),ownerVersion:o1},c2:{cf:Number(p2.cft2||0),p2:Number(p2.p2||0),ownerVersion:o2}};
   console.log('[AUDIT OWNER CHARGES FIXES CERBERE 20260914] '+JSON.stringify(out));return out;
 }
