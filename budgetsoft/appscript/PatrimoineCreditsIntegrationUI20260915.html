@@ -1,0 +1,65 @@
+<script>
+(function(){'use strict';
+  let cachePatrimoineCredits20260915_=null;
+  const euroPatrimoine20260915_=v=>typeof money!=='undefined'?money.format(Number(v||0)):Number(v||0).toFixed(2)+' €';
+  const escPatrimoine20260915_=s=>typeof echapper==='function'?echapper(String(s??'')):String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function lignePatrimoine20260915_(x,champ){
+    const valeur=Number(x&&x[champ]||0);
+    return `<div class="patrimoine-row"><div><strong>${escPatrimoine20260915_(x&&x.nom||'Élément')}</strong><small>${escPatrimoine20260915_(x&&x.type||'')}</small></div><b>${euroPatrimoine20260915_(valeur)}</b></div>`;
+  }
+
+  function rendrePatrimoine20260915_(pack){
+    const zone=document.getElementById('generic-view');if(!zone)return;
+    if(!pack||pack.ok===false||!pack.patrimoine){zone.innerHTML='<section class="error">Patrimoine indisponible.</section>';return;}
+    cachePatrimoineCredits20260915_=pack;
+    const p=pack.patrimoine||{},c=pack.credits||{},coh=pack.coherence||{};
+    const actifs=Array.isArray(p.actifs)?p.actifs:[],livrets=Array.isArray(p.livrets)?p.livrets:[],placements=Array.isArray(p.placements)?p.placements:[];
+    const revision=String(pack.revisionBudgetSoft||'');
+    const source=pack.sourceBudgetSoft==='snapshot_global'?'Même révision BudgetSoft que Crédits':'Lecture de secours';
+    zone.innerHTML=`
+      <div class="section-toolbar"><p class="section-intro">Vue patrimoniale reliée au module Crédits. L’endettement est repris tel quel depuis son propriétaire ; aucun montant n’est recalculé dans Patrimoine.</p><div class="toolbar-buttons"><button class="secondary-button" id="refresh-patrimoine-20260915">Actualiser</button></div></div>
+      <div class="cards patrimoine-summary-20260915">
+        <article class="card metric-card"><span>Patrimoine total</span><strong>${euroPatrimoine20260915_(p.totalActifs)}</strong><small>Actifs patrimoniaux + épargne + placements</small></article>
+        <article class="card metric-card"><span>Endettement total</span><strong>${euroPatrimoine20260915_(c.endettementTotal)}</strong><small>Valeur propriétaire : onglet Crédits</small></article>
+        <article class="card metric-card patrimoine-net-card-20260915"><span>Patrimoine total − endettement total</span><strong>${euroPatrimoine20260915_(p.patrimoineNet)}</strong><small>${escPatrimoine20260915_(source)}</small></article>
+        <article class="card metric-card"><span>Épargne et placements</span><strong>${euroPatrimoine20260915_(p.totalFinancier)}</strong><small>Livrets + placements</small></article>
+      </div>
+      <article class="card panel patrimoine-panel-20260915"><div class="panel-heading"><div><span class="panel-kicker">Composition</span><h2>Actifs patrimoniaux</h2></div></div><div>${actifs.length?actifs.map(x=>lignePatrimoine20260915_(x,'valeur')).join(''):'<div class="empty-state">Aucun actif patrimonial enregistré.</div>'}</div></article>
+      <article class="card panel patrimoine-panel-20260915"><div class="panel-heading"><div><span class="panel-kicker">Financier</span><h2>Épargne et placements</h2></div></div><div>${livrets.concat(placements).length?livrets.concat(placements).map(x=>lignePatrimoine20260915_(x,'soldeReel')).join(''):'<div class="empty-state">Aucun livret ou placement enregistré.</div>'}</div></article>
+      <article class="card panel patrimoine-panel-20260915"><div class="panel-heading"><div><span class="panel-kicker">Dette</span><h2>Intégration avec Crédits</h2></div><span class="credit-ok">${Math.abs(Number(coh.ecartDette||0))<=.01?'✓ Cohérent':'! Écart'}</span></div><div class="patrimoine-debt-grid-20260915"><div><span>Crédits restant dus</span><b>${euroPatrimoine20260915_(c.capitalCredits)}</b></div><div><span>Dettes hors crédit</span><b>${euroPatrimoine20260915_(c.dettesHorsCredit)}</b></div><div><span>Endettement total</span><b>${euroPatrimoine20260915_(c.endettementTotal)}</b></div></div>${revision?`<p class="helper-text patrimoine-revision-20260915">Révision BudgetSoft : ${escPatrimoine20260915_(revision)}</p>`:''}</article>`;
+    document.getElementById('refresh-patrimoine-20260915')?.addEventListener('click',()=>chargerPatrimoine20260915_(true));
+  }
+
+  function chargerPatrimoine20260915_(force){
+    const zone=document.getElementById('generic-view');
+    if(!force&&cachePatrimoineCredits20260915_){rendrePatrimoine20260915_(cachePatrimoineCredits20260915_);return;}
+    if(zone)zone.innerHTML='<section class="loading">Chargement du patrimoine…</section>';
+    google.script.run.withSuccessHandler(rendrePatrimoine20260915_).withFailureHandler(err=>{if(typeof afficherErreur==='function')afficherErreur(err.message||String(err));}).chargerCreditsPatrimoineIntegres20260915();
+  }
+
+  window.chargerPatrimoineUI20260915=chargerPatrimoine20260915_;
+  window.budgetsoftModules=window.budgetsoftModules||{};
+  window.budgetsoftModules.patrimoine=()=>chargerPatrimoine20260915_(false);
+  const base=window.ouvrirVue;
+  if(typeof base==='function')window.ouvrirVue=function(view){const r=base.apply(this,arguments);if(view==='patrimoine')chargerPatrimoine20260915_(false);return r;};
+
+  const st=document.createElement('style');
+  st.textContent=`
+    #credits-list>.account-row,.credit-panel .account-row:not(.debt-row){grid-template-columns:minmax(220px,1.5fr) repeat(4,minmax(115px,.85fr));gap:14px;align-items:start}
+    #credits-list>.account-row>.account-main,.credit-panel .account-row:not(.debt-row)>.account-main{grid-row:1/3;align-self:center}
+    #credits-list>.account-row .account-type,.credit-panel .account-row:not(.debt-row) .account-type{min-width:0}
+    #credits-list>.account-row .account-type strong,.credit-panel .account-row:not(.debt-row) .account-type strong{display:block;color:var(--ink);font-size:15px;white-space:nowrap}
+    #credits-list>.account-row .account-type small,.credit-panel .account-row:not(.debt-row) .account-type small{display:block;margin-top:3px;font-size:11px;line-height:1.25}
+    .patrimoine-summary-20260915{grid-template-columns:repeat(4,minmax(0,1fr))}
+    .patrimoine-net-card-20260915{border-color:rgba(20,125,100,.35);background:linear-gradient(180deg,#fff,#f4fbf8)}
+    .patrimoine-panel-20260915{min-height:0;margin-top:18px}
+    .patrimoine-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px;align-items:center;padding:14px 0;border-bottom:1px solid var(--line)}
+    .patrimoine-row:last-child{border-bottom:0}.patrimoine-row strong,.patrimoine-row small{display:block}.patrimoine-row small{color:var(--muted);font-size:12px;margin-top:3px}.patrimoine-row b{font-size:16px}
+    .patrimoine-debt-grid-20260915{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.patrimoine-debt-grid-20260915>div{background:#f7faf8;border-radius:12px;padding:14px}.patrimoine-debt-grid-20260915 span,.patrimoine-debt-grid-20260915 b{display:block}.patrimoine-debt-grid-20260915 span{color:var(--muted);font-size:12px}.patrimoine-debt-grid-20260915 b{margin-top:5px;font-size:18px}.patrimoine-revision-20260915{margin:14px 0 0}
+    @media(max-width:1200px){#credits-list>.account-row,.credit-panel .account-row:not(.debt-row){grid-template-columns:minmax(200px,1.3fr) repeat(3,minmax(115px,1fr))}#credits-list>.account-row>.account-main,.credit-panel .account-row:not(.debt-row)>.account-main{grid-row:auto;grid-column:1/-1}.patrimoine-summary-20260915{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media(max-width:760px){.patrimoine-summary-20260915,.patrimoine-debt-grid-20260915{grid-template-columns:1fr}}
+  `;
+  document.head.appendChild(st);
+})();
+</script>
