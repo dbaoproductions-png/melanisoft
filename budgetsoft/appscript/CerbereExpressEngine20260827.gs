@@ -1,4 +1,4 @@
-const CERBERE_EXPRESS_VERSION = '2026-09-13.1';
+const CERBERE_EXPRESS_VERSION = '2026-09-15.2';
 
 /** Cerbère Express est un consommateur de décision : EP uniquement. */
 function chargerCerbereExpress20260827() {
@@ -32,6 +32,15 @@ function composerCerbereExpressDepuisCockpit20260910_(cerbere) {
   const meteo={niveau:globalVigilance.niveau,emoji:globalVigilance.niveau==='rouge'?'🌧️':globalVigilance.niveau==='orange'?'🌥️':'🌤️',libelle:globalVigilance.libelle,resume:globalVigilance.message,raisons:[globalVigilance.message]};
   const consigne={niveau:meteo.niveau,texte:totalReste<0?'EP dépassée de '+formatEuroExpress_(Math.abs(totalReste)):('Il reste '+formatEuroExpress_(Math.max(0,totalReste))+' sur l’EP décidée.'),raison:'EP décidée et rythme de consommation'};
 
+  // C2 est déjà calculé par Cerbère : Express ne recalcule rien.
+  // - cbHeritee = achats CB déjà décidés et imputés au prochain cycle ;
+  // - epDisponible = allocation C2 diminuée du réel/déjà-engagé C2.
+  const roulant2=p2&&p2.roulant||{},ep2=p2&&p2.enveloppePilotable||{};
+  const prochainCycleEp=arrExpress_(c2.epTotal!=null?c2.epTotal:(ep2.total!=null?ep2.total:(p2&&p2.budgetReparti||0)));
+  const prochainCycleCbEngagee=arrExpress_(roulant2.cbHeritee!=null?roulant2.cbHeritee:(c2.reportCbCycle||0));
+  const prochainCycleEpConsommee=arrExpress_(c2.epConsomme!=null?c2.epConsomme:(ep2.consomme||0));
+  const prochainCycleEpDisponible=arrExpress_(c2.epDisponible!=null?c2.epDisponible:(ep2.reste!=null?ep2.reste:prochainCycleEp-prochainCycleEpConsommee));
+
   return{
     ok:true,version:CERBERE_EXPRESS_VERSION,moteurSource:String(cerbere.version||''),cockpitVersion:String(cerbere.cockpit20260902&&cerbere.cockpit20260902.version||''),genereLe:Utilities.formatDate(maintenant,Session.getScriptTimeZone(),"yyyy-MM-dd'T'HH:mm:ss"),
     doctrine:'Express = décision d’achat : EP, consommation et rythme uniquement. P et la mécanique comptable n’y sont pas publiés.',
@@ -40,7 +49,19 @@ function composerCerbereExpressDepuisCockpit20260910_(cerbere) {
     referenceEP:{totalP0:arrExpress_(c.epP0!=null?c.epP0:(c.p0Total||0)),totalEP:totalAllocation,source:String(c.epSource||'P0'),proprietaire:String(typeof BUDGETSOFT_EP_OWNER_20260913!=='undefined'?BUDGETSOFT_EP_OWNER_20260913:'')},
     pilotable:{allocation:totalAllocation,consomme:totalConsomme,reste:totalReste,reparti:totalAllocation,lignes:lignes},
     pluxee:construirePluxeeExpress_(),
-    contexteDecision:{ep:totalAllocation,epDisponible:totalReste,epSource:String(c.epSource||''),prochainCycleEp:arrExpress_(c2.epTotal!=null?c2.epTotal:(p2&&p2.budgetReparti||0)),reportCbCycleSuivant:arrExpress_(c2.reportCbCycle||0),epDiffereEstimeCycleSuivant:arrExpress_(c2.cbEpEstimee||0)},
+    contexteDecision:{
+      ep:totalAllocation,
+      epDisponible:totalReste,
+      epSource:String(c.epSource||''),
+      prochainCycleEp:prochainCycleEp,
+      prochainCycleCbEngagee:prochainCycleCbEngagee,
+      prochainCycleEpConsommee:prochainCycleEpConsommee,
+      prochainCycleEpDisponible:prochainCycleEpDisponible,
+      // Compatibilité anciens consommateurs : même valeur canonique, aucun recalcul.
+      reportCbCycleSuivant:prochainCycleCbEngagee,
+      epDiffereEstimeCycleSuivant:prochainCycleEpDisponible,
+      sourceProchainCycle:'Cerbère C2 déjà calculé'
+    },
     meteo,consigneSaillante:consigne
   };
 }
