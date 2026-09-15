@@ -1,0 +1,106 @@
+const CASDEN_SCHEDULE_20260915_VERSION='2026-09-15.1';
+const CASDEN_SCHEDULE_LOAN_20260915='S0064401451';
+const CASDEN_SCHEDULE_ROWS_20260915=`
+2026-11-04|576.33|480.97|95.36|40081.33
+2026-12-04|576.33|544.93|31.40|39536.40
+2027-01-04|576.33|545.36|30.97|38991.04
+2027-02-04|576.33|545.79|30.54|38445.25
+2027-03-04|576.33|546.21|30.12|37899.04
+2027-04-04|576.33|546.64|29.69|37352.40
+2027-05-04|576.33|547.07|29.26|36805.33
+2027-06-04|576.33|547.50|28.83|36257.83
+2027-07-04|576.33|547.93|28.40|35709.90
+2027-08-04|576.33|548.36|27.97|35161.54
+2027-09-04|576.33|548.79|27.54|34612.75
+2027-10-04|576.33|549.22|27.11|34063.53
+2027-11-04|576.33|549.65|26.68|33513.88
+2027-12-04|576.33|550.08|26.25|32963.80
+2028-01-04|576.33|550.51|25.82|32413.29
+2028-02-04|576.33|550.94|25.39|31862.35
+2028-03-04|576.33|551.37|24.96|31310.98
+2028-04-04|576.33|551.80|24.53|30759.18
+2028-05-04|576.33|552.24|24.09|30206.94
+2028-06-04|576.33|552.67|23.66|29654.27
+2028-07-04|576.33|553.10|23.23|29101.17
+2028-08-04|576.33|553.53|22.80|28547.64
+2028-09-04|576.33|553.97|22.36|27993.67
+2028-10-04|576.33|554.40|21.93|27439.27
+2028-11-04|576.33|554.84|21.49|26884.43
+2028-12-04|576.33|555.27|21.06|26329.16
+2029-01-04|576.33|555.71|20.62|25773.45
+2029-02-04|576.33|556.14|20.19|25217.31
+2029-03-04|576.33|556.58|19.75|24660.73
+2029-04-04|576.33|557.01|19.32|24103.72
+2029-05-04|576.33|557.45|18.88|23546.27
+2029-06-04|576.33|557.89|18.44|22988.38
+2029-07-04|576.33|558.32|18.01|22430.06
+2029-08-04|576.33|558.76|17.57|21871.30
+2029-09-04|576.33|559.20|17.13|21312.10
+2029-10-04|576.33|559.64|16.69|20752.46
+2029-11-04|576.33|560.07|16.26|20192.39
+2029-12-04|576.33|560.51|15.82|19631.88
+2030-01-04|576.33|560.95|15.38|19070.93
+2030-02-04|576.33|561.39|14.94|18509.54
+2030-03-04|576.33|561.83|14.50|17947.71
+2030-04-04|576.33|562.27|14.06|17385.44
+2030-05-04|576.33|562.71|13.62|16822.73
+2030-06-04|576.33|563.15|13.18|16259.58
+2030-07-04|576.33|563.59|12.74|15695.99
+2030-08-04|576.33|564.03|12.30|15131.96
+2030-09-04|576.33|564.48|11.85|14567.48
+2030-10-04|576.33|564.92|11.41|14002.56
+2030-11-04|576.33|565.36|10.97|13437.20
+2030-12-04|576.33|565.80|10.53|12871.40
+2031-01-04|576.33|566.25|10.08|12305.15
+2031-02-04|576.33|566.69|9.64|11738.46
+2031-03-04|576.33|567.13|9.20|11171.33
+2031-04-04|576.33|567.58|8.75|10603.75
+2031-05-04|576.33|568.02|8.31|10035.73
+2031-06-04|576.33|568.47|7.86|9467.26
+2031-07-04|576.33|568.91|7.42|8898.35
+2031-08-04|576.33|569.36|6.97|8328.99
+2031-09-04|576.33|569.81|6.52|7759.18
+2031-10-04|576.33|570.25|6.08|7188.93
+2031-11-04|576.33|570.70|5.63|6618.23
+2031-12-04|576.33|571.15|5.18|6047.08
+2032-01-04|576.33|571.59|4.74|5475.49
+2032-02-04|576.33|572.04|4.29|4903.45
+2032-03-04|576.33|572.49|3.84|4330.96
+2032-04-04|576.33|572.94|3.39|3758.02
+2032-05-04|576.33|573.39|2.94|3184.63
+2032-06-04|576.33|573.84|2.49|2610.79
+2032-07-04|576.33|574.28|2.05|2036.51
+2032-08-04|576.33|574.73|1.60|1461.78
+2032-09-04|576.33|575.18|1.15|886.60
+2032-10-04|576.33|575.64|0.69|310.96
+2032-11-04|311.20|310.96|0.24|0.00
+`.trim();
+
+function estCreditCasdenEcheancier20260915_(credit){
+  const numero=String(credit&&credit.numero_pret||'').trim().toUpperCase();
+  const nom=texteCreditAmort20260915_([credit&&credit.nom,credit&&credit.commentaire].join(' '));
+  return numero===CASDEN_SCHEDULE_LOAN_20260915||nom.includes('CASDEN');
+}
+
+function lignesEcheancierCasden20260915_(){
+  if(!globalThis.__CASDEN_SCHEDULE_CACHE_20260915){
+    globalThis.__CASDEN_SCHEDULE_CACHE_20260915=CASDEN_SCHEDULE_ROWS_20260915.split(/\n+/).map(l=>{const [date,montant,capital,interets,crd]=l.split('|');return{date,montant:Number(montant),capital:Number(capital),interets:Number(interets),assurance:0,capital_restant:Number(crd)};});
+  }
+  return globalThis.__CASDEN_SCHEDULE_CACHE_20260915;
+}
+
+function ventilationEcheancierCasden20260915_(credit,operation){
+  if(!estCreditCasdenEcheancier20260915_(credit))return null;
+  const d=dateOperationCredit20260915_(operation);if(!d)return null;
+  const cle=Utilities.formatDate(d,Session.getScriptTimeZone(),'yyyy-MM-dd');
+  const ligne=lignesEcheancierCasden20260915_().find(x=>x.date===cle);if(!ligne)return null;
+  const montant=Math.abs(Number(operation&&operation.montant||0));
+  if(Math.abs(montant-ligne.montant)>.02)return null;
+  return{partCapital:ligne.capital,partInterets:ligne.interets,partAssurance:ligne.assurance,capitalApresTheorique:ligne.capital_restant,methode:'echeancier_exact_CASDEN_'+CASDEN_SCHEDULE_20260915_VERSION};
+}
+
+function auditerEcheancierCasden20260915(){
+  const credit=(typeof lireCreditsEtendusV2_==='function'?lireCreditsEtendusV2_():[]).find(estCreditCasdenEcheancier20260915_);
+  const rows=lignesEcheancierCasden20260915_(),out={ok:!!credit,version:CASDEN_SCHEDULE_20260915_VERSION,pret:CASDEN_SCHEDULE_LOAN_20260915,capital_reference_2026_08_04:40562.30,suspensions:['2026-09-04','2026-10-04'],reprise:rows[0],derniere_echeance:rows[rows.length-1],nombre_echeances:rows.length,credit:credit?{id:credit.id,nom:credit.nom,numero_pret:credit.numero_pret,capital_restant:Number(credit.capital_restant||0)}:null};
+  console.log('[AUDIT ECHEANCIER CASDEN 20260915] '+JSON.stringify(out));return out;
+}
