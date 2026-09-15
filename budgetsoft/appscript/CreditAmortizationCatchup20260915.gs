@@ -1,4 +1,4 @@
-const CREDIT_AMORTIZATION_CATCHUP_20260915_VERSION='2026-09-15.3';
+const CREDIT_AMORTIZATION_CATCHUP_20260915_VERSION='2026-09-15.4';
 
 function dateFrRattrapageCredit20260915_(s){
   const m=String(s||'').match(/\b(\d{1,2})\/(\d{1,2})\/(20\d{2})\b/);if(!m)return null;
@@ -43,7 +43,7 @@ function montantCompatibleEcheanceCreditRattrapage20260915_(credit,operation){
   const mens=Math.abs(Number(credit&&credit.mensualite||0)),montant=Math.abs(Number(operation&&operation.montant||0));if(!mens||!montant)return true;
   const tolerance=Math.max(10,mens*.15);return Math.abs(montant-mens)<=tolerance;
 }
-function methodeDocumenteeRattrapage20260915_(methode){return /^(echeancier_exact_|releve_exact_|ventilation_explicite_commentaire_datee)/.test(String(methode||''));}
+function methodeDocumenteeRattrapage20260915_(methode){return /^(echeancier_exact_|releve_exact_|ventilation_explicite_commentaire_datee|contrat_COFIDIS_)/.test(String(methode||''));}
 
 function rapprochementsCreditsValidesRattrapage20260915_(){
   const ops=lireTable_('Operations'),opsParId=new Map(ops.map(o=>[String(o.id||''),o])),charges=lireTable_('Charges_fixes'),chargesParId=new Map(charges.map(c=>[String(c.id||''),c]));
