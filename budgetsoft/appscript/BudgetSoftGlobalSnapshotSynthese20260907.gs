@@ -126,8 +126,23 @@ function reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(origine){
       if(!gardeCbMultiCycle||gardeCbMultiCycle.ok!==true)erreurs.push({module:'gardeCbMultiCycle',erreur:'Invariant CB multi-cycle non satisfait',diagnostic:gardeCbMultiCycle||null});
 
       const cerbere=prendre('cerbere',()=>{
-        if(cerbereBase&&cerbereBase.ok!==false)return composerCerbereCockpitDepuisBaseSnapshotBudgetSoft20260910_(cerbereBase);
-        return typeof chargerCerbereCockpit20260902==='function'?chargerCerbereCockpit20260902():null;
+        const brut=(cerbereBase&&cerbereBase.ok!==false)
+          ?composerCerbereCockpitDepuisBaseSnapshotBudgetSoft20260910_(cerbereBase)
+          :(typeof recalculerCerbereCockpitP1Frais20260912_==='function'
+            ?recalculerCerbereCockpitP1Frais20260912_({contexteExterne:true})
+            :(typeof chargerCerbereCockpit20260902==='function'?chargerCerbereCockpit20260902():null));
+        if(!brut)throw new Error('Cerbère frais absent pendant la construction synthèse.');
+        if(brut.ok===false)throw new Error('Cerbère frais en erreur : '+String(brut.erreur||brut.stage||brut.message||'cause inconnue'));
+        if(!Array.isArray(brut.periodes)||brut.periodes.length<2)throw new Error('Cerbère frais incomplet : deux périodes C1/C2 sont requises.');
+        const normalise=typeof normaliserCerbereCfPourSnapshot20260914_==='function'
+          ?normaliserCerbereCfPourSnapshot20260914_(brut,sources)
+          :brut;
+        const attendu=typeof BUDGETSOFT_CERBERE_CF_SNAPSHOT_BUILD_20260914_VERSION!=='undefined'
+          ?String(BUDGETSOFT_CERBERE_CF_SNAPSHOT_BUILD_20260914_VERSION)
+          :'2026-09-14.4';
+        const obtenu=String(normalise&&normalise.diagnostic&&normalise.diagnostic.cfSnapshotBuild20260914&&normalise.diagnostic.cfSnapshotBuild20260914.version||'');
+        if(obtenu!==attendu)throw new Error('Normalisation Charges_fixes absente du Cerbère synthèse : attendu '+attendu+', obtenu '+(obtenu||'vide'));
+        return normalise;
       });
       perf.cerbere=Number(perf.cerbere||0)+cerbereBaseMs;
       const soldeReelUnifie=Number(projectionEtendue&&projectionEtendue.soldeReel);
