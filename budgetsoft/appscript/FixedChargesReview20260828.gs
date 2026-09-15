@@ -121,6 +121,7 @@ function deciderRapprochementChargeFixeRapide20260828(chargeId,operationId,decis
     const row={id:Utilities.getUuid(),charge_fixe_id:chargeId,operation_id:operationId,score:'',statut:choix==='valider'?'Validé':'Ignoré',date_operation:d?d.toISOString():'',montant_reel:m,montant_attendu:att,ecart_montant:Math.round(Math.abs(m-att)*100)/100,ecart_jours:'',libelle_operation:String(operation.libelle||''),libelle_charge:String(charge.libelle||''),compte:String(operation.compte||''),decision:choix==='valider'?'Rapproché à l’opération réelle':'Proposition ignorée',cree_le:new Date().toISOString(),modifie_le:new Date().toISOString()};f.getRange(f.getLastRow()+1,1,1,h.length).setValues([h.map(k=>row[k]??'')]);
   }
   if(choix==='valider')supprimerSnapshotChargesFixes20260828_();
+  if(choix==='valider'&&typeof appliquerAmortissementCreditDepuisRapprochement20260915_==='function')appliquerAmortissementCreditDepuisRapprochement20260915_(chargeId,operationId);
   const d=dateComptableOperation20260828_(operation),cycleCourant=cycle28DepuisDate20260828_(new Date()),cycleOp=d?cycle28DepuisDate20260828_(d):null;
   return {ok:true,decision:choix,charge_fixe_id:String(chargeId),operation_id:String(operationId),montant:Math.abs(Number(operation.montant||0)),date:d?d.toISOString():'',cycle:cycleOp?cycleOp.cle:'',cycleCourant:cycleCourant?cycleCourant.cle:''};
 }
