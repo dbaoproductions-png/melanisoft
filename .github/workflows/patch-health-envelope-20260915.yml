@@ -1,0 +1,163 @@
+name: Patch health envelope 20260915
+
+on:
+  push:
+    branches:
+      - budgetsoft-import-lab
+    paths:
+      - '.github/workflows/patch-health-envelope-20260915.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: budgetsoft-import-lab
+          fetch-depth: 0
+      - name: Add canonical health envelope owner and patch synthese builder
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > budgetsoft/appscript/BudgetSoftEnvelopeSante20260915.gs <<'EOF'
+          /*
+           * BudgetSoft — doctrine spéciale de l'enveloppe Santé — 2026-09-15.
+           *
+           * La comptabilité globale conserve les flux bruts : dépenses en débit,
+           * remboursements en crédit. Seule la consommation de la molette Santé est
+           * nette des remboursements réellement encaissés dans le cycle.
+           */
+          const BUDGETSOFT_ENVELOPPE_SANTE_20260915_VERSION='2026-09-15.1';
+          const BUDGETSOFT_ENVELOPPE_SANTE_20260915_OWNER='BudgetSoftEnvelopeSante20260915';
+
+          function arrEnveloppeSante20260915_(n){return Math.round((Number(n)||0)*100)/100;}
+          function estCategorieSante20260915_(v){
+            const s=String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+            return s==='sante';
+          }
+
+          function faitsSantePeriode20260915_(p){
+            const depDirect=Number(p&&p.santeDepenses),rembDirect=Number(p&&p.santeRemboursements);
+            if(Number.isFinite(depDirect)||Number.isFinite(rembDirect)){
+              const dep=Math.max(0,Number.isFinite(depDirect)?depDirect:0),remb=Math.max(0,Number.isFinite(rembDirect)?rembDirect:0);
+              return{depenses:arrEnveloppeSante20260915_(dep),remboursements:arrEnveloppeSante20260915_(remb),source:'periode.santeDepenses/santeRemboursements'};
+            }
+            const s=p&&p.roulant&&p.roulant.sante||{};
+            const net=Number(s.net),remb=Number(s.remboursements);
+            if(Number.isFinite(net)||Number.isFinite(remb)){
+              const r=Math.max(0,Number.isFinite(remb)?remb:0),n=Math.max(0,Number.isFinite(net)?net:0);
+              return{depenses:arrEnveloppeSante20260915_(n+r),remboursements:arrEnveloppeSante20260915_(r),source:'roulant.sante (brut reconstitué)'};
+            }
+            return{depenses:0,remboursements:0,source:'aucun fait Santé'};
+          }
+
+          function normaliserCerbereSantePourSnapshot20260915_(base){
+            if(!base||base.ok===false)return base;
+            const periodes=Array.isArray(base.periodes)?base.periodes:[],cycles=[];
+            periodes.forEach((p,index)=>{
+              if(!p)return;
+              const env=Array.isArray(p.enveloppes)?p.enveloppes:[],sante=env.find(x=>estCategorieSante20260915_(x&&x.categorie));
+              const faits=faitsSantePeriode20260915_(p);
+              const net=arrEnveloppeSante20260915_(Math.max(0,faits.depenses-faits.remboursements));
+              if(sante){
+                const allocation=Math.max(0,Number(sante.prevu||0)),plan=Math.max(0,Number(sante.planifie||0));
+                sante.reelSanteBrut20260915=faits.depenses;
+                sante.remboursementsSanteEncaisses20260915=faits.remboursements;
+                sante.reelNetPrevisionnel=net;
+                sante.resteV37=arrEnveloppeSante20260915_(allocation-net);
+                sante.engageV37=arrEnveloppeSante20260915_(net+plan);
+                sante.dpt1=arrEnveloppeSante20260915_(Math.max(allocation,net+plan));
+                sante.doctrineSante20260915='Consommation Santé = max(0, dépenses réelles - remboursements réellement encaissés). Les remboursements attendus ne reconstituent pas la molette.';
+                cycles.push({index:index+1,cle:String(p.clePilotage||''),allocation:arrEnveloppeSante20260915_(allocation),depenses:faits.depenses,remboursements:faits.remboursements,consommationNette:net,disponible:arrEnveloppeSante20260915_(allocation-net),source:faits.source});
+              }else cycles.push({index:index+1,cle:String(p.clePilotage||''),allocation:0,depenses:faits.depenses,remboursements:faits.remboursements,consommationNette:net,disponible:0,source:faits.source,sansEnveloppeSante:true});
+            });
+            base.diagnostic=base.diagnostic||{};
+            base.diagnostic.enveloppeSante20260915={ok:true,version:BUDGETSOFT_ENVELOPPE_SANTE_20260915_VERSION,proprietaire:BUDGETSOFT_ENVELOPPE_SANTE_20260915_OWNER,cycles:cycles,doctrine:'Flux bancaires bruts inchangés ; seule la molette Santé consomme le net des remboursements réellement encaissés ; consommation plancher 0, donc disponibilité jamais supérieure à l’allocation.'};
+            return base;
+          }
+
+          function synchroniserAgregatsApresSante20260915_(base){
+            if(!base||base.ok===false)return base;
+            if(typeof enrichirEnvelopePilotableBudgetSoft20260913_==='function')enrichirEnvelopePilotableBudgetSoft20260913_(base);
+            const ps=Array.isArray(base.periodes)?base.periodes:[];
+            ps.forEach(p=>{
+              if(!p)return;
+              const ep=typeof calculerEnvelopePilotableBudgetSoft20260913_==='function'?calculerEnvelopePilotableBudgetSoft20260913_(p):null;
+              if(!ep)return;
+              const v=p.v37||(p.v37={}),c=v.cockpit20260902||(v.cockpit20260902={});
+              const soutenable=Math.max(0,Number(c.pSoutenable!=null?c.pSoutenable:(c.p1Total!=null?c.p1Total:0)));
+              const resteP=arrEnveloppeSante20260915_(soutenable-Number(ep.consomme||0));
+              c.consommePilotable=arrEnveloppeSante20260915_(ep.consomme);
+              c.ret1=resteP;c.pDisponible=resteP;
+              c.epTotal=Number(ep.total||0);c.epConsomme=Number(ep.consomme||0);c.epDisponible=Number(ep.reste||0);
+              v.ret1=resteP;v.disponibleEnveloppes=Number(ep.reste||0);
+              p.resteBudgetPilotable=resteP;p.resteBudgetAlloue=Number(ep.reste||0);p.enveloppePilotable=ep;
+            });
+            return base;
+          }
+
+          function auditerEnveloppeSanteSnapshot20260915(){
+            const s=typeof chargerSnapshotGlobalBudgetSoft20260906==='function'?chargerSnapshotGlobalBudgetSoft20260906():null,e=s&&s.disponible&&s.etat||{},c=e&&e.modules&&e.modules.cerbere||{},diag=c&&c.diagnostic&&c.diagnostic.enveloppeSante20260915||{},ps=Array.isArray(c&&c.periodes)?c.periodes:[];
+            const cycles=ps.map((p,index)=>{const x=(p.enveloppes||[]).find(y=>estCategorieSante20260915_(y&&y.categorie))||{},v=p.v37||{},co=v.cockpit20260902||{};return{index:index+1,cle:String(p.clePilotage||''),allocation:arrEnveloppeSante20260915_(x.prevu||0),depensesBrutes:arrEnveloppeSante20260915_(x.reelSanteBrut20260915||0),remboursementsEncaisses:arrEnveloppeSante20260915_(x.remboursementsSanteEncaisses20260915||0),consommationNette:arrEnveloppeSante20260915_(x.reelNetPrevisionnel||0),disponibleSante:arrEnveloppeSante20260915_(Number(x.prevu||0)-Number(x.reelNetPrevisionnel||0)),epConsomme:arrEnveloppeSante20260915_(co.epConsomme||0),pDisponible:arrEnveloppeSante20260915_(co.pDisponible!=null?co.pDisponible:co.ret1||0)};});
+            const out={ok:String(diag.version||'')===BUDGETSOFT_ENVELOPPE_SANTE_20260915_VERSION,version:BUDGETSOFT_ENVELOPPE_SANTE_20260915_VERSION,revisionBudgetSoft:String(e.revisionBudgetSoft||''),owner:String(diag.proprietaire||''),cycles:cycles};
+            console.log('[AUDIT ENVELOPPE SANTE 20260915] '+JSON.stringify(out));return out;
+          }
+          EOF
+
+          cat > budgetsoft/SUPRADOCTRINE_BUDGETSOFT_ADDENDUM_ENVELOPPE_SANTE_20260915.md <<'EOF'
+          # Addendum supradoctrine BudgetSoft — enveloppe Santé — 15/09/2026
+
+          ## Principe
+          La catégorie Santé conserve deux lectures simultanées sans confusion de propriétaire.
+
+          1. **Comptabilité / trésorerie globale** : chaque dépense Santé reste un débit et chaque remboursement Sécu/mutuelle reste un crédit. Aucun flux bancaire n'est supprimé, fusionné ou antidaté.
+          2. **Enveloppe pilotable Santé** : la consommation du cycle est calculée en net sur les seuls flux réellement constatés : `max(0, dépenses Santé réelles - remboursements Santé réellement encaissés)`.
+
+          ## Conséquences
+          - un remboursement encaissé reconstitue la molette Santé dans le cycle où il est reçu, même s'il rembourse une dépense d'un cycle antérieur ;
+          - un remboursement seulement attendu ou planifié ne reconstitue jamais la molette ;
+          - la consommation Santé est bornée à zéro : un excédent de remboursement ne crée pas une allocation Santé supérieure à la décision prise ;
+          - l'excédent de remboursement reste intégralement une recette réelle pour la trésorerie et les agrégats globaux ;
+          - cette règle est propre à Santé et ne doit pas être généralisée aux autres enveloppes sans décision doctrinale explicite ;
+          - Pn reste un indicateur de soutenabilité et n'est pas redéfini par cette règle ; EPn reste la somme des allocations décidées.
+
+          ## Propriétaires
+          - Détection des faits Santé : moteur Cerbère existant (`indexerDonneesCerbereV35_` dans `CerbereV33.gs`).
+          - Normalisation de consommation de la molette : `normaliserCerbereSantePourSnapshot20260915_` dans `BudgetSoftEnvelopeSante20260915.gs`.
+          - Agrégation EP : `calculerEnvelopePilotableBudgetSoft20260913_` / `enrichirEnvelopePilotableBudgetSoft20260913_` dans `BudgetSoftEnvelopePilotable20260913.gs`.
+          - Construction snapshot autoritaire : `reconstruireSnapshotGlobalSyntheseBudgetSoft20260907` dans `BudgetSoftGlobalSnapshotSynthese20260907.gs`.
+          EOF
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('budgetsoft/appscript/BudgetSoftGlobalSnapshotSynthese20260907.gs')
+          s=p.read_text(encoding='utf-8')
+          old="""        if(obtenu!==attendu)throw new Error('Normalisation Charges_fixes absente du Cerbère synthèse : attendu '+attendu+', obtenu '+(obtenu||'vide'));
+        return normalise;
+"""
+          new="""        if(obtenu!==attendu)throw new Error('Normalisation Charges_fixes absente du Cerbère synthèse : attendu '+attendu+', obtenu '+(obtenu||'vide'));
+        const sante=typeof normaliserCerbereSantePourSnapshot20260915_==='function'
+          ?normaliserCerbereSantePourSnapshot20260915_(normalise)
+          :normalise;
+        if(typeof synchroniserAgregatsApresSante20260915_==='function')synchroniserAgregatsApresSante20260915_(sante);
+        const attenduSante=typeof BUDGETSOFT_ENVELOPPE_SANTE_20260915_VERSION!=='undefined'
+          ?String(BUDGETSOFT_ENVELOPPE_SANTE_20260915_VERSION)
+          :'2026-09-15.1';
+        const obtenuSante=String(sante&&sante.diagnostic&&sante.diagnostic.enveloppeSante20260915&&sante.diagnostic.enveloppeSante20260915.version||'');
+        if(obtenuSante!==attenduSante)throw new Error('Normalisation enveloppe Santé absente du Cerbère synthèse : attendu '+attenduSante+', obtenu '+(obtenuSante||'vide'));
+        return sante;
+"""
+          if s.count(old)!=1:
+              raise SystemExit(f'Cerbere return block found {s.count(old)} times')
+          p.write_text(s.replace(old,new),encoding='utf-8')
+          PY
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add budgetsoft/appscript/BudgetSoftEnvelopeSante20260915.gs budgetsoft/appscript/BudgetSoftGlobalSnapshotSynthese20260907.gs budgetsoft/SUPRADOCTRINE_BUDGETSOFT_ADDENDUM_ENVELOPPE_SANTE_20260915.md
+          git diff --cached --quiet && exit 0
+          git commit -m 'Add canonical health envelope net consumption'
+          git push origin HEAD:budgetsoft-import-lab
