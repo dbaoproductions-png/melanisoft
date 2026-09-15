@@ -1,0 +1,74 @@
+name: Patch credit UI and amortization hooks 20260915
+
+on:
+  push:
+    branches: [budgetsoft-import-lab]
+    paths:
+      - '.github/workflows/patch-credit-amortization-ui-20260915.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: budgetsoft-import-lab
+      - name: Patch Credits UI and reconciliation hooks
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          # 1) CreditsUI: dedicated markup, no generic account-row grid.
+          p=Path('budgetsoft/appscript/CreditsUI.html')
+          s=p.read_text(encoding='utf-8')
+          old=re.search(r"  function ligneCredit_\(c,renouvelable\)\{return `.*?`;\}\n",s,re.S)
+          if not old:
+              raise SystemExit('ligneCredit_ not found')
+          new="""  function ligneCredit_(c,renouvelable){return `<div class=\"credit-row\"><div class=\"account-main credit-row-main\"><div class=\"account-icon\">${renouvelable?'🔄':'💼'}</div><div><strong>${esc_(c.nom||'Crédit')}</strong><small>${c.numero_pret?'N° '+esc_(c.numero_pret):''}</small></div></div><div class=\"credit-metrics\"><div class=\"credit-metric\"><strong>${euro_(c.capital_restant)}</strong><small>${renouvelable?'Encours utilisé':'Capital restant'}</small></div><div class=\"credit-metric\"><strong>${euro_(c.mensualite)}</strong><small>Mensualité actuelle</small></div><div class=\"credit-metric\"><strong>${euro_(c.cout_restant)}</strong><small>Coût restant estimé</small></div><div class=\"credit-metric\"><strong>${taux_(c.taux)}</strong><small>${renouvelable?'TAEG révisable':'TAEG'}</small></div><div class=\"credit-metric\"><strong>${Number(c.echeances_restantes||0)||'—'}</strong><small>Mensualités estimées</small></div><div class=\"credit-metric\"><strong>${date_(c.prochaine_echeance)}</strong><small>Prochaine échéance</small></div><div class=\"credit-metric\"><strong>${date_(c.date_fin)}</strong><small>${renouvelable?'Fin estimée':'Fin du crédit'}</small></div></div></div>${renouvelable?`<p class=\"helper-text credit-note\"><strong>Réserve :</strong> plafond ${euro_(c.plafond_credit)} · disponible communiqué ${euro_(c.disponible_credit)}${Number(c.assurance_mensuelle||0)?` · assurance actuelle ${euro_(c.assurance_mensuelle)}`:''}</p>`:''}${c.cout_restant_precision?`<p class=\"helper-text credit-note\"><strong>Coût restant :</strong> ${esc_(c.cout_restant_precision)}</p>`:''}${c.commentaire?`<p class=\"helper-text credit-note last\">${esc_(c.commentaire)}</p>`:''}`;}\n"""
+          s=s[:old.start()]+new+s[old.end():]
+          marker="const st=document.createElement('style');st.textContent=`"
+          if marker not in s:
+              raise SystemExit('CreditsUI style marker not found')
+          css=""".credit-row{display:grid;grid-template-columns:minmax(220px,1.05fr) minmax(0,3fr);gap:20px;align-items:start;padding:16px 0;border-bottom:1px solid var(--line)}.credit-row:last-child{border-bottom:0}.credit-row-main{min-width:0}.credit-row-main strong,.credit-row-main small{display:block}.credit-row-main small{margin-top:4px;color:var(--muted)}.credit-metrics{display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:16px 18px;min-width:0}.credit-metric{min-width:0}.credit-metric strong,.credit-metric small{display:block}.credit-metric strong{font-size:15px;color:var(--ink);white-space:nowrap}.credit-metric small{margin-top:3px;color:var(--muted);font-size:11px;line-height:1.25}.credit-note{margin-left:0!important;padding-left:0}@media(max-width:1100px){.credit-row{grid-template-columns:1fr}.credit-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:760px){.credit-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:480px){.credit-metrics{grid-template-columns:1fr}}"""
+          s=s.replace(marker,marker+css,1)
+          p.write_text(s,encoding='utf-8')
+
+          # 2) Fast fixed-charge reconciliation path: apply credit amortization once bank operation is linked.
+          p=Path('budgetsoft/appscript/FixedChargesReview20260828.gs')
+          s=p.read_text(encoding='utf-8')
+          needle="  if(choix==='valider')supprimerSnapshotChargesFixes20260828_();"
+          repl=needle+"\n  if(choix==='valider'&&typeof appliquerAmortissementCreditDepuisRapprochement20260915_==='function')appliquerAmortissementCreditDepuisRapprochement20260915_(chargeId,operationId);"
+          if needle not in s:
+              raise SystemExit('fast reconciliation hook point not found')
+          if 'appliquerAmortissementCreditDepuisRapprochement20260915_(chargeId,operationId)' not in s:
+              s=s.replace(needle,repl,1)
+          p.write_text(s,encoding='utf-8')
+
+          # 3) Classic fixed-charge reconciliation path: same intermodule hook.
+          p=Path('budgetsoft/appscript/Rapprochements.gs')
+          s=p.read_text(encoding='utf-8')
+          needle="if(choix==='valider')marquerOperationRapprocheeChargeFixe_(objet);if(typeof invaliderProjectionBudgetSoft_==='function')"
+          repl="if(choix==='valider'){marquerOperationRapprocheeChargeFixe_(objet);if(typeof appliquerAmortissementCreditDepuisRapprochement20260915_==='function')appliquerAmortissementCreditDepuisRapprochement20260915_(objet.charge_fixe_id,objet.operation_id);}if(typeof invaliderProjectionBudgetSoft_==='function')"
+          if needle not in s:
+              raise SystemExit('classic reconciliation hook point not found')
+          if 'appliquerAmortissementCreditDepuisRapprochement20260915_(objet.charge_fixe_id,objet.operation_id)' not in s:
+              s=s.replace(needle,repl,1)
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Commit patch
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add budgetsoft/appscript/CreditsUI.html budgetsoft/appscript/FixedChargesReview20260828.gs budgetsoft/appscript/Rapprochements.gs
+          if git diff --cached --quiet; then
+            echo 'Nothing to patch'
+            exit 0
+          fi
+          git commit -m 'Fix Credits layout and amortize reconciled credit payments'
+          git push origin budgetsoft-import-lab
