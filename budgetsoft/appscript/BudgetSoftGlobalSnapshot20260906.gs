@@ -47,10 +47,21 @@ function reconstruireSnapshotGlobalBudgetSoft20260906(origine){
       prendre('projectionEtendue',()=>typeof chargerTresorerieFinCycle20260830==='function'?chargerTresorerieFinCycle20260830():null);
 
       const cerbere=prendre('cerbere',()=>{
-        const brut=typeof recalculerCerbereCockpitP1Frais20260912_==='function'?recalculerCerbereCockpitP1Frais20260912_():(typeof chargerCerbereCockpit20260902==='function'?chargerCerbereCockpit20260902():null);
-        return typeof normaliserCerbereCfPourSnapshot20260914_==='function'
+        const brut=typeof recalculerCerbereCockpitP1Frais20260912_==='function'
+          ?recalculerCerbereCockpitP1Frais20260912_({contexteExterne:true})
+          :(typeof chargerCerbereCockpit20260902==='function'?chargerCerbereCockpit20260902():null);
+        if(!brut)throw new Error('Cerbère frais absent pendant la construction du snapshot.');
+        if(brut.ok===false)throw new Error('Cerbère frais en erreur : '+String(brut.erreur||brut.stage||brut.message||'cause inconnue'));
+        if(!Array.isArray(brut.periodes)||brut.periodes.length<2)throw new Error('Cerbère frais incomplet : deux périodes C1/C2 sont requises.');
+        const normalise=typeof normaliserCerbereCfPourSnapshot20260914_==='function'
           ?normaliserCerbereCfPourSnapshot20260914_(brut,sources)
           :brut;
+        const attendu=typeof BUDGETSOFT_CERBERE_CF_SNAPSHOT_BUILD_20260914_VERSION!=='undefined'
+          ?String(BUDGETSOFT_CERBERE_CF_SNAPSHOT_BUILD_20260914_VERSION)
+          :'2026-09-14.4';
+        const obtenu=String(normalise&&normalise.diagnostic&&normalise.diagnostic.cfSnapshotBuild20260914&&normalise.diagnostic.cfSnapshotBuild20260914.version||'');
+        if(obtenu!==attendu)throw new Error('Normalisation Charges_fixes absente du Cerbère construit : attendu '+attendu+', obtenu '+(obtenu||'vide'));
+        return normalise;
       });
       const cerbereExpress=prendre('cerbereExpress',()=>typeof chargerVueCerbereExpressSansContexte20260827_==='function'?chargerVueCerbereExpressSansContexte20260827_():null);
 

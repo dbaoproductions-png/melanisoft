@@ -23,7 +23,8 @@ const CERBERE_CB_DOUBLE_ROLE_FINAL_VERSION='2026-09-12.p1-doctrine-3';
  * Cette fonction factorise exactement le pipeline de secours de l'entrée publique
  * afin que l'audit puisse prouver les valeurs réellement recalculées.
  */
-function recalculerCerbereCockpitP1Frais20260912_(){
+function recalculerCerbereCockpitP1Frais20260912_(options){
+  options=options||{};
   const executer=function(){
     const t0=Date.now(),base=chargerCerbereCockpitBaseRapide20260903_();if(!base||base.ok===false)return base;
     const post=base.diagnostic&&base.diagnostic.performancePost35||{couches:[]},timings=Array.isArray(post.couches)?post.couches:[];
@@ -47,6 +48,7 @@ function recalculerCerbereCockpitP1Frais20260912_(){
     if(out&&out.cockpit20260902&&out.cockpit20260902.performance){out.cockpit20260902.performance.serializationMs=serializationMs;out.cockpit20260902.performance.dureeMs=Date.now()-t0;}
     return out;
   };
+  if(options.contexteExterne===true)return executer();
   return typeof avecContexteLectureBudgetSoft20260827_==='function'?avecContexteLectureBudgetSoft20260827_('cerbere-cockpit-p1-frais-20260912',executer):executer();
 }
 
