@@ -1,4 +1,4 @@
-const CREDIT_AMORTIZATION_INTERMODULE_20260915_VERSION='2026-09-15.3';
+const CREDIT_AMORTIZATION_INTERMODULE_20260915_VERSION='2026-09-15.4';
 const CREDIT_AMORTIZATION_SHEET_20260915='Amortissements_credits';
 const CREDIT_AMORTIZATION_HEADERS_20260915=['id','credit_id','credit_nom','charge_fixe_id','operation_id','date_operation','montant_echeance','part_capital','part_interets','part_assurance','capital_avant','capital_apres','echeances_avant','echeances_apres','prochaine_echeance_avant','prochaine_echeance_apres','methode','statut','version','date_traitement'];
 
@@ -51,7 +51,7 @@ function montantExpliciteAvantLibelleCredit20260915_(texte,libelle){
   const source=String(texte||'');
   const patterns={
     capital:/(\d+(?:[,.]\d+)?)\s*€?\s*(?:de\s+|d['’]\s*)capital\b/i,
-    interets:/(\d+(?:[,.]\d+)?)\s*€?\s*(?:d['’]\s*|de\s+)int[eê]r[eê]ts?\b/i,
+    interets:/(\d+(?:[,.]\d+)?)\s*€?\s*(?:d['’]\s*|de\s+)int[eéê]r[eéê]ts?\b/i,
     assurance:/(\d+(?:[,.]\d+)?)\s*€?\s*(?:d['’]\s*|de\s+)assurance\b/i
   };
   const m=source.match(patterns[libelle]);
@@ -75,7 +75,7 @@ function ventilationExpliciteCredit20260915_(credit,montantOperation){
   const texte=[credit.commentaire,credit.cout_restant_precision].filter(Boolean).join(' ');
   if(!texte)return null;
   const capApres=texte.match(/(?:dont\s+)?(?:part\s+de\s+)?capital(?:\s+rembourse|\s+amorti)?[^0-9]{0,24}(\d+(?:[,.]\d+)?)\s*€?/i);
-  const intApres=texte.match(/inter[eê]ts?[^0-9]{0,24}(\d+(?:[,.]\d+)?)\s*€?/i);
+  const intApres=texte.match(/int[eéê]r[eéê]ts?[^0-9]{0,24}(\d+(?:[,.]\d+)?)\s*€?/i);
   const assApres=texte.match(/assurance[^0-9]{0,24}(\d+(?:[,.]\d+)?)\s*€?/i);
   const capAvant=montantExpliciteAvantLibelleCredit20260915_(texte,'capital');
   const intAvant=montantExpliciteAvantLibelleCredit20260915_(texte,'interets');
