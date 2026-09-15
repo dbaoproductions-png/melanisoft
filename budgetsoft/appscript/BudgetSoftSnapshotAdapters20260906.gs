@@ -1,4 +1,4 @@
-const BUDGETSOFT_SNAPSHOT_ADAPTERS_VERSION='2026-09-14.4';
+const BUDGETSOFT_SNAPSHOT_ADAPTERS_VERSION='2026-09-15.1';
 
 function chargerDashboardDepuisSnapshotGlobalBudgetSoft20260906(){
   const t0=Date.now();
@@ -20,30 +20,18 @@ function snapshotCerbereCfBuildFrais20260914_(m){
 
 function chargerCerbereDepuisSnapshotGlobalBudgetSoft20260906(){
   const t0=Date.now();
-  let m=typeof lireModuleSnapshotGlobalBudgetSoft20260906_==='function'?lireModuleSnapshotGlobalBudgetSoft20260906_('cerbere'):null;
+  const m=typeof lireModuleSnapshotGlobalBudgetSoft20260906_==='function'?lireModuleSnapshotGlobalBudgetSoft20260906_('cerbere'):null;
 
-  // Auto-rattrapage unique : si le snapshot précède la doctrine CF de construction,
-  // on reconstruit une seule fois. Pendant une reconstruction globale le document
-  // est déjà verrouillé : le probe échoue alors immédiatement et évite toute récursion.
-  if(m&&!snapshotCerbereCfBuildFrais20260914_(m)&&typeof reconstruireSnapshotGlobalBudgetSoft20260906==='function'){
-    const probe=LockService.getDocumentLock();
-    let libre=false;
-    try{libre=probe.tryLock(1);}catch(e){libre=false;}
-    if(libre){
-      try{
-        probe.releaseLock();
-        const r=reconstruireSnapshotGlobalBudgetSoft20260906('auto_rattrapage_cf_cerbere_20260914');
-        if(r&&r.ok===true&&typeof lireModuleSnapshotGlobalBudgetSoft20260906_==='function')m=lireModuleSnapshotGlobalBudgetSoft20260906_('cerbere');
-      }catch(e){
-        console.log('[CERBERE SNAPSHOT AUTO-RATTRAPAGE] '+String(e&&e.message||e));
-      }
-    }
-  }
-
+  // Doctrine snapshot : une lecture ne déclenche jamais une reconstruction globale.
+  // La reconstruction reste une action d'écriture/maintenance séparée. Cela évite
+  // qu'un chargement UI Cerbère réentre dans le constructeur global qui reconstruit
+  // lui-même Cerbère et bloque la requête navigateur.
   if(!m)return{ok:false,version:BUDGETSOFT_SNAPSHOT_ADAPTERS_VERSION,source:'absent',dureeMs:Date.now()-t0,message:'Cerbère absent du snapshot global.'};
+
   m.ok=m.ok!==false;
   m.source='snapshot_global';
   m.dureeLectureSnapshotMs=Date.now()-t0;
+  m.cfSnapshotBuildFrais=snapshotCerbereCfBuildFrais20260914_(m);
   return m;
 }
 
