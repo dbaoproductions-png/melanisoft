@@ -2,7 +2,7 @@
 (function(){'use strict';
   let cachePatrimoineCredits20260915_=null;
   const euroPatrimoine20260915_=v=>typeof money!=='undefined'?money.format(Number(v||0)):Number(v||0).toFixed(2)+' €';
-  const escPatrimoine20260915_=s=>typeof echapper==='function'?echapper(String(s??'')):String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const escPatrimoine20260915_=s=>typeof echapper==='function'?echapper(String(s??'')):String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
 
   function lignePatrimoine20260915_(x,champ){
     const valeur=Number(x&&x[champ]||0);
@@ -38,14 +38,54 @@
     google.script.run.withSuccessHandler(rendrePatrimoine20260915_).withFailureHandler(err=>{if(typeof afficherErreur==='function')afficherErreur(err.message||String(err));}).chargerCreditsPatrimoineIntegres20260915();
   }
 
+  function nettoyerRenduCredits20260915_(){
+    const zone=document.getElementById('generic-view');
+    if(!zone||!document.querySelector('[data-view="credits"].active'))return;
+    let supprimes=0;
+    zone.querySelectorAll('article.card.panel').forEach(panel=>{
+      const titre=String(panel.querySelector('.panel-heading h2')?.textContent||'').trim();
+      if(titre!=='Crédits amortissables'&&titre!=='Crédits renouvelables')return;
+      panel.classList.add('credits-panel-clean-20260915');
+      const heading=panel.querySelector(':scope > .panel-heading');
+      if(heading){
+        [...heading.children].slice(1).forEach(n=>{n.remove();supprimes++;});
+      }
+      const liste=titre==='Crédits amortissables'?panel.querySelector(':scope > #credits-list'):panel.querySelector(':scope > div:not(.panel-heading)');
+      if(liste)liste.classList.add('credits-list-clean-20260915');
+      [...panel.children].forEach(n=>{
+        if(n===heading||n===liste)return;
+        n.remove();supprimes++;
+      });
+    });
+    if(supprimes)console.log('[UI CREDITS NETTOYAGE 20260915] éléments parasites supprimés: '+supprimes);
+  }
+
+  let nettoyagePlanifieCredits20260915_=false;
+  function planifierNettoyageCredits20260915_(){
+    if(nettoyagePlanifieCredits20260915_)return;
+    nettoyagePlanifieCredits20260915_=true;
+    requestAnimationFrame(()=>{nettoyagePlanifieCredits20260915_=false;nettoyerRenduCredits20260915_();});
+  }
+
   window.chargerPatrimoineUI20260915=chargerPatrimoine20260915_;
   window.budgetsoftModules=window.budgetsoftModules||{};
   window.budgetsoftModules.patrimoine=()=>chargerPatrimoine20260915_(false);
   const base=window.ouvrirVue;
-  if(typeof base==='function')window.ouvrirVue=function(view){const r=base.apply(this,arguments);if(view==='patrimoine')chargerPatrimoine20260915_(false);return r;};
+  if(typeof base==='function')window.ouvrirVue=function(view){const r=base.apply(this,arguments);if(view==='patrimoine')chargerPatrimoine20260915_(false);if(view==='credits')setTimeout(planifierNettoyageCredits20260915_,0);return r;};
+
+  document.addEventListener('DOMContentLoaded',()=>{
+    const zone=document.getElementById('generic-view');
+    if(!zone)return;
+    new MutationObserver(planifierNettoyageCredits20260915_).observe(zone,{childList:true,subtree:true});
+  });
 
   const st=document.createElement('style');
   st.textContent=`
+    .credits-panel-clean-20260915{overflow:hidden}
+    .credits-panel-clean-20260915>.panel-heading{display:flex!important;justify-content:space-between!important;align-items:flex-start!important}
+    .credits-panel-clean-20260915>.panel-heading>:not(:first-child){display:none!important}
+    .credits-list-clean-20260915{display:block!important;min-width:0!important;max-width:100%!important;overflow:hidden!important}
+    .credits-list-clean-20260915>.credit-row{width:100%!important;max-width:100%!important}
     #credits-list>.account-row,.credit-panel .account-row:not(.debt-row){grid-template-columns:minmax(220px,1.5fr) repeat(4,minmax(115px,.85fr));gap:14px;align-items:start}
     #credits-list>.account-row>.account-main,.credit-panel .account-row:not(.debt-row)>.account-main{grid-row:1/3;align-self:center}
     #credits-list>.account-row .account-type,.credit-panel .account-row:not(.debt-row) .account-type{min-width:0}
