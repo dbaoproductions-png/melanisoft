@@ -47,7 +47,7 @@ function reconstruireSnapshotGlobalBudgetSoft20260906(origine){
       prendre('projectionEtendue',()=>typeof chargerTresorerieFinCycle20260830==='function'?chargerTresorerieFinCycle20260830():null);
 
       const cerbere=prendre('cerbere',()=>{
-        const brut=typeof chargerCerbereCockpit20260902==='function'?chargerCerbereCockpit20260902():null;
+        const brut=typeof recalculerCerbereCockpitP1Frais20260912_==='function'?recalculerCerbereCockpitP1Frais20260912_():(typeof chargerCerbereCockpit20260902==='function'?chargerCerbereCockpit20260902():null);
         return typeof normaliserCerbereCfPourSnapshot20260914_==='function'
           ?normaliserCerbereCfPourSnapshot20260914_(brut,sources)
           :brut;
