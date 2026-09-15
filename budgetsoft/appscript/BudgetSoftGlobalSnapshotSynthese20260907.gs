@@ -142,7 +142,16 @@ function reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(origine){
           :'2026-09-14.4';
         const obtenu=String(normalise&&normalise.diagnostic&&normalise.diagnostic.cfSnapshotBuild20260914&&normalise.diagnostic.cfSnapshotBuild20260914.version||'');
         if(obtenu!==attendu)throw new Error('Normalisation Charges_fixes absente du Cerbère synthèse : attendu '+attendu+', obtenu '+(obtenu||'vide'));
-        return normalise;
+        const sante=typeof normaliserCerbereSantePourSnapshot20260915_==='function'
+          ?normaliserCerbereSantePourSnapshot20260915_(normalise)
+          :normalise;
+        if(typeof synchroniserAgregatsApresSante20260915_==='function')synchroniserAgregatsApresSante20260915_(sante);
+        const attenduSante=typeof BUDGETSOFT_ENVELOPPE_SANTE_20260915_VERSION!=='undefined'
+          ?String(BUDGETSOFT_ENVELOPPE_SANTE_20260915_VERSION)
+          :'2026-09-15.1';
+        const obtenuSante=String(sante&&sante.diagnostic&&sante.diagnostic.enveloppeSante20260915&&sante.diagnostic.enveloppeSante20260915.version||'');
+        if(obtenuSante!==attenduSante)throw new Error('Normalisation enveloppe Santé absente du Cerbère synthèse : attendu '+attenduSante+', obtenu '+(obtenuSante||'vide'));
+        return sante;
       });
       perf.cerbere=Number(perf.cerbere||0)+cerbereBaseMs;
       const soldeReelUnifie=Number(projectionEtendue&&projectionEtendue.soldeReel);
