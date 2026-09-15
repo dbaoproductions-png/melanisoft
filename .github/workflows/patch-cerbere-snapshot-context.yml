@@ -1,0 +1,58 @@
+name: Patch Cerbere snapshot build context
+
+on:
+  push:
+    branches:
+      - budgetsoft-import-lab
+    paths:
+      - '.github/workflows/patch-cerbere-snapshot-context.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: budgetsoft-import-lab
+          fetch-depth: 0
+      - name: Patch fresh Cerbere context and snapshot validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p=Path('budgetsoft/appscript/ZZZ_CerbereCbDoubleRoleFinal20260905.gs')
+          s=p.read_text(encoding='utf-8')
+          old="function recalculerCerbereCockpitP1Frais20260912_(){\n  const executer=function(){"
+          new="function recalculerCerbereCockpitP1Frais20260912_(options){\n  options=options||{};\n  const executer=function(){"
+          if s.count(old)!=1:
+              raise SystemExit('fresh engine signature not found exactly once')
+          s=s.replace(old,new)
+          old2="  return typeof avecContexteLectureBudgetSoft20260827_==='function'?avecContexteLectureBudgetSoft20260827_('cerbere-cockpit-p1-frais-20260912',executer):executer();\n}"
+          new2="  if(options.contexteExterne===true)return executer();\n  return typeof avecContexteLectureBudgetSoft20260827_==='function'?avecContexteLectureBudgetSoft20260827_('cerbere-cockpit-p1-frais-20260912',executer):executer();\n}"
+          if s.count(old2)!=1:
+              raise SystemExit('fresh engine return not found exactly once')
+          p.write_text(s.replace(old2,new2),encoding='utf-8')
+
+          p=Path('budgetsoft/appscript/BudgetSoftGlobalSnapshot20260906.gs')
+          s=p.read_text(encoding='utf-8')
+          old="""      const cerbere=prendre('cerbere',()=>{\n        const brut=typeof recalculerCerbereCockpitP1Frais20260912_==='function'?recalculerCerbereCockpitP1Frais20260912_():(typeof chargerCerbereCockpit20260902==='function'?chargerCerbereCockpit20260902():null);\n        return typeof normaliserCerbereCfPourSnapshot20260914_==='function'\n          ?normaliserCerbereCfPourSnapshot20260914_(brut,sources)\n          :brut;\n      });"""
+          new="""      const cerbere=prendre('cerbere',()=>{\n        const brut=typeof recalculerCerbereCockpitP1Frais20260912_==='function'\n          ?recalculerCerbereCockpitP1Frais20260912_({contexteExterne:true})\n          :(typeof chargerCerbereCockpit20260902==='function'?chargerCerbereCockpit20260902():null);\n        if(!brut)throw new Error('Cerbère frais absent pendant la construction du snapshot.');\n        if(brut.ok===false)throw new Error('Cerbère frais en erreur : '+String(brut.erreur||brut.stage||brut.message||'cause inconnue'));\n        if(!Array.isArray(brut.periodes)||brut.periodes.length<2)throw new Error('Cerbère frais incomplet : deux périodes C1/C2 sont requises.');\n        const normalise=typeof normaliserCerbereCfPourSnapshot20260914_==='function'\n          ?normaliserCerbereCfPourSnapshot20260914_(brut,sources)\n          :brut;\n        const attendu=typeof BUDGETSOFT_CERBERE_CF_SNAPSHOT_BUILD_20260914_VERSION!=='undefined'\n          ?String(BUDGETSOFT_CERBERE_CF_SNAPSHOT_BUILD_20260914_VERSION)\n          :'2026-09-14.4';\n        const obtenu=String(normalise&&normalise.diagnostic&&normalise.diagnostic.cfSnapshotBuild20260914&&normalise.diagnostic.cfSnapshotBuild20260914.version||'');\n        if(obtenu!==attendu)throw new Error('Normalisation Charges_fixes absente du Cerbère construit : attendu '+attendu+', obtenu '+(obtenu||'vide'));\n        return normalise;\n      });"""
+          if s.count(old)!=1:
+              raise SystemExit('global Cerbere builder block not found exactly once')
+          p.write_text(s.replace(old,new),encoding='utf-8')
+          PY
+      - name: Commit patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add budgetsoft/appscript/ZZZ_CerbereCbDoubleRoleFinal20260905.gs budgetsoft/appscript/BudgetSoftGlobalSnapshot20260906.gs
+          git diff --cached --quiet && exit 0
+          git commit -m 'Build Cerbere under global snapshot context'
+          git push origin HEAD:budgetsoft-import-lab
