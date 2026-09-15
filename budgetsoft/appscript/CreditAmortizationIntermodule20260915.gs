@@ -1,4 +1,4 @@
-const CREDIT_AMORTIZATION_INTERMODULE_20260915_VERSION='2026-09-15.7';
+const CREDIT_AMORTIZATION_INTERMODULE_20260915_VERSION='2026-09-15.8';
 const CREDIT_AMORTIZATION_SHEET_20260915='Amortissements_credits';
 const CREDIT_AMORTIZATION_HEADERS_20260915=['id','credit_id','credit_nom','charge_fixe_id','operation_id','date_operation','montant_echeance','part_capital','part_interets','part_assurance','capital_avant','capital_apres','echeances_avant','echeances_apres','prochaine_echeance_avant','prochaine_echeance_apres','methode','statut','version','date_traitement'];
 
@@ -49,64 +49,33 @@ function tauxMensuelCredit20260915_(credit){
 
 function montantExpliciteAvantLibelleCredit20260915_(texte,libelle){
   const source=String(texte||'');
-  const patterns={
-    capital:/(\d+(?:[,.]\d+)?)\s*€?\s*(?:de\s+|d['’]\s*)capital\b/i,
-    interets:/(\d+(?:[,.]\d+)?)\s*€?\s*(?:d['’]\s*|de\s+)int[éeê]r[éeê]ts?\b/i,
-    assurance:/(\d+(?:[,.]\d+)?)\s*€?\s*(?:d['’]\s*|de\s+)assurance\b/i
-  };
-  const m=source.match(patterns[libelle]);
-  return m?nombreCreditAmort20260915_(m[1]):null;
+  const patterns={capital:/(\d+(?:[,.]\d+)?)\s*€?\s*(?:de\s+|d['’]\s*)capital\b/i,interets:/(\d+(?:[,.]\d+)?)\s*€?\s*(?:d['’]\s*|de\s+)int[éeê]r[éeê]ts?\b/i,assurance:/(\d+(?:[,.]\d+)?)\s*€?\s*(?:d['’]\s*|de\s+)assurance\b/i};
+  const m=source.match(patterns[libelle]);return m?nombreCreditAmort20260915_(m[1]):null;
 }
-
-function dateOperationCredit20260915_(operation){
-  if(!operation)return null;const d=new Date(operation.date_comptable||operation.date||operation.date_operation||0);return isNaN(d)?null:d;
-}
+function dateOperationCredit20260915_(operation){if(!operation)return null;const d=new Date(operation.date_comptable||operation.date||operation.date_operation||0);return isNaN(d)?null:d;}
 function memeJourCredit20260915_(a,b){return !!(a&&b)&&a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();}
 function dateVentilationCommentaireCredit20260915_(texte){
-  const source=String(texte||'');
-  const motifs=[/(?:prochain\s+pr[ée]l[èe]vement|[ée]ch[ée]ance)(?:\s+du)?\s*(\d{1,2})\/(\d{1,2})\/(20\d{2})[^.]{0,180}(?:capital|int[éeê]r[éeê]ts?|assurance)/i,/(\d{1,2})\/(\d{1,2})\/(20\d{2})[^.]{0,180}(?:capital|int[éeê]r[éeê]ts?|assurance)/i];
-  for(const r of motifs){const m=source.match(r);if(m){const d=new Date(Number(m[3]),Number(m[2])-1,Number(m[1]),12);if(!isNaN(d))return d;}}
-  return null;
+  const source=String(texte||''),motifs=[/(?:prochain\s+pr[ée]l[èe]vement|[ée]ch[ée]ance)(?:\s+du)?\s*(\d{1,2})\/(\d{1,2})\/(20\d{2})[^.]{0,180}(?:capital|int[éeê]r[éeê]ts?|assurance)/i,/(\d{1,2})\/(\d{1,2})\/(20\d{2})[^.]{0,180}(?:capital|int[éeê]r[éeê]ts?|assurance)/i];
+  for(const r of motifs){const m=source.match(r);if(m){const d=new Date(Number(m[3]),Number(m[2])-1,Number(m[1]),12);if(!isNaN(d))return d;}}return null;
 }
-
 function ventilationExpliciteCredit20260915_(credit,montantOperation,operation){
-  const montant=arrCreditAmort20260915_(Math.abs(Number(montantOperation||0)));
-  if(!credit||montant<=0)return null;
+  const montant=arrCreditAmort20260915_(Math.abs(Number(montantOperation||0)));if(!credit||montant<=0)return null;
   const champs=[['part_capital','part_interets','part_assurance'],['capital_echeance','interets_echeance','assurance_echeance']];
-  for(const c of champs){
-    const brutCap=credit[c[0]],brutInt=credit[c[1]],brutAss=credit[c[2]],aPresent=brutAss!==''&&brutAss!=null;
-    if(brutCap!==''&&brutCap!=null&&brutInt!==''&&brutInt!=null){
-      const cap=Math.max(0,nombreCreditAmort20260915_(brutCap)),interets=Math.max(0,nombreCreditAmort20260915_(brutInt)),assurance=aPresent?Math.max(0,nombreCreditAmort20260915_(brutAss)):Math.max(0,Number(credit.assurance_mensuelle||0)),total=arrCreditAmort20260915_(cap+interets+assurance);
-      if(Math.abs(total-montant)<=Math.max(.02,montant*.01))return{partCapital:arrCreditAmort20260915_(cap),partInterets:arrCreditAmort20260915_(interets),partAssurance:arrCreditAmort20260915_(assurance),methode:'ventilation_explicitement_structuree'};
-    }
-  }
-  const texte=[credit.commentaire,credit.cout_restant_precision].filter(Boolean).join(' ');if(!texte)return null;
-  const dateVentilation=dateVentilationCommentaireCredit20260915_(texte),dateOp=dateOperationCredit20260915_(operation);
-  if(dateVentilation&&dateOp&&!memeJourCredit20260915_(dateVentilation,dateOp))return null;
-  const capApres=texte.match(/(?:dont\s+)?(?:part\s+de\s+)?capital(?:\s+rembourse|\s+amorti)?[^0-9]{0,24}(\d+(?:[,.]\d+)?)\s*€?/i);
-  const intApres=texte.match(/int[éeê]r[éeê]ts?[^0-9]{0,24}(\d+(?:[,.]\d+)?)\s*€?/i);
-  const assApres=texte.match(/assurance[^0-9]{0,24}(\d+(?:[,.]\d+)?)\s*€?/i);
-  const capAvant=montantExpliciteAvantLibelleCredit20260915_(texte,'capital'),intAvant=montantExpliciteAvantLibelleCredit20260915_(texte,'interets'),assAvant=montantExpliciteAvantLibelleCredit20260915_(texte,'assurance');
-  const cap=capAvant!=null?capAvant:(capApres?nombreCreditAmort20260915_(capApres[1]):null),interets=intAvant!=null?intAvant:(intApres?nombreCreditAmort20260915_(intApres[1]):null);if(cap==null||interets==null)return null;
-  const assurance=assAvant!=null?assAvant:(assApres?nombreCreditAmort20260915_(assApres[1]):Math.max(0,Number(credit.assurance_mensuelle||0))),total=arrCreditAmort20260915_(Math.max(0,cap)+Math.max(0,interets)+Math.max(0,assurance));
-  if(Math.abs(total-montant)>Math.max(.02,montant*.01))return null;
+  for(const c of champs){const brutCap=credit[c[0]],brutInt=credit[c[1]],brutAss=credit[c[2]],aPresent=brutAss!==''&&brutAss!=null;if(brutCap!==''&&brutCap!=null&&brutInt!==''&&brutInt!=null){const cap=Math.max(0,nombreCreditAmort20260915_(brutCap)),interets=Math.max(0,nombreCreditAmort20260915_(brutInt)),assurance=aPresent?Math.max(0,nombreCreditAmort20260915_(brutAss)):Math.max(0,Number(credit.assurance_mensuelle||0)),total=arrCreditAmort20260915_(cap+interets+assurance);if(Math.abs(total-montant)<=Math.max(.02,montant*.01))return{partCapital:arrCreditAmort20260915_(cap),partInterets:arrCreditAmort20260915_(interets),partAssurance:arrCreditAmort20260915_(assurance),methode:'ventilation_explicitement_structuree'};}}
+  const texte=[credit.commentaire,credit.cout_restant_precision].filter(Boolean).join(' ');if(!texte)return null;const dateVentilation=dateVentilationCommentaireCredit20260915_(texte),dateOp=dateOperationCredit20260915_(operation);if(dateVentilation&&dateOp&&!memeJourCredit20260915_(dateVentilation,dateOp))return null;
+  const capApres=texte.match(/(?:dont\s+)?(?:part\s+de\s+)?capital(?:\s+rembourse|\s+amorti)?[^0-9]{0,24}(\d+(?:[,.]\d+)?)\s*€?/i),intApres=texte.match(/int[éeê]r[éeê]ts?[^0-9]{0,24}(\d+(?:[,.]\d+)?)\s*€?/i),assApres=texte.match(/assurance[^0-9]{0,24}(\d+(?:[,.]\d+)?)\s*€?/i);
+  const capAvant=montantExpliciteAvantLibelleCredit20260915_(texte,'capital'),intAvant=montantExpliciteAvantLibelleCredit20260915_(texte,'interets'),assAvant=montantExpliciteAvantLibelleCredit20260915_(texte,'assurance'),cap=capAvant!=null?capAvant:(capApres?nombreCreditAmort20260915_(capApres[1]):null),interets=intAvant!=null?intAvant:(intApres?nombreCreditAmort20260915_(intApres[1]):null);if(cap==null||interets==null)return null;
+  const assurance=assAvant!=null?assAvant:(assApres?nombreCreditAmort20260915_(assApres[1]):Math.max(0,Number(credit.assurance_mensuelle||0))),total=arrCreditAmort20260915_(Math.max(0,cap)+Math.max(0,interets)+Math.max(0,assurance));if(Math.abs(total-montant)>Math.max(.02,montant*.01))return null;
   return{partCapital:arrCreditAmort20260915_(Math.max(0,cap)),partInterets:arrCreditAmort20260915_(Math.max(0,interets)),partAssurance:arrCreditAmort20260915_(Math.max(0,assurance)),methode:dateVentilation?'ventilation_explicite_commentaire_datee':'ventilation_explicite_commentaire'};
 }
-
-function prochaineEcheanceApresPaiement20260915_(credit,dateOperation){
-  if(!credit||!credit.prochaine_echeance)return'';let d=new Date(credit.prochaine_echeance),op=new Date(dateOperation||0);if(isNaN(d)||isNaN(op))return credit.prochaine_echeance;
-  while(d<=op){const jour=d.getDate(),x=new Date(d.getFullYear(),d.getMonth()+1,1,12),dernier=new Date(x.getFullYear(),x.getMonth()+1,0).getDate();d=new Date(x.getFullYear(),x.getMonth(),Math.min(jour,dernier),12);}
-  return Utilities.formatDate(d,Session.getScriptTimeZone(),'yyyy-MM-dd');
-}
+function prochaineEcheanceApresPaiement20260915_(credit,dateOperation){if(!credit||!credit.prochaine_echeance)return'';let d=new Date(credit.prochaine_echeance),op=new Date(dateOperation||0);if(isNaN(d)||isNaN(op))return credit.prochaine_echeance;while(d<=op){const jour=d.getDate(),x=new Date(d.getFullYear(),d.getMonth()+1,1,12),dernier=new Date(x.getFullYear(),x.getMonth()+1,0).getDate();d=new Date(x.getFullYear(),x.getMonth(),Math.min(jour,dernier),12);}return Utilities.formatDate(d,Session.getScriptTimeZone(),'yyyy-MM-dd');}
 
 function calculerAmortissementCredit20260915_(credit,operation){
   const capital=Math.max(0,Number(credit&&credit.capital_restant||0)),montant=Math.abs(Number(operation&&operation.montant||0));
-  const exactCasden=typeof ventilationEcheancierCasden20260915_==='function'?ventilationEcheancierCasden20260915_(credit,operation):null;
-  if(exactCasden){const partCapital=Math.min(capital,Math.max(0,exactCasden.partCapital));return{montant:arrCreditAmort20260915_(montant),partCapital:arrCreditAmort20260915_(partCapital),partInterets:arrCreditAmort20260915_(exactCasden.partInterets),partAssurance:arrCreditAmort20260915_(exactCasden.partAssurance),capitalAvant:arrCreditAmort20260915_(capital),capitalApres:arrCreditAmort20260915_(capital-partCapital),capitalApresTheorique:arrCreditAmort20260915_(exactCasden.capitalApresTheorique),methode:exactCasden.methode};}
-  const exactAccessio=typeof ventilationEcheancierAccessio20260915_==='function'?ventilationEcheancierAccessio20260915_(credit,operation):null;
-  if(exactAccessio){const partCapital=Math.min(capital,Math.max(0,exactAccessio.partCapital));return{montant:arrCreditAmort20260915_(montant),partCapital:arrCreditAmort20260915_(partCapital),partInterets:arrCreditAmort20260915_(exactAccessio.partInterets),partAssurance:arrCreditAmort20260915_(exactAccessio.partAssurance),capitalAvant:arrCreditAmort20260915_(capital),capitalApres:arrCreditAmort20260915_(capital-partCapital),capitalApresTheorique:arrCreditAmort20260915_(exactAccessio.capitalApresTheorique),methode:exactAccessio.methode};}
-  const explicite=ventilationExpliciteCredit20260915_(credit,montant,operation);
-  if(explicite){const partCapital=Math.min(capital,Math.max(0,explicite.partCapital));return{montant:arrCreditAmort20260915_(montant),partCapital:arrCreditAmort20260915_(partCapital),partInterets:arrCreditAmort20260915_(explicite.partInterets),partAssurance:arrCreditAmort20260915_(explicite.partAssurance),capitalAvant:arrCreditAmort20260915_(capital),capitalApres:arrCreditAmort20260915_(capital-partCapital),methode:explicite.methode};}
+  const exactCasden=typeof ventilationEcheancierCasden20260915_==='function'?ventilationEcheancierCasden20260915_(credit,operation):null;if(exactCasden){const partCapital=Math.min(capital,Math.max(0,exactCasden.partCapital));return{montant:arrCreditAmort20260915_(montant),partCapital:arrCreditAmort20260915_(partCapital),partInterets:arrCreditAmort20260915_(exactCasden.partInterets),partAssurance:arrCreditAmort20260915_(exactCasden.partAssurance),capitalAvant:arrCreditAmort20260915_(capital),capitalApres:arrCreditAmort20260915_(capital-partCapital),capitalApresTheorique:arrCreditAmort20260915_(exactCasden.capitalApresTheorique),methode:exactCasden.methode};}
+  const exactAccessio=typeof ventilationEcheancierAccessio20260915_==='function'?ventilationEcheancierAccessio20260915_(credit,operation):null;if(exactAccessio){const partCapital=Math.min(capital,Math.max(0,exactAccessio.partCapital));return{montant:arrCreditAmort20260915_(montant),partCapital:arrCreditAmort20260915_(partCapital),partInterets:arrCreditAmort20260915_(exactAccessio.partInterets),partAssurance:arrCreditAmort20260915_(exactAccessio.partAssurance),capitalAvant:arrCreditAmort20260915_(capital),capitalApres:arrCreditAmort20260915_(capital-partCapital),capitalApresTheorique:arrCreditAmort20260915_(exactAccessio.capitalApresTheorique),methode:exactAccessio.methode};}
+  const contratCofidis=typeof ventilationContratCofidis20260915_==='function'?ventilationContratCofidis20260915_(credit,operation):null;if(contratCofidis){const partCapital=Math.min(capital,Math.max(0,contratCofidis.partCapital));return{montant:arrCreditAmort20260915_(montant),partCapital:arrCreditAmort20260915_(partCapital),partInterets:arrCreditAmort20260915_(contratCofidis.partInterets),partAssurance:arrCreditAmort20260915_(contratCofidis.partAssurance),capitalAvant:arrCreditAmort20260915_(capital),capitalApres:arrCreditAmort20260915_(capital-partCapital),capitalApresTheorique:arrCreditAmort20260915_(contratCofidis.capitalApresTheorique),methode:contratCofidis.methode};}
+  const explicite=ventilationExpliciteCredit20260915_(credit,montant,operation);if(explicite){const partCapital=Math.min(capital,Math.max(0,explicite.partCapital));return{montant:arrCreditAmort20260915_(montant),partCapital:arrCreditAmort20260915_(partCapital),partInterets:arrCreditAmort20260915_(explicite.partInterets),partAssurance:arrCreditAmort20260915_(explicite.partAssurance),capitalAvant:arrCreditAmort20260915_(capital),capitalApres:arrCreditAmort20260915_(capital-partCapital),methode:explicite.methode};}
   const assurance=Math.min(montant,Math.max(0,Number(credit&&credit.assurance_mensuelle||0))),tx=tauxMensuelCredit20260915_(credit),interets=Math.min(Math.max(0,montant-assurance),arrCreditAmort20260915_(capital*tx.tauxMensuel)),partCapital=Math.min(capital,Math.max(0,arrCreditAmort20260915_(montant-assurance-interets)));
   return{montant:arrCreditAmort20260915_(montant),partCapital,partInterets:arrCreditAmort20260915_(interets),partAssurance:arrCreditAmort20260915_(assurance),capitalAvant:arrCreditAmort20260915_(capital),capitalApres:arrCreditAmort20260915_(capital-partCapital),methode:tx.methode};
 }
@@ -129,7 +98,4 @@ function appliquerAmortissementCreditDepuisRapprochement20260915_(chargeId,opera
   if(resultat&&resultat.applique&&typeof reconstruireSnapshotGlobalSyntheseBudgetSoft20260907==='function'){try{const s=reconstruireSnapshotGlobalSyntheseBudgetSoft20260907('rapprochement_credit');resultat.snapshot={ok:!!(s&&s.ok),revisionBudgetSoft:String(s&&s.revisionBudgetSoft||''),message:String(s&&s.message||'')};}catch(e){resultat.snapshot={ok:false,erreur:String(e&&e.message||e)};}}
   return resultat;
 }
-
-function auditerAmortissementsCredits20260915(){
-  const lignes=lireJournalAmortissementsCredits20260915_(),credits=typeof lireCreditsEtendusV2_==='function'?lireCreditsEtendusV2_():[],out={ok:true,version:CREDIT_AMORTIZATION_INTERMODULE_20260915_VERSION,nombre:lignes.length,derniers:lignes.slice(-10).map(x=>({credit:x.credit_nom,operation_id:x.operation_id,montant:Number(x.montant_echeance||0),capital:Number(x.part_capital||0),interets:Number(x.part_interets||0),assurance:Number(x.part_assurance||0),capital_apres:Number(x.capital_apres||0),methode:x.methode})),credits:credits.map(c=>({nom:c.nom,capital_restant:Number(c.capital_restant||0),echeances_restantes:Number(c.echeances_restantes||0),prochaine_echeance:c.prochaine_echeance||''}))};console.log('[AUDIT AMORTISSEMENTS CREDITS 20260915] '+JSON.stringify(out));return out;
-}
+function auditerAmortissementsCredits20260915(){const lignes=lireJournalAmortissementsCredits20260915_(),credits=typeof lireCreditsEtendusV2_==='function'?lireCreditsEtendusV2_():[],out={ok:true,version:CREDIT_AMORTIZATION_INTERMODULE_20260915_VERSION,nombre:lignes.length,derniers:lignes.slice(-10).map(x=>({credit:x.credit_nom,operation_id:x.operation_id,montant:Number(x.montant_echeance||0),capital:Number(x.part_capital||0),interets:Number(x.part_interets||0),assurance:Number(x.part_assurance||0),capital_apres:Number(x.capital_apres||0),methode:x.methode})),credits:credits.map(c=>({nom:c.nom,capital_restant:Number(c.capital_restant||0),echeances_restantes:Number(c.echeances_restantes||0),prochaine_echeance:c.prochaine_echeance||''}))};console.log('[AUDIT AMORTISSEMENTS CREDITS 20260915] '+JSON.stringify(out));return out;}
