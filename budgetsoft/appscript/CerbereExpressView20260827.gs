@@ -1,4 +1,4 @@
-const CERBERE_EXPRESS_VIEW_VERSION = '2026-09-13.3';
+const CERBERE_EXPRESS_VIEW_VERSION = '2026-09-15.4';
 
 /**
  * Adapte le moteur Cerbère Express vers la vue mobile, sans recalcul métier.
@@ -10,7 +10,20 @@ function composerVueCerbereExpressDepuisMoteur20260913_(e,sourceBudgetSoft,revis
   const lignes=(e.pilotable&&e.pilotable.lignes||[]).map(x=>({categorie:x.categorie,allocation:Number(x.allocation||0),consomme:Number(x.consomme||0),reste:Number(x.reste||0),partConsommee:Number(x.partConsommee||0),partTempsPct:Number(x.partTempsPct||0),niveau:x.vigilance&&x.vigilance.niveau||'vert',libelle:x.vigilance&&x.vigilance.libelle||'Cap tenu',message:x.vigilance&&x.vigilance.message||''}));
   const pluxee=e.pluxee&&e.pluxee.disponible?{disponible:true,soldeReel:Number(e.pluxee.soldeReel||0),soldeTheorique:Number(e.pluxee.soldeTheorique||0),ecart:Number(e.pluxee.ecartReelTheorique||0),progressionPct:Number(e.pluxee.progressionPct||0),lignes:(e.pluxee.lignes||[]).map(x=>({categorie:x.categorie,allocation:Number(x.allocation||0),consomme:Number(x.consomme||0),reste:Number(x.reste||0),partConsommee:Number(x.partConsommee||0),partTempsPct:Number(x.partTempsPct||0),niveau:x.vigilance&&x.vigilance.niveau||'vert',message:x.vigilance&&x.vigilance.message||''}))}:{disponible:false};
   const rouges=lignes.filter(x=>x.niveau==='rouge').length,oranges=lignes.filter(x=>x.niveau==='orange').length,ctx=e.contexteDecision||{},ref=e.referenceEP||{};
-  return{ok:true,version:CERBERE_EXPRESS_VIEW_VERSION,moteurVersion:e.version,moteurSource:e.moteurSource||'',cockpitVersion:e.cockpitVersion||'',genereLe:e.genereLe,cycle:e.cycle,meteo:e.meteo,consigneSaillante:e.consigneSaillante,pilotable:{allocation:Number(e.pilotable&&e.pilotable.allocation||0),consomme:Number(e.pilotable&&e.pilotable.consomme||0),reste:Number(e.pilotable&&e.pilotable.reste||0),reparti:Number(e.pilotable&&e.pilotable.reparti||0),lignes,rouges,oranges},pluxee,decision:{ep:Number(ctx.ep!=null?ctx.ep:(e.pilotable&&e.pilotable.allocation||0)),epDisponible:Number(ctx.epDisponible!=null?ctx.epDisponible:(e.pilotable&&e.pilotable.reste||0)),epSource:String(ctx.epSource||ref.source||''),p0Reference:Number(ref.totalP0||0),prochainCycleEp:Number(ctx.prochainCycleEp||0),reportCbCycleSuivant:Number(ctx.reportCbCycleSuivant||0),epDiffereEstimeCycleSuivant:Number(ctx.epDiffereEstimeCycleSuivant||0)},performance:Object.assign({},e.performance||{},{source:sourceBudgetSoft==='snapshot_global'?'snapshot_global · moteur EP':'recalcul_secours · moteur EP'}),sourceBudgetSoft:String(sourceBudgetSoft||'recalcul_secours'),revisionBudgetSoft:String(revisionBudgetSoft||e.revisionBudgetSoft||''),doctrine:'Cerbère Express publie exclusivement la décision EP et son rythme de consommation.'};
+  return{ok:true,version:CERBERE_EXPRESS_VIEW_VERSION,moteurVersion:e.version,moteurSource:e.moteurSource||'',cockpitVersion:e.cockpitVersion||'',genereLe:e.genereLe,cycle:e.cycle,meteo:e.meteo,consigneSaillante:e.consigneSaillante,pilotable:{allocation:Number(e.pilotable&&e.pilotable.allocation||0),consomme:Number(e.pilotable&&e.pilotable.consomme||0),reste:Number(e.pilotable&&e.pilotable.reste||0),reparti:Number(e.pilotable&&e.pilotable.reparti||0),lignes,rouges,oranges},pluxee,decision:{
+    ep:Number(ctx.ep!=null?ctx.ep:(e.pilotable&&e.pilotable.allocation||0)),
+    epDisponible:Number(ctx.epDisponible!=null?ctx.epDisponible:(e.pilotable&&e.pilotable.reste||0)),
+    epSource:String(ctx.epSource||ref.source||''),
+    p0Reference:Number(ref.totalP0||0),
+    prochainCycleEp:Number(ctx.prochainCycleEp||0),
+    prochainCycleCbEngagee:Number(ctx.prochainCycleCbEngagee!=null?ctx.prochainCycleCbEngagee:(ctx.reportCbCycleSuivant||0)),
+    prochainCycleEpConsommee:Number(ctx.prochainCycleEpConsommee||0),
+    prochainCycleEpDisponible:Number(ctx.prochainCycleEpDisponible!=null?ctx.prochainCycleEpDisponible:(ctx.epDiffereEstimeCycleSuivant||0)),
+    // Compatibilité de la vue avec les anciens noms jusqu'à disparition des consommateurs legacy.
+    reportCbCycleSuivant:Number(ctx.prochainCycleCbEngagee!=null?ctx.prochainCycleCbEngagee:(ctx.reportCbCycleSuivant||0)),
+    epDiffereEstimeCycleSuivant:Number(ctx.prochainCycleEpDisponible!=null?ctx.prochainCycleEpDisponible:(ctx.epDiffereEstimeCycleSuivant||0)),
+    sourceProchainCycle:String(ctx.sourceProchainCycle||'')
+  },performance:Object.assign({},e.performance||{},{source:sourceBudgetSoft==='snapshot_global'?'snapshot_global · moteur EP':'recalcul_secours · moteur EP'}),sourceBudgetSoft:String(sourceBudgetSoft||'recalcul_secours'),revisionBudgetSoft:String(revisionBudgetSoft||e.revisionBudgetSoft||''),doctrine:'Cerbère Express publie exclusivement la décision EP et son rythme de consommation.'};
 }
 
 function chargerVueCerbereExpress20260827(){
