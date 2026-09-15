@@ -1,4 +1,4 @@
-const CREDIT_AMORTIZATION_CATCHUP_20260915_VERSION='2026-09-15.4';
+const CREDIT_AMORTIZATION_CATCHUP_20260915_VERSION='2026-09-15.5';
 
 function dateFrRattrapageCredit20260915_(s){
   const m=String(s||'').match(/\b(\d{1,2})\/(\d{1,2})\/(20\d{2})\b/);if(!m)return null;
@@ -13,6 +13,7 @@ function dateIsoRattrapageCredit20260915_(s){
 function referenceContractuelleCreditRattrapage20260915_(credit){
   if(typeof estCreditCasdenEcheancier20260915_==='function'&&estCreditCasdenEcheancier20260915_(credit))return{date:dateIsoRattrapageCredit20260915_('2026-08-04'),capital:40562.30,source:'echeancier_exact_CASDEN'};
   if(typeof estCreditAccessio20260915_==='function'&&estCreditAccessio20260915_(credit))return{date:dateIsoRattrapageCredit20260915_('2026-08-21'),capital:800.00,source:'releve_exact_ACCESSIO'};
+  if(typeof referenceReleveCarrefourPass20260915_==='function'){const c=referenceReleveCarrefourPass20260915_(credit);if(c)return{date:dateIsoRattrapageCredit20260915_(c.date),capital:Number(c.capital),source:c.source};}
   return null;
 }
 
@@ -61,6 +62,7 @@ function simulerRattrapageAmortissementsCredits20260915(){
     let confiance='insuffisante',raison='date_reference_absente';
     if(refDate){if(refCapital==null){confiance='moyenne';raison='date_reference_trouvee_sans_capital_reference_dans_commentaire';}else if(Math.abs(refCapital-capitalActuel)<=.01){confiance='haute';raison=sourceReference==='commentaire_credit'?'date_et_capital_reference_concordent_avec_capital_actuel':'reference_documentaire_exacte_concordante';}else{confiance='conflit';raison='capital_actuel_differe_du_capital_reference';}}
     const virtuel=Object.assign({},credit),operations=[],exclues=[];
+    if(confiance==='haute'&&refCapital!=null)virtuel.capital_restant=refCapital;
     const candidates=rappros.filter(r=>{const liaison=trouverCreditPourChargeFixe20260915_(r.charge,credits);return liaison.ok&&String(liaison.credit.id)===String(credit.id)&&refDate&&r.date>refDate;});
     candidates.forEach(r=>{
       if(operationSurDateSuspendueCreditRattrapage20260915_(credit,r.date)){exclues.push({operation_id:String(r.operation.id||''),date:r.date.toISOString(),montant:Math.abs(Number(r.operation.montant||0)),raison:'date_suspendue_ou_reportee'});return;}
