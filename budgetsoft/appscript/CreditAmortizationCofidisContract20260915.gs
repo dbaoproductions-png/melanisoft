@@ -1,13 +1,20 @@
-const COFIDIS_CONTRACT_20260915_VERSION='2026-09-15.1';
+const COFIDIS_CONTRACT_20260915_VERSION='2026-09-15.2';
 const COFIDIS_CONTRACT_ACCOUNT_20260915='28924002171500';
 const COFIDIS_CONTRACT_TNA_20260915=0.046;
 const COFIDIS_CONTRACT_ASSURANCE_20260915=21.00;
 const COFIDIS_CONTRACT_ECHEANCE_HORS_ASSURANCE_20260915=186.89;
 const COFIDIS_CONTRACT_ECHEANCE_AVEC_ASSURANCE_20260915=207.89;
+const COFIDIS_SITE_REFERENCE_DATE_20260915='2026-09-15';
+const COFIDIS_SITE_REFERENCE_CRD_20260915=8795.45;
 
 function estCreditCofidisPersonnel20260915_(credit){
   const t=texteCreditAmort20260915_([credit&&credit.nom,credit&&credit.commentaire,credit&&credit.numero_pret].join(' '));
   return t.includes('COFIDIS')&&!t.includes('ACCESSIO');
+}
+
+function referenceSiteCofidis20260915_(credit){
+  if(!estCreditCofidisPersonnel20260915_(credit))return null;
+  return{date:COFIDIS_SITE_REFERENCE_DATE_20260915,capital:COFIDIS_SITE_REFERENCE_CRD_20260915,source:'site_COFIDIS_2026-09-15'};
 }
 
 function ventilationContratCofidis20260915_(credit,operation){
@@ -37,6 +44,7 @@ function auditerMoteurCofidisContrat20260915(){
   const attenduInterets=arrCreditAmort20260915_(Number(credit.capital_restant||0)*(COFIDIS_CONTRACT_TNA_20260915/12));
   const attenduCapital=arrCreditAmort20260915_(COFIDIS_CONTRACT_ECHEANCE_AVEC_ASSURANCE_20260915-COFIDIS_CONTRACT_ASSURANCE_20260915-attenduInterets);
   const attenduApres=arrCreditAmort20260915_(Number(credit.capital_restant||0)-attenduCapital);
-  const out={ok:calc&&String(calc.methode||'').indexOf('contrat_COFIDIS_TNA_assurance_')===0,version_moteur:typeof CREDIT_AMORTIZATION_INTERMODULE_20260915_VERSION!=='undefined'?CREDIT_AMORTIZATION_INTERMODULE_20260915_VERSION:'',version_contrat:COFIDIS_CONTRACT_20260915_VERSION,credit:{id:credit.id,nom:credit.nom,capital_actuel:Number(credit.capital_restant||0)},test_2026_09_01:calc,attendu:{montant:COFIDIS_CONTRACT_ECHEANCE_AVEC_ASSURANCE_20260915,partCapital:attenduCapital,partInterets:attenduInterets,partAssurance:COFIDIS_CONTRACT_ASSURANCE_20260915,capitalApres:attenduApres}};
+  const ref=referenceSiteCofidis20260915_(credit);
+  const out={ok:calc&&String(calc.methode||'').indexOf('contrat_COFIDIS_TNA_assurance_')===0,version_moteur:typeof CREDIT_AMORTIZATION_INTERMODULE_20260915_VERSION!=='undefined'?CREDIT_AMORTIZATION_INTERMODULE_20260915_VERSION:'',version_contrat:COFIDIS_CONTRACT_20260915_VERSION,credit:{id:credit.id,nom:credit.nom,capital_actuel:Number(credit.capital_restant||0)},reference_site:ref,test_2026_09_01:calc,attendu:{montant:COFIDIS_CONTRACT_ECHEANCE_AVEC_ASSURANCE_20260915,partCapital:attenduCapital,partInterets:attenduInterets,partAssurance:COFIDIS_CONTRACT_ASSURANCE_20260915,capitalApres:attenduApres}};
   console.log('[AUDIT MOTEUR COFIDIS CONTRAT 20260915] '+JSON.stringify(out));return out;
 }
