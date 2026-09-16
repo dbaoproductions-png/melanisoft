@@ -1,4 +1,4 @@
-const CREDIT_AMORTIZATION_CATCHUP_20260915_VERSION='2026-09-15.8';
+const CREDIT_AMORTIZATION_CATCHUP_20260915_VERSION='2026-09-16.1';
 
 function dateFrRattrapageCredit20260915_(s){
   const m=String(s||'').match(/\b(\d{1,2})\/(\d{1,2})\/(20\d{2})\b/);if(!m)return null;
@@ -15,6 +15,7 @@ function referenceContractuelleCreditRattrapage20260915_(credit){
   if(typeof estCreditAccessio20260915_==='function'&&estCreditAccessio20260915_(credit))return{date:dateIsoRattrapageCredit20260915_('2026-08-21'),capital:800.00,source:'releve_exact_ACCESSIO'};
   if(typeof referenceSiteCofidis20260915_==='function'){const c=referenceSiteCofidis20260915_(credit);if(c)return{date:dateIsoRattrapageCredit20260915_(c.date),capital:Number(c.capital),source:c.source};}
   if(typeof referenceReleveCarrefourPass20260915_==='function'){const c=referenceReleveCarrefourPass20260915_(credit);if(c)return{date:dateIsoRattrapageCredit20260915_(c.date),capital:Number(c.capital),source:c.source};}
+  if(typeof referenceReleveFloa20260916_==='function'){const c=referenceReleveFloa20260916_(credit);if(c)return{date:dateIsoRattrapageCredit20260915_(c.date),capital:Number(c.capital),source:c.source};}
   return null;
 }
 
@@ -33,7 +34,7 @@ function capitalReferenceCreditRattrapage20260915_(credit){
 }
 
 function sourceReferenceCreditRattrapage20260915_(credit){const c=referenceContractuelleCreditRattrapage20260915_(credit);return c?c.source:'commentaire_credit';}
-function sourceReferenceResynchronisableCredit20260915_(source){return ['site_COFIDIS_2026-09-15','releve_exact_CARREFOUR_PASS','releve_exact_CARREFOUR_PASS_2026-08-20'].includes(String(source||''));}
+function sourceReferenceResynchronisableCredit20260915_(source){return ['site_COFIDIS_2026-09-15','releve_exact_CARREFOUR_PASS','releve_exact_CARREFOUR_PASS_2026-08-20','releve_exact_FLOA_2026-08-24'].includes(String(source||''));}
 
 function datesSuspenduesCreditRattrapage20260915_(credit){
   const t=String(credit&&credit.commentaire||''),dates=[];
@@ -56,6 +57,12 @@ function rapprochementsCreditsValidesRattrapage20260915_(){
   ops.forEach(o=>{const cid=String(o.charge_fixe_id||'').trim();if(cid)pousser(cid,o.id,'Operations.charge_fixe_id');});return out.sort((a,b)=>a.date-b.date);
 }
 
+function calculerAmortissementRattrapage20260916_(credit,operation){
+  const floa=typeof ventilationReleveFloa20260916_==='function'?ventilationReleveFloa20260916_(credit,operation):null;
+  if(floa){const capital=Math.max(0,Number(credit&&credit.capital_restant||0)),partCapital=Math.min(capital,Math.max(0,Number(floa.partCapital||0)));return{montant:arrCreditAmort20260915_(Math.abs(Number(operation&&operation.montant||0))),partCapital:arrCreditAmort20260915_(partCapital),partInterets:arrCreditAmort20260915_(floa.partInterets),partAssurance:arrCreditAmort20260915_(floa.partAssurance),capitalAvant:arrCreditAmort20260915_(capital),capitalApres:arrCreditAmort20260915_(capital-partCapital),capitalApresTheorique:arrCreditAmort20260915_(floa.capitalApresTheorique),methode:floa.methode};}
+  return calculerAmortissementCredit20260915_(credit,operation);
+}
+
 function simulerRattrapageAmortissementsCredits20260915(){
   verifierInitialisation_();
   const credits=typeof lireCreditsEtendusV2_==='function'?lireCreditsEtendusV2_():[],rappros=rapprochementsCreditsValidesRattrapage20260915_(),lignes=[];
@@ -74,14 +81,14 @@ function simulerRattrapageAmortissementsCredits20260915(){
     candidates.forEach(r=>{
       if(operationSurDateSuspendueCreditRattrapage20260915_(credit,r.date)){exclues.push({operation_id:String(r.operation.id||''),date:r.date.toISOString(),montant:Math.abs(Number(r.operation.montant||0)),raison:'date_suspendue_ou_reportee'});return;}
       if(!montantCompatibleEcheanceCreditRattrapage20260915_(credit,r.operation)){exclues.push({operation_id:String(r.operation.id||''),date:r.date.toISOString(),montant:Math.abs(Number(r.operation.montant||0)),raison:'montant_incompatible_avec_mensualite'});return;}
-      const avant=Math.round(Math.max(0,Number(virtuel.capital_restant||0))*100)/100,calc=calculerAmortissementCredit20260915_(virtuel,r.operation),documentee=methodeDocumenteeRattrapage20260915_(calc.methode);virtuel.capital_restant=calc.capitalApres;
+      const avant=Math.round(Math.max(0,Number(virtuel.capital_restant||0))*100)/100,calc=calculerAmortissementRattrapage20260916_(virtuel,r.operation),documentee=methodeDocumenteeRattrapage20260915_(calc.methode);virtuel.capital_restant=calc.capitalApres;
       operations.push({operation_id:String(r.operation.id||''),charge_fixe_id:String(r.charge.id||''),date:r.date.toISOString(),montant:calc.montant,capital_avant:avant,part_capital:calc.partCapital,part_interets:calc.partInterets,part_assurance:calc.partAssurance,capital_apres:calc.capitalApres,methode:calc.methode,ventilation_documentee:documentee,source_rapprochement:r.source});
     });
     const operationsDocumentees=operations.filter(x=>x.ventilation_documentee),operationsEstimees=operations.filter(x=>!x.ventilation_documentee),capitalDocumente=Math.round(operationsDocumentees.reduce((s,x)=>s+Number(x.part_capital||0),0)*100)/100;
     const applicationAutorisee=confiance==='haute'&&exclues.length===0&&operationsEstimees.length===0;
-    const capitalOperations=Math.round(operations.reduce((s,x)=>s+Number(x.part_capital||0),0)*100)/100;
-    lignes.push({credit_id:String(credit.id||''),credit:String(credit.nom||''),capital_actuel:capitalActuel,date_reference:refDate?Utilities.formatDate(refDate,Session.getScriptTimeZone(),'yyyy-MM-dd'):'',capital_reference:refCapital,source_reference:sourceReference,confiance,raison,resynchronisation_source:resynchronisationSource,ajustement_direct_source:ajustementDirectSource,operations_a_rattraper:operations.length,operations_documentees:operationsDocumentees.length,operations_estimees:operationsEstimees.length,operations_exclues:exclues.length,capital_a_deduire:capitalOperations,capital_documente_a_deduire:capitalDocumente,capital_simule_apres:Math.round(Number(virtuel.capital_restant||0)*100)/100,application_automatique_autorisable:applicationAutorisee,operations,exclues});
+    const capitalOperations=Math.round(operations.reduce((s,x)=>s+Number(x.part_capital||0),0)*100)/100,capitalSimule=Math.round(Number(virtuel.capital_restant||0)*100)/100,variationNette=Math.round((capitalSimule-capitalActuel)*100)/100;
+    lignes.push({credit_id:String(credit.id||''),credit:String(credit.nom||''),capital_actuel:capitalActuel,date_reference:refDate?Utilities.formatDate(refDate,Session.getScriptTimeZone(),'yyyy-MM-dd'):'',capital_reference:refCapital,source_reference:sourceReference,confiance,raison,resynchronisation_source:resynchronisationSource,ajustement_direct_source:ajustementDirectSource,operations_a_rattraper:operations.length,operations_documentees:operationsDocumentees.length,operations_estimees:operationsEstimees.length,operations_exclues:exclues.length,capital_a_deduire:capitalOperations,capital_documente_a_deduire:capitalDocumente,capital_simule_apres:capitalSimule,variation_nette_capital:variationNette,application_automatique_autorisable:applicationAutorisee,operations,exclues});
   });
-  const autorisables=lignes.filter(x=>x.application_automatique_autorisable),out={ok:true,version:CREDIT_AMORTIZATION_CATCHUP_20260915_VERSION,lecture_seule:true,nombre_credits:lignes.length,nombre_operations:lignes.reduce((s,x)=>s+x.operations_a_rattraper,0),nombre_operations_documentees:lignes.reduce((s,x)=>s+x.operations_documentees,0),nombre_operations_estimees:lignes.reduce((s,x)=>s+x.operations_estimees,0),nombre_operations_exclues:lignes.reduce((s,x)=>s+x.operations_exclues,0),capital_total_a_deduire:Math.round(lignes.reduce((s,x)=>s+x.capital_a_deduire+Math.max(0,Number(x.ajustement_direct_source||0)),0)*100)/100,capital_total_documente:Math.round(lignes.reduce((s,x)=>s+x.capital_documente_a_deduire+Math.max(0,Number(x.ajustement_direct_source||0)),0)*100)/100,capital_total_autorisable:Math.round(autorisables.reduce((s,x)=>s+x.capital_a_deduire+Math.max(0,Number(x.ajustement_direct_source||0)),0)*100)/100,credits:lignes};
+  const autorisables=lignes.filter(x=>x.application_automatique_autorisable),out={ok:true,version:CREDIT_AMORTIZATION_CATCHUP_20260915_VERSION,lecture_seule:true,nombre_credits:lignes.length,nombre_operations:lignes.reduce((s,x)=>s+x.operations_a_rattraper,0),nombre_operations_documentees:lignes.reduce((s,x)=>s+x.operations_documentees,0),nombre_operations_estimees:lignes.reduce((s,x)=>s+x.operations_estimees,0),nombre_operations_exclues:lignes.reduce((s,x)=>s+x.operations_exclues,0),capital_total_a_deduire:Math.round(lignes.reduce((s,x)=>s+x.capital_a_deduire+Math.max(0,Number(x.ajustement_direct_source||0)),0)*100)/100,capital_total_documente:Math.round(lignes.reduce((s,x)=>s+x.capital_documente_a_deduire+Math.max(0,Number(x.ajustement_direct_source||0)),0)*100)/100,capital_total_autorisable:Math.round(autorisables.reduce((s,x)=>s+Math.max(0,-Number(x.variation_nette_capital||0)),0)*100)/100,variation_nette_capital_autorisable:Math.round(autorisables.reduce((s,x)=>s+Number(x.variation_nette_capital||0),0)*100)/100,credits:lignes};
   console.log('[SIMULATION RATTRAPAGE AMORTISSEMENTS CREDITS 20260915] '+JSON.stringify(out));return out;
 }
