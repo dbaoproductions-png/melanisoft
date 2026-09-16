@@ -38,6 +38,27 @@
     google.script.run.withSuccessHandler(rendrePatrimoine20260915_).withFailureHandler(err=>{if(typeof afficherErreur==='function')afficherErreur(err.message||String(err));}).chargerCreditsPatrimoineIntegres20260915();
   }
 
+  function ouvrirPatrimoineIntegre20260916_(){
+    if(window.state)state.currentView='patrimoine';
+    document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view==='patrimoine'));
+    const titre=document.getElementById('page-title');if(titre)titre.textContent='Patrimoine';
+    const eyebrow=document.getElementById('page-eyebrow');if(eyebrow)eyebrow.textContent='Situation globale';
+    ['dashboard','comptes','operations','charges_fixes'].forEach(id=>document.getElementById(id)?.classList.remove('active'));
+    const zone=document.getElementById('generic-view');if(zone)zone.classList.add('active');
+    chargerPatrimoine20260915_(false);
+  }
+
+  // Le routeur historique PlanningUI intercepte les clics en phase capture.
+  // Cette interception est enregistrée immédiatement, donc avant son listener DOMContentLoaded,
+  // afin que Patrimoine utilise toujours le rendu intégré Crédits + Patrimoine.
+  document.addEventListener('click',e=>{
+    const bouton=e.target.closest?.('.nav-item[data-view="patrimoine"]');
+    if(!bouton)return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    ouvrirPatrimoineIntegre20260916_();
+  },true);
+
   function nettoyerRenduCredits20260915_(){
     const zone=document.getElementById('generic-view');
     if(!zone||!document.querySelector('[data-view="credits"].active'))return;
