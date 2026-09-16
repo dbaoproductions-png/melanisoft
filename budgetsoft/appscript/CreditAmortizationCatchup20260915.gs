@@ -1,4 +1,4 @@
-const CREDIT_AMORTIZATION_CATCHUP_20260915_VERSION='2026-09-16.2';
+const CREDIT_AMORTIZATION_CATCHUP_20260915_VERSION='2026-09-16.3';
 
 function dateFrRattrapageCredit20260915_(s){
   const m=String(s||'').match(/\b(\d{1,2})\/(\d{1,2})\/(20\d{2})\b/);if(!m)return null;
@@ -16,6 +16,7 @@ function referenceContractuelleCreditRattrapage20260915_(credit){
   if(typeof referenceSiteCofidis20260915_==='function'){const c=referenceSiteCofidis20260915_(credit);if(c)return{date:dateIsoRattrapageCredit20260915_(c.date),capital:Number(c.capital),source:c.source};}
   if(typeof referenceReleveCarrefourPass20260915_==='function'){const c=referenceReleveCarrefourPass20260915_(credit);if(c)return{date:dateIsoRattrapageCredit20260915_(c.date),capital:Number(c.capital),source:c.source};}
   if(typeof referenceReleveFloa20260916_==='function'){const c=referenceReleveFloa20260916_(credit);if(c)return{date:dateIsoRattrapageCredit20260915_(c.date),capital:Number(c.capital),source:c.source};}
+  if(typeof referenceReleveOney20260916_==='function'){const c=referenceReleveOney20260916_(credit);if(c)return{date:dateIsoRattrapageCredit20260915_(c.date),capital:Number(c.capital),source:c.source};}
   return null;
 }
 
@@ -34,7 +35,7 @@ function capitalReferenceCreditRattrapage20260915_(credit){
 }
 
 function sourceReferenceCreditRattrapage20260915_(credit){const c=referenceContractuelleCreditRattrapage20260915_(credit);return c?c.source:'commentaire_credit';}
-function sourceReferenceResynchronisableCredit20260915_(source){return ['site_COFIDIS_2026-09-15','releve_exact_CARREFOUR_PASS','releve_exact_CARREFOUR_PASS_2026-08-20','releve_exact_FLOA_2026-08-24'].includes(String(source||''));}
+function sourceReferenceResynchronisableCredit20260915_(source){return ['site_COFIDIS_2026-09-15','releve_exact_CARREFOUR_PASS','releve_exact_CARREFOUR_PASS_2026-08-20','releve_exact_FLOA_2026-08-24','releve_exact_ONEY_2026-08-25'].includes(String(source||''));}
 
 function datesSuspenduesCreditRattrapage20260915_(credit){
   const t=String(credit&&credit.commentaire||''),dates=[];
@@ -73,6 +74,8 @@ function rapprochementsCreditsValidesRattrapage20260915_(){
 }
 
 function calculerAmortissementRattrapage20260916_(credit,operation){
+  const exactOney=typeof ventilationReleveOney20260916_==='function'?ventilationReleveOney20260916_(credit,operation):null;
+  if(exactOney){const capital=Math.max(0,Number(credit&&credit.capital_restant||0)),partCapital=Math.min(capital,Math.max(0,Number(exactOney.partCapital||0)));return{montant:arrCreditAmort20260915_(Math.abs(Number(operation&&operation.montant||0))),partCapital:arrCreditAmort20260915_(partCapital),partInterets:arrCreditAmort20260915_(exactOney.partInterets),partAssurance:arrCreditAmort20260915_(exactOney.partAssurance),partFrais:0,capitalAvant:arrCreditAmort20260915_(capital),capitalApres:arrCreditAmort20260915_(capital-partCapital),capitalApresTheorique:arrCreditAmort20260915_(exactOney.capitalApresTheorique),methode:exactOney.methode};}
   const exactFloa=typeof ventilationReleveFloa20260916_==='function'?ventilationReleveFloa20260916_(credit,operation):null;
   if(exactFloa){const capital=Math.max(0,Number(credit&&credit.capital_restant||0)),partCapital=Math.min(capital,Math.max(0,Number(exactFloa.partCapital||0)));return{montant:arrCreditAmort20260915_(Math.abs(Number(operation&&operation.montant||0))),partCapital:arrCreditAmort20260915_(partCapital),partInterets:arrCreditAmort20260915_(exactFloa.partInterets),partAssurance:arrCreditAmort20260915_(exactFloa.partAssurance),partFrais:arrCreditAmort20260915_(exactFloa.partFrais),capitalAvant:arrCreditAmort20260915_(capital),capitalApres:arrCreditAmort20260915_(capital-partCapital),capitalApresTheorique:arrCreditAmort20260915_(exactFloa.capitalApresTheorique),methode:exactFloa.methode};}
   return calculerAmortissementCredit20260915_(credit,operation);
