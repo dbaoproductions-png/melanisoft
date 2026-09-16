@@ -1,6 +1,6 @@
 <script>
 (function(){
-  const VERSION='2026-09-05.3';
+  const VERSION='2026-09-16.1';
   window.__BUDGETSOFT_PREFETCH=window.__BUDGETSOFT_PREFETCH||{};
 
   function nettoyerVueChargesFixes_(view){
@@ -70,8 +70,13 @@
     w.__prefetch20260905=true;modules.budget=w;
   }
 
-  // Patrimoine : le calcul préparé en arrière-plan, puis la dernière valeur rendue, sont réutilisés.
+  // Patrimoine : depuis l'intégration Crédits/Patrimoine 20260915, le rendu intégré
+  // reste propriétaire de la vue afin d'afficher le patrimoine net canonique.
   function installerCachePatrimoine_(){
+    if(typeof window.chargerPatrimoineUI20260915==='function'){
+      delete window.__BUDGETSOFT_PREFETCH.patrimoine;
+      return;
+    }
     const modules=window.budgetsoftModules;if(!modules||typeof modules.patrimoine!=='function'||modules.patrimoine.__prefetch20260905)return;
     const base=modules.patrimoine;
     const w=function(){
@@ -107,6 +112,7 @@
   function prechargerFond_(){
     const cache=window.__BUDGETSOFT_PREFETCH;
     const apresCredits=()=>setTimeout(()=>{
+      if(typeof window.chargerPatrimoineUI20260915==='function')return apresPatrimoine();
       if(cache.patrimoine)return apresPatrimoine();
       google.script.run.withSuccessHandler(r=>{cache.patrimoine=r;apresPatrimoine();}).withFailureHandler(apresPatrimoine).chargerPatrimoine();
     },140);
