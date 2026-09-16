@@ -1,4 +1,4 @@
-const CREDIT_DATA_REFRESH_20260916_VERSION='2026-09-16.2';
+const CREDIT_DATA_REFRESH_20260916_VERSION='2026-09-16.3';
 
 function dateLocaleCreditDataRefresh20260916_(v){
   if(!v)return'';const d=new Date(v);if(isNaN(d))return'';
@@ -27,13 +27,25 @@ function rapprochementsChargesFixesCreditDataRefresh20260916_(){
   return rows.filter(r=>r.some(v=>v!==''&&v!==null)).map(r=>Object.fromEntries(FIXED_CHARGE_MATCH_HEADERS.map((h,i)=>[h,r[i] instanceof Date?r[i].toISOString():r[i]])));
 }
 
+function chargeFixeAccessioUnique20260916_(){
+  const charges=typeof lireTable_==='function'?lireTable_('Charges_fixes'):[];
+  const candidats=(charges||[]).filter(c=>{
+    const montant=Math.abs(Number(c&&c.montant||0));
+    if(Math.abs(montant-33.60)>.02)return false;
+    const texte=texteCreditAmort20260915_([c.libelle,c.libelle_bancaire,c.commentaire,c.nature,c.categorie].join(' '));
+    return texte.includes('ACCESSIO')||(texte.includes('COFIDIS')&&texte.includes('33 60'));
+  });
+  return candidats.length===1?String(candidats[0].id||''):'';
+}
+
 function rapprochementChargeFixeAccessio20260916_(operationId){
   const oid=String(operationId||'');if(!oid)return'';
   const op=(typeof lireTable_==='function'?lireTable_('Operations'):[]).find(x=>String(x.id||'')===oid);
   if(op&&op.charge_fixe_id)return String(op.charge_fixe_id);
   const rappro=rapprochementsChargesFixesCreditDataRefresh20260916_();
   const r=(rappro||[]).find(x=>String(x.operation_id||x.operationId||'')===oid&&String(x.statut||'').toLowerCase()!=='rejeté'&&String(x.statut||'').toLowerCase()!=='rejete'&&String(x.statut||'').toLowerCase()!=='ignoré'&&String(x.statut||'').toLowerCase()!=='ignore');
-  return r?String(r.charge_fixe_id||r.chargeId||''):'';
+  if(r){const id=String(r.charge_fixe_id||r.chargeId||'');if(id)return id;}
+  return chargeFixeAccessioUnique20260916_();
 }
 
 function auditerRattrapageAccessio20260916(){
@@ -43,10 +55,10 @@ function auditerRattrapageAccessio20260916(){
   const trouve=trouverOperationAccessioSeptembre20260916_();
   if(!credit||!trouve.ok){const out={ok:false,version:CREDIT_DATA_REFRESH_20260916_VERSION,lecture_seule:true,raison:!credit?'credit_accessio_introuvable':trouve.raison,detail:trouve};console.log('[AUDIT RATTRAPAGE ACCESSIO 20260916] '+JSON.stringify(out));return out;}
   const op=trouve.operation,oid=String(op.id||''),journal=typeof lireJournalAmortissementsCredits20260915_==='function'?lireJournalAmortissementsCredits20260915_():[],deja=journal.find(x=>String(x.operation_id||'')===oid&&String(x.statut||'')==='applique');
-  const calc=calculerAmortissementCredit20260915_(credit,op),capitalActuel=Number(credit.capital_restant||0),capitalAttendu=776.53;
+  const calc=calculerAmortissementCredit20260915_(credit,op),capitalActuel=Number(credit.capital_restant||0),capitalAttendu=776.53,chargeId=rapprochementChargeFixeAccessio20260916_(oid);
   const calculExact=!!(calc&&String(calc.methode||'').indexOf('releve_exact_ACCESSIO_')===0&&Math.abs(Number(calc.partCapital||0)-23.47)<.001&&Math.abs(Number(calc.partInterets||0)-10.13)<.001);
-  const autorisable=!deja&&Math.abs(capitalActuel-800)<.01&&calculExact;
-  const out={ok:true,version:CREDIT_DATA_REFRESH_20260916_VERSION,lecture_seule:true,credit:{id:String(credit.id||''),nom:String(credit.nom||''),capital_actuel:capitalActuel,capital_attendu:capitalAttendu,prochaine_echeance:String(credit.prochaine_echeance||'')},operation:{id:oid,date:dateLocaleCreditDataRefresh20260916_(op.date_comptable||op.date||op.date_operation),montant:Number(op.montant||0),charge_fixe_id:rapprochementChargeFixeAccessio20260916_(oid)},calcul:calc,deja_journalisee:!!deja,application_autorisable:autorisable};
+  const autorisable=!deja&&Math.abs(capitalActuel-800)<.01&&calculExact&&!!chargeId;
+  const out={ok:true,version:CREDIT_DATA_REFRESH_20260916_VERSION,lecture_seule:true,credit:{id:String(credit.id||''),nom:String(credit.nom||''),capital_actuel:capitalActuel,capital_attendu:capitalAttendu,prochaine_echeance:String(credit.prochaine_echeance||'')},operation:{id:oid,date:dateLocaleCreditDataRefresh20260916_(op.date_comptable||op.date||op.date_operation),montant:Number(op.montant||0),charge_fixe_id:chargeId},calcul:calc,deja_journalisee:!!deja,liaison_charge_fixe_ok:!!chargeId,application_autorisable:autorisable};
   console.log('[AUDIT RATTRAPAGE ACCESSIO 20260916] '+JSON.stringify(out));return out;
 }
 
@@ -59,13 +71,13 @@ function appliquerRattrapageAccessio20260916(){
       const op=trouve.operation,oid=String(op.id||''),journal=lireJournalAmortissementsCredits20260915_(),deja=journal.find(x=>String(x.operation_id||'')===oid&&String(x.statut||'')==='applique');
       if(deja){out={ok:true,version:CREDIT_DATA_REFRESH_20260916_VERSION,applique:false,duplique:true,operation_id:oid,capital_restant:Number(credit.capital_restant||0)};}
       else{
-        const capitalAvant=Number(credit.capital_restant||0),calc=calculerAmortissementCredit20260915_(credit,op),exact=calc&&String(calc.methode||'').indexOf('releve_exact_ACCESSIO_')===0;
-        if(Math.abs(capitalAvant-800)>=.01||!exact||Math.abs(Number(calc.partCapital||0)-23.47)>=.001)throw new Error('Garde Accessio refusée : état ou ventilation inattendu');
+        const capitalAvant=Number(credit.capital_restant||0),calc=calculerAmortissementCredit20260915_(credit,op),exact=calc&&String(calc.methode||'').indexOf('releve_exact_ACCESSIO_')===0,chargeId=rapprochementChargeFixeAccessio20260916_(oid);
+        if(Math.abs(capitalAvant-800)>=.01||!exact||Math.abs(Number(calc.partCapital||0)-23.47)>=.001||!chargeId)throw new Error('Garde Accessio refusée : état, ventilation ou liaison charge fixe inattendu');
         const cible=Object.assign({},credit,{capital_restant:776.53,prochaine_echeance:'2026-10-05'});
         if(typeof enregistrerCreditEtendu_==='function')enregistrerCreditEtendu_(cible);else enregistrerLigne('Credits',cible);
-        const sh=assurerJournalAmortissementsCredits20260915_(),chargeId=rapprochementChargeFixeAccessio20260916_(oid),row={id:Utilities.getUuid(),credit_id:credit.id,credit_nom:credit.nom,charge_fixe_id:chargeId,operation_id:oid,date_operation:op.date_comptable||op.date||op.date_operation,montant_echeance:33.60,part_capital:23.47,part_interets:10.13,part_assurance:0,capital_avant:800,capital_apres:776.53,echeances_avant:Number(credit.echeances_restantes||0),echeances_apres:Number(credit.echeances_restantes||0),prochaine_echeance_avant:credit.prochaine_echeance||'',prochaine_echeance_apres:'2026-10-05',methode:String(calc.methode||'')+'_rattrapage',statut:'applique',version:CREDIT_DATA_REFRESH_20260916_VERSION,date_traitement:new Date().toISOString()};
+        const sh=assurerJournalAmortissementsCredits20260915_(),row={id:Utilities.getUuid(),credit_id:credit.id,credit_nom:credit.nom,charge_fixe_id:chargeId,operation_id:oid,date_operation:op.date_comptable||op.date||op.date_operation,montant_echeance:33.60,part_capital:23.47,part_interets:10.13,part_assurance:0,capital_avant:800,capital_apres:776.53,echeances_avant:Number(credit.echeances_restantes||0),echeances_apres:Number(credit.echeances_restantes||0),prochaine_echeance_avant:credit.prochaine_echeance||'',prochaine_echeance_apres:'2026-10-05',methode:String(calc.methode||'')+'_rattrapage',statut:'applique',version:CREDIT_DATA_REFRESH_20260916_VERSION,date_traitement:new Date().toISOString()};
         sh.getRange(sh.getLastRow()+1,1,1,CREDIT_AMORTIZATION_HEADERS_20260915.length).setValues([CREDIT_AMORTIZATION_HEADERS_20260915.map(h=>row[h]??'')]);
-        out={ok:true,version:CREDIT_DATA_REFRESH_20260916_VERSION,applique:true,credit:String(credit.nom||''),operation_id:oid,capital_avant:800,part_capital:23.47,capital_apres:776.53,prochaine_echeance:'2026-10-05',methode:row.methode};
+        out={ok:true,version:CREDIT_DATA_REFRESH_20260916_VERSION,applique:true,credit:String(credit.nom||''),operation_id:oid,charge_fixe_id:chargeId,capital_avant:800,part_capital:23.47,capital_apres:776.53,prochaine_echeance:'2026-10-05',methode:row.methode};
       }
     }
   }finally{lock.releaseLock();}
