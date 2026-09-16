@@ -1,4 +1,4 @@
-const CREDIT_AMORTIZATION_CATCHUP_20260915_VERSION='2026-09-15.7';
+const CREDIT_AMORTIZATION_CATCHUP_20260915_VERSION='2026-09-15.8';
 
 function dateFrRattrapageCredit20260915_(s){
   const m=String(s||'').match(/\b(\d{1,2})\/(\d{1,2})\/(20\d{2})\b/);if(!m)return null;
@@ -33,7 +33,7 @@ function capitalReferenceCreditRattrapage20260915_(credit){
 }
 
 function sourceReferenceCreditRattrapage20260915_(credit){const c=referenceContractuelleCreditRattrapage20260915_(credit);return c?c.source:'commentaire_credit';}
-function sourceReferenceResynchronisableCredit20260915_(source){return ['site_COFIDIS_2026-09-15','releve_exact_CARREFOUR_PASS_2026-08-20'].includes(String(source||''));}
+function sourceReferenceResynchronisableCredit20260915_(source){return ['site_COFIDIS_2026-09-15','releve_exact_CARREFOUR_PASS','releve_exact_CARREFOUR_PASS_2026-08-20'].includes(String(source||''));}
 
 function datesSuspenduesCreditRattrapage20260915_(credit){
   const t=String(credit&&credit.commentaire||''),dates=[];
