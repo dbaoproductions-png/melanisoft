@@ -1,4 +1,4 @@
-const CREDIT_DATA_REFRESH_20260916_VERSION='2026-09-16.1';
+const CREDIT_DATA_REFRESH_20260916_VERSION='2026-09-16.2';
 
 function dateLocaleCreditDataRefresh20260916_(v){
   if(!v)return'';const d=new Date(v);if(isNaN(d))return'';
@@ -19,12 +19,20 @@ function trouverOperationAccessioSeptembre20260916_(){
   return{ok:true,operation:candidats[0]};
 }
 
+function rapprochementsChargesFixesCreditDataRefresh20260916_(){
+  if(typeof initialiserRapprochementsChargesFixes_!=='function'||typeof FIXED_CHARGE_MATCH_HEADERS==='undefined')return[];
+  const sh=initialiserRapprochementsChargesFixes_();
+  if(!sh||sh.getLastRow()<2)return[];
+  const rows=sh.getRange(2,1,sh.getLastRow()-1,FIXED_CHARGE_MATCH_HEADERS.length).getValues();
+  return rows.filter(r=>r.some(v=>v!==''&&v!==null)).map(r=>Object.fromEntries(FIXED_CHARGE_MATCH_HEADERS.map((h,i)=>[h,r[i] instanceof Date?r[i].toISOString():r[i]])));
+}
+
 function rapprochementChargeFixeAccessio20260916_(operationId){
   const oid=String(operationId||'');if(!oid)return'';
   const op=(typeof lireTable_==='function'?lireTable_('Operations'):[]).find(x=>String(x.id||'')===oid);
   if(op&&op.charge_fixe_id)return String(op.charge_fixe_id);
-  const rappro=typeof lireTable_==='function'?lireTable_('Rapprochements_charges_fixes'):[];
-  const r=(rappro||[]).find(x=>String(x.operation_id||x.operationId||'')===oid&&String(x.statut||'').toLowerCase()!=='rejete');
+  const rappro=rapprochementsChargesFixesCreditDataRefresh20260916_();
+  const r=(rappro||[]).find(x=>String(x.operation_id||x.operationId||'')===oid&&String(x.statut||'').toLowerCase()!=='rejeté'&&String(x.statut||'').toLowerCase()!=='rejete'&&String(x.statut||'').toLowerCase()!=='ignoré'&&String(x.statut||'').toLowerCase()!=='ignore');
   return r?String(r.charge_fixe_id||r.chargeId||''):'';
 }
 
