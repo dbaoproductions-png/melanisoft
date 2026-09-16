@@ -1,4 +1,4 @@
-const CREDIT_AMORTIZATION_CATCHUP_20260915_VERSION='2026-09-15.6';
+const CREDIT_AMORTIZATION_CATCHUP_20260915_VERSION='2026-09-15.7';
 
 function dateFrRattrapageCredit20260915_(s){
   const m=String(s||'').match(/\b(\d{1,2})\/(\d{1,2})\/(20\d{2})\b/);if(!m)return null;
@@ -33,6 +33,7 @@ function capitalReferenceCreditRattrapage20260915_(credit){
 }
 
 function sourceReferenceCreditRattrapage20260915_(credit){const c=referenceContractuelleCreditRattrapage20260915_(credit);return c?c.source:'commentaire_credit';}
+function sourceReferenceResynchronisableCredit20260915_(source){return ['site_COFIDIS_2026-09-15','releve_exact_CARREFOUR_PASS_2026-08-20'].includes(String(source||''));}
 
 function datesSuspenduesCreditRattrapage20260915_(credit){
   const t=String(credit&&credit.commentaire||''),dates=[];
@@ -64,7 +65,7 @@ function simulerRattrapageAmortissementsCredits20260915(){
     if(refDate){
       if(refCapital==null){confiance='moyenne';raison='date_reference_trouvee_sans_capital_reference_dans_commentaire';}
       else if(Math.abs(refCapital-capitalActuel)<=.01){confiance='haute';raison=sourceReference==='commentaire_credit'?'date_et_capital_reference_concordent_avec_capital_actuel':'reference_documentaire_exacte_concordante';}
-      else if(sourceReference==='site_COFIDIS_2026-09-15'){confiance='haute';raison='reference_site_plus_recente_a_resynchroniser';resynchronisationSource=true;ajustementDirectSource=Math.round((capitalActuel-refCapital)*100)/100;}
+      else if(sourceReferenceResynchronisableCredit20260915_(sourceReference)){confiance='haute';raison='reference_documentaire_plus_recente_a_resynchroniser';resynchronisationSource=true;ajustementDirectSource=Math.round((capitalActuel-refCapital)*100)/100;}
       else{confiance='conflit';raison='capital_actuel_differe_du_capital_reference';}
     }
     const virtuel=Object.assign({},credit),operations=[],exclues=[];
