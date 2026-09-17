@@ -13,7 +13,6 @@
   let afficherArchives=false;
   let derniereSynthese=null;
   let chargementEnCours=false;
-  let rafraichissementSnapshotEnCours=false;
   let structureInstallee=false;
 
   function installerStructure(){
@@ -55,8 +54,7 @@
     zone.innerHTML=comptes.map(function(c){const actif=estActif(c.actif),solde=Number(c.soldeReel||0);return `<div class="account-row ${actif?'':'archived'}"><div class="account-main"><div class="account-icon">${iconeCompte(c.type)}</div><div><strong>${echapper(c.nom)}</strong><small>${actif?'<span class="badge">Actif</span>':'<span class="badge archived-badge">Archivé</span>'}</small></div></div><div class="account-type">${libelleType(c.type)}</div><div class="account-balance ${solde<0?'amount-negative':''}">${money.format(solde)}<small>${echapper(sourceLibelle(c))}</small></div><div class="account-actions"><button class="small-button" onclick="modifierCompte('${echapperAttribut(c.id)}')" title="Modifier">✎</button><button class="small-button" onclick="basculerCompte('${echapperAttribut(c.id)}')" title="${actif?'Archiver':'Réactiver'}">${actif?'⌁':'↻'}</button></div></div>`;}).join('');
   }
 
-  function rafraichirSnapshotSilencieusement(){if(rafraichissementSnapshotEnCours)return;rafraichissementSnapshotEnCours=true;google.script.run.withSuccessHandler(function(x){rafraichissementSnapshotEnCours=false;if(x&&x.ok&&x.vue)rendreSynthese(x.vue);}).withFailureHandler(function(){rafraichissementSnapshotEnCours=false;}).rafraichirSnapshotComptes20260828();}
-  function chargerSynthese(){if(chargementEnCours)return;chargementEnCours=true;const zone=document.getElementById('accounts-list');if(zone&&!derniereSynthese){zone.className='empty-state';zone.textContent='Chargement des soldes réels…';}google.script.run.withSuccessHandler(function(r){chargementEnCours=false;rendreSynthese(r);if(r&&r.snapshotPerime)rafraichirSnapshotSilencieusement();}).withFailureHandler(function(e){chargementEnCours=false;const msg=e&&e.message?e.message:String(e||'Erreur inconnue');if(zone){zone.className='empty-state';zone.textContent='Impossible de charger les comptes : '+msg;}}).chargerSyntheseComptes20260828();}
+  function chargerSynthese(){if(chargementEnCours)return;chargementEnCours=true;const zone=document.getElementById('accounts-list');if(zone&&!derniereSynthese){zone.className='empty-state';zone.textContent='Chargement des soldes réels…';}google.script.run.withSuccessHandler(function(r){chargementEnCours=false;rendreSynthese(r);}).withFailureHandler(function(e){chargementEnCours=false;const msg=e&&e.message?e.message:String(e||'Erreur inconnue');if(zone){zone.className='empty-state';zone.textContent='Impossible de charger les comptes : '+msg;}}).chargerSyntheseComptes20260828();}
   window.invaliderSyntheseComptes20260828=function(){derniereSynthese=null;};
   window.rendreComptes=function(){installerStructure();if(typeof state!=='undefined'&&state.currentView!=='comptes'&&!derniereSynthese)return;chargerSynthese();};
   document.addEventListener('DOMContentLoaded',function(){installerStructure();const refresh=document.getElementById('refresh-button');if(refresh)refresh.addEventListener('click',function(){if(typeof state!=='undefined'&&state.currentView==='comptes')setTimeout(chargerSynthese,0);});});
