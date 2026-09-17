@@ -5,18 +5,30 @@
  * mais une seule définition publique subsiste. Elle délègue à la couche de
  * fraîcheur, qui appelle le moteur métier puis invalide le snapshot global.
  */
-const CERBERE_PILOTAGE_PUBLIC_ENDPOINT_20260917_VERSION='2026-09-17.1';
+const CERBERE_PILOTAGE_PUBLIC_ENDPOINT_20260917_VERSION='2026-09-17.2';
+const CERBERE_PILOTAGE_TRACE_AT_20260917='CERBERE_PILOTAGE_ENDPOINT_LAST_CALL_AT';
+const CERBERE_PILOTAGE_TRACE_RESULT_20260917='CERBERE_PILOTAGE_ENDPOINT_LAST_RESULT';
 
 function sauvegarderPilotageCerbere20260903(d){
+  const p=PropertiesService.getDocumentProperties(),appeleLe=new Date().toISOString();
+  p.setProperty(CERBERE_PILOTAGE_TRACE_AT_20260917,appeleLe);
   if(typeof sauvegarderPilotageCerbereAvecFraicheur20260917_!=='function'){
+    p.setProperty(CERBERE_PILOTAGE_TRACE_RESULT_20260917,'proprietaire_indisponible');
     throw new Error('Propriétaire de sauvegarde Cerbère indisponible.');
   }
-  const r=sauvegarderPilotageCerbereAvecFraicheur20260917_(d);
-  if(r&&typeof r==='object'){
-    r.versionEndpointEcritureCerbere=CERBERE_PILOTAGE_PUBLIC_ENDPOINT_20260917_VERSION;
-    r.sourceEcritureCerbere='endpoint_public_unique_20260917';
+  try{
+    const r=sauvegarderPilotageCerbereAvecFraicheur20260917_(d);
+    p.setProperty(CERBERE_PILOTAGE_TRACE_RESULT_20260917,'ok');
+    if(r&&typeof r==='object'){
+      r.versionEndpointEcritureCerbere=CERBERE_PILOTAGE_PUBLIC_ENDPOINT_20260917_VERSION;
+      r.sourceEcritureCerbere='endpoint_public_unique_20260917';
+      r.endpointAppeleLe=appeleLe;
+    }
+    return r;
+  }catch(e){
+    p.setProperty(CERBERE_PILOTAGE_TRACE_RESULT_20260917,'erreur:'+String(e&&e.message||e));
+    throw e;
   }
-  return r;
 }
 
 function auditerEndpointEcritureCerbere20260917(){
@@ -33,6 +45,10 @@ function auditerEndpointEcritureCerbere20260917(){
       proprietaireFraicheur:typeof sauvegarderPilotageCerbereAvecFraicheur20260917_==='function',
       moteurMetier:typeof sauvegarderPilotageCerbereMoteur20260903_==='function',
       invalidationSnapshot:typeof marquerSnapshotGlobalBudgetSoftObsolete20260916_==='function'
+    },
+    derniereInvocation:{
+      appeleeLe:p.getProperty(CERBERE_PILOTAGE_TRACE_AT_20260917)||'',
+      resultat:p.getProperty(CERBERE_PILOTAGE_TRACE_RESULT_20260917)||''
     },
     etatAvantMutation:{
       projectionDirty:p.getProperty('BUDGETSOFT_PROJECTION_DIRTY')==='true',
