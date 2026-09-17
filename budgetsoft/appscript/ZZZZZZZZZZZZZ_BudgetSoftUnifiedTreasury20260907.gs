@@ -115,7 +115,7 @@ function auditerConsommateursTreasuryForecast20260909(){
     const horsHorizonRapide=apres(rapide&&rapide.lignes||[],horizonSnapshot,cible);
     essais.push({
       cible:cible,
-      perimetre:{compare:'carte solde + point Cerbère + liste explicite + liste rapide',dateReference:ref,sourceVerite:sourceBudgetSoft||'projection canonique',horizonSnapshot:horizonSnapshot,cibleComparee:cibleComparee},
+      perimetre:{compare:'carte solde + point Cerbère + liste explicite + liste rapide',dateReference:ref,sourceVerite:String(canon&&canon.sourceBudgetSoft||'projection canonique'),horizonSnapshot:horizonSnapshot,cibleComparee:cibleComparee},
       revisionBudgetSoft:canon&&canon.revisionBudgetSoft||'',
       carteSolde:{source:'chargerTresorerieUnifieeBudgetSoft20260907',solde:canon&&canon.soldePrevisionnel},
       cerbereRapide:{source:'chargerTresorerieUnifieeBudgetSoft20260907',overrideTerminal:true},
