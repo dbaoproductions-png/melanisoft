@@ -1,12 +1,11 @@
 /*
  * Cerbère — entrée publique canonique unique — 2026-09-14.
  *
- * Stabilisation 2026-09-17 : l'UI garde cet endpoint stable, mais l'endpoint ne
- * dépend plus exclusivement du snapshot global. Si le snapshot est absent,
- * périmé ou incompatible, il délègue au propriétaire public Cerbère courant,
- * qui sait servir un snapshot valide ou recalculer frais.
+ * Stabilisation 2026-09-17 : l'UI garde cet endpoint stable. Le snapshot global
+ * est servi lorsqu'il est compatible ; sinon l'endpoint délègue au propriétaire
+ * interne moderne chargerCerbereCockpitProprietaire20260917_().
  */
-const CERBERE_CANONICAL_PUBLIC_ENDPOINT_20260914_VERSION='2026-09-17.1';
+const CERBERE_CANONICAL_PUBLIC_ENDPOINT_20260914_VERSION='2026-09-17.2';
 
 function chargerCerbereCockpitCanonique20260914(){
   const t0=Date.now();
@@ -33,11 +32,9 @@ function chargerCerbereCockpitCanonique20260914(){
     return snapshot;
   }
 
-  // Fallback obligatoire : l'absence/péremption d'un cache ne doit jamais rendre
-  // Cerbère indisponible si son moteur métier peut recalculer la vue.
-  if(typeof chargerCerbereCockpit20260902==='function'){
+  if(typeof chargerCerbereCockpitProprietaire20260917_==='function'){
     try{
-      const frais=chargerCerbereCockpit20260902();
+      const frais=chargerCerbereCockpitProprietaire20260917_();
       if(frais&&frais.ok!==false){
         frais.ok=true;
         frais.sourceBudgetSoft=String(frais.sourceBudgetSoft||frais.source||'recalcul_secours');
@@ -72,7 +69,7 @@ function chargerCerbereCockpitCanonique20260914(){
     revisionBudgetSoft:String(snapshot&&snapshot.revisionBudgetSoft||''),
     cfSnapshotBuildVersion:build,
     cfSnapshotBuildAttendue:attendu,
-    erreur:erreurSnapshot||String(snapshot&&snapshot.erreur||snapshot&&snapshot.message||'Snapshot Cerbère indisponible et aucun fallback frais n’est disponible.')
+    erreur:erreurSnapshot||String(snapshot&&snapshot.erreur||snapshot&&snapshot.message||'Snapshot Cerbère indisponible et propriétaire moderne indisponible.')
   };
 }
 
