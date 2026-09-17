@@ -1,11 +1,15 @@
-const CERBERE_EXPRESS_VERSION = '2026-09-15.2';
+const CERBERE_EXPRESS_VERSION = '2026-09-17.1';
 
 /** Cerbère Express est un consommateur de décision : EP uniquement. */
 function chargerCerbereExpress20260827() {
   const t0=Date.now();
-  const cerbere = typeof chargerCerbereCockpit20260902==='function' ? chargerCerbereCockpit20260902() : chargerCerbereV374();
+  const cerbere = typeof chargerCerbereCockpitCanonique20260914==='function'
+    ? chargerCerbereCockpitCanonique20260914()
+    : (typeof chargerCerbereCockpitProprietaire20260917_==='function'
+      ? chargerCerbereCockpitProprietaire20260917_()
+      : chargerCerbereV374());
   const out=composerCerbereExpressDepuisCockpit20260910_(cerbere);
-  if(out&&out.performance){out.performance.dureeMs=Date.now()-t0;out.performance.source='cockpit Cerbère · propriétaire EP';}
+  if(out&&out.performance){out.performance.dureeMs=Date.now()-t0;out.performance.source='cockpit Cerbère canonique · propriétaire EP';}
   return out;
 }
 
@@ -32,9 +36,6 @@ function composerCerbereExpressDepuisCockpit20260910_(cerbere) {
   const meteo={niveau:globalVigilance.niveau,emoji:globalVigilance.niveau==='rouge'?'🌧️':globalVigilance.niveau==='orange'?'🌥️':'🌤️',libelle:globalVigilance.libelle,resume:globalVigilance.message,raisons:[globalVigilance.message]};
   const consigne={niveau:meteo.niveau,texte:totalReste<0?'EP dépassée de '+formatEuroExpress_(Math.abs(totalReste)):('Il reste '+formatEuroExpress_(Math.max(0,totalReste))+' sur l’EP décidée.'),raison:'EP décidée et rythme de consommation'};
 
-  // C2 est déjà calculé par Cerbère : Express ne recalcule rien.
-  // - cbHeritee = achats CB déjà décidés et imputés au prochain cycle ;
-  // - epDisponible = allocation C2 diminuée du réel/déjà-engagé C2.
   const roulant2=p2&&p2.roulant||{},ep2=p2&&p2.enveloppePilotable||{};
   const prochainCycleEp=arrExpress_(c2.epTotal!=null?c2.epTotal:(ep2.total!=null?ep2.total:(p2&&p2.budgetReparti||0)));
   const prochainCycleCbEngagee=arrExpress_(roulant2.cbHeritee!=null?roulant2.cbHeritee:(c2.reportCbCycle||0));
@@ -57,7 +58,6 @@ function composerCerbereExpressDepuisCockpit20260910_(cerbere) {
       prochainCycleCbEngagee:prochainCycleCbEngagee,
       prochainCycleEpConsommee:prochainCycleEpConsommee,
       prochainCycleEpDisponible:prochainCycleEpDisponible,
-      // Compatibilité anciens consommateurs : même valeur canonique, aucun recalcul.
       reportCbCycleSuivant:prochainCycleCbEngagee,
       epDiffereEstimeCycleSuivant:prochainCycleEpDisponible,
       sourceProchainCycle:'Cerbère C2 déjà calculé'
