@@ -14,7 +14,7 @@ function chargerDashboardSyntheseV3BudgetSoft20260907(){
     const finSuivant=new Date(finCourant.getFullYear(),finCourant.getMonth()+1,finCourant.getDate());
     const tres=construireTresorerieComptableCanoniqueBudgetSoft20260906_(sources,comptes,finCourant,maintenant);
     const proj=typeof construireTrajectoireTresorerieCanoniqueBudgetSoft20260907==='function'?construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(finSuivant):null;
-    const cer=typeof chargerCerbereCockpit20260902==='function'?chargerCerbereCockpit20260902():null;
+    const cer=typeof chargerCerbereCockpitCanonique20260914==='function'?chargerCerbereCockpitCanonique20260914():null;
     const exp=typeof chargerVueCerbereExpressSansContexte20260827_==='function'?chargerVueCerbereExpressSansContexte20260827_():null;
     const r=composerDashboardSyntheseBudgetSoft20260907_({sources:sources,comptes:comptes,tresorerieComptable:tres,projectionEtendue:proj,cerbere:cer,cerbereExpress:exp});
     r.source='recalcul_secours';r.sourceBudgetSoft='recalcul_secours';return r;
