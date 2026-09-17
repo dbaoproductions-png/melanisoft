@@ -1,4 +1,4 @@
-const BUDGETSOFT_MUTATION_FRESHNESS_20260916_VERSION='2026-09-16.1';
+const BUDGETSOFT_MUTATION_FRESHNESS_20260916_VERSION='2026-09-17.2';
 const BUDGETSOFT_GLOBAL_DIRTY_AT_20260916='BUDGETSOFT_GLOBAL_SNAPSHOT_DIRTY_LE';
 const BUDGETSOFT_GLOBAL_DIRTY_ORIGIN_20260916='BUDGETSOFT_GLOBAL_SNAPSHOT_DIRTY_ORIGINE';
 
@@ -91,13 +91,14 @@ function categoriserOperationsParLot(ids,categorie){
   return{selectionnees:selection.length,trouvees,modifiees,dejaCorrectes,categorie:cible};
 }
 
-/** Toute modification des molettes doit rendre la révision globale antérieure indisponible. */
-function sauvegarderPilotageCerbere20260903(d){
-  d=d||{};const cle=String(d.cle||'').trim(),cible=Math.max(0,Number(d.p1Cible||0)),actualise=Math.max(0,Number(d.pilotableActualise||0)),postes=Array.isArray(d.postes)?d.postes:[];
-  if(!cle)throw new Error('Cycle Cerbère manquant.');
-  sauvegarderBudgetPeriodeCerbereV33({cle:cle,postes:postes});
-  const memo=memoriserCibleP1Cerbere20260903_(cle,cible,actualise);
-  invaliderProjectionBudgetSoft_('cerbere-pilotage-p1');
+/**
+ * Propriétaire interne de fraîcheur pour l'écriture Cerbère.
+ * Le moteur métier reste dans CerbereConsolidation.gs ; cette couche ne fait
+ * qu'ajouter l'invalidation du snapshot global après une sauvegarde réussie.
+ */
+function sauvegarderPilotageCerbereAvecFraicheur20260917_(d){
+  if(typeof sauvegarderPilotageCerbereMoteur20260903_!=='function')throw new Error('Moteur de sauvegarde Cerbère indisponible.');
+  const r=sauvegarderPilotageCerbereMoteur20260903_(d);
   marquerSnapshotGlobalBudgetSoftObsolete20260916_('cerbere-pilotage-p1');
-  return{ok:true,cle:cle,p1Cible:memo.cible,ajustementP1:memo.ajustement};
+  return r;
 }
