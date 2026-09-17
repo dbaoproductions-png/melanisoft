@@ -3,12 +3,10 @@
  *
  * Le moteur frais historique publiait encore la consommation Santé brute/ancienne
  * avant la normalisation Santé appliquée par le snapshot synthèse. Cette couche
- * terminale applique la même doctrine Santé au fallback frais de l'endpoint
- * public Cerbère, et resynchronise les agrégats APRÈS la publication des cartes :
- * publierValeursCartesDepuisOwnerP120260912_ republie en effet des valeurs issues
- * du diagnostic P1 antérieur à la normalisation Santé.
+ * applique la même doctrine Santé au propriétaire de lecture Cerbère courant,
+ * sans redéfinir l'ancien endpoint public chargerCerbereCockpit20260902().
  */
-const CERBERE_FRESH_HEALTH_PARITY_20260917_VERSION='2026-09-17.2';
+const CERBERE_FRESH_HEALTH_PARITY_20260917_VERSION='2026-09-17.3';
 
 function normaliserCerbereFraisPublic20260917_(base){
   if(!base||base.ok===false)return base;
@@ -23,7 +21,7 @@ function normaliserCerbereFraisPublic20260917_(base){
   out.diagnostic.pariteCerbereFraisSante20260917={
     ok:true,
     version:CERBERE_FRESH_HEALTH_PARITY_20260917_VERSION,
-    doctrine:'Le fallback frais public applique la même normalisation Santé que le snapshot synthèse avant publication des cartes, puis resynchronise les agrégats après publication.'
+    doctrine:'Le propriétaire Cerbère applique la même normalisation Santé que le snapshot synthèse avant publication des cartes, puis resynchronise les agrégats après publication.'
   };
   return out;
 }
@@ -47,11 +45,11 @@ function publierPuisResynchroniserCerbereSante20260917_(base){
 }
 
 /*
- * Override terminal de l'endpoint public. Snapshot valide et fallback frais
- * convergent vers le même ordre de publication : doctrine Santé -> cartes ->
- * resynchronisation finale des agrégats Santé/EP/P disponible.
+ * Propriétaire interne unique de la lecture Cerbère moderne.
+ * Snapshot valide et fallback frais convergent vers le même ordre de publication :
+ * doctrine Santé -> cartes -> resynchronisation finale des agrégats Santé/EP/P disponible.
  */
-function chargerCerbereCockpit20260902(){
+function chargerCerbereCockpitProprietaire20260917_(){
   try{
     if(typeof chargerCerbereDepuisSnapshotGlobalBudgetSoft20260906==='function'){
       const snapshot=chargerCerbereDepuisSnapshotGlobalBudgetSoft20260906();
@@ -75,7 +73,7 @@ function chargerCerbereCockpit20260902(){
 }
 
 function auditerPariteEndpointCerbereSante20260917(){
-  const x=chargerCerbereCockpit20260902();
+  const x=chargerCerbereCockpitProprietaire20260917_();
   const ps=Array.isArray(x&&x.periodes)?x.periodes.slice(0,2):[];
   const cycles=ps.map(function(p,index){
     const env=Array.isArray(p&&p.enveloppes)?p.enveloppes:[];
