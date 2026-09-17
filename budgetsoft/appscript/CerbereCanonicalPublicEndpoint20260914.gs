@@ -1,12 +1,12 @@
 /*
  * Cerbère — entrée publique canonique unique — 2026-09-14.
  *
- * Cette fonction est volontairement dotée d'un nom inédit : l'UI ne dépend plus
- * des nombreuses redéfinitions historiques de chargerCerbereCockpit20260902().
- * Le calcul métier reste propriétaire des moteurs Cerbère / Charges_fixes ; cette
- * entrée ne fait que servir la révision globale cohérente déjà construite.
+ * Stabilisation 2026-09-17 : l'UI garde cet endpoint stable, mais l'endpoint ne
+ * dépend plus exclusivement du snapshot global. Si le snapshot est absent,
+ * périmé ou incompatible, il délègue au propriétaire public Cerbère courant,
+ * qui sait servir un snapshot valide ou recalculer frais.
  */
-const CERBERE_CANONICAL_PUBLIC_ENDPOINT_20260914_VERSION='2026-09-14.3';
+const CERBERE_CANONICAL_PUBLIC_ENDPOINT_20260914_VERSION='2026-09-17.1';
 
 function chargerCerbereCockpitCanonique20260914(){
   const t0=Date.now();
@@ -14,52 +14,66 @@ function chargerCerbereCockpitCanonique20260914(){
     ?String(BUDGETSOFT_CERBERE_CF_SNAPSHOT_BUILD_20260914_VERSION)
     :'2026-09-14.4';
 
-  if(typeof chargerCerbereDepuisSnapshotGlobalBudgetSoft20260906!=='function'){
-    return{
-      ok:false,
-      version:CERBERE_CANONICAL_PUBLIC_ENDPOINT_20260914_VERSION,
-      erreur:'Adaptateur du snapshot global Cerbère indisponible.'
-    };
+  let snapshot=null;
+  let erreurSnapshot='';
+  if(typeof chargerCerbereDepuisSnapshotGlobalBudgetSoft20260906==='function'){
+    try{snapshot=chargerCerbereDepuisSnapshotGlobalBudgetSoft20260906();}
+    catch(e){erreurSnapshot=String(e&&e.message||e);}
+  }else{
+    erreurSnapshot='Adaptateur du snapshot global Cerbère indisponible.';
   }
 
-  let r;
-  try{
-    r=chargerCerbereDepuisSnapshotGlobalBudgetSoft20260906();
-  }catch(e){
-    return{
-      ok:false,
-      version:CERBERE_CANONICAL_PUBLIC_ENDPOINT_20260914_VERSION,
-      erreur:'Lecture du snapshot Cerbère impossible : '+String(e&&e.message||e)
-    };
+  const build=String(snapshot&&snapshot.diagnostic&&snapshot.diagnostic.cfSnapshotBuild20260914&&snapshot.diagnostic.cfSnapshotBuild20260914.version||'');
+  if(snapshot&&snapshot.ok!==false&&build===attendu){
+    snapshot.ok=true;
+    snapshot.sourceBudgetSoft='snapshot_global_endpoint_canonique_20260914';
+    snapshot.versionEndpointCanonique=CERBERE_CANONICAL_PUBLIC_ENDPOINT_20260914_VERSION;
+    snapshot.cfSnapshotBuildVersion=build;
+    snapshot.dureeEndpointCanoniqueMs=Date.now()-t0;
+    return snapshot;
   }
 
-  if(!r||r.ok===false){
-    return Object.assign({},r||{}, {
-      ok:false,
-      versionEndpointCanonique:CERBERE_CANONICAL_PUBLIC_ENDPOINT_20260914_VERSION,
-      erreur:String(r&&r.erreur||r&&r.message||'Snapshot Cerbère indisponible.')
-    });
+  // Fallback obligatoire : l'absence/péremption d'un cache ne doit jamais rendre
+  // Cerbère indisponible si son moteur métier peut recalculer la vue.
+  if(typeof chargerCerbereCockpit20260902==='function'){
+    try{
+      const frais=chargerCerbereCockpit20260902();
+      if(frais&&frais.ok!==false){
+        frais.ok=true;
+        frais.sourceBudgetSoft=String(frais.sourceBudgetSoft||frais.source||'recalcul_secours');
+        frais.versionEndpointCanonique=CERBERE_CANONICAL_PUBLIC_ENDPOINT_20260914_VERSION;
+        frais.cfSnapshotBuildVersion=String(frais&&frais.diagnostic&&frais.diagnostic.cfSnapshotBuild20260914&&frais.diagnostic.cfSnapshotBuild20260914.version||'');
+        frais.fallbackEndpointCanonique=true;
+        frais.raisonFallbackEndpointCanonique=snapshot&&snapshot.ok!==false&&build!==attendu
+          ?'snapshot_cf_build_incompatible'
+          :(erreurSnapshot?'snapshot_erreur':'snapshot_indisponible');
+        frais.dureeEndpointCanoniqueMs=Date.now()-t0;
+        return frais;
+      }
+      return Object.assign({},frais||{}, {
+        ok:false,
+        versionEndpointCanonique:CERBERE_CANONICAL_PUBLIC_ENDPOINT_20260914_VERSION,
+        erreur:String(frais&&frais.erreur||frais&&frais.message||'Recalcul Cerbère indisponible.')
+      });
+    }catch(e){
+      return{
+        ok:false,
+        versionEndpointCanonique:CERBERE_CANONICAL_PUBLIC_ENDPOINT_20260914_VERSION,
+        erreur:'Snapshot et recalcul Cerbère indisponibles : '+String(e&&e.message||e),
+        erreurSnapshot:erreurSnapshot||''
+      };
+    }
   }
 
-  const build=String(r&&r.diagnostic&&r.diagnostic.cfSnapshotBuild20260914&&r.diagnostic.cfSnapshotBuild20260914.version||'');
-  if(build!==attendu){
-    return{
-      ok:false,
-      versionEndpointCanonique:CERBERE_CANONICAL_PUBLIC_ENDPOINT_20260914_VERSION,
-      sourceBudgetSoft:String(r.sourceBudgetSoft||r.source||''),
-      revisionBudgetSoft:String(r.revisionBudgetSoft||''),
-      cfSnapshotBuildVersion:build,
-      cfSnapshotBuildAttendue:attendu,
-      erreur:'Le snapshot Cerbère n’est pas encore construit avec le propriétaire canonique Charges_fixes ('+attendu+').'
-    };
-  }
-
-  r.ok=true;
-  r.sourceBudgetSoft='snapshot_global_endpoint_canonique_20260914';
-  r.versionEndpointCanonique=CERBERE_CANONICAL_PUBLIC_ENDPOINT_20260914_VERSION;
-  r.cfSnapshotBuildVersion=build;
-  r.dureeEndpointCanoniqueMs=Date.now()-t0;
-  return r;
+  return{
+    ok:false,
+    versionEndpointCanonique:CERBERE_CANONICAL_PUBLIC_ENDPOINT_20260914_VERSION,
+    sourceBudgetSoft:String(snapshot&&snapshot.sourceBudgetSoft||snapshot&&snapshot.source||''),
+    revisionBudgetSoft:String(snapshot&&snapshot.revisionBudgetSoft||''),
+    cfSnapshotBuildVersion:build,
+    cfSnapshotBuildAttendue:attendu,
+    erreur:erreurSnapshot||String(snapshot&&snapshot.erreur||snapshot&&snapshot.message||'Snapshot Cerbère indisponible et aucun fallback frais n’est disponible.')
+  };
 }
 
 function auditerEndpointCanoniqueCerbere20260914(){
@@ -72,6 +86,8 @@ function auditerEndpointCanoniqueCerbere20260914(){
     source:r&&r.sourceBudgetSoft||'',
     revisionBudgetSoft:r&&r.revisionBudgetSoft||'',
     cfSnapshotBuildVersion:r&&r.cfSnapshotBuildVersion||'',
+    fallback:!!(r&&r.fallbackEndpointCanonique),
+    raisonFallback:r&&r.raisonFallbackEndpointCanonique||'',
     cf2:Number(p2.cft2||0),
     p2:Number(p2.p2||0),
     ownerVersion:String(a2.ownerVersion||''),
