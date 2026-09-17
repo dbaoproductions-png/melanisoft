@@ -6,7 +6,7 @@
  * modules.projectionEtendue. Le moteur 20260901 reste son implémentation métier.
  * Dashboard, Comptes et Cerbère lisent la même trajectoire et la même révision.
  */
-const BUDGETSOFT_UNIFIED_TREASURY_VERSION='2026-09-07.6';
+const BUDGETSOFT_UNIFIED_TREASURY_VERSION='2026-09-17.1';
 
 function jourTresorerieUnifiee20260907_(v){
   if(v===undefined||v===null||v==='')return '';
@@ -41,21 +41,28 @@ function auditerUniteModulesTresorerieBudgetSoft20260907_(modules){
 }
 
 function chargerTresorerieUnifieeBudgetSoft20260907(dateCible){
-  const s=chargerSnapshotGlobalBudgetSoft20260906(),e=s&&s.disponible&&s.etat,m=e&&e.modules||{},p=m.projectionEtendue||{},c=m.comptes||{},d=m.dashboard||{};
-  if(!e||e.ok!==true||!p||p.ok===false)return{ok:false,version:BUDGETSOFT_UNIFIED_TREASURY_VERSION,erreur:'Snapshot global ou moteur prévisionnel indisponible.'};
+  const s=chargerSnapshotGlobalBudgetSoft20260906(),e=s&&s.disponible&&s.etat,m=e&&e.modules||{};
+  let p=m.projectionEtendue||{},c=m.comptes||{},d=m.dashboard||{},sourceBudgetSoft='snapshot_global_projection_canonique',revisionBudgetSoft=e&&e.revisionBudgetSoft||'',genereLe=e&&e.genereLe||'';
+  if(!e||e.ok!==true||!p||p.ok===false){
+    if(typeof construireTrajectoireTresorerieCanoniqueBudgetSoft20260907!=='function')return{ok:false,version:BUDGETSOFT_UNIFIED_TREASURY_VERSION,erreur:'Snapshot global périmé et propriétaire canonique frais indisponible.'};
+    const executer=function(){return construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(dateCible);};
+    p=typeof avecContexteLectureBudgetSoft20260827_==='function'?avecContexteLectureBudgetSoft20260827_('tresorerie-unifiee-recalcul-secours',executer):executer();
+    if(!p||p.ok===false)return p||{ok:false,version:BUDGETSOFT_UNIFIED_TREASURY_VERSION,erreur:'Recalcul canonique de trésorerie indisponible.'};
+    c={};d={};sourceBudgetSoft='recalcul_secours_canonique';revisionBudgetSoft='';genereLe='';
+  }
   const ref=jourTresorerieUnifiee20260907_(p.dateReference);
   const cibleDemandee=jourTresorerieUnifiee20260907_(dateCible);
   const cible=cibleDemandee||jourTresorerieUnifiee20260907_(finCycleTresorerieUnifiee20260907_(p.dateReference));
   const soldeComptes=Number(c&&c.synthese&&c.synthese.disponible),soldeMoteur=Number(p.soldeReel),soldeDashboard=Number(d&&d.courtTerme&&d.courtTerme.soldeBancaire),soldeCible=pointProjectionTresorerieUnifiee20260907_(p,cible);
   const decompositionCible=decompositionCibleTresorerieUnifiee20260907_(p,cible,soldeCible);
-  return{ok:true,version:BUDGETSOFT_UNIFIED_TREASURY_VERSION,revisionBudgetSoft:e.revisionBudgetSoft||'',genereLe:e.genereLe||'',versionMoteur:p.version||'',proprietaireBudgetSoft:p.proprietaireBudgetSoft||'',moteurSousJacent:p.moteurSousJacent||'',versionContratCanonique:p.versionContratCanonique||'',dateReference:ref,dateCible:cible,soldeReel:Number.isFinite(soldeMoteur)?soldeMoteur:null,soldePrevisionnel:soldeCible,soldesSources:{comptes:Number.isFinite(soldeComptes)?soldeComptes:null,moteur:Number.isFinite(soldeMoteur)?soldeMoteur:null,dashboard:Number.isFinite(soldeDashboard)?soldeDashboard:null},lignes:Array.isArray(p.lignes)?p.lignes:[],decompositionCanonique:decompositionCible,confiance:p.confiance||null,doctrine:'Une révision, un solde réel, un propriétaire canonique. R0 + CF0 + opérations futures + Plan confirmé + CB engagées/résiduelles ; jamais de recalcul local.'};
+  return{ok:true,version:BUDGETSOFT_UNIFIED_TREASURY_VERSION,sourceBudgetSoft:sourceBudgetSoft,revisionBudgetSoft:revisionBudgetSoft,genereLe:genereLe,versionMoteur:p.version||'',proprietaireBudgetSoft:p.proprietaireBudgetSoft||'',moteurSousJacent:p.moteurSousJacent||'',versionContratCanonique:p.versionContratCanonique||'',dateReference:ref,dateCible:cible,soldeReel:Number.isFinite(soldeMoteur)?soldeMoteur:null,soldePrevisionnel:soldeCible,soldesSources:{comptes:Number.isFinite(soldeComptes)?soldeComptes:null,moteur:Number.isFinite(soldeMoteur)?soldeMoteur:null,dashboard:Number.isFinite(soldeDashboard)?soldeDashboard:null},lignes:Array.isArray(p.lignes)?p.lignes:[],decompositionCanonique:decompositionCible,confiance:p.confiance||null,doctrine:'Une révision, un solde réel, un propriétaire canonique. Snapshot frais sinon recalcul du même propriétaire canonique ; jamais de moteur local concurrent.'};
 }
 
-function chargerTrajectoireBanqueCerbereRapide20260903(dateCible,partCerbere){const r=chargerTresorerieUnifieeBudgetSoft20260907(dateCible);if(!r.ok)return r;const cible=String(r.dateCible||'');return{ok:true,version:BUDGETSOFT_UNIFIED_TREASURY_VERSION,revisionBudgetSoft:r.revisionBudgetSoft,dateReference:r.dateReference,dateCible:cible,soldeReel:r.soldeReel,lignes:(r.lignes||[]).filter(l=>jourTresorerieUnifiee20260907_(l&&l.date)<=cible),decompositionCanonique:r.decompositionCanonique,confiance:r.confiance,sourceBudgetSoft:'snapshot_global_projection_canonique',partCerbereIgnoree:true};}
+function chargerTrajectoireBanqueCerbereRapide20260903(dateCible,partCerbere){const r=chargerTresorerieUnifieeBudgetSoft20260907(dateCible);if(!r.ok)return r;const cible=String(r.dateCible||'');return{ok:true,version:BUDGETSOFT_UNIFIED_TREASURY_VERSION,revisionBudgetSoft:r.revisionBudgetSoft,dateReference:r.dateReference,dateCible:cible,soldeReel:r.soldeReel,lignes:(r.lignes||[]).filter(l=>jourTresorerieUnifiee20260907_(l&&l.date)<=cible),decompositionCanonique:r.decompositionCanonique,confiance:r.confiance,sourceBudgetSoft:r.sourceBudgetSoft||'recalcul_secours_canonique',partCerbereIgnoree:true};}
 
 function auditerUniteTresorerieBudgetSoft20260907(){
   const s=chargerSnapshotGlobalBudgetSoft20260906(),e=s&&s.disponible&&s.etat,m=e&&e.modules||{},g=auditerUniteModulesTresorerieBudgetSoft20260907_(m),r=chargerTresorerieUnifieeBudgetSoft20260907();
-  const out={ok:!!(r.ok&&g.ok&&r.decompositionCanonique&&r.decompositionCanonique.ok),version:BUDGETSOFT_UNIFIED_TREASURY_VERSION,revisionBudgetSoft:e&&e.revisionBudgetSoft||'',versionMoteur:g.versionMoteur,proprietaire:g.proprietaire,moteurSousJacent:g.moteurSousJacent,dateReference:r.dateReference,dateCible:r.dateCible,soldeReel:r.soldeReel,soldePrevisionnel:r.soldePrevisionnel,soldesSources:g.valeurs,ecartSoldeReel:g.ecartSoldeReel,moteurDoctrinal:g.moteurDoctrinal,contratCanoniqueCible:resumerContratCanoniqueTresorerieUnifiee20260907_(r.decompositionCanonique)};
+  const out={ok:!!(r.ok&&r.decompositionCanonique&&r.decompositionCanonique.ok&&(e?g.ok:true)),version:BUDGETSOFT_UNIFIED_TREASURY_VERSION,sourceBudgetSoft:r&&r.sourceBudgetSoft||'',revisionBudgetSoft:e&&e.revisionBudgetSoft||'',versionMoteur:r&&r.versionMoteur||g.versionMoteur,proprietaire:r&&r.proprietaireBudgetSoft||g.proprietaire,moteurSousJacent:r&&r.moteurSousJacent||g.moteurSousJacent,dateReference:r.dateReference,dateCible:r.dateCible,soldeReel:r.soldeReel,soldePrevisionnel:r.soldePrevisionnel,soldesSources:e?g.valeurs:r.soldesSources,ecartSoldeReel:e?g.ecartSoldeReel:null,moteurDoctrinal:e?g.moteurDoctrinal:(r.proprietaireBudgetSoft==='construireTrajectoireTresorerieCanoniqueBudgetSoft20260907'&&r.moteurSousJacent==='chargerTresoreriePrevisionnelle20260901'),contratCanoniqueCible:resumerContratCanoniqueTresorerieUnifiee20260907_(r.decompositionCanonique)};
   console.log('[AUDIT Unité trésorerie] '+JSON.stringify(out));return out;
 }
 
@@ -108,7 +115,7 @@ function auditerConsommateursTreasuryForecast20260909(){
     const horsHorizonRapide=apres(rapide&&rapide.lignes||[],horizonSnapshot,cible);
     essais.push({
       cible:cible,
-      perimetre:{compare:'carte solde + point Cerbère + liste explicite + liste rapide',dateReference:ref,sourceVerite:'snapshot global modules.projectionEtendue',horizonSnapshot:horizonSnapshot,cibleComparee:cibleComparee},
+      perimetre:{compare:'carte solde + point Cerbère + liste explicite + liste rapide',dateReference:ref,sourceVerite:sourceBudgetSoft||'projection canonique',horizonSnapshot:horizonSnapshot,cibleComparee:cibleComparee},
       revisionBudgetSoft:canon&&canon.revisionBudgetSoft||'',
       carteSolde:{source:'chargerTresorerieUnifieeBudgetSoft20260907',solde:canon&&canon.soldePrevisionnel},
       cerbereRapide:{source:'chargerTresorerieUnifieeBudgetSoft20260907',overrideTerminal:true},
