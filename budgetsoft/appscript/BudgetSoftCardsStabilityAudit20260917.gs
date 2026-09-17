@@ -1,4 +1,4 @@
-const BUDGETSOFT_CARDS_STABILITY_AUDIT_20260917_VERSION='2026-09-17.1';
+const BUDGETSOFT_CARDS_STABILITY_AUDIT_20260917_VERSION='2026-09-17.2';
 
 function arrCardsStability20260917_(n){return Math.round((Number(n)||0)*100)/100;}
 function safeCardsStability20260917_(nom,fn){const t0=Date.now();try{const v=fn();return{ok:!!(v&&v.ok!==false),nom,dureeMs:Date.now()-t0,valeur:v||null,erreur:''};}catch(e){return{ok:false,nom,dureeMs:Date.now()-t0,valeur:null,erreur:String(e&&e.message||e)};}}
@@ -29,7 +29,8 @@ function auditerCartesStabiliteBudgetSoft20260917(){
   const epDispoExpress=Number(xv&&xv.pilotable&&xv.pilotable.reste);
 
   const detteCredits=Number(crv&&crv.endettementTotal);
-  const dettePatrimoine=Number(pv&&pv.endettementTotal);
+  const dettePatrimoine=Number(pv&&pv.coherence&&pv.coherence.totalDettesPatrimoine);
+  const ecartDettePatrimoine=Number(pv&&pv.coherence&&pv.coherence.ecartDette);
 
   const modules=[operations,comptes,tresorerie,dashboard,cerbere,express,credits,patrimoine,analyses];
   const controles=[
@@ -38,7 +39,7 @@ function auditerCartesStabiliteBudgetSoft20260917(){
     {code:'SOLDE_REEL_INTERMODULE',ok:soldes.length>=4&&ecartSolde!==null&&Math.abs(ecartSolde)<=.01,detail:'comptes='+soldeComptes+' ; tresorerie='+soldeTres+' ; dashboard='+soldeDash+' ; cerbere='+soldeCer+' ; ecart='+ecartSolde},
     {code:'CERBERE_EXPRESS_EP_COHERENT',ok:Number.isFinite(epCer)&&Number.isFinite(epExpress)&&Math.abs(arrCardsStability20260917_(epCer-epExpress))<=.01,detail:'Cerbère EP='+epCer+' ; Express EP='+epExpress},
     {code:'CERBERE_EXPRESS_RESTE_COHERENT',ok:(!Number.isFinite(epDispoCer)||!Number.isFinite(epDispoExpress))?true:Math.abs(arrCardsStability20260917_(epDispoCer-epDispoExpress))<=.01,detail:'Cerbère reste='+epDispoCer+' ; Express reste='+epDispoExpress},
-    {code:'CREDITS_PATRIMOINE_DETTE_COHERENTE',ok:Number.isFinite(detteCredits)&&Number.isFinite(dettePatrimoine)&&Math.abs(arrCardsStability20260917_(detteCredits-dettePatrimoine))<=.01,detail:'crédits='+detteCredits+' ; patrimoine='+dettePatrimoine},
+    {code:'CREDITS_PATRIMOINE_DETTE_COHERENTE',ok:Number.isFinite(detteCredits)&&Number.isFinite(dettePatrimoine)&&Number.isFinite(ecartDettePatrimoine)&&Math.abs(ecartDettePatrimoine)<=.01&&Math.abs(arrCardsStability20260917_(detteCredits-dettePatrimoine))<=.01,detail:'crédits='+detteCredits+' ; patrimoine='+dettePatrimoine+' ; écart='+ecartDettePatrimoine},
     {code:'COMPTES_SANS_SNAPSHOT_LOCAL_ACTIF',ok:String(cv&&cv.performance&&cv.performance.source||'')!=='snapshot_local_secours',detail:'source='+String(cv&&cv.performance&&cv.performance.source||'')},
     {code:'OPERATIONS_LECTURE_SANS_ECRITURE',ok:Number(ov&&ov._performance&&ov._performance.snapshotMs||0)===0,detail:'snapshotMs='+Number(ov&&ov._performance&&ov._performance.snapshotMs||0)}
   ];
