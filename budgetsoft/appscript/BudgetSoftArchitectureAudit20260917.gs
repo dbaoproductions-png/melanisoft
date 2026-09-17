@@ -1,7 +1,7 @@
-const BUDGETSOFT_ARCHITECTURE_AUDIT_20260917_VERSION='2026-09-17.1';
+const BUDGETSOFT_ARCHITECTURE_AUDIT_20260917_VERSION='2026-09-17.2';
 
 function fonctionDisponibleArchitectureBudgetSoft20260917_(nom){
-  try{return typeof this[nom]==='function';}catch(e){return false;}
+  try{return !!eval('(typeof '+String(nom)+' === "function")');}catch(e){return false;}
 }
 
 function arrArchitectureBudgetSoft20260917_(n){return Math.round((Number(n)||0)*100)/100;}
