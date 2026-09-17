@@ -25,18 +25,10 @@ function chargerSyntheseComptes20260828(){
   const global=chargerSyntheseComptesDepuisSnapshotGlobal20260906_();
   if(global){global.performance.dureeMs=Date.now()-t0;return global;}
 
-  let s=null;
-  try{s=chargerSnapshotComptes20260828();}catch(e){s=null;}
-  if(s&&s.disponible&&s.vue&&!s.perime&&String(s.vue.version||'')===COMPTES_REVIEW_20260828_VERSION){
-    const r=JSON.parse(JSON.stringify(s.vue));
-    r.performance={dureeMs:Date.now()-t0,controleDashboardExecute:false,source:'snapshot_local_secours',snapshotPerime:false,snapshotGenereLe:s.genereLe||''};
-    r.snapshotPerime=false;
-    return r;
-  }
-
-  const refresh=rafraichirSnapshotComptes20260828();
-  const r=refresh&&refresh.vue&&String(refresh.vue.version||'')===COMPTES_REVIEW_20260828_VERSION?JSON.parse(JSON.stringify(refresh.vue)):construireSyntheseComptes20260828_();
-  r.performance={dureeMs:Date.now()-t0,controleDashboardExecute:false,source:'recalcul_secours',snapshotPerime:false,snapshotGenereLe:refresh&&refresh.genereLe||''};
+  // Secours unique : recalcul frais en lecture seule. Les anciens snapshots locaux
+  // Comptes ne participent plus au chemin de lecture et ne sont plus rafraîchis ici.
+  const r=construireSyntheseComptes20260828_();
+  r.performance={dureeMs:Date.now()-t0,controleDashboardExecute:false,source:'recalcul_secours',snapshotPerime:false,snapshotGenereLe:''};
   r.snapshotPerime=false;
   return r;
 }
