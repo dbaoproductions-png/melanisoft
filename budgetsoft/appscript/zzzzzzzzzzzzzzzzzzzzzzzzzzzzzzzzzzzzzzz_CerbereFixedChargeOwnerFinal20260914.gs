@@ -88,8 +88,8 @@ function estSnapshotCerbereP1FraisValide20260912_(s){
   return Math.abs(attenduP1-n(d.p1))<.011&&Math.abs(n(ep.ep)-n(d.allocations))<.011&&Math.abs(attenduP2-n(p2.p2))<.011&&Math.abs(n(ss2.frontiere.ss2)-n(p2.ss2))<.011;
 }
 
-/* Entrée publique terminale : un snapshot pré-correctif ne peut plus contourner la garde. */
-function chargerCerbereCockpit20260902(){
+/* Ancienne entrée publique terminale, internalisée le 2026-09-18. La garde métier reste disponible pour diagnostic historique, sans concurrencer l'endpoint canonique. */
+function chargerCerbereCockpitLegacyFixedChargeOwnerFinal20260914_(){
   try{
     if(typeof chargerCerbereDepuisSnapshotGlobalBudgetSoft20260906==='function'){
       const snapshot=chargerCerbereDepuisSnapshotGlobalBudgetSoft20260906();
