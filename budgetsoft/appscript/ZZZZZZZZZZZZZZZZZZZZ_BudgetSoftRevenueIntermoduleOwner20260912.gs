@@ -16,22 +16,7 @@ function evenementRetardMaintenuRevenueOwner20260912_(ev){
   return ['effectif','effective','effectifs','effectives','realise a rapprocher','realisee a rapprocher'].includes(s);
 }
 
-// Dashboard : Rt1 Cerbere est l'unique proprietaire des recettes attendues du cycle.
-var composerDashboardSyntheseBudgetSoftAvantRevenueOwner20260912_=composerDashboardSyntheseBudgetSoft20260907_;
-composerDashboardSyntheseBudgetSoft20260907_=function(ctx){
-  const r=composerDashboardSyntheseBudgetSoftAvantRevenueOwner20260912_(ctx);
-  const cer=ctx&&ctx.cerbere||{},p=Array.isArray(cer.periodes)?cer.periodes[0]:null,v=p&&p.v37||{};
-  const rt1=Number(v.rt1);
-  if(r&&r.courtTerme&&Number.isFinite(rt1)){
-    r.courtTerme.revenusAttendus=arrRevenueOwner20260912_(rt1);
-    r.courtTerme.revenusPrevisionnelsRestants=arrRevenueOwner20260912_(rt1-Number(r.courtTerme.revenusConstates||0));
-    r.provenance=r.provenance||{};
-    r.provenance.revenusAttendus='cerbere.periodes[0].v37.rt1';
-    r.provenance.revenusPrevisionnels='projectionEtendue canonique ; aucun recalcul local dans Comptes';
-    r.versionRevenueOwner=BUDGETSOFT_REVENUE_INTERMODULE_OWNER_20260912_VERSION;
-  }
-  return r;
-};
+// Dashboard : responsabilité transférée à BudgetSoftDashboardCanonicalOwner20260918.gs.
 
 // Remplace le garde recettes precedent : le Dashboard ne doit plus etre valide
 // contre une formule locale reel + projection, mais contre le proprietaire Rt1.
