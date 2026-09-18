@@ -9,7 +9,7 @@ const BUDGETSOFT_HISTORY_SHEET='BudgetSoft_History';
  * Les sources brutes ne sont jamais stockées dans le snapshot : elles sont lues
  * une fois pendant la construction puis réduites en sorties canoniques.
  */
-function reconstruireSnapshotGlobalBudgetSoft20260906(origine){
+function reconstruireSnapshotGlobalLegacyBudgetSoft20260906_(origine){
   verifierInitialisation_();
   const lock=LockService.getDocumentLock();
   if(!lock.tryLock(3000))return{ok:false,version:BUDGETSOFT_GLOBAL_SNAPSHOT_VERSION,enCours:true,message:'Une reconstruction BudgetSoft est déjà en cours.'};
