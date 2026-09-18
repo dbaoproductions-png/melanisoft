@@ -1,4 +1,4 @@
-const BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION='2026-09-11.1';
+const BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION='2026-09-18.1';
 
 /**
  * Adapte le chargeur Cerbère classique à une base déjà calculée sans modifier son
@@ -81,7 +81,7 @@ function reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(origine){
       modules.sourceMeta={version:sources&&sources.meta&&sources.meta.version||'',tables:{}};
       Object.keys(sources||{}).forEach(k=>{if(Array.isArray(sources[k]))modules.sourceMeta.tables[k]=sources[k].length;});
 
-      const comptes=prendre('comptes',()=>{if(typeof rafraichirSnapshotComptes20260828==='function'){const r=rafraichirSnapshotComptes20260828();return r&&r.vue?r.vue:r;}return typeof construireSyntheseComptes20260828_==='function'?construireSyntheseComptes20260828_():chargerSyntheseComptes20260828();});
+      const comptes=prendre('comptes',()=>typeof construireSyntheseComptes20260828_==='function'?construireSyntheseComptes20260828_():chargerSyntheseComptes20260828());
       const credits=prendre('credits',()=>typeof chargerCreditsEtDettesV2==='function'?chargerCreditsEtDettesV2():null);
       const patrimoine=prendre('patrimoine',()=>typeof composerPatrimoineCanoniqueBudgetSoft20260906_==='function'?composerPatrimoineCanoniqueBudgetSoft20260906_(sources,comptes,credits):chargerPatrimoine());
       const maintenant=new Date(),finCourant=typeof dateFinCycleCanonBudgetSoft20260906_==='function'?dateFinCycleCanonBudgetSoft20260906_(maintenant):new Date(maintenant.getFullYear(),maintenant.getMonth(),27),finSuivant=new Date(finCourant.getFullYear(),finCourant.getMonth()+1,finCourant.getDate());
