@@ -133,7 +133,7 @@ function auditerGardesCandidatCerbereSnapshotDonneesPartageesBudgetSoft20260911(
     if(!cerbereBase||cerbereBase.ok===false)erreurs.push({module:'cerbereBase',erreur:'Base Cerbère candidate absente ou invalide.'});
 
     const tComptes=Date.now();
-    const comptes=typeof rafraichirSnapshotComptes20260828==='function'?(function(){const r=rafraichirSnapshotComptes20260828();return r&&r.vue?r.vue:r;})():(typeof construireSyntheseComptes20260828_==='function'?construireSyntheseComptes20260828_():chargerSyntheseComptes20260828());
+    const comptes=typeof construireSyntheseComptes20260828_==='function'?construireSyntheseComptes20260828_():chargerSyntheseComptes20260828();
     const comptesMs=Date.now()-tComptes;
     const tCredits=Date.now(),credits=typeof chargerCreditsEtDettesV2==='function'?chargerCreditsEtDettesV2():null,creditsMs=Date.now()-tCredits;
     const patrimoine=typeof composerPatrimoineCanoniqueBudgetSoft20260906_==='function'?composerPatrimoineCanoniqueBudgetSoft20260906_(sources,comptes,credits):(typeof chargerPatrimoine==='function'?chargerPatrimoine():null);
