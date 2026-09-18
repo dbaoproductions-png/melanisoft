@@ -98,8 +98,8 @@ function appliquerReportCbCycleSuivant20260905_(base){
   return base;
 }
 
-/** Les molettes sauvegardent EP seulement. Les anciens paramètres P1 sont ignorés. */
-function sauvegarderPilotageCerbere20260903(d){
+/** Implémentation historique EP conservée uniquement pour diagnostic/référence ; aucun RPC public. */
+function sauvegarderPilotageCerbereLegacyEp20260912_(d){
   d=d||{};const cle=String(d.cle||'').trim(),postes=Array.isArray(d.postes)?d.postes:[];
   if(!cle)throw new Error('Cycle Cerbère manquant.');
   sauvegarderBudgetPeriodeCerbereV33({cle:cle,postes:postes});
@@ -130,22 +130,22 @@ function publierValeursCartesDepuisOwnerP120260912_(base){
   return base;
 }
 
-/* Entrée UI/snapshot : snapshot obsolète refusé, sinon propriétaires republiés. */
-function chargerCerbereCockpit20260902(){
+/* Ancien propriétaire de lecture conservé en interne pour comparaison ; aucun endpoint public. */
+function chargerCerbereCockpitLegacyOwner20260912_(){
   try{if(typeof chargerCerbereDepuisSnapshotGlobalBudgetSoft20260906==='function'){const snapshot=chargerCerbereDepuisSnapshotGlobalBudgetSoft20260906();if(snapshot&&snapshot.ok!==false&&snapshot.source==='snapshot_global'&&estSnapshotCerbereP1FraisValide20260912_(snapshot)){snapshot.sourceBudgetSoft='snapshot_global';snapshot.versionSnapshotFirst=CERBERE_CB_DOUBLE_ROLE_FINAL_VERSION;return publierValeursCartesDepuisOwnerP120260912_(snapshot);}}}catch(e){}
   return publierValeursCartesDepuisOwnerP120260912_(recalculerCerbereCockpitP1Frais20260912_());
 }
 
-/** Même source EP pour Dashboard et Express : aucun calcul P dans ce raccourci. */
-function lirePilotableParJourDashboardSnapshotBudgetSoft20260909(){
+/** Ancien raccourci Dashboard conservé en interne ; le propriétaire public est dans BudgetSoftDashboardSyntheseAccess20260907.gs. */
+function lirePilotableParJourDashboardLegacy20260912_(){
   const x=chargerEtatEnvelopePilotableBudgetSoft20260913(),c=x&&x.courant;if(!c)return{disponible:false};
-  const cockpit=chargerCerbereCockpit20260902(),p=cockpit&&Array.isArray(cockpit.periodes)?cockpit.periodes[0]:null,fin=dateCockpit20260902_(p&&p.periode&&p.periode.fin),maintenant=new Date();
+  const cockpit=chargerCerbereCockpitLegacyOwner20260912_(),p=cockpit&&Array.isArray(cockpit.periodes)?cockpit.periodes[0]:null,fin=dateCockpit20260902_(p&&p.periode&&p.periode.fin),maintenant=new Date();
   const jours=fin?Math.max(1,Math.ceil((new Date(fin.getFullYear(),fin.getMonth(),fin.getDate()).getTime()-new Date(maintenant.getFullYear(),maintenant.getMonth(),maintenant.getDate()).getTime())/86400000)+1):1;
   return{disponible:true,version:BUDGETSOFT_EP_20260913_VERSION,source:'EP',ep:Number(c.ep||0),epDisponible:Number(c.epDisponible||0),joursRestants:jours,pilotableParJour:arrCockpit20260902_(Number(c.epDisponible||0)/jours)};
 }
 
 function auditerValeursCartesCerbereOwner20260912(){
-  const x=chargerCerbereCockpit20260902(),p=x&&Array.isArray(x.periodes)?x.periodes[0]:null,v=p&&p.v37||{},c=v.cockpit20260902||{},d=x&&x.diagnostic&&x.diagnostic.p1Doctrine20260912||{},e=x&&x.diagnostic&&x.diagnostic.enveloppePilotable20260913||{};
+  const x=chargerCerbereCockpitLegacyOwner20260912_(),p=x&&Array.isArray(x.periodes)?x.periodes[0]:null,v=p&&p.v37||{},c=v.cockpit20260902||{},d=x&&x.diagnostic&&x.diagnostic.p1Doctrine20260912||{},e=x&&x.diagnostic&&x.diagnostic.enveloppePilotable20260913||{};
   const out={ok:!!p,version:CERBERE_COCKPIT_CARD_OWNER_GUARD_20260912_VERSION,source:x&&x.sourceBudgetSoft||'',p:{carte:Number(c.p1Total||0),disponible:Number(c.ret1||0),owner:Number(d.p1||0),ownerDisponible:Number(d.restePilotable||0)},ep:{carte:Number(c.epTotal||0),disponible:Number(c.epDisponible||0),owner:Number(e.ep||0),ownerDisponible:Number(e.epDisponible||0),source:String(c.epSource||'')},construction:{rt1:Number(v.rt1||0),cft1:Number(v.cft1||0),het1:Number(v.het1Reel||0)},sansRecalculMetier:true};
   out.ok=out.ok&&Math.abs(out.p.carte-out.p.owner)<.011&&Math.abs(out.p.disponible-out.p.ownerDisponible)<.011&&Math.abs(out.ep.carte-out.ep.owner)<.011&&Math.abs(out.ep.disponible-out.ep.ownerDisponible)<.011;
   console.log('[AUDIT CARTES CERBERE OWNER 20260913] '+JSON.stringify(out));return out;
