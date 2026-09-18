@@ -1,4 +1,4 @@
-const BUDGETSOFT_STRUCTURAL_CLEANUP_20260917_VERSION='2026-09-18.5';
+const BUDGETSOFT_STRUCTURAL_CLEANUP_20260917_VERSION='2026-09-18.6';
 
 function compterClesParPrefixeBudgetSoft20260917_(prefixe){
   const props=PropertiesService.getDocumentProperties().getProperties()||{};
@@ -12,6 +12,12 @@ function auditerNettoyageStructurelBudgetSoft20260917(){
   const cartes=typeof auditerCartesStabiliteBudgetSoft20260917==='function'?auditerCartesStabiliteBudgetSoft20260917():null;
   const clesOperations=compterClesParPrefixeBudgetSoft20260917_('OPERATIONS_SNAPSHOT_20260828_');
   const clesComptes=compterClesParPrefixeBudgetSoft20260917_('COMPTES_SNAPSHOT_20260828_');
+  let aliasCerbere=null;
+  try{aliasCerbere=typeof chargerCerbereCockpit20260902==='function'?chargerCerbereCockpit20260902():null;}catch(e){aliasCerbere={ok:false,erreur:String(e&&e.message||e)};}
+  const aliasCerbereCanonique=!!(aliasCerbere&&aliasCerbere.ok!==false&&(
+    String(aliasCerbere.versionEndpointCanonique||'')===String(typeof CERBERE_CANONICAL_PUBLIC_ENDPOINT_20260914_VERSION!=='undefined'?CERBERE_CANONICAL_PUBLIC_ENDPOINT_20260914_VERSION:'2026-09-18.1')||
+    String(aliasCerbere.sourceBudgetSoft||'').indexOf('endpoint_canonique_20260914')>=0
+  ));
   const controles=[
     {code:'COMPTES_N_UTILISE_PLUS_SNAPSHOT_LOCAL',ok:String(comptes&&comptes.performance&&comptes.performance.source||'')!=='snapshot_local_secours',detail:'source='+String(comptes&&comptes.performance&&comptes.performance.source||'')},
     {code:'OPERATIONS_N_UTILISE_PLUS_SNAPSHOT_LOCAL',ok:Number(operations&&operations._performance&&operations._performance.snapshotMs||0)===0,detail:'snapshotMs='+Number(operations&&operations._performance&&operations._performance.snapshotMs||0)},
@@ -24,7 +30,7 @@ function auditerNettoyageStructurelBudgetSoft20260917(){
     {code:'DASHBOARD_PILOTABLE_LEGACY_INTERNALISE',ok:typeof lirePilotableParJourDashboardLegacy20260912_==='function'&&typeof lirePilotableParJourDashboardSnapshotBudgetSoft20260909==='function',detail:'ancien raccourci internalisé ; endpoint Dashboard conservé'},
     {code:'FICHIER_SNAPSHOT_LOCAL_COMPTES_RETIRE',ok:typeof chargerSnapshotComptes20260828==='undefined'&&typeof rafraichirSnapshotComptes20260828==='undefined'&&typeof invaliderSnapshotComptes20260828==='undefined',detail:'fonctions locales Comptes absentes du runtime'},
     {code:'FICHIER_SNAPSHOT_LOCAL_OPERATIONS_RETIRE',ok:typeof chargerSnapshotOperations20260828==='undefined'&&typeof rafraichirSnapshotOperations20260828==='undefined'&&typeof invaliderSnapshotOperations20260828==='undefined',detail:'fonctions locales Operations absentes du runtime'},
-    {code:'CERBERE_ALIAS_HISTORIQUE_VERS_CANONIQUE',ok:typeof chargerCerbereCockpit20260902==='function'&&String(chargerCerbereCockpit20260902).indexOf('chargerCerbereCockpitCanonique20260914')>=0,detail:'ancien nom public -> endpoint canonique 20260914'},
+    {code:'CERBERE_ALIAS_HISTORIQUE_VERS_CANONIQUE',ok:typeof chargerCerbereCockpit20260902==='function'&&aliasCerbereCanonique,detail:'ancien nom public -> endpoint canonique 20260914 ; source='+String(aliasCerbere&&aliasCerbere.sourceBudgetSoft||'')+' ; versionEndpoint='+String(aliasCerbere&&aliasCerbere.versionEndpointCanonique||'')},
     {code:'CERBERE_CONSOLIDATION_LEGACY_INTERNALISE',ok:typeof chargerCerbereCockpitLegacyConsolidation20260902_==='function',detail:'ancien lecteur CerbereConsolidation internalisé'},
     {code:'CERBERE_SNAPSHOT_FIRST_ANCIEN_RETIRE',ok:typeof BUDGETSOFT_CERBERE_SNAPSHOT_FIRST_VERSION==='undefined',detail:'premier override snapshot-first retiré du runtime'},
     {code:'CERBERE_CB_DOUBLE_ROLE_LEGACY_INTERNALISE',ok:typeof chargerCerbereCockpitLegacyCbDoubleRole20260905_==='function',detail:'ancien lecteur CB double rôle internalisé'},
