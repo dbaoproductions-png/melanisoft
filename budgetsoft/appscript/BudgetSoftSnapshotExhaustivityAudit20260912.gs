@@ -16,8 +16,7 @@ function manifesteLecteursSnapshotBudgetSoft20260912_(){
   return [
     {vue:'dashboard',fonction:'chargerDashboardReel',statut:'DANS_SNAPSHOT',role:'tableau de bord / synthèse'},
     {vue:'comptes',fonction:'chargerSyntheseComptes20260828',statut:'DANS_SNAPSHOT',role:'synthèse des comptes'},
-    {vue:'operations',fonction:'chargerSnapshotOperations20260828',statut:'A_INTEGRER',role:'première vue Opérations ; snapshot local autonome'},
-    {vue:'operations',fonction:'chargerOperationsLeger20260828',statut:'A_INTEGRER',role:'complément / repli de lecture Opérations'},
+    {vue:'operations',fonction:'chargerOperationsLeger20260828',statut:'DANS_SNAPSHOT',role:'lecture canonique Opérations sans snapshot local ; réel + futur conservés'},
     {vue:'charges_fixes',fonction:'chargerChargesFixesReview20260829',statut:'A_INTEGRER',role:'vue Charges fixes ; snapshot local autonome'},
     {vue:'charges_fixes',fonction:'chargerPropositionsRapprochementChargesFixes20260829',statut:'A_INTEGRER',role:'propositions de rapprochement en lecture pure'},
     {vue:'plan',fonction:'chargerPlanStructureV54',statut:'A_INTEGRER',role:'structure du Plan'},
