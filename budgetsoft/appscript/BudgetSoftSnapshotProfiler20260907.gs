@@ -26,13 +26,7 @@ function profilerReconstructionSnapshotBudgetSoft20260907(){
     }
 
     const sources=mesurer('sources',()=>chargerToutesLesDonnees());
-    const comptes=mesurer('comptes',()=>{
-      if(typeof rafraichirSnapshotComptes20260828==='function'){
-        const r=rafraichirSnapshotComptes20260828();
-        return r&&r.vue?r.vue:r;
-      }
-      return typeof construireSyntheseComptes20260828_==='function'?construireSyntheseComptes20260828_():chargerSyntheseComptes20260828();
-    });
+    const comptes=mesurer('comptes',()=>typeof construireSyntheseComptes20260828_==='function'?construireSyntheseComptes20260828_():chargerSyntheseComptes20260828());
     const credits=mesurer('credits',()=>typeof chargerCreditsEtDettesV2==='function'?chargerCreditsEtDettesV2():null);
     const dashboard=mesurer('dashboard',()=>typeof chargerDashboardReelV2==='function'?chargerDashboardReelV2():(typeof chargerDashboardReel==='function'?chargerDashboardReel():null));
     const patrimoine=mesurer('patrimoine',()=>typeof composerPatrimoineCanoniqueBudgetSoft20260906_==='function'?composerPatrimoineCanoniqueBudgetSoft20260906_(sources,comptes,credits):chargerPatrimoine());
