@@ -1,4 +1,4 @@
-const BUDGETSOFT_STRUCTURAL_CLEANUP_20260917_VERSION='2026-09-18.3';
+const BUDGETSOFT_STRUCTURAL_CLEANUP_20260917_VERSION='2026-09-18.4';
 
 function compterClesParPrefixeBudgetSoft20260917_(prefixe){
   const props=PropertiesService.getDocumentProperties().getProperties()||{};
@@ -23,7 +23,11 @@ function auditerNettoyageStructurelBudgetSoft20260917(){
     {code:'CERBERE_LECTURE_CANONIQUE_PRESENTE',ok:typeof chargerCerbereCockpitCanonique20260914==='function'&&typeof chargerCerbereCockpitProprietaire20260917_==='function',detail:'endpoint canonique -> propriétaire moderne'},
     {code:'DASHBOARD_PILOTABLE_LEGACY_INTERNALISE',ok:typeof lirePilotableParJourDashboardLegacy20260912_==='function'&&typeof lirePilotableParJourDashboardSnapshotBudgetSoft20260909==='function',detail:'ancien raccourci internalisé ; endpoint Dashboard conservé'},
     {code:'FICHIER_SNAPSHOT_LOCAL_COMPTES_RETIRE',ok:typeof chargerSnapshotComptes20260828==='undefined'&&typeof rafraichirSnapshotComptes20260828==='undefined'&&typeof invaliderSnapshotComptes20260828==='undefined',detail:'fonctions locales Comptes absentes du runtime'},
-    {code:'FICHIER_SNAPSHOT_LOCAL_OPERATIONS_RETIRE',ok:typeof chargerSnapshotOperations20260828==='undefined'&&typeof rafraichirSnapshotOperations20260828==='undefined'&&typeof invaliderSnapshotOperations20260828==='undefined',detail:'fonctions locales Operations absentes du runtime'}
+    {code:'FICHIER_SNAPSHOT_LOCAL_OPERATIONS_RETIRE',ok:typeof chargerSnapshotOperations20260828==='undefined'&&typeof rafraichirSnapshotOperations20260828==='undefined'&&typeof invaliderSnapshotOperations20260828==='undefined',detail:'fonctions locales Operations absentes du runtime'},
+    {code:'CERBERE_ALIAS_HISTORIQUE_VERS_CANONIQUE',ok:typeof chargerCerbereCockpit20260902==='function'&&String(chargerCerbereCockpit20260902).indexOf('chargerCerbereCockpitCanonique20260914')>=0,detail:'ancien nom public -> endpoint canonique 20260914'},
+    {code:'CERBERE_CONSOLIDATION_LEGACY_INTERNALISE',ok:typeof chargerCerbereCockpitLegacyConsolidation20260902_==='function',detail:'ancien lecteur CerbereConsolidation internalisé'},
+    {code:'CERBERE_SNAPSHOT_FIRST_ANCIEN_RETIRE',ok:typeof BUDGETSOFT_CERBERE_SNAPSHOT_FIRST_VERSION==='undefined',detail:'premier override snapshot-first retiré du runtime'},
+    {code:'SNAPSHOT_GLOBAL_CONSTRUCTEUR_PUBLIC_PROMU',ok:typeof reconstruireSnapshotGlobalBudgetSoft20260906==='function'&&String(reconstruireSnapshotGlobalBudgetSoft20260906).indexOf('reconstruireSnapshotGlobalSyntheseBudgetSoft20260907')>=0&&typeof reconstruireSnapshotGlobalLegacyBudgetSoft20260906_==='function',detail:'nom public -> constructeur synthèse ; ancien constructeur internalisé'}
   ];
   const out={ok:controles.every(c=>c.ok),version:BUDGETSOFT_STRUCTURAL_CLEANUP_20260917_VERSION,lectureSeule:true,dureeMs:Date.now()-t0,controles,clesLocales:{comptes:clesComptes,operations:clesOperations},architecture:{endpointEcriture:'sauvegarderPilotageCerberePublic20260917',aliasEcriture:'sauvegarderPilotageCerbere20260903',ownerLecture:'chargerCerbereCockpitProprietaire20260917_',endpointLecture:'chargerCerbereCockpitCanonique20260914',legacyEpInterne:'sauvegarderPilotageCerbereLegacyEp20260912_',legacyDashboardInterne:'lirePilotableParJourDashboardLegacy20260912_'}};
   console.log('[AUDIT NETTOYAGE STRUCTUREL BUDGETSOFT 20260917] '+JSON.stringify(out));
