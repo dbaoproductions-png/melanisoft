@@ -28,8 +28,8 @@ function manifesteLecteursSnapshotBudgetSoft20260912_(){
     {vue:'analyses',fonction:'chargerAnalysesBudgetairesV23',statut:'DANS_SNAPSHOT',role:'analyses budgétaires 3/6/12 servies depuis modules.analyses ; moteur source inchangé'},
     {vue:'ia',fonction:'',statut:'DANS_SNAPSHOT',role:'vue statique « Conseiller IA » ; aucun lecteur serveur fonctionnel à intégrer avant le sprint dédié'},
     {vue:'engagements_bancaires',fonction:'chargerEngagementsBancairesFuturs',statut:'DANS_SNAPSHOT',role:'engagements bancaires futurs servis depuis modules.engagementsBancaires ; moteur source inchangé'},
-    {vue:'budget_prefetch',fonction:'chargerBudgetPeriode',statut:'A_INTEGRER',role:'budget de période préchargé par l’interface'},
-    {vue:'pluxee_prefetch',fonction:'chargerPluxee',statut:'A_INTEGRER',role:'registre Pluxee préchargé par l’interface'},
+    {vue:'budget_prefetch',fonction:'chargerBudgetPeriode',statut:'DANS_SNAPSHOT',role:'budget courant préchargé depuis modules.budget ; périodes explicites hors courante en fallback moteur'},
+    {vue:'pluxee_prefetch',fonction:'chargerPluxee',statut:'DANS_SNAPSHOT',role:'registre Pluxee servi depuis modules.pluxee ; moteur source inchangé'},
     {vue:'tresorerie_previsionnelle',fonction:'chargerTresorerieUnifieeBudgetSoft20260907',statut:'DANS_SNAPSHOT',role:'trésorerie prévisionnelle canonique'},
     {vue:'parametres',fonction:'',statut:'DANS_SNAPSHOT',role:'renderer client de doctrine ; aucune lecture serveur autonome identifiée'}
   ];
