@@ -1,9 +1,9 @@
 // Engagements bancaires futurs du cycle courant.
 // Sépare les CB différées des prélèvements/virements déjà annoncés par la banque
 // et évite de recompter une charge fixe lorsqu'une opération bancaire future la couvre.
-function chargerEngagementsBancairesFuturs() {
+function chargerEngagementsBancairesFutursSource20260912_(dashboardRevision) {
   verifierInitialisation_();
-  const dash = chargerDashboardReel();
+  const dash = dashboardRevision&&typeof dashboardRevision==='object'?dashboardRevision:chargerDashboardReel();
   const c = dash && dash.courtTerme ? dash.courtTerme : {};
   const reference = c.dateReference ? dateJourCycle_(new Date(c.dateReference)) : dateJourCycle_(new Date());
   const fin = c.fin ? dateJourCycle_(new Date(c.fin)) : reference;
