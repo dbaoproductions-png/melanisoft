@@ -52,7 +52,7 @@ function recalculerCerbereCockpitP1Frais20260912_(options){
   return typeof avecContexteLectureBudgetSoft20260827_==='function'?avecContexteLectureBudgetSoft20260827_('cerbere-cockpit-p1-frais-20260912',executer):executer();
 }
 
-function chargerCerbereCockpit20260902(){
+function chargerCerbereCockpitLegacyCbDoubleRoleFinal20260905_(){
   try{
     if(typeof chargerCerbereDepuisSnapshotGlobalBudgetSoft20260906==='function'){
       const snapshot=chargerCerbereDepuisSnapshotGlobalBudgetSoft20260906();
