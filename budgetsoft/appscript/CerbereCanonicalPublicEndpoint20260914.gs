@@ -5,7 +5,34 @@
  * est servi lorsqu'il est compatible ; sinon l'endpoint délègue au propriétaire
  * interne moderne chargerCerbereCockpitProprietaire20260917_().
  */
-const CERBERE_CANONICAL_PUBLIC_ENDPOINT_20260914_VERSION='2026-09-17.2';
+const CERBERE_CANONICAL_PUBLIC_ENDPOINT_20260914_VERSION='2026-09-18.1';
+
+function harmoniserSoldeReelCerbereCanonique20260918_(r){
+  if(!r||r.ok===false)return r;
+  try{
+    if(typeof chargerSyntheseComptes20260828==='function'){
+      const comptes=chargerSyntheseComptes20260828();
+      const solde=Number(comptes&&comptes.synthese&&comptes.synthese.disponible);
+      if(Number.isFinite(solde)){
+        r.reel=r.reel||{};
+        r.reel.soldeBancaire=Math.round(solde*100)/100;
+        r.reel.sourceSoldeBancaire='chargerSyntheseComptes20260828.synthese.disponible';
+        r.diagnostic=r.diagnostic||{};
+        r.diagnostic.soldeReelCanonique20260918={
+          ok:true,
+          version:'2026-09-18.1',
+          solde:r.reel.soldeBancaire,
+          source:'comptes frais canoniques',
+          doctrine:'Le solde réel Cerbère frais est la même valeur bancaire canonique que Comptes ; Cerbère ne recalcule pas un solde concurrent.'
+        };
+      }
+    }
+  }catch(e){
+    r.diagnostic=r.diagnostic||{};
+    r.diagnostic.soldeReelCanonique20260918={ok:false,version:'2026-09-18.1',erreur:String(e&&e.message||e)};
+  }
+  return r;
+}
 
 function chargerCerbereCockpitCanonique20260914(){
   const t0=Date.now();
@@ -44,6 +71,7 @@ function chargerCerbereCockpitCanonique20260914(){
         frais.raisonFallbackEndpointCanonique=snapshot&&snapshot.ok!==false&&build!==attendu
           ?'snapshot_cf_build_incompatible'
           :(erreurSnapshot?'snapshot_erreur':'snapshot_indisponible');
+        harmoniserSoldeReelCerbereCanonique20260918_(frais);
         frais.dureeEndpointCanoniqueMs=Date.now()-t0;
         return frais;
       }
