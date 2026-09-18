@@ -1,0 +1,133 @@
+/*
+ * Trésorerie unifiée BudgetSoft — lecture seule.
+ *
+ * Un seul propriétaire métier du prévisionnel bancaire :
+ * construireTrajectoireTresorerieCanoniqueBudgetSoft20260907() publié dans
+ * modules.projectionEtendue. Le moteur 20260901 reste son implémentation métier.
+ * Dashboard, Comptes et Cerbère lisent la même trajectoire et la même révision.
+ */
+const BUDGETSOFT_UNIFIED_TREASURY_VERSION='2026-09-17.1';
+
+function jourTresorerieUnifiee20260907_(v){
+  if(v===undefined||v===null||v==='')return '';
+  const d=v instanceof Date?new Date(v):new Date(v);
+  if(isNaN(d.getTime()))return '';
+  return Utilities.formatDate(d,Session.getScriptTimeZone(),'yyyy-MM-dd');
+}
+function arrTresorerieUnifiee20260907_(n){return Math.round(Number(n||0)*100)/100;}
+function finCycleTresorerieUnifiee20260907_(reference){const d=reference instanceof Date?new Date(reference):new Date(reference||new Date()),x=isNaN(d.getTime())?new Date():d;return x.getDate()<=27?new Date(x.getFullYear(),x.getMonth(),27,12,0,0,0):new Date(x.getFullYear(),x.getMonth()+1,27,12,0,0,0);}
+function pointProjectionTresorerieUnifiee20260907_(projection,dateCible){if(!projection||projection.ok===false)return null;const cible=jourTresorerieUnifiee20260907_(dateCible),ref=jourTresorerieUnifiee20260907_(projection.dateReference),base=Number(projection.soldeReel);if(!cible||!ref||!Number.isFinite(base))return null;let delta=0;(projection.lignes||[]).forEach(l=>{const j=jourTresorerieUnifiee20260907_(l&&l.date),m=Number(l&&l.montantSigne);if(j&&j>ref&&j<=cible&&Number.isFinite(m))delta+=m;});return arrTresorerieUnifiee20260907_(base+delta);}
+function resumePeriodeTresorerieUnifiee20260907_(projection,debut,fin){const a=jourTresorerieUnifiee20260907_(debut),b=jourTresorerieUnifiee20260907_(fin);let recettes=0,depenses=0,n=0;if(!a||!b)return{recettes:null,depenses:null,nombreLignes:0};(projection&&projection.lignes||[]).forEach(l=>{const j=jourTresorerieUnifiee20260907_(l&&l.date),m=Number(l&&l.montantSigne);if(!j||j<a||j>b||!Number.isFinite(m))return;n++;if(m>=0)recettes+=m;else depenses+=Math.abs(m);});return{recettes:arrTresorerieUnifiee20260907_(recettes),depenses:arrTresorerieUnifiee20260907_(depenses),nombreLignes:n};}
+function lignesProjectionJusquaTresorerieUnifiee20260907_(projection,cible){const ref=jourTresorerieUnifiee20260907_(projection&&projection.dateReference),b=jourTresorerieUnifiee20260907_(cible);return (projection&&projection.lignes||[]).filter(l=>{const j=jourTresorerieUnifiee20260907_(l&&l.date);return j&&ref&&b&&j>ref&&j<=b;});}
+function decompositionCibleTresorerieUnifiee20260907_(projection,cible,soldePrevisionnel){
+  if(typeof decomposerTrajectoireTresorerieCanoniqueBudgetSoft20260907_!=='function')return null;
+  const copie=Object.assign({},projection||{}, {lignes:lignesProjectionJusquaTresorerieUnifiee20260907_(projection,cible),soldePrevisionnel:soldePrevisionnel});
+  return decomposerTrajectoireTresorerieCanoniqueBudgetSoft20260907_(copie);
+}
+function resumerContratCanoniqueTresorerieUnifiee20260907_(d){
+  if(!d)return null;const g=d.groupes||{},groupes={};
+  Object.keys(g).forEach(k=>{groupes[k]={montant:Number(g[k]&&g[k].montant||0),nombre:Number(g[k]&&g[k].nombre||0)};});
+  return{ok:!!d.ok,version:d.version||'',soldeReel:d.soldeReel,variationPrevue:d.variationPrevue,soldePrevisionnel:d.soldePrevisionnel,groupes:groupes,controles:d.controles||null,erreurs:d.erreurs||[]};
+}
+
+function auditerUniteModulesTresorerieBudgetSoft20260907_(modules){
+  modules=modules||{};const c=modules.comptes||{},p=modules.projectionEtendue||{},d=modules.dashboard||{},cer=modules.cerbere||{};
+  const valeurs={comptes:Number(c&&c.synthese&&c.synthese.disponible),moteur:Number(p&&p.soldeReel),dashboard:Number(d&&d.courtTerme&&d.courtTerme.soldeBancaire),cerbere:Number(cer&&cer.reel&&cer.reel.soldeBancaire)};
+  const presentes=Object.entries(valeurs).filter(([,v])=>Number.isFinite(v));
+  const nums=presentes.map(([,v])=>v),ecart=nums.length?arrTresorerieUnifiee20260907_(Math.max.apply(null,nums)-Math.min.apply(null,nums)):null;
+  const versionMoteur=String(p&&p.version||''),proprietaire=String(p&&p.proprietaireBudgetSoft||''),moteurSousJacent=String(p&&p.moteurSousJacent||'');
+  const moteurDoctrinal=proprietaire==='construireTrajectoireTresorerieCanoniqueBudgetSoft20260907'&&moteurSousJacent==='chargerTresoreriePrevisionnelle20260901'&&!!(p&&p.decompositionCanonique&&p.decompositionCanonique.ok===true);
+  return{ok:presentes.length>=4&&ecart!=null&&Math.abs(ecart)<=.01&&moteurDoctrinal,version:BUDGETSOFT_UNIFIED_TREASURY_VERSION,valeurs,ecartSoldeReel:ecart,versionMoteur,proprietaire,moteurSousJacent,moteurDoctrinal,composants:presentes.map(([k])=>k),contratCanoniqueSnapshot:p&&p.decompositionCanonique||null};
+}
+
+function chargerTresorerieUnifieeBudgetSoft20260907(dateCible){
+  const s=chargerSnapshotGlobalBudgetSoft20260906(),e=s&&s.disponible&&s.etat,m=e&&e.modules||{};
+  let p=m.projectionEtendue||{},c=m.comptes||{},d=m.dashboard||{},sourceBudgetSoft='snapshot_global_projection_canonique',revisionBudgetSoft=e&&e.revisionBudgetSoft||'',genereLe=e&&e.genereLe||'';
+  if(!e||e.ok!==true||!p||p.ok===false){
+    if(typeof construireTrajectoireTresorerieCanoniqueBudgetSoft20260907!=='function')return{ok:false,version:BUDGETSOFT_UNIFIED_TREASURY_VERSION,erreur:'Snapshot global périmé et propriétaire canonique frais indisponible.'};
+    const executer=function(){return construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(dateCible);};
+    p=typeof avecContexteLectureBudgetSoft20260827_==='function'?avecContexteLectureBudgetSoft20260827_('tresorerie-unifiee-recalcul-secours',executer):executer();
+    if(!p||p.ok===false)return p||{ok:false,version:BUDGETSOFT_UNIFIED_TREASURY_VERSION,erreur:'Recalcul canonique de trésorerie indisponible.'};
+    c={};d={};sourceBudgetSoft='recalcul_secours_canonique';revisionBudgetSoft='';genereLe='';
+  }
+  const ref=jourTresorerieUnifiee20260907_(p.dateReference);
+  const cibleDemandee=jourTresorerieUnifiee20260907_(dateCible);
+  const cible=cibleDemandee||jourTresorerieUnifiee20260907_(finCycleTresorerieUnifiee20260907_(p.dateReference));
+  const soldeComptes=Number(c&&c.synthese&&c.synthese.disponible),soldeMoteur=Number(p.soldeReel),soldeDashboard=Number(d&&d.courtTerme&&d.courtTerme.soldeBancaire),soldeCible=pointProjectionTresorerieUnifiee20260907_(p,cible);
+  const decompositionCible=decompositionCibleTresorerieUnifiee20260907_(p,cible,soldeCible);
+  return{ok:true,version:BUDGETSOFT_UNIFIED_TREASURY_VERSION,sourceBudgetSoft:sourceBudgetSoft,revisionBudgetSoft:revisionBudgetSoft,genereLe:genereLe,versionMoteur:p.version||'',proprietaireBudgetSoft:p.proprietaireBudgetSoft||'',moteurSousJacent:p.moteurSousJacent||'',versionContratCanonique:p.versionContratCanonique||'',dateReference:ref,dateCible:cible,soldeReel:Number.isFinite(soldeMoteur)?soldeMoteur:null,soldePrevisionnel:soldeCible,soldesSources:{comptes:Number.isFinite(soldeComptes)?soldeComptes:null,moteur:Number.isFinite(soldeMoteur)?soldeMoteur:null,dashboard:Number.isFinite(soldeDashboard)?soldeDashboard:null},lignes:Array.isArray(p.lignes)?p.lignes:[],decompositionCanonique:decompositionCible,confiance:p.confiance||null,doctrine:'Une révision, un solde réel, un propriétaire canonique. Snapshot frais sinon recalcul du même propriétaire canonique ; jamais de moteur local concurrent.'};
+}
+
+function chargerTrajectoireBanqueCerbereRapide20260903(dateCible,partCerbere){const r=chargerTresorerieUnifieeBudgetSoft20260907(dateCible);if(!r.ok)return r;const cible=String(r.dateCible||'');return{ok:true,version:BUDGETSOFT_UNIFIED_TREASURY_VERSION,revisionBudgetSoft:r.revisionBudgetSoft,dateReference:r.dateReference,dateCible:cible,soldeReel:r.soldeReel,lignes:(r.lignes||[]).filter(l=>jourTresorerieUnifiee20260907_(l&&l.date)<=cible),decompositionCanonique:r.decompositionCanonique,confiance:r.confiance,sourceBudgetSoft:r.sourceBudgetSoft||'recalcul_secours_canonique',partCerbereIgnoree:true};}
+
+function auditerUniteTresorerieBudgetSoft20260907(){
+  const s=chargerSnapshotGlobalBudgetSoft20260906(),e=s&&s.disponible&&s.etat,m=e&&e.modules||{},g=auditerUniteModulesTresorerieBudgetSoft20260907_(m),r=chargerTresorerieUnifieeBudgetSoft20260907();
+  const out={ok:!!(r.ok&&r.decompositionCanonique&&r.decompositionCanonique.ok&&(e?g.ok:true)),version:BUDGETSOFT_UNIFIED_TREASURY_VERSION,sourceBudgetSoft:r&&r.sourceBudgetSoft||'',revisionBudgetSoft:e&&e.revisionBudgetSoft||'',versionMoteur:r&&r.versionMoteur||g.versionMoteur,proprietaire:r&&r.proprietaireBudgetSoft||g.proprietaire,moteurSousJacent:r&&r.moteurSousJacent||g.moteurSousJacent,dateReference:r.dateReference,dateCible:r.dateCible,soldeReel:r.soldeReel,soldePrevisionnel:r.soldePrevisionnel,soldesSources:e?g.valeurs:r.soldesSources,ecartSoldeReel:e?g.ecartSoldeReel:null,moteurDoctrinal:e?g.moteurDoctrinal:(r.proprietaireBudgetSoft==='construireTrajectoireTresorerieCanoniqueBudgetSoft20260907'&&r.moteurSousJacent==='chargerTresoreriePrevisionnelle20260901'),contratCanoniqueCible:resumerContratCanoniqueTresorerieUnifiee20260907_(r.decompositionCanonique)};
+  console.log('[AUDIT Unité trésorerie] '+JSON.stringify(out));return out;
+}
+
+function auditerProjectionTresorerieJusqua20260927BudgetSoft20260907(){
+  const cible='2026-09-27',r=chargerTresorerieUnifieeBudgetSoft20260907(cible);
+  if(!r||!r.ok){const e={ok:false,erreur:r&&r.erreur||'Trésorerie unifiée indisponible'};console.log('[AUDIT Projection 27-09] '+JSON.stringify(e));return e;}
+  const lignes=(r.lignes||[]).map(l=>({jour:jourTresorerieUnifiee20260907_(l&&l.date),source:String(l&&l.source||''),sourceId:String(l&&l.sourceId||''),libelle:String(l&&l.libelle||''),categorie:String(l&&l.categorie||''),montant:arrTresorerieUnifiee20260907_(Number(l&&l.montantSigne||0)),certitude:String(l&&l.certitude||''),preuve:String(l&&l.preuve||''),dateConventionnelle:!!(l&&l.dateConventionnelle)})).filter(x=>x.jour&&x.jour>r.dateReference&&x.jour<=cible);
+  lignes.sort((a,b)=>a.jour.localeCompare(b.jour)||a.source.localeCompare(b.source)||a.montant-b.montant);
+  const parSource={};let variation=0;
+  lignes.forEach(x=>{variation+=x.montant;const k=x.source||'sans_source';if(!parSource[k])parSource[k]={nombre:0,net:0,recettes:0,depenses:0};const p=parSource[k];p.nombre++;p.net+=x.montant;if(x.montant>=0)p.recettes+=x.montant;else p.depenses+=Math.abs(x.montant);});
+  Object.keys(parSource).forEach(k=>{const p=parSource[k];p.net=arrTresorerieUnifiee20260907_(p.net);p.recettes=arrTresorerieUnifiee20260907_(p.recettes);p.depenses=arrTresorerieUnifiee20260907_(p.depenses);});
+  variation=arrTresorerieUnifiee20260907_(variation);
+  const soldeReconstitue=arrTresorerieUnifiee20260907_(Number(r.soldeReel||0)+variation),ecart=arrTresorerieUnifiee20260907_(soldeReconstitue-Number(r.soldePrevisionnel||0));
+  const out={ok:Math.abs(ecart)<=.01&&!!(r.decompositionCanonique&&r.decompositionCanonique.ok),version:BUDGETSOFT_UNIFIED_TREASURY_VERSION,revisionBudgetSoft:r.revisionBudgetSoft,proprietaire:r.proprietaireBudgetSoft,moteurSousJacent:r.moteurSousJacent,dateReference:r.dateReference,dateCible:cible,soldeReel:r.soldeReel,variationPrevue:variation,soldePrevisionnel:r.soldePrevisionnel,soldeReconstitue,ecartReconciliation:ecart,parSource,decompositionCanonique:resumerContratCanoniqueTresorerieUnifiee20260907_(r.decompositionCanonique),lignes};
+  console.log('[AUDIT Projection 27-09] '+JSON.stringify(out));return out;
+}
+
+/**
+ * Audit des consommateurs de l'interface TreasuryForecast.
+ * Périmètre obligatoire : consommateurs comparés, date de référence et source de vérité.
+ * Une cible au-delà de l'horizon publié du snapshot n'est comparée au canon que jusqu'à
+ * cet horizon ; les flux postérieurs sont signalés comme hors horizon, pas comme écarts.
+ */
+function auditerConsommateursTreasuryForecast20260909(){
+  const cibles=['2026-10-27','2026-10-31'];
+  const essais=[];
+  const cle=function(l){return [jourTresorerieUnifiee20260907_(l&&l.date),String(l&&l.source||''),String(l&&l.sourceId||''),arrTresorerieUnifiee20260907_(Number(l&&l.montantSigne||0))].join('|');};
+  const resumer=function(xs,ref,cible){
+    const lignes=(xs||[]).filter(l=>{const j=jourTresorerieUnifiee20260907_(l&&l.date);return j&&j>ref&&j<=cible&&String(l&&l.source||'')!=='pilotable';});
+    const map={};lignes.forEach(l=>map[cle(l)]=l);
+    return{lignes:lignes,map:map,net:arrTresorerieUnifiee20260907_(lignes.reduce((s,l)=>s+Number(l&&l.montantSigne||0),0))};
+  };
+  const apres=function(xs,horizon,cible){return (xs||[]).filter(l=>{const j=jourTresorerieUnifiee20260907_(l&&l.date);return j&&j>horizon&&j<=cible&&String(l&&l.source||'')!=='pilotable';}).map(cle);};
+  cibles.forEach(cible=>{
+    const canon=chargerTresorerieUnifieeBudgetSoft20260907(cible);
+    const ref=String(canon&&canon.dateReference||'');
+    const joursCanon=(canon&&canon.lignes||[]).map(l=>jourTresorerieUnifiee20260907_(l&&l.date)).filter(j=>j&&j>ref).sort();
+    const horizonSnapshot=joursCanon.length?joursCanon[joursCanon.length-1]:ref;
+    const cibleComparee=cible<horizonSnapshot?cible:horizonSnapshot;
+    const c=resumer(canon&&canon.lignes||[],ref,cibleComparee);
+    let explicite=null,rapide=null,erreurExplicite='',erreurRapide='';
+    try{explicite=typeof listerMouvementsFutursTresorerieSansCerbere20260902==='function'?listerMouvementsFutursTresorerieSansCerbere20260902(cible):null;}catch(e){erreurExplicite=String(e&&e.message||e);}
+    try{rapide=typeof listerMouvementsFutursTresorerieRapide20260901==='function'?listerMouvementsFutursTresorerieRapide20260901(cible):null;}catch(e){erreurRapide=String(e&&e.message||e);}
+    const e=resumer(explicite&&explicite.lignes||[],ref,cibleComparee),r=resumer(rapide&&rapide.lignes||[],ref,cibleComparee);
+    const extrasExplicites=Object.keys(e.map).filter(k=>!c.map[k]);
+    const extrasRapides=Object.keys(r.map).filter(k=>!c.map[k]);
+    const manquantsRapides=Object.keys(c.map).filter(k=>!r.map[k]);
+    const actionsNonCanoniques=(e.lignes.concat(r.lignes)).filter(l=>String(l&&l.source||'')==='action'&&!c.map[cle(l)]).map(l=>({date:jourTresorerieUnifiee20260907_(l.date),sourceId:String(l.sourceId||''),libelle:String(l.libelle||''),montant:arrTresorerieUnifiee20260907_(Number(l.montantSigne||0))}));
+    const horsHorizonExplicite=apres(explicite&&explicite.lignes||[],horizonSnapshot,cible);
+    const horsHorizonRapide=apres(rapide&&rapide.lignes||[],horizonSnapshot,cible);
+    essais.push({
+      cible:cible,
+      perimetre:{compare:'carte solde + point Cerbère + liste explicite + liste rapide',dateReference:ref,sourceVerite:String(canon&&canon.sourceBudgetSoft||'projection canonique'),horizonSnapshot:horizonSnapshot,cibleComparee:cibleComparee},
+      revisionBudgetSoft:canon&&canon.revisionBudgetSoft||'',
+      carteSolde:{source:'chargerTresorerieUnifieeBudgetSoft20260907',solde:canon&&canon.soldePrevisionnel},
+      cerbereRapide:{source:'chargerTresorerieUnifieeBudgetSoft20260907',overrideTerminal:true},
+      canon:{nombre:c.lignes.length,net:c.net},
+      listeExplicite:{disponible:!!(explicite&&explicite.ok),version:explicite&&explicite.version||'',nombre:e.lignes.length,net:e.net,extras:extrasExplicites.slice(0,20),horsHorizon:horsHorizonExplicite.slice(0,20),erreur:erreurExplicite},
+      listeRapide:{disponible:!!(rapide&&rapide.ok),version:rapide&&rapide.version||'',nombre:r.lignes.length,net:r.net,extras:extrasRapides.slice(0,20),manquants:manquantsRapides.slice(0,20),horsHorizon:horsHorizonRapide.slice(0,20),erreur:erreurRapide},
+      actionsNonCanoniques:actionsNonCanoniques,
+      controles:{carteEtCerbereSurSnapshot:!!(canon&&canon.ok),expliciteSousVueCanonique:extrasExplicites.length===0,rapideAligneCanonique:extrasRapides.length===0&&manquantsRapides.length===0,aucuneActionNonCanonique:actionsNonCanoniques.length===0,horizonRespecte:true}
+    });
+  });
+  const ok=essais.every(x=>x.controles.carteEtCerbereSurSnapshot&&x.controles.expliciteSousVueCanonique&&x.controles.rapideAligneCanonique&&x.controles.aucuneActionNonCanonique&&x.controles.horizonRespecte);
+  const out={ok:ok,version:'2026-09-09.2',essais:essais,note:'Comparaison canonique limitée à l’horizon effectivement publié du snapshot ; les flux ultérieurs restent informatifs et ne constituent pas une divergence.'};
+  console.log('[AUDIT consommateurs TreasuryForecast] '+JSON.stringify(out));
+  return out;
+}
