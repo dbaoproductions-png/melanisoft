@@ -15,7 +15,7 @@ function chargerDashboardSyntheseV3BudgetSoft20260907(){
     const tres=construireTresorerieComptableCanoniqueBudgetSoft20260906_(sources,comptes,finCourant,maintenant);
     const proj=typeof construireTrajectoireTresorerieCanoniqueBudgetSoft20260907==='function'?construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(finSuivant):null;
     const cer=typeof chargerCerbereCockpitCanonique20260914==='function'?chargerCerbereCockpitCanonique20260914():null;
-    const exp=typeof chargerVueCerbereExpressSansContexte20260827_==='function'?chargerVueCerbereExpressSansContexte20260827_():null;
+    const exp=typeof composerCerbereExpressDepuisCockpit20260910_==='function'&&cer&&cer.ok!==false?composerCerbereExpressDepuisCockpit20260910_(cer):null;
     const r=composerDashboardSyntheseBudgetSoft20260907_({sources:sources,comptes:comptes,tresorerieComptable:tres,projectionEtendue:proj,cerbere:cer,cerbereExpress:exp});
     r.source='recalcul_secours';r.sourceBudgetSoft='recalcul_secours';return r;
   };
