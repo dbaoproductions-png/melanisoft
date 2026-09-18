@@ -18,7 +18,7 @@ function producteurAnalyse20260904_(cat){return typeof producteurRevenu2026_==='
 function structurelAnalyse20260904_(cat){return typeof estRevenuStructurel2026_==='function'?estRevenuStructurel2026_(cat):['Salaires','France Travail','Cours','Concerts','Congés spectacles','SACEM','Droits artistiques','Revenus fonciers'].includes(cat);}
 function variableAnalyse20260904_(cat){return typeof estRevenuVariable2026_==='function'?estRevenuVariable2026_(cat):['France Travail','Cours','Concerts','Congés spectacles','SACEM','Droits artistiques','Revenus divers','Autres revenus','Avantages employeur'].includes(cat);}
 
-function chargerAnalysesBudgetairesV23(nombrePeriodes){
+function chargerAnalysesBudgetairesV23Source20260912_(nombrePeriodes){
   verifierInitialisation_();
   const t0=Date.now();
   const nbDemande=parseInt(nombrePeriodes,10),nb=[3,6,12].includes(nbDemande)?nbDemande:6;
