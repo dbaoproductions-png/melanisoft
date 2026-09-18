@@ -17,7 +17,7 @@ function diagnostiquerConsolidationCerbere(){
 }
 
 const CERBERE_COCKPIT_20260902_VERSION='2026-09-03.4';
-function chargerCerbereCockpit20260902(){
+function chargerCerbereCockpitLegacyConsolidation20260902_(){
   const executer=function(){const base=chargerCerbereV374();if(!base||base.ok===false)return base;corrigerSuspensionsActionsEvenements20260903_(base);corrigerReelPilotableDateAchat20260902_(base);const periodes=Array.isArray(base.periodes)?base.periodes:[];periodes.forEach((p,i)=>enrichirCycleCockpitCerbere20260902_(p,i));base.cockpit20260902={version:CERBERE_COCKPIT_20260902_VERSION,appreciation:appreciationCockpitCerbere20260902_(base),doctrine:'Par défaut, l’enveloppe globale P1 suit le pilotable disponible à l’instant t. Un ajustement manuel est mémorisé comme écart à cette capacité. Surplus/déficit à ventiler = enveloppe globale P1 - somme des molettes. Les achats CB alimentent les molettes selon leur date d’achat ; le règlement CB technique est exclu des molettes et vient réduire l’enveloppe globale du cycle suivant selon sa date bancaire.'};return serialiserCerberePourClient_(base);};
   return typeof avecContexteLectureBudgetSoft20260827_==='function'?avecContexteLectureBudgetSoft20260827_('cerbere-cockpit-20260902',executer):executer();
 }
