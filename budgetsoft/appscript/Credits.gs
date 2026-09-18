@@ -28,7 +28,7 @@ function enrichirCredit_(c){
   return x;
 }
 
-function chargerCreditsEtDettes() {
+function chargerCreditsEtDettesLegacyBase_() {
   verifierInitialisation_();
   assurerColonnesCredits_();
   const credits = lireTable_('Credits').map(enrichirCredit_);
@@ -84,13 +84,13 @@ function enregistrerCreditOuDette(donnees) {
     ligne.commentaire=String(donnees.commentaire||'').trim();
   }
   enregistrerLigne(table, ligne);
-  return chargerCreditsEtDettes();
+  return chargerCreditsEtDettesLegacyBase_();
 }
 
 function supprimerCreditOuDette(table, id) {
   const nomTable = String(table) === 'Dettes' ? 'Dettes' : 'Credits';
   supprimerLigne(nomTable, id);
-  return chargerCreditsEtDettes();
+  return chargerCreditsEtDettesLegacyBase_();
 }
 
 function trouverChargeCasden_(){
