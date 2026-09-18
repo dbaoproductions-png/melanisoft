@@ -26,13 +26,7 @@ function reconstruireSnapshotGlobalBudgetSoft20260906(origine){
       modules.sourceMeta={version:sources&&sources.meta&&sources.meta.version||'',tables:{}};
       Object.keys(sources||{}).forEach(k=>{if(Array.isArray(sources[k]))modules.sourceMeta.tables[k]=sources[k].length;});
 
-      const comptes=prendre('comptes',()=>{
-        if(typeof rafraichirSnapshotComptes20260828==='function'){
-          const r=rafraichirSnapshotComptes20260828();
-          return r&&r.vue?r.vue:r;
-        }
-        return typeof construireSyntheseComptes20260828_==='function'?construireSyntheseComptes20260828_():chargerSyntheseComptes20260828();
-      });
+      const comptes=prendre('comptes',()=>typeof construireSyntheseComptes20260828_==='function'?construireSyntheseComptes20260828_():chargerSyntheseComptes20260828());
       const credits=prendre('credits',()=>typeof chargerCreditsEtDettesV2==='function'?chargerCreditsEtDettesV2():null);
       const dashboard=prendre('dashboard',()=>typeof chargerDashboardReelV2==='function'?chargerDashboardReelV2():(typeof chargerDashboardReel==='function'?chargerDashboardReel():null));
       const patrimoine=prendre('patrimoine',()=>typeof composerPatrimoineCanoniqueBudgetSoft20260906_==='function'?composerPatrimoineCanoniqueBudgetSoft20260906_(sources,comptes,credits):chargerPatrimoine());
