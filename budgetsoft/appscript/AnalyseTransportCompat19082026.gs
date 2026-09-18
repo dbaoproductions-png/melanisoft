@@ -3,14 +3,14 @@
 // google.script.run ne les transporte pas de manière fiable vers le navigateur.
 // Cette enveloppe convertit donc le résultat en structure JSON pure sans toucher aux calculs.
 
-function chargerAnalysesBudgetairesSerialisable(nombrePeriodes) {
-  const resultat = chargerAnalysesBudgetaires(nombrePeriodes);
+function chargerAnalysesBudgetairesSerialisableLegacy19082026_(nombrePeriodes) {
+  const resultat = chargerAnalysesBudgetairesLegacyV23Base_(nombrePeriodes);
   return JSON.parse(JSON.stringify(resultat));
 }
 
 function diagnostiquerTransportAnalyses19082026() {
   const t0 = Date.now();
-  const resultat = chargerAnalysesBudgetairesSerialisable(6);
+  const resultat = chargerAnalysesBudgetairesSerialisableLegacy19082026_(6);
   const resume = {
     ok: true,
     ms: Date.now() - t0,
