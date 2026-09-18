@@ -1,4 +1,4 @@
-const BUDGETSOFT_STRUCTURAL_CLEANUP_20260917_VERSION='2026-09-18.13';
+const BUDGETSOFT_STRUCTURAL_CLEANUP_20260917_VERSION='2026-09-18.14';
 
 function compterClesParPrefixeBudgetSoft20260917_(prefixe){
   const props=PropertiesService.getDocumentProperties().getProperties()||{};
@@ -56,6 +56,7 @@ function auditerNettoyageStructurelBudgetSoft20260917(){
     {code:'SNAPSHOT_WRITER_UNIQUE_RESTAURE',ok:typeof ecrireSnapshotGlobalBudgetSoft20260906_==='function'&&String(ecrireSnapshotGlobalBudgetSoft20260906_).indexOf('construireModuleAnalysesSnapshotBudgetSoft20260912_')<0,detail:'writer global unique ; Analyses/Engagements construits avant écriture'},
     {code:'TRESORERIE_UNIFIEE_HORS_FICHIER_Z',ok:typeof chargerTresorerieUnifieeBudgetSoft20260907==='function'&&typeof auditerUniteModulesTresorerieBudgetSoft20260907_==='function',detail:'module Trésorerie unifiée conservé sous fichier canonique sans préfixe Z'},
     {code:'DASHBOARD_SEMANTIQUE_HORS_FICHIER_Z',ok:typeof chargerDashboardSyntheseV3BudgetSoft20260907==='function'&&typeof corrigerSemantiqueDashboardBudgetSoft20260907_==='function',detail:'module sémantique Dashboard conservé sous fichier canonique sans préfixe Z'},
+    {code:'RECETTES_CANONIQUES_ARREARS_SANS_DOUBLON_Z',ok:typeof revenusCanoniquesTresorerie20260831_==='function'&&typeof revenusCanoniquesTresorerieLegacy20260831_==='function',detail:'version RevenueArrears publique unique ; ancien calcul 20260831 internalisé'},
     {code:'SNAPSHOT_GLOBAL_CONSTRUCTEUR_PUBLIC_PROMU',ok:typeof reconstruireSnapshotGlobalBudgetSoft20260906==='function'&&String(reconstruireSnapshotGlobalBudgetSoft20260906).indexOf('reconstruireSnapshotGlobalSyntheseBudgetSoft20260907')>=0&&typeof reconstruireSnapshotGlobalLegacyBudgetSoft20260906_==='function',detail:'nom public -> constructeur synthèse ; ancien constructeur internalisé'}
   ];
   const out={ok:controles.every(c=>c.ok),version:BUDGETSOFT_STRUCTURAL_CLEANUP_20260917_VERSION,lectureSeule:true,dureeMs:Date.now()-t0,controles,clesLocales:{comptes:clesComptes,operations:clesOperations},architecture:{endpointEcriture:'sauvegarderPilotageCerberePublic20260917',aliasEcriture:'sauvegarderPilotageCerbere20260903',ownerLecture:'chargerCerbereCockpitProprietaire20260917_',endpointLecture:'chargerCerbereCockpitCanonique20260914',legacyEpInterne:'sauvegarderPilotageCerbereLegacyEp20260912_',legacyDashboardInterne:'lirePilotableParJourDashboardLegacy20260912_'}};
