@@ -1,4 +1,4 @@
-const BUDGETSOFT_STRUCTURAL_CLEANUP_20260917_VERSION='2026-09-18.6';
+const BUDGETSOFT_STRUCTURAL_CLEANUP_20260917_VERSION='2026-09-18.7';
 
 function compterClesParPrefixeBudgetSoft20260917_(prefixe){
   const props=PropertiesService.getDocumentProperties().getProperties()||{};
@@ -36,6 +36,7 @@ function auditerNettoyageStructurelBudgetSoft20260917(){
     {code:'CERBERE_CB_DOUBLE_ROLE_LEGACY_INTERNALISE',ok:typeof chargerCerbereCockpitLegacyCbDoubleRole20260905_==='function',detail:'ancien lecteur CB double rôle internalisé'},
     {code:'CERBERE_PLAN_DOCTRINE_LEGACY_INTERNALISE',ok:typeof chargerCerbereCockpitLegacyPlanDoctrineV374_==='function',detail:'ancien lecteur plan-doctrine internalisé'},
     {code:'CERBERE_CB_DOUBLE_ROLE_FINAL_LEGACY_INTERNALISE',ok:typeof chargerCerbereCockpitLegacyCbDoubleRoleFinal20260905_==='function',detail:'ancien lecteur final snapshot-first internalisé'},
+    {code:'CERBERE_FIXED_CHARGE_OWNER_FINAL_LEGACY_INTERNALISE',ok:typeof chargerCerbereCockpitLegacyFixedChargeOwnerFinal20260914_==='function',detail:'ancien override terminal charges fixes internalisé'},
     {code:'SNAPSHOT_GLOBAL_CONSTRUCTEUR_PUBLIC_PROMU',ok:typeof reconstruireSnapshotGlobalBudgetSoft20260906==='function'&&String(reconstruireSnapshotGlobalBudgetSoft20260906).indexOf('reconstruireSnapshotGlobalSyntheseBudgetSoft20260907')>=0&&typeof reconstruireSnapshotGlobalLegacyBudgetSoft20260906_==='function',detail:'nom public -> constructeur synthèse ; ancien constructeur internalisé'}
   ];
   const out={ok:controles.every(c=>c.ok),version:BUDGETSOFT_STRUCTURAL_CLEANUP_20260917_VERSION,lectureSeule:true,dureeMs:Date.now()-t0,controles,clesLocales:{comptes:clesComptes,operations:clesOperations},architecture:{endpointEcriture:'sauvegarderPilotageCerberePublic20260917',aliasEcriture:'sauvegarderPilotageCerbere20260903',ownerLecture:'chargerCerbereCockpitProprietaire20260917_',endpointLecture:'chargerCerbereCockpitCanonique20260914',legacyEpInterne:'sauvegarderPilotageCerbereLegacyEp20260912_',legacyDashboardInterne:'lirePilotableParJourDashboardLegacy20260912_'}};
