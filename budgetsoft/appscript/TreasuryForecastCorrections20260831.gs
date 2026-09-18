@@ -236,7 +236,7 @@ function lireCanonRecettesTresorerie20260831_(){
   for(let i=0;i<lecteurs.length;i++){try{const x=lecteurs[i]();if(Array.isArray(x)&&x.length)return x;}catch(e){}}
   return [];
 }
-function revenusCanoniquesTresorerie20260831_(ops,lignesExistantes,reference,cible){
+function revenusCanoniquesTresorerieLegacy20260831_(ops,lignesExistantes,reference,cible){
   const canon=lireCanonRecettesTresorerie20260831_(),out=[];
   (canon||[]).forEach(c=>{
     if(!actifTresorerie_(c.actif)||String(c.nature||'').toLowerCase()!=='structurelle')return;
