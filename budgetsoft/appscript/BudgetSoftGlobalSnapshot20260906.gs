@@ -174,9 +174,9 @@ function installerActualisationGlobaleBudgetSoft20260906(){
   ScriptApp.newTrigger(nom).timeBased().everyMinutes(30).create();
   return{ok:true,version:BUDGETSOFT_GLOBAL_SNAPSHOT_VERSION,frequenceMinutes:30};
 }
-function actualiserBudgetSoftToutesLes30Minutes20260906(){return reconstruireSnapshotGlobalBudgetSoft20260906('planifie_30min');}
-function actualiserBudgetSoftMaintenant20260906(){return reconstruireSnapshotGlobalBudgetSoft20260906('manuel_force');}
-function initialiserArchitectureSnapshotBudgetSoft20260906(){const installation=installerActualisationGlobaleBudgetSoft20260906(),etat=reconstruireSnapshotGlobalBudgetSoft20260906('initialisation');return{ok:!!(installation.ok&&etat.ok),installation,etat};}
+function actualiserBudgetSoftToutesLes30MinutesLegacy20260906_(){return reconstruireSnapshotGlobalLegacyBudgetSoft20260906_('planifie_30min');}
+function actualiserBudgetSoftMaintenantLegacy20260906_(){return reconstruireSnapshotGlobalLegacyBudgetSoft20260906_('manuel_force');}
+function initialiserArchitectureSnapshotLegacyBudgetSoft20260906_(){const installation=installerActualisationGlobaleBudgetSoft20260906(),etat=reconstruireSnapshotGlobalLegacyBudgetSoft20260906_('initialisation');return{ok:!!(installation.ok&&etat.ok),installation,etat};}
 
 function auditerSnapshotGlobalBudgetSoft20260906(){
   const s=chargerSnapshotGlobalBudgetSoft20260906();if(!s.disponible)return s;const e=s.etat,m=e.modules||{};
