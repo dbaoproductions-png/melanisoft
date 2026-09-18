@@ -1,6 +1,6 @@
 const ANALYSES_VERSION = '2.3';
 
-function chargerAnalysesBudgetaires(nombrePeriodes) {
+function chargerAnalysesBudgetairesLegacyV23Base_(nombrePeriodes) {
   verifierInitialisation_();
   const operationsBrutes = lireTable_('Operations');
   const budgets = lireTable_('Budget');
