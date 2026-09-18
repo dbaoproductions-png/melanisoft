@@ -38,7 +38,7 @@ function lirePluxee_(){
   return vals.filter(r=>r.some(v=>v!==''&&v!==null)).map(r=>Object.fromEntries(PLUXEE_HEADERS.map((h,i)=>[h,serialiserValeur_(r[i])])));
 }
 
-function chargerPluxee(){
+function chargerPluxeeSource20260918_(){
   const ss=SpreadsheetApp.getActiveSpreadsheet();
   if(!ss.getSheetByName(PLUXEE_SHEET))return initialiserPluxee();
   const ops=lirePluxee_();
