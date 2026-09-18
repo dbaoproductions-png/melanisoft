@@ -19,7 +19,7 @@ function cyclesDashboardSynthese20260907_(cerbere,reference){
   return{courant:{debut,fin},suivant:{debut:suivantDebut,fin:suivantFin},precedent:{debut:precedentDebut,fin:precedentFin}};
 }
 
-function composerDashboardSyntheseBudgetSoft20260907_(ctx){
+function composerDashboardSyntheseSourceBudgetSoft20260907_(ctx){
   ctx=ctx||{};const sources=ctx.sources||{},tres=ctx.tresorerieComptable||{},proj=ctx.projectionEtendue||{},cer=ctx.cerbere||{},exp=ctx.cerbereExpress||{};
   const reference=dateDashboardSynthese20260907_(tres.dateReference||new Date()),cycles=cyclesDashboardSynthese20260907_(cer,reference),cc=cycles.courant,cs=cycles.suivant,cp=cycles.precedent;
   let ops=Array.isArray(sources.Operations)?sources.Operations:[];if(typeof dedoublonnerOperationsCartesBudgetSoft_==='function')try{ops=dedoublonnerOperationsCartesBudgetSoft_(ops);}catch(e){}
