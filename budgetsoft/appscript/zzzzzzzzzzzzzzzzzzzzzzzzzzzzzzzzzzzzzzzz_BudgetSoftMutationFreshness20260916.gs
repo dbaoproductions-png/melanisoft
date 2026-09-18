@@ -64,7 +64,7 @@ function enregistrerLigne(nom,ligne){
     if(idIndex>=0&&copie.id&&feuille.getLastRow()>1){const ids=feuille.getRange(2,idIndex+1,feuille.getLastRow()-1,1).getValues().flat(),position=ids.findIndex(id=>String(id)===String(copie.id));if(position>=0)ligneCible=position+2;}
     const valeurs=entetes.map(cle=>normaliserValeur_(copie[cle]));if(ligneCible>0)feuille.getRange(ligneCible,1,1,entetes.length).setValues([valeurs]);else feuille.appendRow(valeurs);
   }finally{verrou.releaseLock();}
-  if(['Operations','Charges_fixes','Comptes','Parametres','Categories','Credits','Dettes','Actifs'].includes(String(nom)))marquerSnapshotGlobalBudgetSoftObsolete20260916_('enregistrerLigne:'+String(nom));
+  if(['Operations','Charges_fixes','Comptes','Parametres','Categories','Credits','Dettes','Actifs','Budget'].includes(String(nom)))marquerSnapshotGlobalBudgetSoftObsolete20260916_('enregistrerLigne:'+String(nom));
   return copie;
 }
 
@@ -73,7 +73,7 @@ function supprimerLigne(nom,id){
   const feuille=SpreadsheetApp.getActiveSpreadsheet().getSheetByName(nom);if(feuille.getLastRow()<2)return false;
   const ids=feuille.getRange(2,idIndex+1,feuille.getLastRow()-1,1).getValues().flat(),position=ids.findIndex(v=>String(v)===String(id));if(position<0)return false;
   feuille.deleteRow(position+2);
-  if(['Operations','Charges_fixes','Comptes','Parametres','Categories','Credits','Dettes','Actifs'].includes(String(nom)))marquerSnapshotGlobalBudgetSoftObsolete20260916_('supprimerLigne:'+String(nom));
+  if(['Operations','Charges_fixes','Comptes','Parametres','Categories','Credits','Dettes','Actifs','Budget'].includes(String(nom)))marquerSnapshotGlobalBudgetSoftObsolete20260916_('supprimerLigne:'+String(nom));
   return true;
 }
 
