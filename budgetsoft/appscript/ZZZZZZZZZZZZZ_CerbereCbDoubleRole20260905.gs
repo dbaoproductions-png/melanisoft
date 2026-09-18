@@ -93,7 +93,7 @@ function auditerReportCbCycleSuivant20260905(){
   return res;
 }
 
-function chargerCerbereCockpit20260902(){
+function chargerCerbereCockpitLegacyCbDoubleRole20260905_(){
   try{
     if(typeof chargerCerbereDepuisSnapshotGlobalBudgetSoft20260906==='function'){
       const snapshot=chargerCerbereDepuisSnapshotGlobalBudgetSoft20260906();
