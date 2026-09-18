@@ -1,4 +1,4 @@
-const BUDGETSOFT_STRUCTURAL_CLEANUP_20260917_VERSION='2026-09-18.1';
+const BUDGETSOFT_STRUCTURAL_CLEANUP_20260917_VERSION='2026-09-18.2';
 
 function compterClesParPrefixeBudgetSoft20260917_(prefixe){
   const props=PropertiesService.getDocumentProperties().getProperties()||{};
@@ -37,8 +37,10 @@ function purgerSnapshotsLocauxHistoriquesBudgetSoft20260917(){
     comptes:compterClesParPrefixeBudgetSoft20260917_('COMPTES_SNAPSHOT_20260828_'),
     operations:compterClesParPrefixeBudgetSoft20260917_('OPERATIONS_SNAPSHOT_20260828_')
   };
-  if(typeof invaliderSnapshotComptes20260828==='function')invaliderSnapshotComptes20260828();
-  if(typeof invaliderSnapshotOperations20260828==='function')invaliderSnapshotOperations20260828();
+  const props=PropertiesService.getDocumentProperties();
+  Object.keys(props.getProperties()||{}).forEach(function(k){
+    if(String(k).indexOf('COMPTES_SNAPSHOT_20260828_')===0||String(k).indexOf('OPERATIONS_SNAPSHOT_20260828_')===0)props.deleteProperty(k);
+  });
   const apres={
     comptes:compterClesParPrefixeBudgetSoft20260917_('COMPTES_SNAPSHOT_20260828_'),
     operations:compterClesParPrefixeBudgetSoft20260917_('OPERATIONS_SNAPSHOT_20260828_')
