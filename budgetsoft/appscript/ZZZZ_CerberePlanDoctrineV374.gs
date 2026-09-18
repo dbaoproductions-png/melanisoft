@@ -54,7 +54,7 @@ function chargerCerbereCockpitBaseRapide20260903_(){
 }
 
 /** Surcharge du chargeur cockpit : même doctrine, payload C1/C2 seulement. */
-function chargerCerbereCockpit20260902(){
+function chargerCerbereCockpitLegacyPlanDoctrineV374_(){
   const executer=function(){
     const t0=Date.now(),base=chargerCerbereCockpitBaseRapide20260903_();if(!base||base.ok===false)return base;
     const post=base.diagnostic&&base.diagnostic.performancePost35||{couches:[]},timings=Array.isArray(post.couches)?post.couches:[];
