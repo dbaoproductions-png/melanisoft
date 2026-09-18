@@ -1,6 +1,6 @@
 const BUDGET_PLAN_VERSION = '1.3';
 
-function chargerBudgetPeriode(clePeriode) {
+function chargerBudgetPeriodeSource20260918_(clePeriode) {
   verifierInitialisation_();
   const operations = lireTable_('Operations');
   const parametres = lireTable_('Parametres');
