@@ -56,7 +56,7 @@ function corrigerTypesCreditsAudit18082026V2() {
 
 // Remplacement compatible du chargeur : il lit toutes les colonnes réellement présentes
 // dans la feuille Credits, notamment type_credit et les champs propres aux renouvelables.
-function chargerCreditsEtDettes() {
+function chargerCreditsEtDettesLegacySchemaCompat_() {
   verifierInitialisation_();
   assurerColonnesCredits_();
   const credits = lireCreditsEtendus_().map(enrichirCredit_);
