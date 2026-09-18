@@ -166,6 +166,10 @@ function reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(origine){
         return composerCerbereExpressDepuisCockpit20260910_(cerbere);
       });
       const dashboard=prendre('dashboard',()=>composerDashboardSyntheseBudgetSoft20260907_({sources:sources,comptes:comptes,credits:credits,tresorerieComptable:tresorerieComptable,projectionEtendue:projectionEtendue,cerbere:cerbere,cerbereExpress:cerbereExpress}));
+      const analyses=prendre('analyses',()=>typeof construireModuleAnalysesSnapshotBudgetSoft20260912_==='function'?construireModuleAnalysesSnapshotBudgetSoft20260912_():null);
+      if(analyses&&typeof analyses==='object')analyses.revisionBudgetSoft='';
+      const engagementsBancaires=prendre('engagementsBancaires',()=>typeof construireModuleEngagementsBancairesSnapshotBudgetSoft20260912_==='function'?construireModuleEngagementsBancairesSnapshotBudgetSoft20260912_(dashboard):null);
+      if(engagementsBancaires&&typeof engagementsBancaires==='object')engagementsBancaires.revisionBudgetSoft='';
       const transversales=prendre('transversales',()=>typeof construireTransversalesBudgetSoft20260906_==='function'?construireTransversalesBudgetSoft20260906_(Object.assign({sources:sources},modules)):{});
       if(tresorerieComptable&&transversales&&transversales.tresorerie)transversales.tresorerie={version:tresorerieComptable.version||'',soldeReel:Number(tresorerieComptable.soldeReel),variationComptableCertaine:Number(tresorerieComptable.variationComptableCertaine),soldePrevisionnel:Number(tresorerieComptable.soldePrevisionnel),dateCible:tresorerieComptable.dateCible||'',nombreOperationsFutures:Number(tresorerieComptable.nombreOperationsFutures||0)};
 
@@ -181,6 +185,8 @@ function reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(origine){
       modules.optimisationCerberePartage={version:'2026-09-10.1',active:!!(cerbereBase&&cerbereBase.ok!==false),uneSeuleBaseCerbere:true,projectionDepuisBasePrecalculee:!!(projectionCalculUnique&&projectionCalculUnique.diagnostic20260831&&projectionCalculUnique.diagnostic20260831.cerberePrechargeProjection),cockpitDepuisMemeBase:!!(cerbereBase&&cerbereBase.ok!==false),dureeBaseCerbereMs:cerbereBaseMs};
       modules.optimisationCerbereDonneesPartagees={version:'2026-09-11.1',active:cerberePartageDonnees,source:'chargerToutesLesDonnees',chargeursAutonomesInchanges:true,reutilisation:cerbereTablesReutilisees,dureeBaseCerbereMs:cerbereBaseMs};
       const provisoire={modules:modules,erreurs:erreurs,transversales:transversales},coherence=typeof auditerCoherenceRevisionBudgetSoft20260906_==='function'?auditerCoherenceRevisionBudgetSoft20260906_(provisoire):{ok:true,version:'absent',erreurs:[],avertissements:[]},revision=empreinteRevisionGlobaleBudgetSoft20260906_(genereLe,modules);
+      if(modules.analyses&&typeof modules.analyses==='object')modules.analyses.revisionBudgetSoft=revision;
+      if(modules.engagementsBancaires&&typeof modules.engagementsBancaires==='object')modules.engagementsBancaires.revisionBudgetSoft=revision;
       return serialiserEtatGlobalBudgetSoft20260906_({ok:erreurs.length===0&&coherence.ok===true&&unite.ok===true&&contrat&&contrat.ok===true&&gardeRecettesCanoniques&&gardeRecettesCanoniques.ok===true&&gardeCbMultiCycle&&gardeCbMultiCycle.ok===true,publie:false,version:BUDGETSOFT_GLOBAL_SNAPSHOT_VERSION,versionConstructeur:BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION,versionDoctrine:'2026-09-06',versionDoctrineTresorerie:'2026-09-07-canonique',revisionBudgetSoft:revision,genereLe:genereLe,origine:String(origine||'manuel_synthese'),erreurs:erreurs,coherence:coherence,uniteTresorerie:unite,transversales:transversales,modules:modules,performance:{dureeMs:Date.now()-t0,modules:perf}});
     };
     const etat=typeof avecContexteLectureBudgetSoft20260827_==='function'?avecContexteLectureBudgetSoft20260827_('budgetsoft-global-snapshot',construire):construire();
