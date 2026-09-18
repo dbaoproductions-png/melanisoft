@@ -59,7 +59,7 @@ function definirSoldeInitialPluxee(montant,dateReference){
   const n=Number(String(montant).replace(',','.'));
   if(!Number.isFinite(n))throw new Error('Solde initial Pluxee invalide.');
   const d=formatDateLocaleBudgetSoft_(dateLocaleBudgetSoft_(dateReference||PLUXEE_DATE_REFERENCE_DEFAUT));
-  const p=PropertiesService.getDocumentProperties();p.setProperty('PLUXEE_SOLDE_INITIAL',String(arrondirPluxee_(n)));p.setProperty('PLUXEE_DATE_REFERENCE',d);return chargerPluxee();
+  const p=PropertiesService.getDocumentProperties();p.setProperty('PLUXEE_SOLDE_INITIAL',String(arrondirPluxee_(n)));p.setProperty('PLUXEE_DATE_REFERENCE',d);if(typeof marquerSnapshotGlobalBudgetSoftObsolete20260916_==='function')marquerSnapshotGlobalBudgetSoftObsolete20260916_('pluxee_solde_initial');return chargerPluxee();
 }
 
 function analyserCollerPluxee(texte){
@@ -92,7 +92,7 @@ function mettreAJourCategoriePluxee(id,categorie){
   const c=String(categorie||'').trim();if(c&&!['Courses','Restaurants'].includes(c))throw new Error('Pluxee n’accepte que Courses ou Restaurants.');
   const f=SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PLUXEE_SHEET);if(!f||f.getLastRow()<2)throw new Error('Registre Pluxee vide.');
   const ids=f.getRange(2,1,f.getLastRow()-1,1).getValues().flat(),i=ids.findIndex(v=>String(v)===String(id));if(i<0)throw new Error('Opération Pluxee introuvable.');
-  f.getRange(i+2,PLUXEE_HEADERS.indexOf('categorie')+1).setValue(c);return chargerPluxee();
+  f.getRange(i+2,PLUXEE_HEADERS.indexOf('categorie')+1).setValue(c);if(typeof marquerSnapshotGlobalBudgetSoftObsolete20260916_==='function')marquerSnapshotGlobalBudgetSoftObsolete20260916_('pluxee_categorie');return chargerPluxee();
 }
 
 function analyserLotPluxee_(operations,source){
@@ -149,5 +149,5 @@ function montantPluxeeDepuisTexte_(s){const m=String(s||'').replace(/[\u00a0\u20
 function nettoyerLibellePluxee_(s){return String(s||'').replace(/\s+/g,' ').trim().replace(/^NaN$/i,'Transaction refusée');}
 function dateHeurePluxee_(v){if(v instanceof Date)return new Date(v.getTime());const s=String(v||'').trim();let m=s.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);if(m)return new Date(Number(m[3]),Number(m[2])-1,Number(m[1]),Number(m[4]||12),Number(m[5]||0),0);m=s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{1,2}):(\d{2}))?/);if(m)return new Date(Number(m[1]),Number(m[2])-1,Number(m[3]),Number(m[4]||12),Number(m[5]||0),0);const d=new Date(v);return isNaN(d)?null:d;}
 function clePluxee_(iso,lib,m,type){return['PLUXEE',String(iso),String(Math.round(Math.abs(Number(m))*100)),normaliserTexteBanque_(lib),type].join('|');}
-function ajouterPluxeeEnLot_(ops){if(!ops.length)return;const f=SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PLUXEE_SHEET);const vals=ops.map(o=>PLUXEE_HEADERS.map(h=>o[h]));f.getRange(f.getLastRow()+1,1,vals.length,PLUXEE_HEADERS.length).setValues(vals);}
+function ajouterPluxeeEnLot_(ops){if(!ops.length)return;const f=SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PLUXEE_SHEET);const vals=ops.map(o=>PLUXEE_HEADERS.map(h=>o[h]));f.getRange(f.getLastRow()+1,1,vals.length,PLUXEE_HEADERS.length).setValues(vals);if(typeof marquerSnapshotGlobalBudgetSoftObsolete20260916_==='function')marquerSnapshotGlobalBudgetSoftObsolete20260916_('pluxee_ecriture_lot');}
 function arrondirPluxee_(n){return Math.round((Number(n)||0)*100)/100;}
