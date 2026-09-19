@@ -56,18 +56,7 @@ chargerCerbereCockpit20260902=function(){
 
 /* Dashboard : responsabilité transférée à BudgetSoftDashboardCanonicalOwner20260918.gs. */
 
-/* GARDE BLOQUANT : meme revision, Dashboard=Rt1, projection canonique, aucun evenement certain du disparu. */
-verifierSupradoctrineRecettesBudgetSoft20260912_=function(etat){
-  const erreurs=[],m=etat&&etat.modules||{},dash=m.dashboard||{},ct=dash.courtTerme||{},cer=m.cerbere||{},proj=m.projectionEtendue||{},p=Array.isArray(cer.periodes)?cer.periodes[0]:null,v=p&&p.v37||{},periode=p&&(p.periode||p)||{};
-  const revision=String(etat&&etat.revisionBudgetSoft||''),rt1=Number(v.rt1),pub=Number(ct.revenusAttendus);
-  if(!revision)erreurs.push({code:'SUPRA_RECETTES_REVISION_ABSENTE'});
-  if(!Number.isFinite(rt1))erreurs.push({code:'SUPRA_RECETTES_RT1_ABSENT'});
-  if(Number.isFinite(rt1)&&(!Number.isFinite(pub)||Math.abs(arrRevenueFinal20260912_(rt1)-arrRevenueFinal20260912_(pub))>.01))erreurs.push({code:'SUPRA_RECETTES_DASHBOARD_RT1',detail:{revisionBudgetSoft:revision,cerbereRt1:arrRevenueFinal20260912_(rt1),dashboard:arrRevenueFinal20260912_(pub)}});
-  const owner=String(proj&&proj.proprietaireBudgetSoft||proj&&proj.proprietaire||'');if(owner&&owner!=='construireTrajectoireTresorerieCanoniqueBudgetSoft20260907')erreurs.push({code:'SUPRA_RECETTES_PROJECTION_OWNER',detail:{proprietaire:owner}});
-  const reference=dateRevenueFinal20260912_(ct.dateReference||new Date()),fin=dateRevenueFinal20260912_(ct.fin||periode.fin),lignes=Array.isArray(proj.lignes)?proj.lignes:[],dus=evenementsCertainsDusCycleRevenueFinal20260912_(periode,reference),controles=[];
-  dus.forEach(function(ev){const id=String(ev.id||''),couvert=lignes.some(function(l){const d=dateRevenueFinal20260912_(l&&l.date);return String(l&&l.source||'')==='evenement'&&String(l&&l.sourceId||'')===id&&d&&d>reference&&(!fin||d<=fin)&&Number(l&&l.montantSigne||0)>0;});const c={id:id,libelle:String(ev.libelle||''),montant:Math.abs(Number(ev.montant||0)),statut:String(ev.statut||''),couvertFutur:couvert};controles.push(c);if(!couvert)erreurs.push({code:'SUPRA_EVENEMENT_CERTAIN_DU_DISPARU',detail:c});});
-  return{ok:erreurs.length===0,version:BUDGETSOFT_REVENUE_INTERMODULE_FINAL_20260912_VERSION,doctrine:{proprietaireRecettesAttendues:'cerbere.periodes[0].v37.rt1',dashboard:'lecture stricte Rt1',comptes:'projectionEtendue canonique',preuveRealisation:'operation_reelle_id ou rapprochement confirme ; jamais date/statut seuls',principe:'une donnee, un proprietaire, un calcul, plusieurs consommateurs'},intermodule:{revisionBudgetSoft:revision,cerbereRt1:Number.isFinite(rt1)?arrRevenueFinal20260912_(rt1):null,dashboardRevenusAttendus:Number.isFinite(pub)?arrRevenueFinal20260912_(pub):null,projectionOwner:owner||null},evenementsCertainsDus:controles,erreurs:erreurs,avertissements:[]};
-};
+/* Garde recettes transférée à BudgetSoftRevenueSupradoctrineCanonicalGuard20260918.gs. */
 
 function auditerRecettesIntermodulesBudgetSoft20260912(){
   const s=chargerSnapshotGlobalBudgetSoft20260906();if(!s||!s.disponible){const x={ok:false,version:BUDGETSOFT_REVENUE_INTERMODULE_FINAL_20260912_VERSION,erreur:'Snapshot global indisponible.'};console.log('[AUDIT recettes intermodules] '+JSON.stringify(x));return x;}
