@@ -10,7 +10,7 @@
  */
 const CERBERE_SNAPSHOT_C2_FRESHNESS_20260913_VERSION='2026-09-13.1';
 
-function estSnapshotCerbereP1FraisValide20260912_(s){
+function estSnapshotCerbereP1FraisValideLegacyC2Freshness20260913_(s){
   if(!s||s.ok===false)return false;
   const p=Array.isArray(s.periodes)&&s.periodes.length?s.periodes[0]:null;
   const d=s&&s.diagnostic&&s.diagnostic.p1Doctrine20260912||null;
@@ -37,7 +37,7 @@ function estSnapshotCerbereP1FraisValide20260912_(s){
 function auditerFraicheurSnapshotC2Cerbere20260913(){
   let snapshot=null;
   try{if(typeof chargerCerbereDepuisSnapshotGlobalBudgetSoft20260906==='function')snapshot=chargerCerbereDepuisSnapshotGlobalBudgetSoft20260906();}catch(e){}
-  const snapshotValide=estSnapshotCerbereP1FraisValide20260912_(snapshot);
+  const snapshotValide=typeof estSnapshotCerbereP1FraisValide20260912_==='function'\n    ?estSnapshotCerbereP1FraisValide20260912_(snapshot)\n    :estSnapshotCerbereP1FraisValideLegacyC2Freshness20260913_(snapshot);
   const cockpit=chargerCerbereCockpit20260902();
   const p2=cockpit&&Array.isArray(cockpit.periodes)?cockpit.periodes[1]:null,v=p2&&p2.v37||{},c=v.cockpit20260902||{},d=cockpit&&cockpit.diagnostic&&cockpit.diagnostic.p2Doctrine20260913||{},s=cockpit&&cockpit.diagnostic&&cockpit.diagnostic.ss2Canonique20260913||{};
   const out={
