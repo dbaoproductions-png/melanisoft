@@ -3,7 +3,7 @@ const BUDGETSOFT_REGRESSION_GUARD_VERSION='2026-09-13.1';
 function arrRegressionBudgetSoft20260906_(n){return Math.round(Number(n||0)*100)/100;}
 function ecartRegressionBudgetSoft20260906_(a,b){return arrRegressionBudgetSoft20260906_(Number(a||0)-Number(b||0));}
 
-function auditerCoherenceRevisionBudgetSoft20260906_(etat){
+function auditerCoherenceRevisionBaseBudgetSoft20260906_(etat){
   const erreurs=[],avertissements=[],m=etat&&etat.modules||{},t=etat&&etat.transversales||{};
   function err(code,message,detail){erreurs.push({code,message,detail:detail||null});}
   function warn(code,message,detail){avertissements.push({code,message,detail:detail||null});}
