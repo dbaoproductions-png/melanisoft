@@ -52,25 +52,7 @@ chargerCerbereCockpit20260902=function(){
   return base;
 };
 
-/* PROPRIETAIRE BANCAIRE : projectionEtendue canonique. Injecte le meme flux encore du si absent du futur. */
-var construireTrajectoireAvantRevenueFinal20260912_=construireTrajectoireTresorerieCanoniqueBudgetSoft20260907;
-construireTrajectoireTresorerieCanoniqueBudgetSoft20260907=function(cible){
-  const r=construireTrajectoireAvantRevenueFinal20260912_(cible);if(!r||r.ok===false)return r;
-  const reference=dateRevenueFinal20260912_(r.dateReference||new Date()),fin=dateRevenueFinal20260912_(cible||r.dateCible);if(!reference||!fin)return r;
-  const periode={debut:typeof dateDebutCycleCanonBudgetSoft20260906_==='function'?dateDebutCycleCanonBudgetSoft20260906_(reference):new Date(reference.getFullYear(),reference.getMonth(),28),fin:typeof dateFinCycleCanonBudgetSoft20260906_==='function'?dateFinCycleCanonBudgetSoft20260906_(reference):fin};
-  const dus=evenementsCertainsDusCycleRevenueFinal20260912_(periode,reference),lignes=Array.isArray(r.lignes)?r.lignes:[];
-  const report=new Date(reference);report.setDate(report.getDate()+1);report.setHours(12,0,0,0);
-  dus.forEach(function(ev){
-    const id=String(ev.id||''),montant=Math.abs(Number(ev.montant||0));if(!montant)return;
-    const dejaFutur=lignes.some(function(l){const d=dateRevenueFinal20260912_(l&&l.date);return String(l&&l.source||'')==='evenement'&&String(l&&l.sourceId||'')===id&&d&&d>reference&&d<=fin&&Number(l&&l.montantSigne||0)>0;});
-    if(dejaFutur)return;
-    const origine=dateEvenementRevenueFinal20260912_(ev,reference),d=origine&&origine>reference?origine:report;if(d>fin)return;
-    lignes.push({id:'event:'+id+':du-sans-preuve',source:'evenement',sourceId:id,date:new Date(d).toISOString(),libelle:String(ev.libelle||'Événement'),categorie:String(ev.categorie||''),compte:String(ev.compte||''),montantSigne:arrRevenueFinal20260912_(montant),certitude:'certaine',preuve:'Événement certain encore dû · aucune opération réelle/rapprochement · date prévue '+isoRevenueFinal20260912_(origine),enRetard:!!(origine&&origine<=reference),datePrevueOrigine:isoRevenueFinal20260912_(origine)});
-  });
-  r.lignes=lignes;r.proprietaireBudgetSoft='construireTrajectoireTresorerieCanoniqueBudgetSoft20260907';r.versionRevenueIntermodule=BUDGETSOFT_REVENUE_INTERMODULE_FINAL_20260912_VERSION;
-  if(Number.isFinite(Number(r.soldeReel))){const net=lignes.filter(function(l){const d=dateRevenueFinal20260912_(l&&l.date);return d&&d>reference&&d<=fin;}).reduce(function(s,l){return s+Number(l&&l.montantSigne||0);},0);r.soldePrevisionnel=arrRevenueFinal20260912_(Number(r.soldeReel)+net);}
-  return r;
-};
+/* Projection bancaire : responsabilité transférée à BudgetSoftTreasuryCanonical20260907.gs. */
 
 /* Dashboard : responsabilité transférée à BudgetSoftDashboardCanonicalOwner20260918.gs. */
 
