@@ -10,7 +10,7 @@ const CERBERE_RECETTES_CANON_SHEET = 'Cerbere_Recettes_Canon_V1';
  * - montant_precedent : valeur valable avant date_effet ;
  * - date_effet : premier jour de cycle où le nouveau montant devient la norme.
  */
-function chargerCanonRecettesCerbereV1() {
+function chargerCanonRecettesCerbereV1LegacyBase_() {
   const sh = assurerCanonRecettesCerbereV1_();
   const hs = sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(x=>String(x||'').trim());
   const rows = sh.getLastRow()>1 ? sh.getRange(2,1,sh.getLastRow()-1,hs.length).getValues() : [];
@@ -35,7 +35,7 @@ function chargerCanonRecettesCerbereV1() {
   };
 }
 
-function assurerCanonRecettesCerbereV1_() {
+function assurerCanonRecettesCerbereV1LegacyBase_() {
   const ss=SpreadsheetApp.getActive();
   let sh=ss.getSheetByName(CERBERE_RECETTES_CANON_SHEET);
   const headers=['categorie','montant','nature','ordre','actif','commentaire','montant_precedent','date_effet'];
