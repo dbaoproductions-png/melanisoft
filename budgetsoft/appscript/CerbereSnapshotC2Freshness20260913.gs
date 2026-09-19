@@ -37,7 +37,9 @@ function estSnapshotCerbereP1FraisValideLegacyC2Freshness20260913_(s){
 function auditerFraicheurSnapshotC2Cerbere20260913(){
   let snapshot=null;
   try{if(typeof chargerCerbereDepuisSnapshotGlobalBudgetSoft20260906==='function')snapshot=chargerCerbereDepuisSnapshotGlobalBudgetSoft20260906();}catch(e){}
-  const snapshotValide=typeof estSnapshotCerbereP1FraisValide20260912_==='function'\n    ?estSnapshotCerbereP1FraisValide20260912_(snapshot)\n    :estSnapshotCerbereP1FraisValideLegacyC2Freshness20260913_(snapshot);
+  const snapshotValide=typeof estSnapshotCerbereP1FraisValide20260912_==='function'
+    ?estSnapshotCerbereP1FraisValide20260912_(snapshot)
+    :estSnapshotCerbereP1FraisValideLegacyC2Freshness20260913_(snapshot);
   const cockpit=chargerCerbereCockpit20260902();
   const p2=cockpit&&Array.isArray(cockpit.periodes)?cockpit.periodes[1]:null,v=p2&&p2.v37||{},c=v.cockpit20260902||{},d=cockpit&&cockpit.diagnostic&&cockpit.diagnostic.p2Doctrine20260913||{},s=cockpit&&cockpit.diagnostic&&cockpit.diagnostic.ss2Canonique20260913||{};
   const out={
