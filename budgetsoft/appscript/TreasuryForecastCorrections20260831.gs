@@ -143,9 +143,50 @@ function statutEffectifTresorerie20260831_(statut){
   const s=String(statut||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   return ['effectif','effective','effectifs','effectives'].includes(s);
 }
+function statutNormaliseEvenementPlanForecast20260912_(v){
+  return String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+function statutAnnuleEvenementPlanForecast20260912_(v){
+  return ['annule','annulee','abandonne','abandonnee'].includes(statutNormaliseEvenementPlanForecast20260912_(v));
+}
+function statutRapprocheEvenementPlanForecast20260912_(v){
+  return ['rapproche','rapprochee'].includes(statutNormaliseEvenementPlanForecast20260912_(v));
+}
+function statutDeclareRealiseEvenementPlanForecast20260912_(v){
+  const s=statutNormaliseEvenementPlanForecast20260912_(v);
+  return s==='realise'||s==='realisee'||s==='realises'||s==='realisees'||s.indexOf('realise a rapprocher')===0||s.indexOf('realisee a rapprocher')===0;
+}
+function statutEffectiveEvenementPlanForecast20260912_(v){
+  return ['effectif','effective','effectifs','effectives'].includes(statutNormaliseEvenementPlanForecast20260912_(v));
+}
+function evenementStandardPlanForecast20260912_(e){
+  const type=String(e&&e.type||'').trim().toLowerCase();
+  return type==='recette'||type==='depense';
+}
+function evenementProuveClosPlanForecast20260912_(e){
+  if(!e)return true;
+  if(statutAnnuleEvenementPlanForecast20260912_(e.statut))return true;
+  if(statutRapprocheEvenementPlanForecast20260912_(e.statut))return true;
+  if(String(e.operation_reelle_id||e.operationReelleId||'').trim())return true;
+  const r=statutNormaliseEvenementPlanForecast20260912_(e.rapprochement_statut||e.rapprochementStatut||'');
+  return ['rapproche','rapprochee','realise','realisee'].includes(r);
+}
+function statutFinalEvenementPlanForecast20260912_(v){
+  return statutAnnuleEvenementPlanForecast20260912_(v)||statutRapprocheEvenementPlanForecast20260912_(v);
+}
+function dateJourSuivantPlanForecast20260912_(reference){
+  const d=new Date(reference);d.setDate(d.getDate()+1);d.setHours(12,0,0,0);return d;
+}
+function isoPlanForecast20260912_(d){
+  return Utilities.formatDate(new Date(d),Session.getScriptTimeZone(),'yyyy-MM-dd');
+}
+
 function evenementEffectifTresorerie20260831_(id,evenements){
-  const e=(evenements||[]).find(x=>String(x.id||'')===String(id||''));
-  return !!e&&statutEffectifTresorerie20260831_(e.statut);
+  const e=(evenements||[]).find(function(x){return String(x&&x.id||'')===String(id||'');});
+  if(!e||evenementProuveClosPlanForecast20260912_(e))return false;
+  if(statutEffectiveEvenementPlanForecast20260912_(e.statut))return true;
+  if(statutDeclareRealiseEvenementPlanForecast20260912_(e.statut))return evenementStandardPlanForecast20260912_(e);
+  return evenementStandardPlanForecast20260912_(e);
 }
 function debutJourTresorerie20260831_(d){return new Date(d.getFullYear(),d.getMonth(),d.getDate(),0,0,0,0);}
 
@@ -157,24 +198,42 @@ function statutRecetteEncoreDueProjection20260912_(ev){
 }
 
 function completerEvenementsEffectifsTresorerie20260831_(lignes,evenements,reference,cible){
-  const out=(lignes||[]).slice(),debut=debutJourTresorerie20260831_(reference);
-  const report=new Date(reference);report.setDate(report.getDate()+1);report.setHours(12,0,0,0);
+  const out=(lignes||[]).slice();
+  const report=dateJourSuivantPlanForecast20260912_(reference);
   (evenements||[]).forEach(function(e){
-    const encoreDue=statutRecetteEncoreDueProjection20260912_(e);
-    if((!statutEffectifTresorerie20260831_(e&&e.statut)&&!encoreDue)||estSuspensionTemporaireTresorerie20260831_(e))return;
-    const dr=datePlanTresorerie_(e,reference,false),base=dr.date;if(!base||isNaN(base))return;
+    if(!evenementStandardPlanForecast20260912_(e))return;
+    if(evenementProuveClosPlanForecast20260912_(e))return;
+    if(typeof estSuspensionTemporaireTresorerie20260831_==='function'&&estSuspensionTemporaireTresorerie20260831_(e))return;
+
+    const statutEligibleRetard=statutEffectiveEvenementPlanForecast20260912_(e.statut)||statutDeclareRealiseEvenementPlanForecast20260912_(e.statut);
+    const dr=datePlanTresorerie_(e,reference,false),base=dr&&dr.date;
+    if(!base||isNaN(base))return;
     const n=(e.fractionne===true||String(e.fractionne)==='true')?Math.max(1,Number(e.nombre_fois||1)):1;
-    const per=String(e.periodicite_fractionnement||'mensuel').toLowerCase(),total=Math.abs(Number(e.montant||0));
+    const per=String(e.periodicite_fractionnement||'mensuel').toLowerCase();
+    const total=Math.abs(Number(e.montant||0));
+    if(!total)return;
+
     for(let i=0;i<n;i++){
-      const origine=new Date(base);if(i){if(per==='annuel')origine.setFullYear(origine.getFullYear()+i);else origine.setMonth(origine.getMonth()+i);}
+      const origine=new Date(base);
+      if(i){if(per==='annuel')origine.setFullYear(origine.getFullYear()+i);else origine.setMonth(origine.getMonth()+i);}
       if(origine>cible)continue;
-      const type=String(e.type||'depense').toLowerCase();if(!['depense','recette'].includes(type))continue;
-      let d=new Date(origine);
-      if(d<debut){if(!(encoreDue&&type==='recette'))continue;d=new Date(report);}
-      if(d>cible)continue;
+      const enRetard=origine<=reference;
+      if(enRetard&&!statutEligibleRetard)continue;
+      const d=enRetard?new Date(report):origine;
+      if(d<=reference||d>cible)continue;
       if(out.some(function(x){return x.source==='evenement'&&String(x.sourceId||'')===String(e.id||'')&&Math.abs(new Date(x.date)-d)<43200000;}))continue;
-      const m=(type==='recette'?1:-1)*(total/n);
-      out.push({id:'event:'+String(e.id||'')+':'+i,source:'evenement',sourceId:e.id||'',date:d.toISOString(),libelle:e.libelle||'Événement',categorie:e.categorie||'',compte:e.compte||'',montantSigne:arrondiTresorerie_(m),certitude:'tres_probable',preuve:encoreDue&&origine<debut?'Événement certain encore dû · échéance dépassée reportée après la frontière bancaire · aucune opération réelle ni rapprochement confirmé':preuveDatePlanTresorerie_('Événement effectif du Plan',dr),dateConventionnelle:!!dr.conventionnelle,enRetard:encoreDue&&origine<debut,datePrevueOrigine:encoreDue&&origine<debut&&typeof isoRevenuePublicationFix20260912_==='function'?isoRevenuePublicationFix20260912_(origine):''});
+      const type=String(e.type||'depense').toLowerCase();
+      const montant=(type==='recette'?1:-1)*(total/n);
+      const preuve=enRetard
+        ?'Événement encore dû · date prévue '+isoPlanForecast20260912_(origine)+' · aucune opération réelle/rapprochement confirmé · maintenu au prévisionnel'
+        :preuveDatePlanTresorerie_('Événement du Plan',dr);
+      out.push({
+        id:'event:'+String(e.id||'')+':'+i+(enRetard?':retard':''),
+        source:'evenement',sourceId:e.id||'',date:d.toISOString(),
+        libelle:e.libelle||'Événement',categorie:e.categorie||'',compte:e.compte||'',
+        montantSigne:arrondiTresorerie_(montant),certitude:'tres_probable',preuve:preuve,
+        dateConventionnelle:!!dr.conventionnelle,datePrevueOrigine:isoPlanForecast20260912_(origine),enRetard:enRetard
+      });
     }
   });
   return out;
