@@ -42,7 +42,7 @@ function recupererLibelleDepuisLigneBrutePdf_(brut) {
   return candidat;
 }
 
-function marchandCarteBudgetSoft_(texte) {
+function marchandCarteBudgetSoftLegacyEnrichment1_(texte) {
   let s = String(texte || '').replace(/\s+/g, ' ').trim();
   s = s
     .replace(/^\s*REMBOURST\s+CB\s+DU\s+\d{6}\s+/i, '')
@@ -88,7 +88,7 @@ function reglesCategoriesImportBudgetSoft_() {
   return BUDGETSOFT_IMPORT_REGLES_CATEGORIES_CACHE_;
 }
 
-function categorieImportBudgetSoft_(libelle, compte, type, categorieExistante) {
+function categorieImportBudgetSoftLegacyEnrichment1_(libelle, compte, type, categorieExistante) {
   const deja = String(categorieExistante || '').trim();
   if (deja) return deja;
   const texte = normaliserTexteBanqueFiable_(libelle);
