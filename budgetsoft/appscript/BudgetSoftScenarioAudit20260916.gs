@@ -79,7 +79,7 @@ function resumeCreditsPatrimoineScenarioBudgetSoft20260916_(){
   return{ok:r&&r.ok===true,version:r&&r.version||'',revisionBudgetSoft:r&&r.revisionBudgetSoft||'',sourceBudgetSoft:r&&r.sourceBudgetSoft||'',endettementTotal:arrScenarioBudgetSoft20260916_(c.endettementTotal),totalDettesPatrimoine:arrScenarioBudgetSoft20260916_(c.totalDettesPatrimoine),patrimoineTotal:arrScenarioBudgetSoft20260916_(c.patrimoineTotal),patrimoineNet:arrScenarioBudgetSoft20260916_(c.patrimoineNet),ecartDette:arrScenarioBudgetSoft20260916_(c.ecartDette),ecartNet:arrScenarioBudgetSoft20260916_(c.ecartNet)};
 }
 
-function capturerEtatControleBudgetSoft20260916(etape){
+function capturerEtatControleLegacyBudgetSoft20260916_(etape){
   etape=String(etape||'MANUEL').trim().toUpperCase();
   const operations=lireSansEchecScenarioBudgetSoft20260916_('operations',resumeOperationsScenarioBudgetSoft20260916_);
   const comptes=lireSansEchecScenarioBudgetSoft20260916_('comptes',resumeComptesScenarioBudgetSoft20260916_);
@@ -93,7 +93,7 @@ function capturerEtatControleBudgetSoft20260916(etape){
   return out;
 }
 
-function lireEtatControleBudgetSoft20260916_(etape){
+function lireEtatControleLegacyBudgetSoft20260916_(etape){
   const raw=PropertiesService.getDocumentProperties().getProperty(BUDGETSOFT_SCENARIO_AUDIT_20260916_PREFIX+String(etape||'').toUpperCase());
   return raw?JSON.parse(raw):null;
 }
@@ -162,7 +162,7 @@ function auditerScenarioBudgetSoft20260916(){
   const out={ok:resultats.every(x=>x.ok)&&(!invariants||invariants.ok),version:BUDGETSOFT_SCENARIO_AUDIT_20260916_VERSION,transitions:resultats,invariants};
   console.log('[AUDIT SCENARIO BUDGETSOFT COMPLET] '+JSON.stringify(out));return out;
 }
-function reinitialiserScenarioBudgetSoft20260916(){
+function reinitialiserScenarioLegacyBudgetSoft20260916_(){
   const p=PropertiesService.getDocumentProperties();['T0','T1','T2','T3','T4','MANUEL'].forEach(x=>p.deleteProperty(BUDGETSOFT_SCENARIO_AUDIT_20260916_PREFIX+x));
   const out={ok:true,version:BUDGETSOFT_SCENARIO_AUDIT_20260916_VERSION,reinitialise:true};console.log('[SCENARIO BUDGETSOFT RESET] '+JSON.stringify(out));return out;
 }
