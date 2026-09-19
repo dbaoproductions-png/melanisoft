@@ -27,30 +27,7 @@ function evenementsCertainsDusCycleRevenueFinal20260912_(periode,reference){
   return (evs||[]).filter(function(ev){if(!evenementCertainEncoreDuRevenueFinal20260912_(ev))return false;const d=dateEvenementRevenueFinal20260912_(ev,reference);return d&&d>=debut&&d<=fin;});
 }
 
-/* PROPRIETAIRE METIER : Cerbere Rt1. Une date ou un statut declaratif ne prouve jamais l'encaissement. */
-var chargerCerbereCockpitAvantRevenueFinal20260912_=chargerCerbereCockpit20260902;
-chargerCerbereCockpit20260902=function(){
-  const base=chargerCerbereCockpitAvantRevenueFinal20260912_();if(!base||base.ok===false)return base;
-  const periodes=Array.isArray(base.periodes)?base.periodes:[],reference=new Date();
-  periodes.forEach(function(p,i){
-    if(!p||typeof p!=='object')return;const v=p.v37||(p.v37={}),periode=p.periode||p;
-    const dus=evenementsCertainsDusCycleRevenueFinal20260912_(periode,reference);
-    const deja=new Set((Array.isArray(v.actionsEvenementsCycle)?v.actionsEvenementsCycle:[]).filter(function(x){return x&&x.realise===false&&String(x.source||'')==='Événement'&&Number(x.montantSigne||0)>0;}).map(function(x){return String(x.id||'');}));
-    const ajoutes=dus.filter(function(ev){return !deja.has(String(ev.id||''));});
-    const delta=arrRevenueFinal20260912_(ajoutes.reduce(function(s,ev){return s+Math.abs(Number(ev.montant||0));},0));
-    if(delta>0){
-      v.rt1=arrRevenueFinal20260912_(Number(v.rt1||0)+delta);
-      v.rt1Audit=v.rt1Audit&&typeof v.rt1Audit==='object'?v.rt1Audit:{};
-      v.rt1Audit.evenementsCertainsDusSansPreuve=arrRevenueFinal20260912_(Number(v.rt1Audit.evenementsCertainsDusSansPreuve||0)+delta);
-      v.rt1Audit.evenementsCertainsDusSansPreuveDetail=ajoutes.map(function(ev){return{id:String(ev.id||''),libelle:String(ev.libelle||''),montant:Math.abs(Number(ev.montant||0)),datePrevue:isoRevenueFinal20260912_(dateEvenementRevenueFinal20260912_(ev,reference)),statut:String(ev.statut||'')};});
-      const dt1=Number(v.dt1||0);v.sct1=arrRevenueFinal20260912_(Number(v.ss1||0)+Number(v.rt1||0)-dt1);v.rpt1=v.sct1;v.resteReellementPilotable=v.sct1;v.disponibleJusquau27=v.sct1;
-      p.resteReellementPilotable=v.sct1;p.capacitePilotable=v.sct1;p.capaciteTresorerie=v.sct1;
-      try{if(typeof enrichirCycleCockpitCerbere20260902_==='function')enrichirCycleCockpitCerbere20260902_(p,i);}catch(e){}
-    }
-  });
-  base.versionRevenueIntermodule=BUDGETSOFT_REVENUE_INTERMODULE_FINAL_20260912_VERSION;
-  return base;
-};
+/* Propriété Rt1 transférée à CerbereRevenueDueOwner20260919.gs ; aucun override du lecteur historique. */
 
 /* Projection bancaire : responsabilité transférée à BudgetSoftTreasuryCanonical20260907.gs. */
 
