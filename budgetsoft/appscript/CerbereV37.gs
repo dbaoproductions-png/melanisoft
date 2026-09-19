@@ -12,7 +12,7 @@ const CERBERE_V37_VERSION='3.7.3';
  * - SCt1 = SS1 + Rt1 - CFt1 - DPt1 ;
  * - SHBt1 est comparé au solde Cerbère présent pour expliquer tout écart.
  */
-function chargerCerbereV37(){
+function chargerCerbereLegacyBaseV37(){
   const base=chargerCerbereRoulant();
   if(!base||base.ok===false)return base;
   const operations=dedoublonnerOperationsCartesBudgetSoft_(lireTable_('Operations'));
@@ -200,7 +200,7 @@ function cfTotalSecoursV372_(charges,periode){
   },0));
 }
 
-function previsionsEvenementsV371_(events,periode,p0Cats,catType){
+function previsionsEvenementsLegacyBaseV371_(events,periode,p0Cats,catType){
   const out={recettesInitiales:0,recettesFutures:0,depensesFutures:0,depensesHorsPilotable:0,depensesHorsPilotableFutures:0,remboursementsSante:0,depensesPilotablesParCategorie:{}};
   const maintenant=new Date();
   (events||[]).forEach(e=>{
