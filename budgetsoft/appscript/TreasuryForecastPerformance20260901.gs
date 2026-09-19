@@ -19,7 +19,7 @@ function chargerTresoreriePrevisionnelleRapide20260901(dateCible){
  * fournie par le cockpit déjà calculé. On évite ainsi la boucle coûteuse
  * Cerbère -> trésorerie -> estimation CB -> Cerbère.
  */
-function chargerTrajectoireBanqueCerbereRapide20260903(dateCible,partCerbere){
+function chargerTrajectoireBanqueCerbereRapideLegacyPerformance20260903_(dateCible,partCerbere){
   return chargerTresoreriePrevisionnelleRapideInterne20260903_(dateCible,Math.max(0,Number(partCerbere||0)),true);
 }
 
