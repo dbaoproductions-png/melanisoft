@@ -1,6 +1,6 @@
 # BudgetSoft — déploiement Apps Script TEST
 
-Le workflow `.github/workflows/budgetsoft-deploy-test.yml` est volontairement **manuel** (`workflow_dispatch`) pendant la phase de fiabilisation.
+Le workflow `.github/workflows/budgetsoft-deploy-test.yml` se déclenche automatiquement à chaque modification de `budgetsoft/appscript/**` sur la branche `budgetsoft-import-lab`. Il reste également lançable manuellement (`workflow_dispatch`). Les exécutions concurrentes utilisent le même groupe et seule la plus récente est conservée, afin d’éviter une file d’attente de déploiements obsolètes.
 
 ## Une seule fois
 
@@ -17,7 +17,7 @@ Le workflow `.github/workflows/budgetsoft-deploy-test.yml` est volontairement **
 
 ## Utilisation
 
-Après un correctif validé dans GitHub : Actions > `BudgetSoft - Deploy TEST` > Run workflow, branche `budgetsoft-import-lab`.
+Après un correctif validé dans GitHub et poussé sur `budgetsoft-import-lab`, le déploiement TEST démarre automatiquement. Le lancement manuel via Actions > `BudgetSoft - Deploy TEST` > Run workflow reste disponible si nécessaire.
 
 Le workflow :
 - vérifie les secrets ;
