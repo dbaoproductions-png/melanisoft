@@ -11,7 +11,10 @@ function composerCerbereCockpitDepuisBaseSnapshotBudgetSoft20260910_(base){
   const chargeurOriginal=chargerCerbereV374;
   try{
     chargerCerbereV374=function(){return base;};
-    return chargerCerbereCockpit20260902();
+    const cockpit=chargerCerbereCockpit20260902();
+    return typeof enrichirCerbereRecettesCertainesDues20260919_==='function'
+      ?enrichirCerbereRecettesCertainesDues20260919_(cockpit)
+      :cockpit;
   }finally{
     chargerCerbereV374=chargeurOriginal;
   }
