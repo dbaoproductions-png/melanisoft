@@ -1,4 +1,4 @@
-const BUDGETSOFT_STRUCTURAL_CLEANUP_20260917_VERSION='2026-09-18.19';
+const BUDGETSOFT_STRUCTURAL_CLEANUP_20260917_VERSION='2026-09-19.20';
 
 function compterClesParPrefixeBudgetSoft20260917_(prefixe){
   const props=PropertiesService.getDocumentProperties().getProperties()||{};
@@ -66,6 +66,9 @@ function auditerNettoyageStructurelBudgetSoft20260917(){
     {code:'SOUS_VUE_TRESORERIE_DUEFIX_CANONIQUE',ok:typeof sousVueTrajectoireTresorerieCanoniqueBudgetSoft20260910_==='function'&&String(sousVueTrajectoireTresorerieCanoniqueBudgetSoft20260910_).indexOf('evenementsCertainsDusInjectesSousVue')>=0,detail:'sous-vue DueFix intégrée au propriétaire BudgetSoftTreasuryCanonical20260907'},
     {code:'PROJECTION_SUBVIEW_DUEFIX_HORS_OVERRIDE_Z',ok:typeof auditerChaineProjectionSnapshotEvenementCertainBudgetSoft20260912==='function'&&typeof auditerEvenementCertainRetardeTresorerieBudgetSoft20260912==='function',detail:'ancien fichier Z converti en fichier d’audits uniquement'},
     {code:'PLAN_EVENT_FORECAST_HORS_OVERRIDE_Z',ok:typeof auditerEvenementsPrevusTresorerieBudgetSoft20260912==='function'&&typeof evenementProuveClosPlanForecast20260912_==='function',detail:'ancien PlanEventForecastFix Z converti en audit ; logique active chez propriétaire 20260831'},
+    {code:'CERBERE_RT1_RECETTES_DUES_OWNER_EXPLICITE',ok:typeof enrichirCerbereRecettesCertainesDues20260919_==='function'&&String(enrichirCerbereRecettesCertainesDues20260919_).indexOf('revenueDueOwner20260919')>=0,detail:'enrichisseur Rt1 idempotent explicite partagé par snapshot et recalcul frais'},
+    {code:'CERBERE_LECTEUR_HISTORIQUE_SANS_OVERRIDE_REVENUE_FINAL',ok:typeof chargerCerbereCockpit20260902==='function'&&String(chargerCerbereCockpit20260902).indexOf('versionRevenueIntermodule')<0,detail:'RevenueIntermoduleFinal ne redéfinit plus chargerCerbereCockpit20260902'},
+    {code:'CERBERE_PROPRIETAIRE_MODERNE_HORS_FICHIER_Z',ok:typeof chargerCerbereCockpitProprietaire20260917_==='function'&&String(chargerCerbereCockpitProprietaire20260917_).indexOf('enrichirCerbereRecettesCertainesDues20260919_')>=0,detail:'propriétaire moderne Cerbère promu dans CerbereFreshHealthParity20260917.gs sans préfixe Z'},
     {code:'SNAPSHOT_GLOBAL_CONSTRUCTEUR_PUBLIC_PROMU',ok:typeof reconstruireSnapshotGlobalBudgetSoft20260906==='function'&&String(reconstruireSnapshotGlobalBudgetSoft20260906).indexOf('reconstruireSnapshotGlobalSyntheseBudgetSoft20260907')>=0&&typeof reconstruireSnapshotGlobalLegacyBudgetSoft20260906_==='function',detail:'nom public -> constructeur synthèse ; ancien constructeur internalisé'}
   ];
   const out={ok:controles.every(c=>c.ok),version:BUDGETSOFT_STRUCTURAL_CLEANUP_20260917_VERSION,lectureSeule:true,dureeMs:Date.now()-t0,controles,clesLocales:{comptes:clesComptes,operations:clesOperations},architecture:{endpointEcriture:'sauvegarderPilotageCerberePublic20260917',aliasEcriture:'sauvegarderPilotageCerbere20260903',ownerLecture:'chargerCerbereCockpitProprietaire20260917_',endpointLecture:'chargerCerbereCockpitCanonique20260914',legacyEpInterne:'sauvegarderPilotageCerbereLegacyEp20260912_',legacyDashboardInterne:'lirePilotableParJourDashboardLegacy20260912_'}};
