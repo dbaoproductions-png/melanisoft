@@ -101,6 +101,7 @@ jobs:
             "https://script.googleapis.com/v1/projects/$SCRIPT_ID/content")
           if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
             echo "Apps Script updateContent failed with HTTP $HTTP_CODE"
+            python3 -m json.tool /tmp/update-response.json || cat /tmp/update-response.json || true
             exit 1
           fi
           echo 'Apps Script TEST source updated.'
