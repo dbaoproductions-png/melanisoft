@@ -27,7 +27,7 @@ function categoriePluxee_(o){
   return'';
 }
 
-function analyserLotPluxee_(operations,source){
+function analyserLotPluxeeLegacyBatchPerformance_(operations,source){
   const exist=lirePluxee_(),cles=new Set(exist.map(o=>String(o.cle_rapprochement||''))),details=[];
   let nouvelles=0,existantes=0,refusees=0,ambigues=0;
   PLUXEE_CATEGORISATION_CTX_=null;
