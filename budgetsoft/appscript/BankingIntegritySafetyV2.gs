@@ -99,7 +99,7 @@ function rapprocherGroupesEquivalentsV31_(incoming,existants,used){
   return{matches,indexes,groupes};
 }
 
-function planifierSnapshotV23_(incoming,ops,compte){
+function planifierSnapshotLegacySafetyV2V23_(incoming,ops,compte){
   const existants=ops.filter(o=>String(o.compte)===String(compte)),groupIn={},groupEx={};
   incoming.forEach((n,i)=>{const k=empreinteExacteV23_(n);(groupIn[k]||(groupIn[k]=[])).push({n,i});});
   existants.forEach(o=>{const k=empreinteExacteV23_(o);(groupEx[k]||(groupEx[k]=[])).push(o);});
