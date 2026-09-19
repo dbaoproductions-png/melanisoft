@@ -56,12 +56,78 @@ function construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(dateCible,ce
   if(typeof chargerTresoreriePrevisionnelle20260901!=='function')return{ok:false,version:BUDGETSOFT_TREASURY_CANONICAL_20260907_VERSION,erreur:'Moteur doctrinal 20260901 absent.'};
   const r=chargerTresoreriePrevisionnelle20260901(dateCible,cerberePrecharge);
   if(!r||r.ok===false)return r;
-  const decomposition=decomposerTrajectoireTresorerieCanoniqueBudgetSoft20260907_(r);
+
+  const reference=typeof dateRevenuePublicationFix20260912_==='function'
+    ?dateRevenuePublicationFix20260912_(r.dateReference||new Date())
+    :new Date(r.dateReference||new Date());
+  const cible=typeof dateRevenuePublicationFix20260912_==='function'
+    ?dateRevenuePublicationFix20260912_(dateCible||r.dateCible)
+    :new Date(dateCible||r.dateCible);
+  if(!reference||!cible||isNaN(reference)||isNaN(cible))return r;
+
+  const debutCycle=typeof dateDebutCycleCanonBudgetSoft20260906_==='function'
+    ?dateDebutCycleCanonBudgetSoft20260906_(reference)
+    :new Date(reference.getFullYear(),reference.getMonth(),28);
+  const finCycle=typeof dateFinCycleCanonBudgetSoft20260906_==='function'
+    ?dateFinCycleCanonBudgetSoft20260906_(reference)
+    :new Date(reference.getFullYear(),reference.getMonth()+1,27,23,59,59,999);
+
+  const dus=typeof evenementsRecettesCertainesDuesRevenuePublicationFix20260912_==='function'
+    ?evenementsRecettesCertainesDuesRevenuePublicationFix20260912_(reference,debutCycle,finCycle)
+    :[];
+  const lignes=Array.isArray(r.lignes)?r.lignes.slice():[];
+  const report=new Date(reference);report.setDate(report.getDate()+1);report.setHours(12,0,0,0);
+  const ajoutes=[];
+
+  dus.forEach(function(ev){
+    const id=String(ev&&ev.id||''),montant=Math.abs(Number(ev&&ev.montant||0));
+    if(!id||!Number.isFinite(montant)||montant<=0)return;
+    const deja=lignes.some(function(l){
+      const d=typeof dateRevenuePublicationFix20260912_==='function'?dateRevenuePublicationFix20260912_(l&&l.date):new Date(l&&l.date);
+      return String(l&&l.source||'')==='evenement'&&String(l&&l.sourceId||'')===id&&d&&!isNaN(d)&&d>reference&&d<=cible&&Number(l&&l.montantSigne||0)>0;
+    });
+    if(deja)return;
+
+    let origine=null;
+    try{
+      const dr=typeof datePlanTresorerie_==='function'?datePlanTresorerie_(ev,reference,false):null;
+      origine=dr&&dr.date?(typeof dateRevenuePublicationFix20260912_==='function'?dateRevenuePublicationFix20260912_(dr.date):new Date(dr.date)):null;
+    }catch(e){}
+    if(!origine)origine=typeof dateRevenuePublicationFix20260912_==='function'
+      ?dateRevenuePublicationFix20260912_(ev.date_effet||ev.date_prevue)
+      :new Date(ev.date_effet||ev.date_prevue);
+    const d=origine&&origine>reference?new Date(origine):new Date(report);
+    if(d>cible)return;
+
+    const arr=typeof arrRevenuePublicationFix20260912_==='function'?arrRevenuePublicationFix20260912_:arrondiTresorerieCanonique20260907_;
+    const iso=typeof isoRevenuePublicationFix20260912_==='function'?isoRevenuePublicationFix20260912_:function(v){return Utilities.formatDate(new Date(v),Session.getScriptTimeZone(),'yyyy-MM-dd');};
+    const ligne={id:'event:'+id+':certain-du',source:'evenement',sourceId:id,date:d.toISOString(),libelle:String(ev.libelle||'Événement'),categorie:String(ev.categorie||''),compte:String(ev.compte||''),montantSigne:arr(montant),certitude:'certaine',preuve:'Événement certain encore dû · aucune opération réelle ni rapprochement confirmé',enRetard:!!(origine&&origine<=reference),datePrevueOrigine:iso(origine)};
+    lignes.push(ligne);ajoutes.push(ligne);
+  });
+
+  lignes.sort(function(a,b){return new Date(a.date)-new Date(b.date);});
+  r.lignes=lignes;
+  const arr=typeof arrRevenuePublicationFix20260912_==='function'?arrRevenuePublicationFix20260912_:arrondiTresorerieCanonique20260907_;
+  const variation=arr(lignes.reduce(function(total,l){
+    const d=typeof dateRevenuePublicationFix20260912_==='function'?dateRevenuePublicationFix20260912_(l&&l.date):new Date(l&&l.date);
+    return d&&!isNaN(d)&&d>reference&&d<=cible?total+Number(l&&l.montantSigne||0):total;
+  },0));
+  r.variationPrevue=variation;
+  if(Number.isFinite(Number(r.soldeReel)))r.soldePrevisionnel=arr(Number(r.soldeReel)+variation);
+
   r.proprietaireBudgetSoft=BUDGETSOFT_TREASURY_CANONICAL_OWNER;
   r.moteurSousJacent='chargerTresoreriePrevisionnelle20260901';
+  r.versionRevenueIntermodule=typeof BUDGETSOFT_REVENUE_PUBLICATION_FIX_20260912_VERSION!=='undefined'?BUDGETSOFT_REVENUE_PUBLICATION_FIX_20260912_VERSION:'';
+  r.evenementsCertainsDusInjectes=ajoutes.map(function(l){return{sourceId:l.sourceId,libelle:l.libelle,montant:l.montantSigne,date:l.date};});
+
+  const decomposition=decomposerTrajectoireTresorerieCanoniqueBudgetSoft20260907_(r);
   r.versionContratCanonique=BUDGETSOFT_TREASURY_CANONICAL_20260907_VERSION;
   r.decompositionCanonique=decomposition;
-  if(!decomposition.ok){r.ok=false;r.erreur='Contrat canonique de trésorerie non satisfait.';r.erreursContrat=decomposition.erreurs.slice();}
+  if(!decomposition.ok){
+    r.ok=false;
+    r.erreur='Contrat canonique de trésorerie non satisfait après ajout des événements certains dus.';
+    r.erreursContrat=(decomposition.erreurs||[]).slice();
+  }
   return r;
 }
 
