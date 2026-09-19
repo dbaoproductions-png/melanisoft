@@ -60,7 +60,10 @@ function chargerCerbereCockpitProprietaire20260917_(){
         snapshot.versionSnapshotFirst=typeof CERBERE_CB_DOUBLE_ROLE_FINAL_VERSION!=='undefined'
           ?CERBERE_CB_DOUBLE_ROLE_FINAL_VERSION
           :'';
-        return publierPuisResynchroniserCerbereSante20260917_(snapshot);
+        const enrichi=typeof enrichirCerbereRecettesCertainesDues20260919_==='function'
+          ?enrichirCerbereRecettesCertainesDues20260919_(snapshot)
+          :snapshot;
+        return publierPuisResynchroniserCerbereSante20260917_(enrichi);
       }
     }
   }catch(e){}
@@ -69,7 +72,10 @@ function chargerCerbereCockpitProprietaire20260917_(){
     ?recalculerCerbereCockpitP1Frais20260912_()
     :null;
   const normalise=normaliserCerbereFraisPublic20260917_(frais);
-  return publierPuisResynchroniserCerbereSante20260917_(normalise);
+  const enrichi=typeof enrichirCerbereRecettesCertainesDues20260919_==='function'
+    ?enrichirCerbereRecettesCertainesDues20260919_(normalise)
+    :normalise;
+  return publierPuisResynchroniserCerbereSante20260917_(enrichi);
 }
 
 function auditerPariteEndpointCerbereSante20260917(){
