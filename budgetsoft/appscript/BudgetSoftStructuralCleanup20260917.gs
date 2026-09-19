@@ -1,4 +1,4 @@
-const BUDGETSOFT_STRUCTURAL_CLEANUP_20260917_VERSION='2026-09-19.23';
+const BUDGETSOFT_STRUCTURAL_CLEANUP_20260917_VERSION='2026-09-19.24';
 
 function compterClesParPrefixeBudgetSoft20260917_(prefixe){
   const props=PropertiesService.getDocumentProperties().getProperties()||{};
@@ -76,6 +76,8 @@ function auditerNettoyageStructurelBudgetSoft20260917(){
     {code:'SCENARIO_STOCKAGE_20260916_INTERNALISE',ok:typeof capturerEtatControleLegacyBudgetSoft20260916_==='function'&&typeof lireEtatControleLegacyBudgetSoft20260916_==='function'&&typeof reinitialiserScenarioLegacyBudgetSoft20260916_==='function',detail:'anciens propriétaires DocumentProperties 20260916 conservés en legacy uniquement'},
     {code:'SCENARIO_STOCKAGE_DURABLE_HORS_FICHIER_Z',ok:typeof capturerEtatControleBudgetSoft20260916==='function'&&typeof lireEtatControleBudgetSoft20260916_==='function'&&typeof reinitialiserScenarioBudgetSoft20260916==='function'&&typeof auditerStockageScenarioBudgetSoft20260917==='function',detail:'stockage durable 20260917 devient propriétaire unique hors Z'},
     {code:'SCENARIO_TRANSITION_GUARD_HORS_FICHIER_Z',ok:typeof auditerTransitionImportFuturBudgetSoft20260917==='function',detail:'garde de transition scénario 20260917 promue hors Z'},
+    {code:'SNAPSHOT_AUDIT_LOG_HORS_FICHIER_Z',ok:typeof auditerSnapshotGlobalBudgetSoft20260906==='function',detail:'audit snapshot global promu hors Z'},
+    {code:'ORACLE_REGRESSION_LEGACY_SANS_COLLISION_Z',ok:typeof auditerOracleLegacyBudgetSoft80_20260906_==='function'&&typeof auditerOracleBudgetSoft80_20260906==='function'&&String(auditerOracleBudgetSoft80_20260906).indexOf('2026-09-06.8-final')>=0,detail:'oracle 20260906.7 internalisé legacy ; oracle 8-final reste seul public'},
     {code:'SNAPSHOT_GLOBAL_CONSTRUCTEUR_PUBLIC_PROMU',ok:typeof reconstruireSnapshotGlobalBudgetSoft20260906==='function'&&String(reconstruireSnapshotGlobalBudgetSoft20260906).indexOf('reconstruireSnapshotGlobalSyntheseBudgetSoft20260907')>=0&&typeof reconstruireSnapshotGlobalLegacyBudgetSoft20260906_==='function',detail:'nom public -> constructeur synthèse ; ancien constructeur internalisé'}
   ];
   const out={ok:controles.every(c=>c.ok),version:BUDGETSOFT_STRUCTURAL_CLEANUP_20260917_VERSION,lectureSeule:true,dureeMs:Date.now()-t0,controles,clesLocales:{comptes:clesComptes,operations:clesOperations},architecture:{endpointEcriture:'sauvegarderPilotageCerberePublic20260917',aliasEcriture:'sauvegarderPilotageCerbere20260903',ownerLecture:'chargerCerbereCockpitProprietaire20260917_',endpointLecture:'chargerCerbereCockpitCanonique20260914',legacyEpInterne:'sauvegarderPilotageCerbereLegacyEp20260912_',legacyDashboardInterne:'lirePilotableParJourDashboardLegacy20260912_'}};
