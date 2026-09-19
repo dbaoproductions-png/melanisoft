@@ -38,6 +38,7 @@ function auditerRecettesCerbereEtUniteComptesBudgetSoft20260912(){
   const horsR0=arrAuditRecettesCerbere20260912_(audit.horsR0!=null?audit.horsR0:v.recettesHorsR0Reelles);
   const tresorerieExclue=arrAuditRecettesCerbere20260912_(audit.tresorerieExclue);
   const planCycle=arrAuditRecettesCerbere20260912_(audit.planCycle!=null?audit.planCycle:(audit.plan!=null?audit.plan:v.recettesEvenements));
+  const recettesCertainesDues=arrAuditRecettesCerbere20260912_(audit.evenementsCertainsDusSansPreuve||0);
   const blocAuDelaSocle=arrAuditRecettesCerbere20260912_(rt1-socleFinal);
   const lignesPlan=(Array.isArray(v.actionsEvenementsCycle)?v.actionsEvenementsCycle:[]).filter(function(x){return Number(x&&x.montantSigne||0)>0;}).map(function(x){
     return {source:String(x.source||''),id:String(x.id||''),libelle:String(x.libelle||''),categorie:String(x.categorie||''),dateEffet:String(x.dateEffet||''),statut:String(x.statut||''),realise:!!x.realise,montant:arrAuditRecettesCerbere20260912_(x.montant),montantSigne:arrAuditRecettesCerbere20260912_(x.montantSigne),operationReelleId:String(x.operationReelleId||'')};
@@ -82,13 +83,13 @@ function auditerRecettesCerbereEtUniteComptesBudgetSoft20260912(){
     version:BUDGETSOFT_CERBERE_REVENUE_OWNER_AUDIT_20260912_VERSION,
     lectureSeule:true,revisionBudgetSoft:revision,
     cycle:{debut:String(periode&&periode.debut||''),fin:String(periode&&periode.fin||''),rt1:rt1},
-    decompositionRt1:{socleFinal:socleFinal,horsR0:horsR0,tresorerieExclue:tresorerieExclue,planCycle:planCycle,blocAuDelaSocle:blocAuDelaSocle,ecartRecomposition:arrAuditRecettesCerbere20260912_(rt1-(socleFinal+horsR0-tresorerieExclue+planCycle))},
+    decompositionRt1:{socleFinal:socleFinal,horsR0:horsR0,tresorerieExclue:tresorerieExclue,planCycle:planCycle,recettesCertainesDuesSansPreuve:recettesCertainesDues,blocAuDelaSocle:blocAuDelaSocle,ecartRecomposition:arrAuditRecettesCerbere20260912_(rt1-(socleFinal+horsR0-tresorerieExclue+planCycle+recettesCertainesDues))},
     rt1Audit:audit,
     canonEffectif:detailCanon,
     recettesPlanPositives:lignesPlan,
     recettesTypeTresorerieExclues:{total:totalRecettesTresorerie,lignes:recettesTresorerie},
     uniteComptesCerbere:uniteComptesCerbere,
-    diagnostic175:{rt1:rt1,socleFinal:socleFinal,differenceRt1Socle:blocAuDelaSocle,planCycle:planCycle,tresorerieExclue:tresorerieExclue,objectif:'expliquer au centime le bloc de 175 € observé sans modifier le moteur'},
+    diagnostic175:{rt1:rt1,socleFinal:socleFinal,differenceRt1Socle:blocAuDelaSocle,planCycle:planCycle,recettesCertainesDuesSansPreuve:recettesCertainesDues,tresorerieExclue:tresorerieExclue,objectif:'expliquer au centime tout écart entre Rt1 et le socle sans modifier le moteur'},
     dureeMs:Date.now()-t0
   };
   console.log('[AUDIT propriétaire recettes Cerbère + unité Comptes] '+JSON.stringify(out));
