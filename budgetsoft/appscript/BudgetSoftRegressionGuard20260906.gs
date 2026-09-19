@@ -78,7 +78,7 @@ function auditerPartitionOperationsBudgetSoft20260906(){
   const r={ok:erreurs.length===0,version:BUDGETSOFT_REGRESSION_GUARD_VERSION,dateReference:ref,sourceBrute:brutes.length,sourceCanonique:ops.length,doublonsBancairesExclus:brutes.length-ops.length,realisees:p.realisees.length,futures:p.futures.length,indatees:p.indatees.length,erreurs};console.log(JSON.stringify(r));return r;
 }
 
-function auditerOracleBudgetSoft80_20260906(){
+function auditerOracleLegacyRegressionGuardBudgetSoft80_20260906_(){
   const opsBrutes=lireTable_('Operations')||[],ops=typeof dedoublonnerOperationsCartesCanonique20260906V3_==='function'?dedoublonnerOperationsCartesCanonique20260906V3_(opsBrutes):(typeof dedoublonnerOperationsCartesBudgetSoft_==='function'?dedoublonnerOperationsCartesBudgetSoft_(opsBrutes):opsBrutes);
   const credits=typeof lireCreditsEtendusV2_==='function'?lireCreditsEtendusV2_():lireTable_('Credits'),dettes=lireTable_('Dettes')||[];
   const signature={operations:opsBrutes.length,credits:credits.length,dettes:dettes.length};
