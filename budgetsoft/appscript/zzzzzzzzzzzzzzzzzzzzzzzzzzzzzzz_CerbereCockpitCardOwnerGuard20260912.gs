@@ -65,7 +65,7 @@ function appliquerDoctrineP1ComptableGuideVieCerbere20260912_(base){
  * SS2 avant salaire + Rt2 - CFt2 - HEt2 - report CB C1.
  * Le report CB = CB déjà engagées de C1 + part EP1 différée estimée.
  */
-function appliquerReportCbCycleSuivant20260905_(base){
+function appliquerReportCbCycleSuivantLegacyCardOwner20260912_(base){
   const ps=Array.isArray(base&&base.periodes)?base.periodes:[];if(ps.length<2)return base;
   const calc=calculerReportCbCycleSuivant20260905_(base),reel=Math.max(0,Number(calc.montant||0)),p1=ps[0],p2=ps[1],v=p2.v37||(p2.v37={}),c=v.cockpit20260902||(v.cockpit20260902={}),arr=arrCockpit20260902_;
   let impactEp={differe:0,immediat:0,resteAEngager:0,tauxDifferePct:0,profil:null};
@@ -109,7 +109,7 @@ function sauvegarderPilotageCerbereLegacyEp20260912_(d){
   return{ok:true,cle:cle,epTotal:ep,proprietaire:BUDGETSOFT_EP_OWNER_20260913,p1Modifie:false};
 }
 
-function estSnapshotCerbereP1FraisValide20260912_(s){
+function estSnapshotCerbereP1FraisValideLegacyCardOwner20260912_(s){
   if(!s||s.ok===false)return false;
   const p=Array.isArray(s.periodes)&&s.periodes.length?s.periodes[0]:null,d=s&&s.diagnostic&&s.diagnostic.p1Doctrine20260912||null,ep=s&&s.diagnostic&&s.diagnostic.enveloppePilotable20260913||null,due=s&&s.diagnostic&&s.diagnostic.rt1EvenementsCertainsDus20260912||null,p2=s&&s.diagnostic&&s.diagnostic.p2Doctrine20260913||null;
   if(!p||!d||!due||!ep||!p2)return false;
