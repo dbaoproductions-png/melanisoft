@@ -1,4 +1,4 @@
-const BUDGETSOFT_STRUCTURAL_CLEANUP_20260917_VERSION='2026-09-19.24';
+const BUDGETSOFT_STRUCTURAL_CLEANUP_20260917_VERSION='2026-09-19.25';
 
 function compterClesParPrefixeBudgetSoft20260917_(prefixe){
   const props=PropertiesService.getDocumentProperties().getProperties()||{};
@@ -78,6 +78,7 @@ function auditerNettoyageStructurelBudgetSoft20260917(){
     {code:'SCENARIO_TRANSITION_GUARD_HORS_FICHIER_Z',ok:typeof auditerTransitionImportFuturBudgetSoft20260917==='function',detail:'garde de transition scénario 20260917 promue hors Z'},
     {code:'SNAPSHOT_AUDIT_LOG_HORS_FICHIER_Z',ok:typeof auditerSnapshotGlobalBudgetSoft20260906==='function',detail:'audit snapshot global promu hors Z'},
     {code:'ORACLE_REGRESSION_LEGACY_SANS_COLLISION_Z',ok:typeof auditerOracleLegacyBudgetSoft80_20260906_==='function'&&typeof auditerOracleBudgetSoft80_20260906==='function'&&String(auditerOracleBudgetSoft80_20260906).indexOf('2026-09-06.8-final')>=0,detail:'oracle 20260906.7 internalisé legacy ; oracle 8-final reste seul public'},
+    {code:'PLUXEE_DEDUPE_LEGACY_HORS_FICHIER_Z',ok:typeof clePluxeeLegacyDedupeFix_==='function'&&typeof clePluxee_==='function',detail:'ancienne clé dedupe Pluxee internalisée legacy ; propriétaire actif clePluxee_ conservé'},
     {code:'SNAPSHOT_GLOBAL_CONSTRUCTEUR_PUBLIC_PROMU',ok:typeof reconstruireSnapshotGlobalBudgetSoft20260906==='function'&&String(reconstruireSnapshotGlobalBudgetSoft20260906).indexOf('reconstruireSnapshotGlobalSyntheseBudgetSoft20260907')>=0&&typeof reconstruireSnapshotGlobalLegacyBudgetSoft20260906_==='function',detail:'nom public -> constructeur synthèse ; ancien constructeur internalisé'}
   ];
   const out={ok:controles.every(c=>c.ok),version:BUDGETSOFT_STRUCTURAL_CLEANUP_20260917_VERSION,lectureSeule:true,dureeMs:Date.now()-t0,controles,clesLocales:{comptes:clesComptes,operations:clesOperations},architecture:{endpointEcriture:'sauvegarderPilotageCerberePublic20260917',aliasEcriture:'sauvegarderPilotageCerbere20260903',ownerLecture:'chargerCerbereCockpitProprietaire20260917_',endpointLecture:'chargerCerbereCockpitCanonique20260914',legacyEpInterne:'sauvegarderPilotageCerbereLegacyEp20260912_',legacyDashboardInterne:'lirePilotableParJourDashboardLegacy20260912_'}};
