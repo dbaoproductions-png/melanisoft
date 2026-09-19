@@ -66,7 +66,7 @@ function composerCerbereExpressDepuisCockpit20260910_(cerbere) {
   };
 }
 
-function vigilanceExpress_(partConsommee,partTemps,reste,allocation,jour){
+function vigilanceExpressLegacyEngine20260827_(partConsommee,partTemps,reste,allocation,jour){
   const pc=Math.max(0,Number(partConsommee||0)),pt=Math.max(0,Math.min(1,Number(partTemps||0))),ecart=(pc-pt)*100;let niveau='vert',libelle='Cap tenu';
   if(reste<-.009||pc>1.0001){niveau='rouge';libelle='Enveloppe dépassée';}else if(allocation<=0&&pc<=0){libelle='Aucune dépense';}else if(jour>3&&ecart>25){niveau='rouge';libelle='Rythme très rapide';}else if(jour>3&&ecart>10){niveau='orange';libelle='Rythme un peu rapide';}
   return{niveau,libelle,ecartRythmePoints:arrExpress_(ecart),partTempsPct:arrExpress_(pt*100),message:messageVigilanceExpress_(niveau,libelle,pc,pt,reste)};
