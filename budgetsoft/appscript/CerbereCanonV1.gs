@@ -1,7 +1,7 @@
 const CERBERE_CANON_V1_VERSION = '1.2.0';
 
 /** Budget canonique prévisionnel. N'écrit jamais dans les opérations réelles. */
-function chargerCanonCerbereV1() {
+function chargerCanonCerbereV1LegacyBase_() {
   const sh = assurerCanonCerbereV1_();
   const rows = lireCanonCerbereV1_(sh)
     .filter(r => String(r.actif).toLowerCase() !== 'false')
@@ -101,7 +101,7 @@ function assurerPosteDiversCerbereCanon_(sh){
   if(change)sh.getRange(2,1,vals.length,7).setValues(vals);
 }
 
-function assurerCanonCerbereV1_(){
+function assurerCanonCerbereV1LegacyBase_(){
   const ss=SpreadsheetApp.getActiveSpreadsheet();
   if(!ss) throw new Error('Classeur BudgetSoft introuvable.');
   let sh=ss.getSheetByName('Cerbere_Canon_V1');
