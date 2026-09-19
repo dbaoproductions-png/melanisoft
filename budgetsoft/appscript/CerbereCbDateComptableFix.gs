@@ -9,7 +9,7 @@ var CERBERE_R0_LECTURE_CACHE_20260905_=null;
  * autoritaire dès qu'elle est connue. La projection par date d'achat n'est
  * utilisée qu'en l'absence de date comptable.
  */
-function dateImputationCarteCerbereBudgetSoft_(o) {
+function dateImputationCarteCerbereCanonique20260919_(o) {
   const dateComptable = dateValideVentilationBudgetSoft_(o && o.date_comptable);
   if (dateComptable) return dateComptable;
   const d = dateAchatMetierBudgetSoft_(o);
