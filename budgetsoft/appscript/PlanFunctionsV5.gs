@@ -209,7 +209,7 @@ function evaluerReductionPlanV5_(a,cible){
   return {realise,attendu_a_date:cible,confiance:'certaine',preuves:[preuveOperationPlanV5_(ops[0])],reference,actuel};
 }
 
-function evaluerSuppressionPlanV5_(a,cible){
+function evaluerSuppressionLegacyPlanV5_(a,cible){
   if(a.source_type!=='charge_fixe')return {statut:'Charge fixe requise'};
   const ops=operationsDansFenetrePlanV5_(a).filter(o=>String(o.charge_fixe_id||'')===String(a.source_id));
   const debut=dateDebutActionPlanV5_(a),jours=debut?Math.floor((new Date()-debut)/86400000):0;
