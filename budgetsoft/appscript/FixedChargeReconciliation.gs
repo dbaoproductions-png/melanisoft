@@ -14,7 +14,7 @@ function initialiserRapprochementsChargesFixes_(){
   return feuille;
 }
 
-function lireRapprochementsChargesFixes(){
+function lireRapprochementsChargesFixesLegacyInitialisant_(){
   const feuille=initialiserRapprochementsChargesFixes_();
   if(feuille.getLastRow()<2)return[];
   const valeurs=feuille.getRange(2,1,feuille.getLastRow()-1,FIXED_CHARGE_MATCH_HEADERS.length).getValues();
