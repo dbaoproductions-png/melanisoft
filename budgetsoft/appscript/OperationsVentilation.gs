@@ -83,7 +83,7 @@ function creerBucketVentilationBudgetSoft_(){return{operations:0,nonCbParCategor
  * présents (date d'achat, cents, marchand, carte), puis les colonnes dédiées.
  * La ligne définitive gagne ; sa catégorie devient donc la catégorie autoritaire.
  */
-function dedoublonnerOperationsCartesBudgetSoft_(operations) {
+function dedoublonnerOperationsCartesLegacyVentilationBudgetSoft_(operations) {
   const groupes={},horsCb=[];
   (operations||[]).forEach((o,index)=>{
     const m=Number(o.montant||0); if(!estCarteStructureeBudgetSoft_(o,m)){horsCb.push({o,index});return;}
