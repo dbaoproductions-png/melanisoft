@@ -12,7 +12,7 @@ const PLUXEE_DATE_REFERENCE_DEFAUT='2025-12-17';
  * - aucun rapprochement de charge fixe ;
  * - débit immédiat : la date d'opération est la date d'imputation.
  */
-function initialiserPluxee(){
+function initialiserPluxeeLegacyBase_(){
   const ss=SpreadsheetApp.getActiveSpreadsheet();
   let f=ss.getSheetByName(PLUXEE_SHEET);
   if(!f)f=ss.insertSheet(PLUXEE_SHEET);
@@ -95,7 +95,7 @@ function mettreAJourCategoriePluxee(id,categorie){
   f.getRange(i+2,PLUXEE_HEADERS.indexOf('categorie')+1).setValue(c);if(typeof marquerSnapshotGlobalBudgetSoftObsolete20260916_==='function')marquerSnapshotGlobalBudgetSoftObsolete20260916_('pluxee_categorie');return chargerPluxee();
 }
 
-function analyserLotPluxee_(operations,source){
+function analyserLotPluxeeLegacyBase_(operations,source){
   const exist=lirePluxee_(),cles=new Set(exist.map(o=>String(o.cle_rapprochement||''))),details=[];let nouvelles=0,existantes=0,refusees=0,ambigues=0;
   operations.forEach((brut,i)=>{
     if(brut.refuse){refusees++;details.push({index:i+1,statutImport:'refusee',raison:brut.raison||'Transaction refusée',operation:brut});return;}
@@ -108,7 +108,7 @@ function analyserLotPluxee_(operations,source){
   return {ok:ambigues===0,version:PLUXEE_VERSION,detectees:operations.length,nouvelles,existantes,refusees,ambigues,details};
 }
 
-function normaliserOperationPluxee_(o){
+function normaliserOperationPluxeeLegacyBase_(o){
   const d=dateHeurePluxee_(o.date),lib=nettoyerLibellePluxee_(o.libelle),m=Number(o.montant||0);
   if(!d||isNaN(d.getTime()))throw new Error('Date Pluxee invalide.');if(!lib)throw new Error('Libellé Pluxee manquant.');if(!Number.isFinite(m)||Math.abs(m)<.001)throw new Error('Montant Pluxee invalide.');
   const type=m>0?'rechargement':'depense';let cat='';
@@ -118,7 +118,7 @@ function normaliserOperationPluxee_(o){
   return {id:o.id||Utilities.getUuid(),date:iso,libelle:lib,montant:arrondirPluxee_(type==='depense'?-Math.abs(m):Math.abs(m)),type,categorie:cat,source:String(o.source||'import'),cle_rapprochement:cle,statut:'valide',date_import:new Date().toISOString()};
 }
 
-function categoriePluxee_(o){
+function categoriePluxeeLegacyBase_(o){
   const lib=normaliserTexteBanque_(o.libelle||'');
   if(/^restauration$/.test(lib))return'Restaurants';
   try{
@@ -143,11 +143,11 @@ function parserCollerPluxee_(texte){
   return out;
 }
 
-function nettoyerLigneCollerPluxee_(s){return String(s||'').replace(/^[-*]+\s*/,'').replace(/^#+\s*/,'').replace(/\[image\]\([^)]*\)/ig,'').replace(/\s+/g,' ').trim();}
+function nettoyerLigneCollerPluxeeLegacyBase_(s){return String(s||'').replace(/^[-*]+\s*/,'').replace(/^#+\s*/,'').replace(/\[image\]\([^)]*\)/ig,'').replace(/\s+/g,' ').trim();}
 function estBruitCollerPluxee_(s){return /^image$/i.test(s)||/assets\/svg|ic-transaction|ic-monet|ic-angle/i.test(s)||/^\d+\s+titres?\s+de\s+/i.test(s);}
 function montantPluxeeDepuisTexte_(s){const m=String(s||'').replace(/[\u00a0\u202f]/g,' ').match(/([+-])\s*([\d ]+(?:[,.]\d{2})?)\s*€/);if(!m)return null;const n=Number(m[2].replace(/ /g,'').replace(',','.'));return Number.isFinite(n)?(m[1]==='-'?-n:n):null;}
 function nettoyerLibellePluxee_(s){return String(s||'').replace(/\s+/g,' ').trim().replace(/^NaN$/i,'Transaction refusée');}
 function dateHeurePluxee_(v){if(v instanceof Date)return new Date(v.getTime());const s=String(v||'').trim();let m=s.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);if(m)return new Date(Number(m[3]),Number(m[2])-1,Number(m[1]),Number(m[4]||12),Number(m[5]||0),0);m=s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{1,2}):(\d{2}))?/);if(m)return new Date(Number(m[1]),Number(m[2])-1,Number(m[3]),Number(m[4]||12),Number(m[5]||0),0);const d=new Date(v);return isNaN(d)?null:d;}
-function clePluxee_(iso,lib,m,type){return['PLUXEE',String(iso),String(Math.round(Math.abs(Number(m))*100)),normaliserTexteBanque_(lib),type].join('|');}
+function clePluxeeLegacyBase_(iso,lib,m,type){return['PLUXEE',String(iso),String(Math.round(Math.abs(Number(m))*100)),normaliserTexteBanque_(lib),type].join('|');}
 function ajouterPluxeeEnLot_(ops){if(!ops.length)return;const f=SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PLUXEE_SHEET);const vals=ops.map(o=>PLUXEE_HEADERS.map(h=>o[h]));f.getRange(f.getLastRow()+1,1,vals.length,PLUXEE_HEADERS.length).setValues(vals);if(typeof marquerSnapshotGlobalBudgetSoftObsolete20260916_==='function')marquerSnapshotGlobalBudgetSoftObsolete20260916_('pluxee_ecriture_lot');}
 function arrondirPluxee_(n){return Math.round((Number(n)||0)*100)/100;}
