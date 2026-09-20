@@ -26,14 +26,14 @@ const CERBERE_CB_DOUBLE_ROLE_FINAL_VERSION='2026-09-12.p1-doctrine-3';
 function recalculerCerbereCockpitP1Frais20260912_(options){
   options=options||{};
   const executer=function(){
-    const t0=Date.now(),base=chargerCerbereCockpitBaseRapide20260903_();if(!base||base.ok===false)return base;
+    const t0=Date.now(),base=chargerCerbereCockpitBaseRapide20260903_();if(!base||base.ok===false)return base;const ajustementsCfPrecharges=typeof lireAjustementsChargesFixes==='function'?lireAjustementsChargesFixes():null;
     const post=base.diagnostic&&base.diagnostic.performancePost35||{couches:[]},timings=Array.isArray(post.couches)?post.couches:[];
     chronometrerCoucheCerbere20260904_(timings,'Suspensions Actions/Événements',()=>corrigerSuspensionsActionsEvenements20260903_(base));
     chronometrerCoucheCerbere20260904_(timings,'Réel pilotable date achat',()=>corrigerReelPilotableDateAchat20260902_(base));
     const periodes=Array.isArray(base.periodes)?base.periodes:[];
     chronometrerCoucheCerbere20260904_(timings,'Enrichissement cockpit C1/C2',()=>periodes.forEach((p,i)=>enrichirCycleCockpitCerbere20260902_(p,i)));
-    chronometrerCoucheCerbere20260904_(timings,'Doctrine P1 comptable / guide de vie',()=>appliquerDoctrineP1ComptableGuideVieCerbere20260912_(base));
-    chronometrerCoucheCerbere20260904_(timings,'CB double rôle C1/C2',()=>appliquerReportCbCycleSuivant20260905_(base));
+    chronometrerCoucheCerbere20260904_(timings,'Doctrine P1 comptable / guide de vie',()=>appliquerDoctrineP1ComptableGuideVieCerbere20260912_(base,ajustementsCfPrecharges));
+    chronometrerCoucheCerbere20260904_(timings,'CB double rôle C1/C2',()=>appliquerReportCbCycleSuivant20260905_(base,ajustementsCfPrecharges));
     let appreciation='';chronometrerCoucheCerbere20260904_(timings,'Appréciation cockpit',()=>{appreciation=appreciationCockpitCerbere20260902_(base);});
     const perf={c1c2Seulement:true,dureeMs:Date.now()-t0,couches:timings};
     base.cockpit20260902={
