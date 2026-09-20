@@ -86,13 +86,13 @@ function chargerChargesFixesReview20260828(){
   const data=construireChargesFixesReview20260828_();enregistrerSnapshotChargesFixes20260828_(data,empreinte);return data;
 }
 
-function sauvegarderChargeFixeReview20260828(charge){
+function sauvegarderChargeFixeReviewLegacyBase20260828_(charge){
   if(!charge||typeof charge!=='object')throw new Error('Charge fixe invalide.');
   const existante=charge.id?lireTable_('Charges_fixes').find(c=>String(c.id)===String(charge.id)):null,fusion=Object.assign({},existante||{},charge);
   ['dernier_rapprochement_id','dernier_rapprochement_date','dernier_montant_reel','statut_rapprochement'].forEach(k=>{if(existante&&charge[k]===undefined)fusion[k]=existante[k];});
   enregistrerLigne('Charges_fixes',fusion);supprimerSnapshotChargesFixes20260828_();return chargerChargesFixesReview20260828();
 }
-function supprimerChargeFixeReview20260828(id){const ok=supprimerLigne('Charges_fixes',id);supprimerSnapshotChargesFixes20260828_();return Object.assign({supprimee:ok},chargerChargesFixesReview20260828());}
+function supprimerChargeFixeReviewLegacyBase20260828_(id){const ok=supprimerLigne('Charges_fixes',id);supprimerSnapshotChargesFixes20260828_();return Object.assign({supprimee:ok},chargerChargesFixesReview20260828());}
 
 function chargerPropositionsRapprochementChargesFixes20260828(){
   const t0=Date.now();verifierInitialisation_();
