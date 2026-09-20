@@ -113,7 +113,7 @@ function reconstruireSnapshotGlobalLegacyBudgetSoft20260906_(origine){
   }finally{lock.releaseLock();}
 }
 
-function chargerSnapshotGlobalBudgetSoft20260906(){
+function chargerSnapshotGlobalLegacyBudgetSoft20260906_(){
   const props=PropertiesService.getDocumentProperties(),rawMeta=props.getProperty(BUDGETSOFT_GLOBAL_SNAPSHOT_PREFIX+'META');
   if(!rawMeta)return{ok:true,disponible:false,version:BUDGETSOFT_GLOBAL_SNAPSHOT_VERSION};
   try{
