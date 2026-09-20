@@ -16,12 +16,12 @@ const AUDIT_VOITURES_EXCEPTIONNEL_20082026 = '9735076e-a9e2-4ef9-897a-766934ec5d
 const AUDIT_VOITURES_MARQUEUR_EXCEPTIONNEL = '[AUDIT:VOITURE:EXCEPTIONNEL]';
 const AUDIT_VOITURES_MARQUEUR_MIGRATION = '[AUDIT:VOITURE:20082026]';
 
-function ajouterMarqueurCommentaireVoiture_(commentaire, marqueur) {
+function ajouterMarqueurCommentaireVoitureLegacyAudit_(commentaire, marqueur) {
   const c = String(commentaire || '').trim();
   return c.includes(marqueur) ? c : (c ? c + ' ' : '') + marqueur;
 }
 
-function migrerAuditVoitures20082026() {
+function migrerAuditVoituresLegacy20082026() {
   verifierInitialisation_();
   const operations = lireTable_('Operations');
   const parId = new Map(operations.map(o => [String(o.id), o]));
@@ -32,7 +32,7 @@ function migrerAuditVoitures20082026() {
     const o = parId.get(c.id);
     if (!o) { absentes.push(c.id); return; }
     const categorieCorrecte = String(o.categorie || '') === c.categorie;
-    const commentaire = ajouterMarqueurCommentaireVoiture_(o.commentaire, AUDIT_VOITURES_MARQUEUR_MIGRATION);
+    const commentaire = ajouterMarqueurCommentaireVoitureLegacyAudit_(o.commentaire, AUDIT_VOITURES_MARQUEUR_MIGRATION);
     if (categorieCorrecte && commentaire === String(o.commentaire || '').trim()) { dejaCorrectes++; return; }
     enregistrerLigne('Operations', Object.assign({}, o, {
       categorie: c.categorie,
@@ -45,10 +45,10 @@ function migrerAuditVoitures20082026() {
   const exceptionnelle = parId.get(AUDIT_VOITURES_EXCEPTIONNEL_20082026);
   if (!exceptionnelle) absentes.push(AUDIT_VOITURES_EXCEPTIONNEL_20082026);
   else {
-    const commentaire = ajouterMarqueurCommentaireVoiture_(exceptionnelle.commentaire, AUDIT_VOITURES_MARQUEUR_EXCEPTIONNEL);
+    const commentaire = ajouterMarqueurCommentaireVoitureLegacyAudit_(exceptionnelle.commentaire, AUDIT_VOITURES_MARQUEUR_EXCEPTIONNEL);
     if (commentaire !== String(exceptionnelle.commentaire || '').trim()) {
       enregistrerLigne('Operations', Object.assign({}, exceptionnelle, {
-        commentaire: ajouterMarqueurCommentaireVoiture_(commentaire, AUDIT_VOITURES_MARQUEUR_MIGRATION),
+        commentaire: ajouterMarqueurCommentaireVoitureLegacyAudit_(commentaire, AUDIT_VOITURES_MARQUEUR_MIGRATION),
         montant: Math.abs(Number(exceptionnelle.montant || 0))
       }));
       exceptionnellesMarquees++;
@@ -65,7 +65,7 @@ function migrerAuditVoitures20082026() {
  * Elles sont volontairement prudentes : un petit achat en station n'est pas
  * assimilé au carburant, tandis que les montants de carburant restent Voitures.
  */
-function propositionAuditVoitures20082026_(o) {
+function propositionAuditVoituresLegacy20082026_(o) {
   if (!o || String(o.type || '').toLowerCase() !== 'depense') return null;
   const texte = normaliserTexteBanque_([o.marchand_normalise || '', o.libelle_bancaire || '', o.libelle || ''].join(' '));
   const montant = Math.abs(Number(o.montant || 0));
@@ -80,7 +80,7 @@ function propositionAuditVoitures20082026_(o) {
   return null;
 }
 
-function auditerVoitures20082026() {
+function auditerVoituresLegacy20082026() {
   verifierInitialisation_();
   const operations = lireTable_('Operations');
   const parId = new Map(operations.map(o => [String(o.id), o]));
