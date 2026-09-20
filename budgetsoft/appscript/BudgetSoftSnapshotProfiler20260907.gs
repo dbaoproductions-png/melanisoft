@@ -677,3 +677,89 @@ function auditerCandidatCockpitBaseDirecteBudgetSoft20260920(){
   console.log('[AUDIT A/B Cockpit base directe 20260920] '+JSON.stringify(out));
   return out;
 }
+
+
+function auditerProfilCbDoubleRoleInterneBudgetSoft20260920(){
+  const t0=Date.now(),temps={},appels={},erreurs=[];
+  function chrono(nom,fn){
+    const t=Date.now();
+    try{const v=fn();temps[nom]=(temps[nom]||0)+(Date.now()-t);appels[nom]=(appels[nom]||0)+1;return v;}
+    catch(e){temps[nom]=(temps[nom]||0)+(Date.now()-t);appels[nom]=(appels[nom]||0)+1;erreurs.push({etape:nom,erreur:String(e&&e.stack||e&&e.message||e)});throw e;}
+  }
+
+  const sources=chrono('sources',function(){return chargerToutesLesDonnees();});
+  const charge=chrono('cerbereBasePartagee',function(){return chargerCerbereBaseDepuisSourcesSnapshotBudgetSoft20260911_(sources);});
+  const base=charge&&charge.base||null;
+  if(!base||base.ok===false){
+    const ko={ok:false,version:'2026-09-20.1',erreurs:erreurs.concat([{etape:'base',erreur:'Base Cerbère indisponible'}])};
+    console.log('[AUDIT PERF CB double rôle interne 20260920] '+JSON.stringify(ko));return ko;
+  }
+
+  const originaux={
+    v374:typeof chargerCerbereV374==='function'?chargerCerbereV374:null,
+    baseRapide:typeof chargerCerbereCockpitBaseRapide20260903_==='function'?chargerCerbereCockpitBaseRapide20260903_:null,
+    report:typeof calculerReportCbCycleSuivant20260905_==='function'?calculerReportCbCycleSuivant20260905_:null,
+    impact:typeof calculerImpactPrevisionnelEpBudgetSoft20260913_==='function'?calculerImpactPrevisionnelEpBudgetSoft20260913_:null,
+    ss2:typeof calculerSs2TresorerieCanoniqueCerbere20260913_==='function'?calculerSs2TresorerieCanoniqueCerbere20260913_:null,
+    cf:typeof reconstruireChargesFixesReevalueesP1Cerbere20260912_==='function'?reconstruireChargesFixesReevalueesP1Cerbere20260912_:null,
+    enveloppe:typeof enrichirEnvelopePilotableBudgetSoft20260913_==='function'?enrichirEnvelopePilotableBudgetSoft20260913_:null
+  };
+  const baseCockpit=JSON.parse(JSON.stringify(base));
+  let resultat=null;
+
+  try{
+    if(originaux.v374)chargerCerbereV374=function(){return base;};
+    if(originaux.baseRapide)chargerCerbereCockpitBaseRapide20260903_=function(){return baseCockpit;};
+    if(originaux.report)calculerReportCbCycleSuivant20260905_=function(){const a=arguments;return chrono('calculReportCb',function(){return originaux.report.apply(this,a);});};
+    if(originaux.impact)calculerImpactPrevisionnelEpBudgetSoft20260913_=function(){const a=arguments;return chrono('impactEpDiffere',function(){return originaux.impact.apply(this,a);});};
+    if(originaux.ss2)calculerSs2TresorerieCanoniqueCerbere20260913_=function(){const a=arguments;return chrono('frontiereSs2Tresorerie',function(){return originaux.ss2.apply(this,a);});};
+    if(originaux.cf)reconstruireChargesFixesReevalueesP1Cerbere20260912_=function(){const a=arguments;return chrono('reconstructionCf',function(){return originaux.cf.apply(this,a);});};
+    if(originaux.enveloppe)enrichirEnvelopePilotableBudgetSoft20260913_=function(){const a=arguments;return chrono('enrichissementEnvelope',function(){return originaux.enveloppe.apply(this,a);});};
+
+    const t=Date.now();
+    resultat=recalculerCerbereCockpitP1Frais20260912_({contexteExterne:true});
+    temps.cockpitTotal=Date.now()-t;
+  }catch(e){
+    erreurs.push({etape:'cockpit',erreur:String(e&&e.stack||e&&e.message||e)});
+  }finally{
+    if(originaux.v374)chargerCerbereV374=originaux.v374;
+    if(originaux.baseRapide)chargerCerbereCockpitBaseRapide20260903_=originaux.baseRapide;
+    if(originaux.report)calculerReportCbCycleSuivant20260905_=originaux.report;
+    if(originaux.impact)calculerImpactPrevisionnelEpBudgetSoft20260913_=originaux.impact;
+    if(originaux.ss2)calculerSs2TresorerieCanoniqueCerbere20260913_=originaux.ss2;
+    if(originaux.cf)reconstruireChargesFixesReevalueesP1Cerbere20260912_=originaux.cf;
+    if(originaux.enveloppe)enrichirEnvelopePilotableBudgetSoft20260913_=originaux.enveloppe;
+  }
+
+  const p1=resultat&&resultat.periodes&&resultat.periodes[0]||{},p2=resultat&&resultat.periodes&&resultat.periodes[1]||{};
+  const c1=p1&&p1.v37&&p1.v37.cockpit20260902||{},c2=p2&&p2.v37&&p2.v37.cockpit20260902||{};
+  const d=resultat&&resultat.diagnostic||{},cb=d.cbDoubleRole||{},p2d=d.p2Doctrine20260913||{};
+  const mesures=['calculReportCb','impactEpDiffere','frontiereSs2Tresorerie','reconstructionCf','enrichissementEnvelope'];
+  const totalMesure=mesures.reduce(function(a,k){return a+Number(temps[k]||0);},0);
+  const classement=mesures.map(function(k){return{etape:k,dureeMs:Number(temps[k]||0),appels:Number(appels[k]||0),partPct:totalMesure?Math.round(Number(temps[k]||0)/totalMesure*1000)/10:null};}).sort(function(a,b){return b.dureeMs-a.dureeMs;});
+  const out={
+    ok:erreurs.length===0&&!!(resultat&&resultat.ok!==false),
+    version:'2026-09-20.1',
+    lectureSeule:true,
+    aucuneModification:true,
+    temps:temps,
+    appels:appels,
+    totalSousEtapesMs:totalMesure,
+    classement:classement,
+    nonExpliqueDansCockpitMs:Math.max(0,Number(temps.cockpitTotal||0)-totalMesure),
+    signature:{
+      p1:Number(c1.pSoutenable!=null?c1.pSoutenable:c1.p1Total||0),
+      p1Disponible:Number(c1.pDisponible!=null?c1.pDisponible:c1.ret1||0),
+      p2:Number(c2.pSoutenable!=null?c2.pSoutenable:c2.p1Total||0),
+      p2Disponible:Number(c2.pDisponible!=null?c2.pDisponible:c2.ret1||0),
+      reportCb:Number(cb.montant||0),
+      cft2:Number(p2d.cft2||0),
+      ss2:Number(p2d.ss2||0)
+    },
+    erreurs:erreurs,
+    dureeTotaleMs:Date.now()-t0,
+    decision:erreurs.length?'PROFIL_INVALIDE':'PROFIL_VALIDE_LOCALISER_CB_DOUBLE_ROLE'
+  };
+  console.log('[AUDIT PERF CB double rôle interne 20260920] '+JSON.stringify(out));
+  return out;
+}
