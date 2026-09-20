@@ -194,6 +194,27 @@ function reparerChargesFixesFluxNonLieesV34(){
   }finally{lock.releaseLock();}
 }
 
+
+function reparerChargesFixesFluxEtActualiserBudgetSoftV34(){
+  const rep=reparerChargesFixesFluxNonLieesV34();
+  const snap=typeof reconstruireSnapshotGlobalBudgetSoft20260906==='function'
+    ?reconstruireSnapshotGlobalBudgetSoft20260906('maintenance_cf_flux_v34')
+    :{ok:false,message:'Constructeur snapshot indisponible'};
+  return{
+    ok:!!(rep&&rep.ok&&snap&&snap.ok),
+    version:'3.4',
+    reparation:rep,
+    snapshot:{
+      ok:!!(snap&&snap.ok),
+      publie:!!(snap&&snap.publie),
+      revisionBudgetSoft:snap&&snap.revisionBudgetSoft||'',
+      genereLe:snap&&snap.genereLe||'',
+      erreurs:snap&&snap.erreurs||[],
+      performance:snap&&snap.performance||null
+    }
+  };
+}
+
 function importerFluxBancaireControleV2(lignes,compte,decisionsAmbiguites){
   const incoming=preparerFluxV23_(lignes,compte),ctl=controlerLotBancaire_(incoming,null);if(!ctl.nombre)throw new Error('Aucune opération exploitable.');
   const lock=LockService.getDocumentLock();lock.waitLock(30000);let backup=null;
