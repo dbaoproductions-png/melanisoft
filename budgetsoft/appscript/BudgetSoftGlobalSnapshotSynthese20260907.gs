@@ -4,7 +4,7 @@ const BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION='2026-09-18.1';
  * Adapte le chargeur Cerbère classique à une base déjà calculée sans modifier son
  * API publique. Le remplacement est strictement local et restauré dans finally.
  */
-function composerCerbereCockpitDepuisBaseSnapshotBudgetSoft20260910_(base){
+function composerCerbereCockpitDepuisBaseSnapshotBudgetSoft20260910_(base,projectionTresoreriePrecalculee){
   if(!base||base.ok===false)return base;
   if(typeof chargerCerbereCockpit20260902!=='function')return base;
   if(typeof chargerCerbereV374!=='function')return chargerCerbereCockpit20260902();
@@ -13,12 +13,20 @@ function composerCerbereCockpitDepuisBaseSnapshotBudgetSoft20260910_(base){
   const chargeurBaseRapideOriginal=typeof chargerCerbereCockpitBaseRapide20260903_==='function'
     ?chargerCerbereCockpitBaseRapide20260903_
     :null;
+  const calculSs2Original=typeof calculerSs2TresorerieCanoniqueCerbere20260913_==='function'
+    ?calculerSs2TresorerieCanoniqueCerbere20260913_
+    :null;
   const baseCockpit=JSON.parse(JSON.stringify(base));
 
   try{
     chargerCerbereV374=function(){return base;};
     if(chargeurBaseRapideOriginal){
       chargerCerbereCockpitBaseRapide20260903_=function(){return baseCockpit;};
+    }
+    if(calculSs2Original&&projectionTresoreriePrecalculee&&projectionTresoreriePrecalculee.ok!==false){
+      calculerSs2TresorerieCanoniqueCerbere20260913_=function(baseSs2,p2){
+        return calculSs2Original(baseSs2,p2,projectionTresoreriePrecalculee);
+      };
     }
     const cockpit=chargerCerbereCockpit20260902();
     return typeof enrichirCerbereRecettesCertainesDues20260919_==='function'
@@ -28,6 +36,9 @@ function composerCerbereCockpitDepuisBaseSnapshotBudgetSoft20260910_(base){
     chargerCerbereV374=chargeurV374Original;
     if(chargeurBaseRapideOriginal){
       chargerCerbereCockpitBaseRapide20260903_=chargeurBaseRapideOriginal;
+    }
+    if(calculSs2Original){
+      calculerSs2TresorerieCanoniqueCerbere20260913_=calculSs2Original;
     }
   }
 }
@@ -142,7 +153,7 @@ function reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(origine){
 
       const cerbere=prendre('cerbere',()=>{
         const brut=(cerbereBase&&cerbereBase.ok!==false)
-          ?composerCerbereCockpitDepuisBaseSnapshotBudgetSoft20260910_(cerbereBase)
+          ?composerCerbereCockpitDepuisBaseSnapshotBudgetSoft20260910_(cerbereBase,projectionCalculUnique)
           :(typeof recalculerCerbereCockpitP1Frais20260912_==='function'
             ?recalculerCerbereCockpitP1Frais20260912_({contexteExterne:true})
             :(typeof chargerCerbereCockpit20260902==='function'?chargerCerbereCockpit20260902():null));
