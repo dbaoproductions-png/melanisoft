@@ -577,3 +577,93 @@ function auditerCandidatEngagementsAjustementsPrechargesBudgetSoft20260920(){
   console.log('[AUDIT A/B Engagements ajustements préchargés 20260920] '+JSON.stringify(out));
   return out;
 }
+
+
+function auditerCandidatCockpitBaseDirecteBudgetSoft20260920(){
+  const t0=Date.now(),temps={},erreurs=[];
+  function chrono(nom,fn){
+    const t=Date.now();
+    try{const v=fn();temps[nom]=Date.now()-t;return v;}
+    catch(e){temps[nom]=Date.now()-t;erreurs.push({etape:nom,erreur:String(e&&e.stack||e&&e.message||e)});return null;}
+  }
+
+  const sources=chrono('sources',function(){return chargerToutesLesDonnees();});
+  const charge=chrono('cerbereBasePartagee',function(){return chargerCerbereBaseDepuisSourcesSnapshotBudgetSoft20260911_(sources);});
+  const base=charge&&charge.base||null;
+  if(!base||base.ok===false){
+    const ko={ok:false,version:'2026-09-20.1',erreurs:erreurs.concat([{etape:'base',erreur:'Base Cerbère indisponible'}])};
+    console.log('[AUDIT A/B Cockpit base directe 20260920] '+JSON.stringify(ko));return ko;
+  }
+
+  let baseline=null,candidat=null;
+  const originalV374=typeof chargerCerbereV374==='function'?chargerCerbereV374:null;
+  const originalBaseRapide=typeof chargerCerbereCockpitBaseRapide20260903_==='function'?chargerCerbereCockpitBaseRapide20260903_:null;
+
+  try{
+    if(originalV374)chargerCerbereV374=function(){return base;};
+    baseline=chrono('baselineCockpitDepuisInjectionV374',function(){
+      return recalculerCerbereCockpitP1Frais20260912_({contexteExterne:true});
+    });
+  }finally{
+    if(originalV374)chargerCerbereV374=originalV374;
+  }
+
+  try{
+    if(originalBaseRapide)chargerCerbereCockpitBaseRapide20260903_=function(){return JSON.parse(JSON.stringify(base));};
+    candidat=chrono('candidatCockpitBaseDirecte',function(){
+      return recalculerCerbereCockpitP1Frais20260912_({contexteExterne:true});
+    });
+  }finally{
+    if(originalBaseRapide)chargerCerbereCockpitBaseRapide20260903_=originalBaseRapide;
+  }
+
+  function signature(x){
+    const ps=Array.isArray(x&&x.periodes)?x.periodes:[];
+    const p1=ps[0]||{},p2=ps[1]||{};
+    const v1=p1.v37||{},v2=p2.v37||{},c1=v1.cockpit20260902||{},c2=v2.cockpit20260902||{};
+    const d=x&&x.diagnostic||{};
+    return{
+      ok:!!(x&&x.ok!==false),
+      version:String(x&&x.version||''),
+      p1:{
+        ss1:Number(v1.ss1||0),rt1:Number(v1.rt1||0),cft1:Number(v1.cft1||0),het1:Number(v1.het1||0),
+        p:Number(c1.pSoutenable!=null?c1.pSoutenable:c1.p1Total||0),
+        disponible:Number(c1.pDisponible!=null?c1.pDisponible:c1.ret1||0),
+        consomme:Number(c1.consommePilotable||0),
+        ep:Number(c1.ep!=null?c1.ep:(p1.enveloppePilotable&&p1.enveloppePilotable.allocation)||0)
+      },
+      p2:{
+        ss2:Number(v2.ss1||0),rt2:Number(v2.rt1||0),cft2:Number(v2.cft1||0),het2:Number(v2.het1||0),
+        reportCb:Number(v2.reportCbCycle||0),
+        p:Number(c2.pSoutenable!=null?c2.pSoutenable:c2.p1Total||0),
+        disponible:Number(c2.pDisponible!=null?c2.pDisponible:c2.ret1||0)
+      },
+      diagnostics:{
+        p1:d.p1Doctrine20260912||null,
+        p2:d.p2Doctrine20260913||null,
+        cb:d.cbDoubleRole||null,
+        ss2:d.ss2Canonique20260913||null
+      }
+    };
+  }
+
+  const a=signature(baseline),b=signature(candidat);
+  const identique=JSON.stringify(a)===JSON.stringify(b);
+  const gain=Number(temps.baselineCockpitDepuisInjectionV374||0)-Number(temps.candidatCockpitBaseDirecte||0);
+  const out={
+    ok:erreurs.length===0&&identique,
+    version:'2026-09-20.1',
+    lectureSeule:true,
+    aucuneModification:true,
+    comparaison:{identiqueMetierStrict:identique},
+    temps:temps,
+    gainMs:gain,
+    gainPct:temps.baselineCockpitDepuisInjectionV374?Math.round(gain/temps.baselineCockpitDepuisInjectionV374*1000)/10:null,
+    signature:{p1:a.p1,p2:a.p2},
+    erreurs:erreurs,
+    decision:erreurs.length?'PROFIL_INVALIDE':(identique?'CANDIDAT_BASE_DIRECTE_VALIDE':'CANDIDAT_BASE_DIRECTE_REFUSE'),
+    dureeTotaleMs:Date.now()-t0
+  };
+  console.log('[AUDIT A/B Cockpit base directe 20260920] '+JSON.stringify(out));
+  return out;
+}
