@@ -447,7 +447,32 @@ function auditerCandidatCfAjustementsPrechargesBudgetSoft20260920(){
     return{xOk:!!(x&&x.ok),total:Number(x&&x.total||0),brut:Number(x&&x.brutAvantSuspensions||0),suspensions:Number(x&&x.suspensions||0),lignes:(x&&x.lignes||[]).map(function(l){return{id:String(l&&l.id||''),occurrences:Number(l&&l.occurrences||0),prevu:Number(l&&l.prevu||0),reel:l&&l.reel==null?null:Number(l.reel),retenu:Number(l&&l.retenu||0),source:String(l&&l.source||'')};})};
   }
   const sigA=baseline.map(normaliser),sigB=candidat.map(normaliser),identique=JSON.stringify(sigA)===JSON.stringify(sigB);
+  const differences=[];
+  const maxPeriodes=Math.max(sigA.length,sigB.length);
+  for(let pi=0;pi<maxPeriodes;pi++){
+    const a=sigA[pi]||{},b=sigB[pi]||{};
+    for(const champ of ['xOk','total','brut','suspensions']){
+      if(JSON.stringify(a[champ])!==JSON.stringify(b[champ])){
+        differences.push({periode:pi+1,type:'entete',champ:champ,baseline:a[champ],candidat:b[champ]});
+      }
+    }
+    const la=Array.isArray(a.lignes)?a.lignes:[],lb=Array.isArray(b.lignes)?b.lignes:[];
+    const ids=new Set(la.concat(lb).map(function(x){return String(x&&x.id||'');}));
+    ids.forEach(function(id){
+      const xa=la.find(function(x){return String(x&&x.id||'')===id;})||null;
+      const xb=lb.find(function(x){return String(x&&x.id||'')===id;})||null;
+      if(!xa||!xb){
+        differences.push({periode:pi+1,type:'presence',id:id,baseline:xa,candidat:xb});
+        return;
+      }
+      for(const champ of ['occurrences','prevu','reel','retenu','source']){
+        if(JSON.stringify(xa[champ])!==JSON.stringify(xb[champ])){
+          differences.push({periode:pi+1,type:'ligne',id:id,champ:champ,baseline:xa[champ],candidat:xb[champ]});
+        }
+      }
+    });
+  }
   const gain=temps.baselineMs-(temps.lectureAjustementsUniqueMs+temps.candidatMs);
   const out={ok:identique&&baseline.every(function(x){return x&&x.ok;})&&candidat.every(function(x){return x&&x.ok;}),version:'2026-09-20.1',lectureSeule:true,aucuneModification:true,comparaison:{identiqueMetierStrict:identique,baseline:sigA,candidat:sigB},temps:temps,gainMs:gain,gainPct:temps.baselineMs?Math.round(gain/temps.baselineMs*1000)/10:null,nombreAjustements:Array.isArray(ajustements)?ajustements.length:0,dureeTotaleMs:Date.now()-t0,decision:identique?'CANDIDAT_CF_PRECHARGE_VALIDE_A_PASSER_AUX_GARDES':'CANDIDAT_CF_PRECHARGE_REFUSE'};
-  console.log('[AUDIT A/B CF ajustements préchargés 20260920 RESUME] '+JSON.stringify({ok:out.ok,version:out.version,identiqueMetierStrict:out.comparaison&&out.comparaison.identiqueMetierStrict,temps:out.temps,gainMs:out.gainMs,gainPct:out.gainPct,nombreAjustements:out.nombreAjustements,dureeTotaleMs:out.dureeTotaleMs,decision:out.decision,totaux:{baseline:(out.comparaison&&out.comparaison.baseline||[]).map(function(x){return x.total;}),candidat:(out.comparaison&&out.comparaison.candidat||[]).map(function(x){return x.total;})}}));return out;
+  console.log('[AUDIT A/B CF ajustements préchargés 20260920 RESUME] '+JSON.stringify({ok:out.ok,version:out.version,identiqueMetierStrict:out.comparaison&&out.comparaison.identiqueMetierStrict,temps:out.temps,gainMs:out.gainMs,gainPct:out.gainPct,nombreAjustements:out.nombreAjustements,dureeTotaleMs:out.dureeTotaleMs,decision:out.decision,totaux:{baseline:(out.comparaison&&out.comparaison.baseline||[]).map(function(x){return x.total;}),candidat:(out.comparaison&&out.comparaison.candidat||[]).map(function(x){return x.total;})},nombreDifferences:differences.length,premieresDifferences:differences.slice(0,20)}));return out;
 }
