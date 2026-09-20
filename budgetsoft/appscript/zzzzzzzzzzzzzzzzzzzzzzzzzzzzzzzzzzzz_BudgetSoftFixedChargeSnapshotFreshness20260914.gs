@@ -32,7 +32,7 @@ function reconstruireSnapshotApresMutationChargeFixe20260914_(origine){
  * Un simple changement actif/inactif suffit à rendre l'ancienne révision impropre
  * à la publication. Les mutations futures reconstruisent ensuite le snapshot.
  */
-function estSnapshotCerbereP1FraisValide20260912_(s){
+function estSnapshotCerbereP1FraisValideLegacyFixedChargeFreshness20260914_(s){
   if(!s||s.ok===false)return false;
   const p=Array.isArray(s.periodes)&&s.periodes.length?s.periodes[0]:null;
   const d=s&&s.diagnostic&&s.diagnostic.p1Doctrine20260912||null;
