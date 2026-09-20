@@ -91,7 +91,7 @@ function rafraichirSnapshotCerbereExpressPrive20260827(token) {
 }
 
 /** SMS Express = uniquement le décidé : EP restante + consigne d'achat + lien. */
-function genererSmsCerbereExpress20260827(profil) {
+function genererSmsCerbereExpressLegacyPrivateLink20260827_(profil) {
   profil = normaliserProfilCerbereExpress20260827_(profil);
   const v = lireVueCanoniqueCerbereExpressPrive20260909_();
   const lien = preparerLiensPrivesCerbereExpress20260827().liens[profil];
