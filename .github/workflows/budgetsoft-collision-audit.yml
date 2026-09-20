@@ -1,0 +1,164 @@
+name: BudgetSoft - Audit collisions Apps Script
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - budgetsoft-import-lab
+    paths:
+      - '.github/workflows/budgetsoft-collision-audit.yml'
+
+jobs:
+  audit-collisions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout BudgetSoft import lab
+        uses: actions/checkout@v7
+        with:
+          ref: budgetsoft-import-lab
+
+      - name: Scan top-level Apps Script function collisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, pathlib, re
+
+          ROOT = pathlib.Path('budgetsoft/appscript')
+          FILES = sorted(ROOT.glob('*.gs'))
+
+          def mask_js(src: str) -> str:
+              out = list(src)
+              i = 0
+              n = len(src)
+              state = 'code'
+              quote = None
+              while i < n:
+                  c = src[i]
+                  nxt = src[i+1] if i+1 < n else ''
+                  if state == 'code':
+                      if c == '/' and nxt == '/':
+                          out[i] = out[i+1] = ' '
+                          i += 2
+                          state = 'line_comment'
+                          continue
+                      if c == '/' and nxt == '*':
+                          out[i] = out[i+1] = ' '
+                          i += 2
+                          state = 'block_comment'
+                          continue
+                      if c in ("'", '"', '`'):
+                          quote = c
+                          out[i] = ' '
+                          i += 1
+                          state = 'string'
+                          continue
+                      i += 1
+                      continue
+                  if state == 'line_comment':
+                      if c == '\n':
+                          state = 'code'
+                      else:
+                          out[i] = ' '
+                      i += 1
+                      continue
+                  if state == 'block_comment':
+                      if c == '*' and nxt == '/':
+                          out[i] = out[i+1] = ' '
+                          i += 2
+                          state = 'code'
+                      else:
+                          out[i] = ' '
+                          i += 1
+                      continue
+                  if state == 'string':
+                      if c == '\\':
+                          out[i] = ' '
+                          if i+1 < n:
+                              out[i+1] = ' '
+                              i += 2
+                          else:
+                              i += 1
+                          continue
+                      if c == quote:
+                          out[i] = ' '
+                          i += 1
+                          state = 'code'
+                          quote = None
+                      else:
+                          if c != '\n':
+                              out[i] = ' '
+                          i += 1
+              return ''.join(out)
+
+          defs = {}
+          total = 0
+          for p in FILES:
+              src = p.read_text(encoding='utf-8')
+              masked = mask_js(src)
+              depth = 0
+              line = 1
+              i = 0
+              n = len(masked)
+              while i < n:
+                  c = masked[i]
+                  if c == '\n':
+                      line += 1
+                      i += 1
+                      continue
+                  if c == '{':
+                      depth += 1
+                      i += 1
+                      continue
+                  if c == '}':
+                      depth = max(0, depth - 1)
+                      i += 1
+                      continue
+                  if depth == 0 and masked.startswith('function', i):
+                      before = masked[i-1] if i > 0 else ' '
+                      after_i = i + len('function')
+                      after = masked[after_i] if after_i < n else ' '
+                      if not (before.isalnum() or before in '_$') and not (after.isalnum() or after in '_$'):
+                          m = re.match(r'function\s+([A-Za-z_$][\w$]*)\s*\(', masked[i:])
+                          if m:
+                              name = m.group(1)
+                              defs.setdefault(name, []).append({'file': p.name, 'line': line})
+                              total += 1
+                              i += m.end()
+                              continue
+                  i += 1
+
+          collisions = {k:v for k,v in defs.items() if len(v) > 1}
+          report = {
+              'files_scanned': len(FILES),
+              'top_level_function_definitions': total,
+              'unique_function_names': len(defs),
+              'collision_names': len(collisions),
+              'collisions': collisions,
+          }
+
+          pathlib.Path('/tmp/budgetsoft-function-collisions.json').write_text(
+              json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8'
+          )
+
+          print(f"Files scanned: {report['files_scanned']}")
+          print(f"Top-level function definitions: {total}")
+          print(f"Unique function names: {len(defs)}")
+          print(f"Collision names: {len(collisions)}")
+          print()
+          if collisions:
+              print('=== COLLISIONS ===')
+              for name in sorted(collisions):
+                  print(name)
+                  for loc in collisions[name]:
+                      print(f"  - {loc['file']}:{loc['line']}")
+              print('=== END COLLISIONS ===')
+          else:
+              print('No top-level function collisions found.')
+          PY
+
+      - name: Upload collision report
+        uses: actions/upload-artifact@v4
+        with:
+          name: budgetsoft-function-collisions
+          path: /tmp/budgetsoft-function-collisions.json
