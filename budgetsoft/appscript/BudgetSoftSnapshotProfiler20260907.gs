@@ -305,6 +305,20 @@ function auditerProfilCerberePostSocleSnapshotBudgetSoft20260920(){
     });
   }
 
+  const perfCockpit=frais&&frais.cockpit20260902&&frais.cockpit20260902.performance||{};
+  const couchesCockpitBrutes=Array.isArray(perfCockpit.couches)?perfCockpit.couches:[];
+  const couchesCockpit=couchesCockpitBrutes.map(function(x,i){
+    x=x||{};
+    return{
+      index:i+1,
+      etape:String(x.nom||x.label||x.etape||x.couche||x.code||('couche_'+(i+1))),
+      dureeMs:Number(x.dureeMs!=null?x.dureeMs:(x.ms!=null?x.ms:(x.duree!=null?x.duree:0)))
+    };
+  });
+  const totalCockpitInterne=couchesCockpit.reduce(function(a,x){return a+Number(x.dureeMs||0);},0);
+  const classementCockpitInterne=couchesCockpit.slice().sort(function(a,b){return b.dureeMs-a.dureeMs;}).map(function(x){
+    return{etape:x.etape,dureeMs:x.dureeMs,partPct:totalCockpitInterne?Math.round(x.dureeMs/totalCockpitInterne*1000)/10:null};
+  });
   const final=normaliseCf||publie||enrichi||normaliseSante||frais||base;
   const p1=final&&final.periodes&&final.periodes[0]||{};
   const c1=p1&&p1.v37&&p1.v37.cockpit20260902||{};
@@ -326,6 +340,13 @@ function auditerProfilCerberePostSocleSnapshotBudgetSoft20260920(){
     tablesReutilisees:charge&&charge.reutilisees||[],
     temps:temps,
     classement:classement,
+    cockpitInterne:{
+      dureeDeclareeMs:Number(perfCockpit.dureeMs||0),
+      serializationMs:Number(perfCockpit.serializationMs||0),
+      totalCouchesMs:totalCockpitInterne,
+      couches:couchesCockpit,
+      classement:classementCockpitInterne
+    },
     dureeTotaleMs:Date.now()-tGlobal,
     signature:{
       version:String(final&&final.version||''),
