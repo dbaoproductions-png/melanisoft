@@ -156,7 +156,7 @@ function auditerBudgetSoftGeneral(){
   return{version:AUDIT_GENERAL_VERSION,maintenanceVersion:MAINTENANCE_VERSION,genereLe:Utilities.formatDate(new Date(),Session.getScriptTimeZone()||'Europe/Paris','dd/MM/yyyy HH:mm:ss'),dureeMs:Date.now()-t0,statut:bloquants?'erreur':erreurs||attentions?'attention':'ok',score:Math.max(0,Math.round(100-erreurs*8-attentions*2)),synthese:{controles:controles.length,oks,attentions,erreurs,bloquants},compteurs:{operations:operations.length,comptes:comptes.length,categories:categories.length,chargesFixes:charges.length,credits:credits.length,dettes:dettes.length,actifs:actifs.length},performances,controles};
 }
 
-function auditGeneralProfilCerbere_(controles,performances,c,cockpitMs){
+function auditGeneralProfilCerbereLegacyMaintenance_(controles,performances,c,cockpitMs){
   const d=c&&c.diagnostic||{},t=d.timings&&typeof d.timings==='object'?d.timings:{},socle=Number(d.duree_ms),socleMs=Number.isFinite(socle)?Math.max(0,Math.round(socle)):null;
   if(socleMs!==null){
     auditGeneralAjouter_(controles,'Performance Cerbère','Socle Cerbère 3.5','info',socleMs+' ms',null,'Temps interne de chargerCerbereV33().');
