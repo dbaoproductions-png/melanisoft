@@ -59,6 +59,7 @@ function chargerEngagementsBancairesFutursSource20260912_(dashboardRevision) {
   const prelevements = futurs.filter(o => !estCarte_(o));
 
   const charges = lireTable_('Charges_fixes').filter(x => convertirBooleen_(x.actif));
+  const ajustementsCfPrecharges = typeof lireAjustementsChargesFixes==='function' ? lireAjustementsChargesFixes() : null;
   const chargesCouvertes = new Set();
   const operationsUtilisees = new Set();
   const rapprochements=[];
@@ -84,7 +85,7 @@ function chargerEngagementsBancairesFutursSource20260912_(dashboardRevision) {
     const finCharge=charge.date_fin?dateLocaleBudgetSoft_(charge.date_fin):null;
     const debutRecherche=new Date(Math.max(reference.getTime()+1,debutCharge.getTime()));
     const echeances=typeof calculerEcheancesChargeFixeAjustees_==='function'
-      ? calculerEcheancesChargeFixeAjustees_(charge,debutRecherche,finCharge,fin)
+      ? calculerEcheancesChargeFixeAjustees_(charge,debutRecherche,finCharge,fin,ajustementsCfPrecharges)
       : calculerEcheancesJusqua_(charge,debutRecherche,finCharge,fin).map(d=>({date:d,montant:Math.abs(Number(charge.montant||0)),ajustement:''}));
     echeances.forEach(e=>echeancesRestantes.push({charge:charge,date:e.date,montant:e.montant,ajustement:e.ajustement||''}));
   });
