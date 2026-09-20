@@ -7,6 +7,7 @@ on:
       - budgetsoft-import-lab
     paths:
       - '.github/workflows/budgetsoft-collision-audit.yml'
+      - 'budgetsoft/appscript/**/*.gs'
 
 jobs:
   audit-collisions:
@@ -155,6 +156,8 @@ jobs:
               print('=== END COLLISIONS ===')
           else:
               print('No top-level function collisions found.')
+          if collisions:
+              raise SystemExit(1)
           PY
 
       - name: Upload collision report
