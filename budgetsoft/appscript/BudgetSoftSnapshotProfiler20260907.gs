@@ -476,3 +476,83 @@ function auditerCandidatCfAjustementsPrechargesBudgetSoft20260920(){
   const out={ok:identique&&baseline.every(function(x){return x&&x.ok;})&&candidat.every(function(x){return x&&x.ok;}),version:'2026-09-20.1',lectureSeule:true,aucuneModification:true,comparaison:{identiqueMetierStrict:identique,baseline:sigA,candidat:sigB},temps:temps,gainMs:gain,gainPct:temps.baselineMs?Math.round(gain/temps.baselineMs*1000)/10:null,nombreAjustements:Array.isArray(ajustements)?ajustements.length:0,dureeTotaleMs:Date.now()-t0,decision:identique?'CANDIDAT_CF_PRECHARGE_VALIDE_A_PASSER_AUX_GARDES':'CANDIDAT_CF_PRECHARGE_REFUSE'};
   console.log('[AUDIT A/B CF ajustements préchargés 20260920 RESUME] '+JSON.stringify({ok:out.ok,version:out.version,identiqueMetierStrict:out.comparaison&&out.comparaison.identiqueMetierStrict,temps:out.temps,gainMs:out.gainMs,gainPct:out.gainPct,nombreAjustements:out.nombreAjustements,dureeTotaleMs:out.dureeTotaleMs,decision:out.decision,totaux:{baseline:(out.comparaison&&out.comparaison.baseline||[]).map(function(x){return x.total;}),candidat:(out.comparaison&&out.comparaison.candidat||[]).map(function(x){return x.total;})},nombreDifferences:differences.length,premieresDifferences:differences.slice(0,20)}));return out;
 }
+
+
+function auditerCandidatEngagementsAjustementsPrechargesBudgetSoft20260920(){
+  const t0=Date.now(),temps={},erreurs=[];
+  if(typeof chargerEngagementsBancairesFutursSource20260912_!=='function'){
+    const ko={ok:false,version:'2026-09-20.1',erreur:'Moteur Engagements bancaires futurs absent.'};
+    console.log('[AUDIT A/B Engagements ajustements préchargés 20260920] '+JSON.stringify(ko));return ko;
+  }
+  const dash=typeof chargerDashboardReel==='function'?chargerDashboardReel():null;
+  let baseline=null,candidat=null,ajustements=[];
+  let t=Date.now();
+  try{baseline=chargerEngagementsBancairesFutursSource20260912_(dash);}
+  catch(e){erreurs.push({etape:'baseline',erreur:String(e&&e.stack||e&&e.message||e)});}
+  temps.baselineMs=Date.now()-t;
+
+  t=Date.now();
+  try{ajustements=typeof lireAjustementsChargesFixes==='function'?lireAjustementsChargesFixes():[];}
+  catch(e){erreurs.push({etape:'lectureAjustements',erreur:String(e&&e.stack||e&&e.message||e)});ajustements=[];}
+  temps.lectureAjustementsUniqueMs=Date.now()-t;
+
+  const original=typeof calculerEcheancesChargeFixeAjustees_==='function'?calculerEcheancesChargeFixeAjustees_:null;
+  t=Date.now();
+  try{
+    if(original){
+      calculerEcheancesChargeFixeAjustees_=function(charge,debut,fin,limite){
+        return original(charge,debut,fin,limite,ajustements);
+      };
+    }
+    candidat=chargerEngagementsBancairesFutursSource20260912_(dash);
+  }catch(e){
+    erreurs.push({etape:'candidat',erreur:String(e&&e.stack||e&&e.message||e)});
+  }finally{
+    if(original)calculerEcheancesChargeFixeAjustees_=original;
+  }
+  temps.candidatMs=Date.now()-t;
+
+  function normaliser(x){
+    x=x||{};
+    return{
+      prelevements:Number(x.prelevements||0),
+      nombrePrelevements:Number(x.nombrePrelevements||0),
+      cbDifferees:Number(x.cbDifferees||0),
+      nombreCb:Number(x.nombreCb||0),
+      chargesFixesRestantes:Number(x.chargesFixesRestantes||0),
+      nombreChargesFixesRestantes:Number(x.nombreChargesFixesRestantes||0),
+      chargesFixesCouvertes:Number(x.chargesFixesCouvertes||0),
+      rapprochements:Array.isArray(x.rapprochements)?x.rapprochements:[],
+      detailChargesFixes:Array.isArray(x.detailChargesFixes)?x.detailChargesFixes:[],
+      detailPrelevements:Array.isArray(x.detailPrelevements)?x.detailPrelevements:[]
+    };
+  }
+
+  const a=normaliser(baseline),b=normaliser(candidat),identique=JSON.stringify(a)===JSON.stringify(b);
+  const gain=temps.baselineMs-(temps.lectureAjustementsUniqueMs+temps.candidatMs);
+  const out={
+    ok:erreurs.length===0&&identique,
+    version:'2026-09-20.1',
+    lectureSeule:true,
+    aucuneModification:true,
+    comparaison:{identiqueMetierStrict:identique},
+    signature:{
+      prelevements:a.prelevements,
+      nombrePrelevements:a.nombrePrelevements,
+      cbDifferees:a.cbDifferees,
+      nombreCb:a.nombreCb,
+      chargesFixesRestantes:a.chargesFixesRestantes,
+      nombreChargesFixesRestantes:a.nombreChargesFixesRestantes,
+      chargesFixesCouvertes:a.chargesFixesCouvertes
+    },
+    temps:temps,
+    gainMs:gain,
+    gainPct:temps.baselineMs?Math.round(gain/temps.baselineMs*1000)/10:null,
+    nombreAjustements:Array.isArray(ajustements)?ajustements.length:0,
+    dureeTotaleMs:Date.now()-t0,
+    erreurs:erreurs,
+    decision:erreurs.length?'PROFIL_INVALIDE':(identique?'CANDIDAT_ENGAGEMENTS_PRECHARGE_VALIDE_A_PASSER_AUX_GARDES':'CANDIDAT_ENGAGEMENTS_PRECHARGE_REFUSE')
+  };
+  console.log('[AUDIT A/B Engagements ajustements préchargés 20260920] '+JSON.stringify(out));
+  return out;
+}
