@@ -97,7 +97,7 @@ function estRapprochementValideP1Cerbere20260912_(r){
  * fréquences restent signalées et conservent la valeur moteur tant qu'elles ne
  * sont pas couvertes par une occurrence explicite.
  */
-function reconstruireChargesFixesReevalueesP1Cerbere20260912_(p,v){
+function reconstruireChargesFixesReevalueesLegacyCbDoubleRoleFinal20260912_(p,v){
   const periode=p&&p.periode||p||{},debut=dateCockpit20260902_(periode.debut),fin=dateCockpit20260902_(periode.fin);
   if(!debut||!fin)return{ok:false,erreur:'bornes période invalides',total:Number(v&&v.cft1||0)};
   const charges=lireTable_('Charges_fixes')||[],ops0=lireTable_('Operations')||[];
@@ -138,7 +138,7 @@ function reconstruireChargesFixesReevalueesP1Cerbere20260912_(p,v){
   return{ok:nonMensuelles.length===0,total:total,brutAvantSuspensions:brut,suspensions:suspension,ancienMoteur:ancien,ecartVsAncien:arrCockpit20260902_(total-ancien),lignes:lignes,nonMensuelles:nonMensuelles,doctrine:'prévision Charges_fixes remplacée uniquement par un Réel explicitement lié/validé ; suspension retranchée une seule fois'};
 }
 
-function calculerCbHeriteesP1Cerbere20260912_(p){
+function calculerCbHeriteesLegacyCbDoubleRoleFinal20260912_(p){
   if(!p)return{montant:0,nombre:0,lignes:[],excluesCf:0};
   const periode=p.periode||p,debut=dateCockpit20260902_(periode.debut),fin=dateCockpit20260902_(periode.fin);
   if(!debut||!fin)return{montant:0,nombre:0,lignes:[],excluesCf:0,erreur:'bornes période invalides'};
@@ -194,7 +194,7 @@ function calculerCbHeriteesP1Cerbere20260912_(p){
   };
 }
 
-function appliquerDoctrineP1ComptableGuideVieCerbere20260912_(base){
+function appliquerDoctrineP1LegacyCbDoubleRoleFinal20260912_(base){
   const ps=Array.isArray(base&&base.periodes)?base.periodes:[];
   if(!ps.length)return base;
   const p=ps[0],v=p&&p.v37||(p.v37={}),c=v.cockpit20260902||(v.cockpit20260902={}),env=Array.isArray(p&&p.enveloppes)?p.enveloppes:[];
