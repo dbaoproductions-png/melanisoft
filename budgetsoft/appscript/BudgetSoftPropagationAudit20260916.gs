@@ -61,7 +61,7 @@ function auditerPropagationBudgetSoft20260916(){
   console.log('[AUDIT PROPAGATION BUDGETSOFT 20260916] '+JSON.stringify(out));return out;
 }
 
-function reconstruireEtAuditerPropagationBudgetSoft20260916(){
+function reconstruireEtAuditerPropagationLegacyBudgetSoft20260916_(){
   const avant=auditerPropagationBudgetSoft20260916();
   const rebuild=reconstruireSnapshotGlobalSyntheseBudgetSoft20260907('audit_propagation_20260916');
   const apres=auditerPropagationBudgetSoft20260916();
