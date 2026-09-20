@@ -8,7 +8,7 @@
  */
 const CERBERE_FIXED_CHARGE_OWNER_FINAL_20260914_VERSION='2026-09-14.2';
 
-function reconstruireChargesFixesReevalueesP1Cerbere20260912_(p,v){
+function reconstruireChargesFixesReevalueesP1Cerbere20260912_(p,v,ajustementsCfPrecharges){
   const periode=p&&p.periode||p||{};
   const debut=dateCockpit20260902_(periode.debut),fin=dateCockpit20260902_(periode.fin);
   if(!debut||!fin)return{ok:false,erreur:'bornes période invalides',total:Number(v&&v.cft1||0),ownerVersion:CERBERE_FIXED_CHARGE_OWNER_FINAL_20260914_VERSION};
@@ -40,7 +40,7 @@ function reconstruireChargesFixesReevalueesP1Cerbere20260912_(p,v){
     if(!estActifP1Cerbere20260912_(c&&c.actif))return;
     let occs=[];
     try{
-      occs=(calculerEcheancesChargeFixeAjustees_(c,debut,fin,fin)||[]).filter(e=>{
+      occs=(calculerEcheancesChargeFixeAjustees_(c,debut,fin,fin,ajustementsCfPrecharges)||[]).filter(e=>{
         const d=dateCockpit20260902_(e&&e.date);return d&&jourCivilP1Cerbere20260912_(d)>=jourCivilP1Cerbere20260912_(debut)&&jourCivilP1Cerbere20260912_(d)<=jourCivilP1Cerbere20260912_(fin);
       });
     }catch(e){erreurs.push({id:String(c&&c.id||''),libelle:String(c&&c.libelle||''),erreur:String(e&&e.message||e)});return;}
