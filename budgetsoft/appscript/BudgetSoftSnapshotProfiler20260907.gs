@@ -227,3 +227,120 @@ function auditerCandidatCerbereSnapshotDonneesPartageesBudgetSoft20260911(){
   };
   console.log('[AUDIT A/B Cerbère données partagées snapshot] '+JSON.stringify(out));return out;
 }
+
+
+/**
+ * Profil lecture seule du chemin Cerbère exact utilisé par le snapshot après
+ * préchargement du socle V374. Aucun endpoint public snapshot-first n'est appelé :
+ * on mesure séparément chaque couche métier du fallback frais.
+ */
+function auditerProfilCerberePostSocleSnapshotBudgetSoft20260920(){
+  const tGlobal=Date.now(),temps={},erreurs=[];
+  function chrono(nom,fn){
+    const t=Date.now();
+    try{
+      const v=fn();
+      temps[nom]=Date.now()-t;
+      return v;
+    }catch(e){
+      temps[nom]=Date.now()-t;
+      erreurs.push({etape:nom,erreur:String(e&&e.stack||e&&e.message||e)});
+      return null;
+    }
+  }
+
+  const sources=chrono('sources',function(){return chargerToutesLesDonnees();});
+  if(!sources)return{ok:false,version:'2026-09-20.1',lectureSeule:true,erreurs:erreurs,temps:temps};
+
+  const charge=chrono('cerbereBasePartagee',function(){
+    return chargerCerbereBaseDepuisSourcesSnapshotBudgetSoft20260911_(sources);
+  });
+  const base=charge&&charge.base||null;
+  if(!base||base.ok===false){
+    const ko={ok:false,version:'2026-09-20.1',lectureSeule:true,aucuneModification:true,temps:temps,erreurs:erreurs.concat([{etape:'cerbereBasePartagee',erreur:'Base Cerbère indisponible'}])};
+    console.log('[AUDIT PERF Cerbère post-socle snapshot 20260920] '+JSON.stringify(ko));
+    return ko;
+  }
+
+  const original=chargerCerbereV374;
+  let frais=null,normaliseSante=null,enrichi=null,publie=null,normaliseCf=null;
+  try{
+    chargerCerbereV374=function(){return base;};
+    frais=chrono('cockpitP1FraisDepuisBase',function(){
+      return recalculerCerbereCockpitP1Frais20260912_({contexteExterne:true});
+    });
+  }finally{
+    chargerCerbereV374=original;
+  }
+
+  if(frais&&frais.ok!==false){
+    normaliseSante=chrono('normalisationSante',function(){
+      return typeof normaliserCerbereFraisPublic20260917_==='function'
+        ?normaliserCerbereFraisPublic20260917_(frais)
+        :frais;
+    });
+  }
+
+  if(normaliseSante&&normaliseSante.ok!==false){
+    enrichi=chrono('recettesCertainesDues',function(){
+      return typeof enrichirCerbereRecettesCertainesDues20260919_==='function'
+        ?enrichirCerbereRecettesCertainesDues20260919_(normaliseSante)
+        :normaliseSante;
+    });
+  }
+
+  if(enrichi&&enrichi.ok!==false){
+    publie=chrono('publicationCartesEtResynchroSante',function(){
+      return typeof publierPuisResynchroniserCerbereSante20260917_==='function'
+        ?publierPuisResynchroniserCerbereSante20260917_(enrichi)
+        :enrichi;
+    });
+  }
+
+  if(publie&&publie.ok!==false){
+    normaliseCf=chrono('normalisationCfSnapshot',function(){
+      return typeof normaliserCerbereCfPourSnapshot20260914_==='function'
+        ?normaliserCerbereCfPourSnapshot20260914_(publie,sources)
+        :publie;
+    });
+  }
+
+  const final=normaliseCf||publie||enrichi||normaliseSante||frais||base;
+  const p1=final&&final.periodes&&final.periodes[0]||{};
+  const c1=p1&&p1.v37&&p1.v37.cockpit20260902||{};
+  const ep1=p1&&p1.enveloppePilotable||{};
+  const p2=final&&final.periodes&&final.periodes[1]||{};
+  const c2=p2&&p2.v37&&p2.v37.cockpit20260902||{};
+  const totalMesure=Object.keys(temps).reduce(function(a,k){return a+Number(temps[k]||0);},0);
+  const classement=Object.keys(temps).map(function(k){
+    return{etape:k,dureeMs:Number(temps[k]||0),partPct:totalMesure?Math.round(Number(temps[k]||0)/totalMesure*1000)/10:null};
+  }).sort(function(a,b){return b.dureeMs-a.dureeMs;});
+
+  const out={
+    ok:erreurs.length===0&&!!(final&&final.ok!==false),
+    version:'2026-09-20.1',
+    lectureSeule:true,
+    aucuneModification:true,
+    perimetre:'chemin Cerbère snapshot après partage des sources, sans lecture du snapshot global publié',
+    partage:!!(charge&&charge.partage),
+    tablesReutilisees:charge&&charge.reutilisees||[],
+    temps:temps,
+    classement:classement,
+    dureeTotaleMs:Date.now()-tGlobal,
+    signature:{
+      version:String(final&&final.version||''),
+      ep:Number(c1.ep!=null?c1.ep:ep1.allocation||0),
+      epConsomme:Number(c1.epConsomme!=null?c1.epConsomme:ep1.consomme||0),
+      epDisponible:Number(c1.epDisponible!=null?c1.epDisponible:ep1.reste||0),
+      p1:Number(c1.pSoutenable!=null?c1.pSoutenable:c1.p1Total||0),
+      p1Disponible:Number(c1.pDisponible!=null?c1.pDisponible:c1.ret1||0),
+      p2:Number(c2.pSoutenable!=null?c2.pSoutenable:c2.p1Total||0),
+      p2Disponible:Number(c2.pDisponible!=null?c2.pDisponible:c2.ret1||0)
+    },
+    erreurs:erreurs,
+    decision:erreurs.length?'PROFIL_INVALIDE':'PROFIL_VALIDE_LOCALISER_GOULET',
+    doctrine:'Profil uniquement. Aucune optimisation n’est intégrée par cette fonction.'
+  };
+  console.log('[AUDIT PERF Cerbère post-socle snapshot 20260920] '+JSON.stringify(out));
+  return out;
+}
