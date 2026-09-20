@@ -6,7 +6,7 @@ const CERBERE_AUDIT_V377_VERSION='3.7.9';
  * dans TABLES. Les feuilles techniques/dynamiques sont donc lues par leurs lecteurs
  * propres ou par lireFeuilleDynamiqueCerbereV379_.
  */
-function appliquerAuditCerbereV377_(base){
+function appliquerAuditCerbereLegacyV377_(base){
   if(!base||base.ok===false)return base;
   const operations=tableauCerbereV379_(lireTable_('Operations'));
   const charges=tableauCerbereV379_(lireTable_('Charges_fixes'));
