@@ -88,7 +88,7 @@ function supprimerActionPlanV3(id){
   return chargerActionsPlanV3();
 }
 
-function cloturerChargeFixeDepuisActionV3(actionId,dateEffet){
+function cloturerChargeFixeDepuisActionLegacyPlanV3_(actionId,dateEffet){
   assurerPlanActionsV3_(); const a=lireFeuilleDynamiquePlan_('Plan_Actions').find(x=>String(x.id)===String(actionId));
   if(!a||a.source_type!=='charge_fixe'||!a.source_id)throw new Error('Cette action n’est pas adossée à une charge fixe.');
   if(!(a.impact_confirme===true||String(a.impact_confirme)==='true'))throw new Error('L’impact doit être confirmé avant de modifier le référentiel.');
