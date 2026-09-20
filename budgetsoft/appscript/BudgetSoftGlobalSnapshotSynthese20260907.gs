@@ -8,15 +8,27 @@ function composerCerbereCockpitDepuisBaseSnapshotBudgetSoft20260910_(base){
   if(!base||base.ok===false)return base;
   if(typeof chargerCerbereCockpit20260902!=='function')return base;
   if(typeof chargerCerbereV374!=='function')return chargerCerbereCockpit20260902();
-  const chargeurOriginal=chargerCerbereV374;
+
+  const chargeurV374Original=chargerCerbereV374;
+  const chargeurBaseRapideOriginal=typeof chargerCerbereCockpitBaseRapide20260903_==='function'
+    ?chargerCerbereCockpitBaseRapide20260903_
+    :null;
+  const baseCockpit=JSON.parse(JSON.stringify(base));
+
   try{
     chargerCerbereV374=function(){return base;};
+    if(chargeurBaseRapideOriginal){
+      chargerCerbereCockpitBaseRapide20260903_=function(){return baseCockpit;};
+    }
     const cockpit=chargerCerbereCockpit20260902();
     return typeof enrichirCerbereRecettesCertainesDues20260919_==='function'
       ?enrichirCerbereRecettesCertainesDues20260919_(cockpit)
       :cockpit;
   }finally{
-    chargerCerbereV374=chargeurOriginal;
+    chargerCerbereV374=chargeurV374Original;
+    if(chargeurBaseRapideOriginal){
+      chargerCerbereCockpitBaseRapide20260903_=chargeurBaseRapideOriginal;
+    }
   }
 }
 
