@@ -84,6 +84,15 @@ jobs:
             --data-urlencode "grant_type=refresh_token")
           if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
             echo "Google OAuth token exchange failed with HTTP $HTTP_CODE"
+            python3 - <<'PY'
+          import json
+          try:
+              d=json.load(open('/tmp/oauth-response.json'))
+              print('OAuth error:', d.get('error','unknown'))
+              print('OAuth description:', d.get('error_description',''))
+          except Exception as e:
+              print('Unable to parse OAuth error response:', type(e).__name__)
+          PY
             exit 1
           fi
           ACCESS_TOKEN=$(python3 -c 'import json; print(json.load(open("/tmp/oauth-response.json")).get("access_token", ""))')
