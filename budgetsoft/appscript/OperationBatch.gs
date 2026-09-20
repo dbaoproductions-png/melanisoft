@@ -1,4 +1,4 @@
-function categoriserOperationsParLot(ids,categorie){
+function categoriserOperationsParLotLegacyBase_(ids,categorie){
   verifierInitialisation_();
   const selection=[...new Set((Array.isArray(ids)?ids:[]).map(v=>String(v||'').trim()).filter(Boolean))];
   const cible=String(categorie||'').trim();
