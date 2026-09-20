@@ -74,7 +74,7 @@ function calculerReportCbCycleSuivant20260905_(base){
   return{montant:Math.round(total*100)/100,lignes,debutFenetre:Utilities.formatDate(debutCb,Session.getScriptTimeZone(),'yyyy-MM-dd'),dateImpact:Utilities.formatDate(impactCycle2,Session.getScriptTimeZone(),'yyyy-MM-dd'),diagnostic:diag};
 }
 
-function appliquerReportCbCycleSuivant20260905_(base){
+function appliquerReportCbCycleSuivantLegacyDoubleRole20260905_(base){
   const ps=Array.isArray(base&&base.periodes)?base.periodes:[];if(ps.length<2)return base;
   const calc=calculerReportCbCycleSuivant20260905_(base),report=Math.max(0,Number(calc.montant||0)),p=ps[1],v=p.v37||(p.v37={}),c=v.cockpit20260902||(v.cockpit20260902={});
   const avant=Math.max(0,Number(c.p1AvantReportCb!=null?c.p1AvantReportCb:(c.p1Total!=null?c.p1Total:(c.p1Cible!=null?c.p1Cible:(p.budgetReparti!=null?p.budgetReparti:0)))));
