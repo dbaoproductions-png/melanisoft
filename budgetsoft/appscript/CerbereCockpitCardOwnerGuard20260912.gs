@@ -22,7 +22,7 @@ function memoriserCibleP1Cerbere20260903_(cle,montant,pilotableActualise){
  * Override autoritaire P1 : aucune donnée issue des molettes n'entre dans P1.
  * Les allocations ne servent ici qu'à publier l'écart de décision EP-P1.
  */
-function appliquerDoctrineP1ComptableGuideVieCerbere20260912_(base){
+function appliquerDoctrineP1ComptableGuideVieCerbere20260912_(base,ajustementsCfPrecharges){
   const ps=Array.isArray(base&&base.periodes)?base.periodes:[];
   if(!ps.length)return base;
   const p=ps[0],v=p&&p.v37||(p.v37={}),c=v.cockpit20260902||(v.cockpit20260902={}),env=Array.isArray(p&&p.enveloppes)?p.enveloppes:[];
@@ -31,7 +31,7 @@ function appliquerDoctrineP1ComptableGuideVieCerbere20260912_(base){
   const allocation=arr(env.reduce((s,x)=>s+Math.max(0,Number(x&&x.prevu||0)),0));
   const consomme=arr(c.consommePilotable!=null?c.consommePilotable:env.reduce((s,x)=>s+Math.max(0,Number(x&&x.reelNetPrevisionnel||0)),0));
   const rt1=arr(Number(v.rt1||0));
-  const cfReconstruite=reconstruireChargesFixesReevalueesP1Cerbere20260912_(p,v);
+  const cfReconstruite=reconstruireChargesFixesReevalueesP1Cerbere20260912_(p,v,ajustementsCfPrecharges);
   const cft1=arr(cfReconstruite&&cfReconstruite.ok?cfReconstruite.total:Number(v.cft1||0));
   const het1=arr(Math.max(0,Number(v.het1!=null?v.het1:(v.horsPilotableAControler||0))));
   const ss1=arr(Number(v.ss1||0));
