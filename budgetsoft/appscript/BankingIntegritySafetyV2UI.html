@@ -8,7 +8,27 @@ function installSafetyV2(){
  const pane=qv2('bi-flux');if(!pane||qv2('bi-flux-preview-v2'))return;
  const box=document.createElement('div');box.id='bi-flux-preview-v2';box.className='warning-box';box.style.marginTop='12px';box.innerHTML='<strong>Simulation obligatoire :</strong> aucune écriture tant que le rapprochement complet n’est pas validé.';pane.insertBefore(box,pane.querySelector('.form-actions'));
  const oldAnalyse=qv2('bi-flux-analyse'),oldImport=qv2('bi-flux-import');if(oldAnalyse)oldAnalyse.onclick=analyseV2;if(oldImport)oldImport.onclick=importV2;
+ installerMaintenanceCfFluxV34();
  installerAuditSoldeV2();
+}
+function installerMaintenanceCfFluxV34(){
+ const pane=qv2('bi-flux');if(!pane||qv2('bi-cf-maint-v34'))return;
+ const d=document.createElement('div');d.id='bi-cf-maint-v34';d.className='warning-box';d.style.marginTop='12px';
+ d.innerHTML='<strong>Maintenance charges fixes</strong><br><span>Répare uniquement les opérations de flux non liées lorsqu\'une charge fixe est reconnue sans ambiguïté par le matcher commun, puis reconstruit le snapshot global.</span><div style="margin-top:8px"><button class="secondary-button" id="bi-run-cf-maint-v34" type="button">Réparer les charges fixes du flux</button></div><div id="bi-cf-maint-status-v34" class="helper-text" style="margin-top:8px"></div>';
+ pane.appendChild(d);
+ qv2('bi-run-cf-maint-v34').onclick=lancerMaintenanceCfFluxV34;
+}
+function lancerMaintenanceCfFluxV34(){
+ const b=qv2('bi-run-cf-maint-v34'),st=qv2('bi-cf-maint-status-v34');
+ if(!b||!st)return;
+ if(!confirm('Réparer les opérations de flux non liées aux charges fixes lorsque la correspondance est certaine, puis reconstruire le snapshot global ?'))return;
+ b.disabled=true;st.textContent='Réparation et reconstruction en cours…';
+ google.script.run.withSuccessHandler(r=>{
+   b.disabled=false;
+   const rep=r&&r.reparation||{},snap=r&&r.snapshot||{};
+   st.textContent=(r&&r.ok?'✅ ':'⚠️ ')+Number(rep.modifiees||0)+' opération(s) liée(s) · snapshot '+(snap.ok?'reconstruit':'non reconstruit')+(snap.revisionBudgetSoft?' · révision '+snap.revisionBudgetSoft:'')+'.';
+   if(typeof charger==='function')charger();
+ }).withFailureHandler(e=>{b.disabled=false;st.textContent='❌ '+(e.message||e);}).reparerChargesFixesFluxEtActualiserBudgetSoftV34();
 }
 function installerAuditSoldeV2(){
  const etat=qv2('bi-etat');if(!etat||qv2('bi-balance-audit'))return;
