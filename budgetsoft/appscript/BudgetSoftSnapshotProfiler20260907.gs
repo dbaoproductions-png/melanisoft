@@ -160,7 +160,7 @@ function auditerProfilInterneCerbereV37BudgetSoft20260911(){
   console.log('[AUDIT PERF profil interne Cerbère V37] '+JSON.stringify(out));return out;
 }
 
-function trouverTableSnapshotCerbere20260911_(sources,nom){
+function trouverTableSnapshotCerbereLegacyProfiler20260911_(sources,nom){
   if(!sources||typeof sources!=='object')return null;
   const cible=String(nom||'').toLowerCase().replace(/[^a-z0-9]/g,'');
   const cles=Object.keys(sources);
