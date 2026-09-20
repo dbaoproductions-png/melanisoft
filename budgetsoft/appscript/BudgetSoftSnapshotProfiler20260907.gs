@@ -344,3 +344,110 @@ function auditerProfilCerberePostSocleSnapshotBudgetSoft20260920(){
   console.log('[AUDIT PERF Cerbère post-socle snapshot 20260920] '+JSON.stringify(out));
   return out;
 }
+
+
+function calculerEcheancesChargeFixeAjusteesPrecharge20260920_(charge,debut,fin,limite,ajustementsTous){
+  const base=calculerEcheancesJusqua_(charge,debut,fin,limite).map(function(d){
+    return{date:new Date(d),montant:Math.abs(Number(charge.montant||0)),ajustement:''};
+  });
+  const ajustements=(Array.isArray(ajustementsTous)?ajustementsTous:[]).filter(function(a){
+    return String(a&&a.charge_fixe_id)===String(charge&&charge.id)&&convertirBooleen_(a&&a.actif);
+  });
+  const moisExclus=new Set();
+  ajustements.filter(function(a){return String(a&&a.action)==='exclure_mois';}).forEach(function(a){
+    String(a&&a.mois||'').split(',').forEach(function(m){
+      const n=parseInt(m,10);if(n>=1&&n<=12)moisExclus.add(n);
+    });
+  });
+  let ev=base.filter(function(e){return !moisExclus.has(e.date.getMonth()+1);});
+  ajustements.forEach(function(a){
+    const action=String(a&&a.action||'');if(action==='exclure_mois')return;
+    const cible=String(a&&a.date_cible||'');if(!cible)return;
+    const idx=ev.findIndex(function(e){return cleDateAjustement_(e.date)===cible;});
+    if(action==='ignorer'){if(idx>=0)ev.splice(idx,1);return;}
+    if(action==='montant'){if(idx>=0){ev[idx].montant=Math.abs(Number(a&&a.nouveau_montant||ev[idx].montant));ev[idx].ajustement=a.id;}return;}
+    if(action==='reporter'){
+      if(idx>=0)ev.splice(idx,1);
+      const nd=dateLocaleBudgetSoft_(a&&a.nouvelle_date);
+      if(!isNaN(nd)&&nd>=debut&&nd<=limite&&(!fin||nd<=fin)){
+        ev.push({date:nd,montant:Math.abs(Number(a&&a.nouveau_montant||charge.montant||0)),ajustement:a.id});
+      }
+    }
+  });
+  return ev.sort(function(a,b){return a.date-b.date;});
+}
+
+function construireCfCanoniquePrechargeProfil20260920_(p,v,sources,ajustementsTous){
+  const periode=p&&p.periode||p||{},debut=dateCfSnapshotBuild20260914_(periode.debut),fin=dateCfSnapshotBuild20260914_(periode.fin);
+  if(!debut||!fin)return{ok:false,erreur:'bornes période invalides',total:Number(v&&v.cft1||0)};
+  const charges=Array.isArray(sources&&sources.Charges_fixes)?sources.Charges_fixes:[],
+        ops0=Array.isArray(sources&&sources.Operations)?sources.Operations:[],
+        operations=typeof dedoublonnerOperationsCartesBudgetSoft_==='function'?dedoublonnerOperationsCartesBudgetSoft_(ops0):ops0,
+        rapprochements=typeof lireRapprochementsChargesFixes==='function'?lireRapprochementsChargesFixes():[],
+        liens={};
+  (rapprochements||[]).forEach(function(r){
+    if(!rapprochementValideCfSnapshotBuild20260914_(r))return;
+    const op=String(r&&r.operation_id||'').trim(),cf=String(r&&r.charge_fixe_id||'').trim();
+    if(op&&cf)liens[op]=cf;
+  });
+  const reels={};
+  (operations||[]).forEach(function(o){
+    const m=Number(o&&o.montant||0);if(!Number.isFinite(m)||m>=0)return;
+    const d=typeof dateOperationBanqueV377_==='function'?dateOperationBanqueV377_(o):dateCfSnapshotBuild20260914_(o&&(o.date_comptable||o.date));
+    if(!d||jourCfSnapshotBuild20260914_(d)<jourCfSnapshotBuild20260914_(debut)||jourCfSnapshotBuild20260914_(d)>jourCfSnapshotBuild20260914_(fin))return;
+    const opId=String(o&&o.id||'').trim(),cfId=String(o&&o.charge_fixe_id||'').trim()||(opId&&liens[opId]||'');
+    if(!cfId)return;
+    if(!reels[cfId])reels[cfId]={total:0,nombre:0};
+    reels[cfId].total+=Math.abs(m);reels[cfId].nombre++;
+  });
+  let brut=0;const lignes=[],erreurs=[];
+  (charges||[]).forEach(function(c){
+    if(!actifCfSnapshotBuild20260914_(c&&c.actif))return;
+    let occs=[];
+    try{
+      occs=(calculerEcheancesChargeFixeAjusteesPrecharge20260920_(c,debut,fin,fin,ajustementsTous)||[]).filter(function(e){
+        const d=dateCfSnapshotBuild20260914_(e&&e.date);
+        return d&&jourCfSnapshotBuild20260914_(d)>=jourCfSnapshotBuild20260914_(debut)&&jourCfSnapshotBuild20260914_(d)<=jourCfSnapshotBuild20260914_(fin);
+      });
+    }catch(e){erreurs.push({id:String(c&&c.id||''),erreur:String(e&&e.message||e)});return;}
+    if(!occs.length)return;
+    const id=String(c&&c.id||''),prevu=occs.reduce(function(x,e){return x+Math.abs(Number(e&&e.montant||0));},0),reel=reels[id]||null;
+    let retenu=prevu,source='prévision canonique';
+    if(reel){
+      const couvert=Math.min(Math.max(0,Number(reel.nombre||0)),occs.length);
+      const prevuCouvert=occs.slice(0,couvert).reduce(function(x,e){return x+Math.abs(Number(e&&e.montant||0));},0);
+      retenu=Math.max(0,Number(reel.total||0)+Math.max(0,prevu-prevuCouvert));
+      source='réel explicite + occurrences restantes';
+    }
+    brut+=retenu;
+    lignes.push({id:id,libelle:String(c&&c.libelle||''),frequence:String(c&&c.frequence||'Mensuelle'),occurrences:occs.length,prevu:Math.round(prevu*100)/100,reel:reel?Math.round(reel.total*100)/100:null,retenu:Math.round(retenu*100)/100,source:source});
+  });
+  if(erreurs.length)return{ok:false,erreur:'échec générateur canonique',erreurs:erreurs,total:Number(v&&v.cft1||0)};
+  const arr=function(n){return Math.round((Number(n)||0)*100)/100;};
+  brut=arr(brut);
+  const suspension=arr(Math.max(0,Number(v&&v.correctionSuspensions20260903||0))),total=arr(Math.max(0,brut-suspension));
+  return{ok:true,total:total,brutAvantSuspensions:brut,suspensions:suspension,lignes:lignes};
+}
+
+function auditerCandidatCfAjustementsPrechargesBudgetSoft20260920(){
+  const t0=Date.now(),snap=chargerSnapshotGlobalBudgetSoft20260906(),etat=snap&&snap.etat||{},sources=chargerToutesLesDonnees(),cer=etat&&etat.modules&&etat.modules.cerbere||null;
+  if(!cer||!Array.isArray(cer.periodes)||cer.periodes.length<2){
+    const ko={ok:false,version:'2026-09-20.1',erreur:'Cerbère snapshot indisponible pour A/B CF.'};
+    console.log('[AUDIT A/B CF ajustements préchargés 20260920] '+JSON.stringify(ko));return ko;
+  }
+  const ps=cer.periodes.slice(0,2),baseline=[],candidat=[],temps={};
+  let t=Date.now();
+  ps.forEach(function(p){baseline.push(construireCfCanoniquePourSnapshot20260914_(p,p&&p.v37||{},sources));});
+  temps.baselineMs=Date.now()-t;
+  t=Date.now();const ajustements=lireAjustementsChargesFixes();temps.lectureAjustementsUniqueMs=Date.now()-t;
+  t=Date.now();
+  ps.forEach(function(p){candidat.push(construireCfCanoniquePrechargeProfil20260920_(p,p&&p.v37||{},sources,ajustements));});
+  temps.candidatMs=Date.now()-t;
+  function normaliser(x){
+    return{xOk:!!(x&&x.ok),total:Number(x&&x.total||0),brut:Number(x&&x.brutAvantSuspensions||0),suspensions:Number(x&&x.suspensions||0),lignes:(x&&x.lignes||[]).map(function(l){return{id:String(l&&l.id||''),occurrences:Number(l&&l.occurrences||0),prevu:Number(l&&l.prevu||0),reel:l&&l.reel==null?null:Number(l.reel),retenu:Number(l&&l.retenu||0),source:String(l&&l.source||'')};})};
+  }
+  const sigA=baseline.map(normaliser),sigB=candidat.map(normaliser),identique=JSON.stringify(sigA)===JSON.stringify(sigB);
+  const gain=temps.baselineMs-(temps.lectureAjustementsUniqueMs+temps.candidatMs);
+  const out={ok:identique&&baseline.every(function(x){return x&&x.ok;})&&candidat.every(function(x){return x&&x.ok;}),version:'2026-09-20.1',lectureSeule:true,aucuneModification:true,comparaison:{identiqueMetierStrict:identique,baseline:sigA,candidat:sigB},temps:temps,gainMs:gain,gainPct:temps.baselineMs?Math.round(gain/temps.baselineMs*1000)/10:null,nombreAjustements:Array.isArray(ajustements)?ajustements.length:0,dureeTotaleMs:Date.now()-t0,decision:identique?'CANDIDAT_CF_PRECHARGE_VALIDE_A_PASSER_AUX_GARDES':'CANDIDAT_CF_PRECHARGE_REFUSE'};
+  console.log('[AUDIT A/B CF ajustements préchargés 20260920] '+JSON.stringify(out));return out;
+}
