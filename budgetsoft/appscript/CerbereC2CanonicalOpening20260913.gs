@@ -21,11 +21,20 @@ function normCerbereC2CanonicalOpening20260913_(v){return String(v||'').trim().t
  * le salaire d'ouverture déjà inclus dans cette trajectoire. Les autres flux du
  * jour (ex. prélèvement du 28) restent donc bien dans SS2.
  */
-function calculerSs2TresorerieCanoniqueCerbere20260913_(base,p2){
+function calculerSs2TresorerieCanoniqueCerbere20260913_(base,p2,projectionTresoreriePrecalculee){
   const debut=dateCerbereC2CanonicalOpening20260913_(p2&&p2.periode&&p2.periode.debut);
-  if(!debut||typeof chargerTresoreriePrevisionnelle20260901!=='function')return{ok:false,raison:'projection canonique indisponible'};
-  let projection=null;
-  try{projection=chargerTresoreriePrevisionnelle20260901(debut,base);}catch(e){return{ok:false,raison:String(e&&e.message||e)};}
+  if(!debut)return{ok:false,raison:'projection canonique indisponible'};
+  let projection=null,projectionPrecalculeeUtilisee=false;
+  try{
+    if(projectionTresoreriePrecalculee&&projectionTresoreriePrecalculee.ok!==false&&typeof sousVueTrajectoireTresorerieCanoniqueBudgetSoft20260910_==='function'){
+      projection=sousVueTrajectoireTresorerieCanoniqueBudgetSoft20260910_(projectionTresoreriePrecalculee,debut);
+      projectionPrecalculeeUtilisee=!!(projection&&projection.ok!==false);
+    }
+    if(!projectionPrecalculeeUtilisee){
+      if(typeof chargerTresoreriePrevisionnelle20260901!=='function')return{ok:false,raison:'projection canonique indisponible'};
+      projection=chargerTresoreriePrevisionnelle20260901(debut,base);
+    }
+  }catch(e){return{ok:false,raison:String(e&&e.message||e)};}
   if(!projection||projection.ok===false||!Number.isFinite(Number(projection.soldePrevisionnel)))return{ok:false,raison:'projection canonique invalide'};
 
   const j0=jourCerbereC2CanonicalOpening20260913_(debut);
@@ -43,7 +52,7 @@ function calculerSs2TresorerieCanoniqueCerbere20260913_(base,p2){
   return{
     ok:true,
     version:CERBERE_C2_CANONICAL_OPENING_20260913_VERSION,
-    proprietaire:'chargerTresoreriePrevisionnelle20260901',
+    proprietaire:projectionPrecalculeeUtilisee?'projectionCalculUnique+sousVue':'chargerTresoreriePrevisionnelle20260901',
     date:j0,
     soldeAvecSalaire:soldeAvecSalaire,
     salaireOuverture:arrCerbereC2CanonicalOpening20260913_(salaire),
