@@ -195,6 +195,63 @@ function reparerChargesFixesFluxNonLieesV34(){
 }
 
 
+
+function auditerDerniereReparationChargesFixesFluxV34(){
+  verifierInitialisation_();
+  const ss=SpreadsheetApp.getActiveSpreadsheet();
+  const nomBackup=typeof BUDGETSOFT_SECURITY_BACKUP_SHEET!=='undefined'
+    ?String(BUDGETSOFT_SECURITY_BACKUP_SHEET)
+    :'Operations_sauvegarde_securite';
+  const backup=ss.getSheetByName(nomBackup),courante=ss.getSheetByName('Operations');
+  if(!backup||!courante)throw new Error('Feuille Operations ou sauvegarde de sécurité introuvable.');
+
+  const headers=assurerColonnesBancaires_();
+  const lire=function(sh){
+    if(sh.getLastRow()<2)return[];
+    const vals=sh.getRange(2,1,sh.getLastRow()-1,headers.length).getValues();
+    return vals.filter(r=>r.some(v=>v!==''&&v!==null)).map(r=>Object.fromEntries(headers.map((h,i)=>[h,serialiserValeur_(r[i])])));
+  };
+  const avant=lire(backup),apres=lire(courante),byAvant=new Map(avant.map(o=>[String(o.id||''),o]));
+  const details=[];
+  apres.forEach(o=>{
+    const a=byAvant.get(String(o.id||''));if(!a)return;
+    const ancienCf=String(a.charge_fixe_id||'').trim(),nouveauCf=String(o.charge_fixe_id||'').trim();
+    if(ancienCf===nouveauCf)return;
+    details.push({
+      id:String(o.id||''),
+      date:dateJourV23_(o.date_comptable||o.date),
+      libelle:String(o.libelle_bancaire||o.libelle||''),
+      montant:Number(o.montant||0),
+      ancienChargeFixeId:ancienCf,
+      nouveauChargeFixeId:nouveauCf,
+      ancienneCategorie:String(a.categorie||''),
+      nouvelleCategorie:String(o.categorie||''),
+      ancienStatut:String(a.statut_bancaire||''),
+      nouveauStatut:String(o.statut_bancaire||''),
+      cleChangee:String(a.cle_rapprochement||'')!==String(o.cle_rapprochement||'')
+    });
+  });
+
+  const charges=lireTable_('Charges_fixes'),byCharge=new Map(charges.map(c=>[String(c.id||''),c]));
+  details.forEach(d=>{
+    const cf=byCharge.get(String(d.nouveauChargeFixeId||''))||{};
+    d.chargeFixeLibelle=String(cf.libelle||'');
+    d.chargeFixeCategorie=String(cf.categorie||'');
+    d.chargeFixeMontant=Number(cf.montant||0);
+    d.chargeFixeJourExecution=Number(cf.jour_execution||0);
+    d.chargeFixeActive=typeof convertirBooleen_==='function'?convertirBooleen_(cf.actif):cf.actif!==false;
+  });
+
+  return{
+    ok:true,
+    lectureSeule:true,
+    version:'3.4',
+    sauvegarde:nomBackup,
+    nombreModificationsChargeFixe:details.length,
+    details:details.sort((a,b)=>String(a.date).localeCompare(String(b.date))||String(a.libelle).localeCompare(String(b.libelle)))
+  };
+}
+
 function reparerChargesFixesFluxEtActualiserBudgetSoftV34(){
   const rep=reparerChargesFixesFluxNonLieesV34();
   const snap=typeof reconstruireSnapshotGlobalBudgetSoft20260906==='function'
