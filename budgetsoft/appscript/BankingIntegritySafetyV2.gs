@@ -1,4 +1,4 @@
-const BANKING_SAFETY_V2='3.3';
+const BANKING_SAFETY_V2='3.4';
 
 function restaurerOperationsDepuisSauvegardeV2(nom){
   const ss=SpreadsheetApp.getActiveSpreadsheet(),src=ss.getSheetByName(String(nom||'')),dst=ss.getSheetByName('Operations');
@@ -149,11 +149,56 @@ function analyserFluxBancaireAvantImportV2(lignes,compte){
   return{version:BANKING_SAFETY_V2,controle:ctl,recues,exploitables:incoming.length,rejetes,existantes:p.matches.length,nouvelles:p.nouvelles.length,ambigues:p.ambigues.length,groupesRapproches:p.groupesRapproches||[],protegeesPdf:p.matches.filter(m=>estPdfDefinitifV27_(m.o)).length,placeholders:p.absorbees.length,orphelines:p.orphelines.length,pret:rejetes===0&&p.ambigues.length===0,resolutionRequise:rejetes===0&&p.ambigues.length>0,detailsNouvelles,detailsExistantes:p.matches.slice(0,30).map(m=>({date:dateJourV23_(m.n.date_comptable||m.n.date),montant:m.n.montant,libelle:m.n.libelle_bancaire||m.n.libelle,sourceExistante:m.o.source_bancaire||'',statutExistant:m.o.statut_bancaire||'',categorieExistante:m.o.categorie||'',protegeePdf:estPdfDefinitifV27_(m.o)})),detailsAmbigues:p.ambigues.map((a,index)=>({index,date:dateJourV23_(a.n.date_comptable||a.n.date),libelle:a.n.libelle_bancaire||a.n.libelle,montant:a.n.montant,raison:a.raison,candidats:a.candidates.map(c=>({id:c.o.id,date:dateJourV23_(c.o.date_comptable||c.o.date),libelle:c.o.libelle_bancaire||c.o.libelle,montant:c.o.montant,categorie:c.o.categorie||'',source:c.o.source_bancaire||'',statut:c.o.statut_bancaire||'',score:c.score,protegeePdf:estPdfDefinitifV27_(c.o)}))})),detailsOrphelines:p.orphelines.slice(0,30).map(o=>({id:o.id,date:dateJourV23_(o.date_comptable||o.date),montant:o.montant,libelle:o.libelle_bancaire||o.libelle,recurrence:estRecurrenceV23_(o)}))};
 }
 
+
+function enrichirChargeFixeFluxControleV34_(o,charges,rapprochements){
+  if(!o||String(o.type||'').toLowerCase()!=='depense'||typeof reconnaitreChargeFixeCommune_!=='function')return o;
+  const r=reconnaitreChargeFixeCommune_(o,charges||[],rapprochements||[]);
+  if(!r||!r.charge_fixe_id||String(r.source||'')!=='legacy_pdf_matcher')return o;
+  const out=Object.assign({},o,{
+    charge_fixe_id:String(r.charge_fixe_id),
+    statut_bancaire:'rapprochee_charge_fixe'
+  });
+  if(!String(out.categorie||'').trim()&&r.charge&&String(r.charge.categorie||'').trim())out.categorie=String(r.charge.categorie).trim();
+  return out;
+}
+
+function reparerChargesFixesFluxNonLieesV34(){
+  verifierInitialisation_();
+  if(typeof reconnaitreChargeFixeCommune_!=='function')throw new Error('Moteur commun de charges fixes indisponible.');
+  const ss=SpreadsheetApp.getActiveSpreadsheet(),f=ss.getSheetByName('Operations');
+  const lock=LockService.getDocumentLock();lock.waitLock(30000);
+  let backup=null;
+  try{
+    const headers=assurerColonnesBancaires_();
+    const ops=lireOperationsBancaires_().map(enrichirDepuisCommentaireBanque_);
+    const charges=lireTable_('Charges_fixes').filter(c=>typeof convertirBooleen_==='function'?convertirBooleen_(c.actif):c.actif!==false);
+    const rap=typeof lireRapprochementsChargesFixes==='function'?lireRapprochementsChargesFixes():[];
+    backup=creerSauvegardeOperationsSecurite_('reparation charges fixes flux');
+    let modifiees=0;
+    const out=ops.map(o=>{
+      if(String(o.source_bancaire||'').toLowerCase()!=='flux'||String(o.charge_fixe_id||'').trim())return o;
+      const e=enrichirChargeFixeFluxControleV34_(o,charges,rap);
+      if(String(e.charge_fixe_id||'').trim()!==String(o.charge_fixe_id||'').trim()){e.cle_rapprochement=cleTransactionUnique_(e);e.modifie_le=new Date();modifiees++;}
+      return e;
+    });
+    if(modifiees){
+      const vals=out.map(o=>serialiserOpBancaire_(o,headers));
+      f.clearContents();f.getRange(1,1,1,headers.length).setValues([headers]);if(vals.length)f.getRange(2,1,vals.length,headers.length).setValues(vals);f.setFrozenRows(1);SpreadsheetApp.flush();
+      const apres=lireOperationsBancaires_(),cles=apres.map(o=>String(o.cle_rapprochement||'').trim()).filter(Boolean);
+      if(apres.length!==ops.length||new Set(apres.map(o=>String(o.id||''))).size!==apres.length||cles.length!==new Set(cles).size){
+        f.clearContents();const bv=backup.getDataRange().getValues();f.getRange(1,1,bv.length,bv[0].length).setValues(bv);SpreadsheetApp.flush();
+        throw new Error('Réparation CF flux refusée : contrôle après écriture échoué ; restauration effectuée.');
+      }
+    }
+    return{ok:true,version:'3.4',modifiees,sauvegarde:backup.getName()};
+  }finally{lock.releaseLock();}
+}
+
 function importerFluxBancaireControleV2(lignes,compte,decisionsAmbiguites){
   const incoming=preparerFluxV23_(lignes,compte),ctl=controlerLotBancaire_(incoming,null);if(!ctl.nombre)throw new Error('Aucune opération exploitable.');
   const lock=LockService.getDocumentLock();lock.waitLock(30000);let backup=null;
   try{
-    const ss=SpreadsheetApp.getActiveSpreadsheet(),f=ss.getSheetByName('Operations'),headers=assurerColonnesBancaires_(),ops=lireOperationsBancaires_().map(enrichirDepuisCommentaireBanque_),avant=checksumOperationsBanque_(ops),p=planifierSnapshotV23_(incoming,ops,compte),ctx=contexteCategoriesFluxV27_(ops);
+    const ss=SpreadsheetApp.getActiveSpreadsheet(),f=ss.getSheetByName('Operations'),headers=assurerColonnesBancaires_(),ops=lireOperationsBancaires_().map(enrichirDepuisCommentaireBanque_),avant=checksumOperationsBanque_(ops),p=planifierSnapshotV23_(incoming,ops,compte),ctx=contexteCategoriesFluxV27_(ops),charges=lireTable_('Charges_fixes').filter(c=>typeof convertirBooleen_==='function'?convertirBooleen_(c.actif):c.actif!==false),rap=typeof lireRapprochementsChargesFixes==='function'?lireRapprochementsChargesFixes():[];
     if(p.ambigues.length){
       const choix=Array.isArray(decisionsAmbiguites)?decisionsAmbiguites:[];
       if(choix.length<p.ambigues.length)return{bloque:true,message:'Import bloqué : '+p.ambigues.length+' ambiguïté(s) doivent être tranchées dans la simulation.'};
@@ -167,10 +212,11 @@ function importerFluxBancaireControleV2(lignes,compte,decisionsAmbiguites){
       const m=matchById.get(String(o.id));if(!m)return o;
       if(estPdfDefinitifV27_(o)){protegeesPdf++;return o;}
       const n=m.n,comment=[String(o.commentaire||''),String(n.commentaire||'')].filter(Boolean).join(' ');
-      const maj=Object.assign({},o,{date:n.date,date_comptable:n.date_comptable,date_achat:n.date_achat,libelle:n.libelle||o.libelle,libelle_bancaire:n.libelle_bancaire,marchand_normalise:n.marchand_normalise,carte_fin:n.carte_fin,source_bancaire:'flux',statut_bancaire:'provisoire',commentaire:comment,modifie_le:new Date()});
+      let maj=Object.assign({},o,{date:n.date,date_comptable:n.date_comptable,date_achat:n.date_achat,libelle:n.libelle||o.libelle,libelle_bancaire:n.libelle_bancaire,marchand_normalise:n.marchand_normalise,carte_fin:n.carte_fin,source_bancaire:'flux',statut_bancaire:'provisoire',commentaire:comment,modifie_le:new Date()});
+      maj=enrichirChargeFixeFluxControleV34_(maj,charges,rap);
       maj.cle_rapprochement=cleTransactionUnique_(maj);modifieesExistantes++;return maj;
     });
-    resolu.nouvelles.forEach(a=>{const now=new Date(),n=a.n,nouveau=Object.assign({id:Utilities.getUuid(),categorie:'',commentaire:'',cree_le:now,modifie_le:now},n),pc=propositionCategorieFluxV27_(n,ctx);if(pc&&pc.categorie){nouveau.categorie=pc.categorie;categorisees++;}nouveau.cle_rapprochement=cleTransactionUnique_(nouveau);out.push(nouveau);nouveaux.push(nouveau.id);});
+    resolu.nouvelles.forEach(a=>{const now=new Date(),n=a.n;let nouveau=Object.assign({id:Utilities.getUuid(),categorie:'',commentaire:'',cree_le:now,modifie_le:now},n),pc=propositionCategorieFluxV27_(n,ctx);if(pc&&pc.categorie){nouveau.categorie=pc.categorie;categorisees++;}nouveau=enrichirChargeFixeFluxControleV34_(nouveau,charges,rap);nouveau.cle_rapprochement=cleTransactionUnique_(nouveau);out.push(nouveau);nouveaux.push(nouveau.id);});
     const vals=out.map(o=>serialiserOpBancaire_(o,headers));f.clearContents();f.getRange(1,1,1,headers.length).setValues([headers]);if(vals.length)f.getRange(2,1,vals.length,headers.length).setValues(vals);f.setFrozenRows(1);SpreadsheetApp.flush();
     const apresOps=lireOperationsBancaires_(),apres=checksumOperationsBanque_(apresOps),attendu=avant.nombre-p.absorbees.length-p.orphelines.length+resolu.nouvelles.length;const cles=apresOps.map(o=>String(o.cle_rapprochement||'').trim()).filter(Boolean);
     if(apres.nombre!==attendu||apres.ids!==apres.nombre||cles.length!==new Set(cles).size){f.clearContents();const bv=backup.getDataRange().getValues();f.getRange(1,1,bv.length,bv[0].length).setValues(bv);SpreadsheetApp.flush();throw new Error('Contrôle après écriture échoué ; restauration automatique effectuée.');}
