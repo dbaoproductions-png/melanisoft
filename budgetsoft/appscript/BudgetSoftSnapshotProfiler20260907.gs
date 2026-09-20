@@ -763,3 +763,93 @@ function auditerProfilCbDoubleRoleInterneBudgetSoft20260920(){
   console.log('[AUDIT PERF CB double rôle interne 20260920] '+JSON.stringify(out));
   return out;
 }
+
+
+function auditerCandidatSs2DepuisProjectionUniqueBudgetSoft20260920(){
+  const t0=Date.now(),temps={},erreurs=[];
+  function chrono(nom,fn){
+    const t=Date.now();
+    try{const v=fn();temps[nom]=Date.now()-t;return v;}
+    catch(e){temps[nom]=Date.now()-t;erreurs.push({etape:nom,erreur:String(e&&e.stack||e&&e.message||e)});return null;}
+  }
+
+  const sources=chrono('sources',function(){return chargerToutesLesDonnees();});
+  const charge=chrono('cerbereBasePartagee',function(){return chargerCerbereBaseDepuisSourcesSnapshotBudgetSoft20260911_(sources);});
+  const base=charge&&charge.base||null;
+  if(!base||base.ok===false){
+    const ko={ok:false,version:'2026-09-20.1',erreurs:erreurs.concat([{etape:'base',erreur:'Base Cerbère indisponible'}])};
+    console.log('[AUDIT A/B SS2 depuis projection unique 20260920] '+JSON.stringify(ko));return ko;
+  }
+  const ps=Array.isArray(base.periodes)?base.periodes:[],p2=ps[1]||null;
+  if(!p2){
+    const ko={ok:false,version:'2026-09-20.1',erreurs:[{etape:'periode',erreur:'C2 absente'}]};
+    console.log('[AUDIT A/B SS2 depuis projection unique 20260920] '+JSON.stringify(ko));return ko;
+  }
+
+  const debut=dateCerbereC2CanonicalOpening20260913_(p2&&p2.periode&&p2.periode.debut);
+  const finLongue=new Date(debut.getFullYear(),debut.getMonth()+1,0,23,59,59,999);
+  const projectionLongue=chrono('projectionLonguePrecalculee',function(){
+    return construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(finLongue,base);
+  });
+
+  const baseline=chrono('baselineSs2Recalculee',function(){
+    return calculerSs2TresorerieCanoniqueCerbere20260913_(base,p2);
+  });
+
+  const candidat=chrono('candidatSs2DepuisSousVue',function(){
+    if(!projectionLongue||projectionLongue.ok===false)return{ok:false,raison:'projection longue invalide'};
+    const projection=sousVueTrajectoireTresorerieCanoniqueBudgetSoft20260910_(projectionLongue,debut);
+    if(!projection||projection.ok===false||!Number.isFinite(Number(projection.soldePrevisionnel)))return{ok:false,raison:'sous-vue invalide'};
+    const j0=jourCerbereC2CanonicalOpening20260913_(debut);
+    let salaire=0;const lignesSalaire=[];
+    (projection.lignes||[]).forEach(function(l){
+      const d=jourCerbereC2CanonicalOpening20260913_(l&&l.date),m=Number(l&&l.montantSigne),
+            cat=normCerbereC2CanonicalOpening20260913_(l&&l.categorie),
+            lib=normCerbereC2CanonicalOpening20260913_(l&&l.libelle);
+      if(d!==j0||!Number.isFinite(m)||m<=0)return;
+      if(cat!=='salaires'&&!/(salaire|traitement)/.test(lib))return;
+      salaire+=m;
+      lignesSalaire.push({date:d,montant:arrCerbereC2CanonicalOpening20260913_(m),categorie:String(l&&l.categorie||''),libelle:String(l&&l.libelle||''),source:String(l&&l.source||'')});
+    });
+    const soldeAvecSalaire=arrCerbereC2CanonicalOpening20260913_(Number(projection.soldePrevisionnel));
+    const ss2=arrCerbereC2CanonicalOpening20260913_(soldeAvecSalaire-salaire);
+    return{
+      ok:true,
+      version:CERBERE_C2_CANONICAL_OPENING_20260913_VERSION,
+      proprietaire:'projectionCalculUnique+sousVue',
+      date:j0,
+      soldeAvecSalaire:soldeAvecSalaire,
+      salaireOuverture:arrCerbereC2CanonicalOpening20260913_(salaire),
+      ss2:ss2,
+      lignesSalaire:lignesSalaire
+    };
+  });
+
+  function sig(x){
+    return{
+      ok:!!(x&&x.ok),
+      date:String(x&&x.date||''),
+      soldeAvecSalaire:Number(x&&x.soldeAvecSalaire||0),
+      salaireOuverture:Number(x&&x.salaireOuverture||0),
+      ss2:Number(x&&x.ss2||0),
+      lignesSalaire:(x&&x.lignesSalaire||[]).map(function(l){return{date:String(l&&l.date||''),montant:Number(l&&l.montant||0),categorie:String(l&&l.categorie||''),libelle:String(l&&l.libelle||''),source:String(l&&l.source||'')};})
+    };
+  }
+  const a=sig(baseline),b=sig(candidat),identique=JSON.stringify(a)===JSON.stringify(b);
+  const gain=Number(temps.baselineSs2Recalculee||0)-Number(temps.candidatSs2DepuisSousVue||0);
+  const out={
+    ok:erreurs.length===0&&identique,
+    version:'2026-09-20.1',
+    lectureSeule:true,
+    aucuneModification:true,
+    comparaison:{identiqueMetierStrict:identique,baseline:a,candidat:b},
+    temps:temps,
+    gainSs2Ms:gain,
+    gainSs2Pct:temps.baselineSs2Recalculee?Math.round(gain/temps.baselineSs2Recalculee*1000)/10:null,
+    erreurs:erreurs,
+    dureeTotaleMs:Date.now()-t0,
+    decision:erreurs.length?'PROFIL_INVALIDE':(identique?'CANDIDAT_SS2_PROJECTION_UNIQUE_VALIDE':'CANDIDAT_SS2_PROJECTION_UNIQUE_REFUSE')
+  };
+  console.log('[AUDIT A/B SS2 depuis projection unique 20260920] '+JSON.stringify(out));
+  return out;
+}
