@@ -1,4 +1,4 @@
-const BANKING_DATE_REPAIR_VERSION='1.0';
+const BANKING_DATE_REPAIR_VERSION='1.1';
 
 function bdrJour_(v){
   if(!v)return '';
@@ -125,24 +125,48 @@ function appliquerCorrectionDatesComptablesV1(lignes,compte){
     const avant=checksumOperationsBanque_(lireOperationsBancaires_());
     const stamp=Utilities.formatDate(new Date(),Session.getScriptTimeZone(),'yyyyMMdd_HHmmss');
     backup=f.copyTo(ss).setName(('Operations_avant_dates_'+stamp).slice(0,99));
-    const headers=assurerColonnesBancaires_(),idxId=headers.indexOf('id'),idxDC=headers.indexOf('date_comptable');
-    if(idxId<0||idxDC<0)throw new Error('Colonnes id/date_comptable introuvables.');
+    const headers=assurerColonnesBancaires_(),idxId=headers.indexOf('id'),idxDC=headers.indexOf('date_comptable'),idxCle=headers.indexOf('cle_rapprochement');
+    if(idxId<0||idxDC<0||idxCle<0)throw new Error('Colonnes id/date_comptable/cle_rapprochement introuvables.');
 
     const values=f.getRange(2,1,f.getLastRow()-1,headers.length).getValues();
-    let modifiees=0;
+    let modifiees=0,clesReconstruites=0;
     values.forEach(row=>{
-      const c=correctionById.get(String(row[idxId]||''));if(!c)return;
-      const p=c.nouvelleDate.split('-').map(Number);row[idxDC]=new Date(p[0],p[1]-1,p[2],12);modifiees++;
+      const corr=correctionById.get(String(row[idxId]||''));if(!corr)return;
+      const p=corr.nouvelleDate.split('-').map(Number);
+      row[idxDC]=new Date(p[0],p[1]-1,p[2],12);
+
+      // Invariant bancaire : toute mutation de date_comptable doit reconstruire
+      // l'identité bancaire structurée à partir de la même opération.
+      const op={};
+      headers.forEach((h,i)=>op[h]=row[i]);
+      const enrichie=enrichirDepuisCommentaireBanque_(op);
+      row[idxCle]=cleTransactionUnique_(enrichie);
+      modifiees++;
+      clesReconstruites++;
     });
     if(modifiees!==simulation.aCorriger)throw new Error('Nombre de lignes à modifier incohérent.');
+    if(clesReconstruites!==modifiees)throw new Error('Toutes les clés de rapprochement n’ont pas été reconstruites.');
     if(values.length)f.getRange(2,1,values.length,headers.length).setValues(values);
     SpreadsheetApp.flush();
 
-    const apres=checksumOperationsBanque_(lireOperationsBancaires_());
-    if(apres.nombre!==avant.nombre||apres.ids!==avant.ids||Math.abs(apres.debits-avant.debits)>0.001||Math.abs(apres.credits-avant.credits)>0.001){
+    const apresOps=lireOperationsBancaires_().map(enrichirDepuisCommentaireBanque_);
+    const apres=checksumOperationsBanque_(apresOps);
+    const parId=new Map(apresOps.map(o=>[String(o.id||''),o]));
+    const erreursCoherence=[];
+    simulation.corrections.forEach(corr=>{
+      const o=parId.get(String(corr.id||''));
+      if(!o){erreursCoherence.push('opération absente '+corr.id);return;}
+      if(bdrJour_(o.date_comptable)!==corr.nouvelleDate)erreursCoherence.push('date comptable non appliquée '+corr.id);
+      const cleAttendue=cleTransactionUnique_(o);
+      if(String(o.cle_rapprochement||'')!==cleAttendue)erreursCoherence.push('clé de rapprochement désynchronisée '+corr.id);
+    });
+    const cles=apresOps.map(o=>String(o.cle_rapprochement||'').trim()).filter(Boolean);
+    if(cles.length!==new Set(cles).size)erreursCoherence.push('clés de rapprochement non uniques');
+
+    if(apres.nombre!==avant.nombre||apres.ids!==avant.ids||Math.abs(apres.debits-avant.debits)>0.001||Math.abs(apres.credits-avant.credits)>0.001||erreursCoherence.length){
       f.clearContents();const b=backup.getDataRange().getValues();f.getRange(1,1,b.length,b[0].length).setValues(b);SpreadsheetApp.flush();
-      throw new Error('Contrôle après écriture échoué : restauration automatique effectuée.');
+      throw new Error('Contrôle après écriture échoué : restauration automatique effectuée.'+(erreursCoherence.length?' '+erreursCoherence.slice(0,10).join(' | '):''));
     }
-    return {ok:true,modifiees,sauvegarde:backup.getName(),avant,apres};
+    return {ok:true,version:BANKING_DATE_REPAIR_VERSION,modifiees,clesReconstruites,sauvegarde:backup.getName(),avant,apres};
   }finally{lock.releaseLock();}
 }
