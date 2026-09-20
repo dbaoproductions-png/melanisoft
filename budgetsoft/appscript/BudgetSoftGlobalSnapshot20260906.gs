@@ -178,7 +178,7 @@ function actualiserBudgetSoftToutesLes30MinutesLegacy20260906_(){return reconstr
 function actualiserBudgetSoftMaintenantLegacy20260906_(){return reconstruireSnapshotGlobalLegacyBudgetSoft20260906_('manuel_force');}
 function initialiserArchitectureSnapshotLegacyBudgetSoft20260906_(){const installation=installerActualisationGlobaleBudgetSoft20260906(),etat=reconstruireSnapshotGlobalLegacyBudgetSoft20260906_('initialisation');return{ok:!!(installation.ok&&etat.ok),installation,etat};}
 
-function auditerSnapshotGlobalBudgetSoft20260906(){
+function auditerSnapshotGlobalLegacyBudgetSoft20260906_(){
   const s=chargerSnapshotGlobalBudgetSoft20260906();if(!s.disponible)return s;const e=s.etat,m=e.modules||{};
   return{ok:e.ok,version:e.version,revisionBudgetSoft:e.revisionBudgetSoft,genereLe:e.genereLe,coherence:e.coherence,transversales:e.transversales,erreurs:e.erreurs||[],clesModules:Object.keys(m),
     dashboard:m.dashboard?{versionCorrection:m.dashboard.versionCorrection||'',sourceBudgetSoft:m.dashboard.sourceBudgetSoft||'',soldeBancaire:m.dashboard.courtTerme&&m.dashboard.courtTerme.soldeBancaire,revenusConstates:m.dashboard.courtTerme&&m.dashboard.courtTerme.revenusConstates,depensesConstatees:m.dashboard.courtTerme&&m.dashboard.courtTerme.depensesConstatees}:null,
