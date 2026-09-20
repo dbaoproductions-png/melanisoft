@@ -1,4 +1,4 @@
-function nettoyerPostAuditRecettesDepenses18082026() {
+function nettoyerPostAuditRecettesDepensesLegacy18082026() {
   verifierInitialisation_();
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
