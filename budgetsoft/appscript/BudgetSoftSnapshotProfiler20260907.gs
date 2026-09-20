@@ -263,14 +263,24 @@ function auditerProfilCerberePostSocleSnapshotBudgetSoft20260920(){
   }
 
   const original=chargerCerbereV374;
+  const originalBaseRapide=typeof chargerCerbereCockpitBaseRapide20260903_==='function'
+    ?chargerCerbereCockpitBaseRapide20260903_
+    :null;
+  const baseCockpit=JSON.parse(JSON.stringify(base));
   let frais=null,normaliseSante=null,enrichi=null,publie=null,normaliseCf=null;
   try{
     chargerCerbereV374=function(){return base;};
+    if(originalBaseRapide){
+      chargerCerbereCockpitBaseRapide20260903_=function(){return baseCockpit;};
+    }
     frais=chrono('cockpitP1FraisDepuisBase',function(){
       return recalculerCerbereCockpitP1Frais20260912_({contexteExterne:true});
     });
   }finally{
     chargerCerbereV374=original;
+    if(originalBaseRapide){
+      chargerCerbereCockpitBaseRapide20260903_=originalBaseRapide;
+    }
   }
 
   if(frais&&frais.ok!==false){
@@ -335,7 +345,7 @@ function auditerProfilCerberePostSocleSnapshotBudgetSoft20260920(){
     version:'2026-09-20.1',
     lectureSeule:true,
     aucuneModification:true,
-    perimetre:'chemin Cerbère snapshot après partage des sources, sans lecture du snapshot global publié',
+    perimetre:'chemin Cerbère snapshot courant : sources partagées + base Cerbère directe dans le cockpit, sans lecture du snapshot global publié',
     partage:!!(charge&&charge.partage),
     tablesReutilisees:charge&&charge.reutilisees||[],
     temps:temps,
