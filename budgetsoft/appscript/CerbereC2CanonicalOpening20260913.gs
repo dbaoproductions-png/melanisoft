@@ -55,7 +55,7 @@ function calculerSs2TresorerieCanoniqueCerbere20260913_(base,p2){
 }
 
 /** Override terminal : même propriétaire P2/report CB que précédemment, SS2 canonique. */
-function appliquerReportCbCycleSuivant20260905_(base){
+function appliquerReportCbCycleSuivant20260905_(base,ajustementsCfPrecharges){
   const ps=Array.isArray(base&&base.periodes)?base.periodes:[];if(ps.length<2)return base;
   const p1=ps[0],p2=ps[1],v=p2.v37||(p2.v37={}),c=v.cockpit20260902||(v.cockpit20260902={}),arr=arrCockpit20260902_;
   const calc=calculerReportCbCycleSuivant20260905_(base),reel=Math.max(0,Number(calc.montant||0));
@@ -68,7 +68,7 @@ function appliquerReportCbCycleSuivant20260905_(base){
   const ss2=frontiere&&frontiere.ok?arr(frontiere.ss2):ancienSs2;
   if(frontiere&&frontiere.ok){v.ss1=ss2;v.soldeOuverture=ss2;v.ss1Statut='trésorerie canonique à l’ouverture de C2 · avant salaire';v.ss1ProjectionCanonique20260913=frontiere;}
 
-  const cfReconstruite=typeof reconstruireChargesFixesReevalueesP1Cerbere20260912_==='function'?reconstruireChargesFixesReevalueesP1Cerbere20260912_(p2,v):null;
+  const cfReconstruite=typeof reconstruireChargesFixesReevalueesP1Cerbere20260912_==='function'?reconstruireChargesFixesReevalueesP1Cerbere20260912_(p2,v,ajustementsCfPrecharges):null;
   const rt2=arr(Number(v.rt1||0));
   const cft2=arr(cfReconstruite&&cfReconstruite.ok?cfReconstruite.total:Number(v.cft1||0));
   const het2=arr(Math.max(0,Number(v.het1!=null?v.het1:(v.horsPilotableAControler||0))));
