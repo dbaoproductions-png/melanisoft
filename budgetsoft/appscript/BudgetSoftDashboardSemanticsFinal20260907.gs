@@ -21,7 +21,7 @@ function corrigerSemantiqueDashboardBudgetSoft20260907_(d){
   return r;
 }
 
-function chargerDashboardSyntheseV3BudgetSoft20260907(){return corrigerSemantiqueDashboardBudgetSoft20260907_(chargerDashboardSyntheseBudgetSoft20260907());}
+function chargerDashboardSyntheseV3LegacySemanticsBudgetSoft20260907_(){return corrigerSemantiqueDashboardBudgetSoft20260907_(chargerDashboardSyntheseBudgetSoft20260907());}
 
 function auditerSemantiqueDashboardBudgetSoft20260907(){
   const d=chargerDashboardSyntheseV3BudgetSoft20260907(),c=d&&d.courtTerme||{},s=d&&d.cycleSuivant||{};
