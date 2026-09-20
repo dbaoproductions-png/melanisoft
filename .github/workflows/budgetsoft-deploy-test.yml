@@ -176,33 +176,37 @@ jobs:
             echo "Apps Script deployments.list failed with HTTP $HTTP_CODE"
             exit 1
           fi
-          DEPLOYMENT_ID=$(python3 - <<'PY'
-          import json, sys
+          python3 - <<'PY' > /tmp/web-deployment-ids.txt
+          import json
           d=json.load(open('/tmp/deployments-response.json'))
-          web=[]
           for x in d.get('deployments',[]):
               eps=x.get('entryPoints') or []
               if any(e.get('entryPointType')=='WEB_APP' for e in eps):
-                  web.append(x.get('deploymentId'))
-          web=[x for x in web if x]
-          print('\n'.join(web))
-          if len(web)!=1:
-              print(f'Expected exactly one TEST WEB_APP deployment, found {len(web)}.', file=sys.stderr)
-              sys.exit(2)
+                  dep=x.get('deploymentId')
+                  if dep:
+                      print(dep)
           PY
-          )
-          test -n "$DEPLOYMENT_ID"
+          DEPLOYMENT_COUNT=$(grep -c . /tmp/web-deployment-ids.txt || true)
+          if [ "$DEPLOYMENT_COUNT" -lt 1 ]; then
+            echo 'No TEST WEB_APP deployment found.'
+            exit 1
+          fi
           cat > /tmp/deployment-update.json <<JSON
           {"deploymentConfig":{"versionNumber":$VERSION_NUMBER,"manifestFileName":"appsscript","description":"BudgetSoft TEST published from budgetsoft-import-lab"}}
           JSON
-          HTTP_CODE=$(curl -sS -o /tmp/deployment-update-response.json -w '%{http_code}' -X PUT \
-            -H "Authorization: Bearer $ACCESS_TOKEN" \
-            -H "Content-Type: application/json" \
-            --data-binary @/tmp/deployment-update.json \
-            "https://script.googleapis.com/v1/projects/$SCRIPT_ID/deployments/$DEPLOYMENT_ID")
-          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
-            echo "Apps Script deployments.update failed with HTTP $HTTP_CODE"
-            python3 -m json.tool /tmp/deployment-update-response.json || true
-            exit 1
-          fi
-          echo "TEST web app deployment updated to version $VERSION_NUMBER."
+          UPDATED=0
+          while IFS= read -r DEPLOYMENT_ID; do
+            [ -n "$DEPLOYMENT_ID" ] || continue
+            HTTP_CODE=$(curl -sS -o /tmp/deployment-update-response.json -w '%{http_code}' -X PUT \
+              -H "Authorization: Bearer $ACCESS_TOKEN" \
+              -H "Content-Type: application/json" \
+              --data-binary @/tmp/deployment-update.json \
+              "https://script.googleapis.com/v1/projects/$SCRIPT_ID/deployments/$DEPLOYMENT_ID")
+            if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+              echo "Apps Script deployments.update failed with HTTP $HTTP_CODE for $DEPLOYMENT_ID"
+              python3 -m json.tool /tmp/deployment-update-response.json || true
+              exit 1
+            fi
+            UPDATED=$((UPDATED+1))
+          done < /tmp/web-deployment-ids.txt
+          echo "TEST web app deployments updated to version $VERSION_NUMBER: $UPDATED/$DEPLOYMENT_COUNT."
