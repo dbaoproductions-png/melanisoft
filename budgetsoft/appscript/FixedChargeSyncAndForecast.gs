@@ -117,9 +117,9 @@ function enregistrerChargeFixeLieeOperation(operationId,charge){
 
 function cleDateAjustement_(d){return Utilities.formatDate(dateLocaleBudgetSoft_(d),Session.getScriptTimeZone(),'yyyy-MM-dd');}
 
-function calculerEcheancesChargeFixeAjustees_(charge,debut,fin,limite){
+function calculerEcheancesChargeFixeAjustees_(charge,debut,fin,limite,ajustementsPrecharges){
   const base=calculerEcheancesJusqua_(charge,debut,fin,limite).map(d=>({date:new Date(d),montant:Math.abs(Number(charge.montant||0)),ajustement:''}));
-  const ajustements=lireAjustementsChargesFixes().filter(a=>String(a.charge_fixe_id)===String(charge.id)&&convertirBooleen_(a.actif));
+  const ajustements=(Array.isArray(ajustementsPrecharges)?ajustementsPrecharges:lireAjustementsChargesFixes()).filter(a=>String(a.charge_fixe_id)===String(charge.id)&&convertirBooleen_(a.actif));
   const moisExclus=new Set();
   ajustements.filter(a=>String(a.action)==='exclure_mois').forEach(a=>String(a.mois||'').split(',').forEach(m=>{const n=parseInt(m,10);if(n>=1&&n<=12)moisExclus.add(n);}));
   let ev=base.filter(e=>!moisExclus.has(e.date.getMonth()+1));
