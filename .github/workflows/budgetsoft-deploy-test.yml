@@ -195,6 +195,8 @@ jobs:
           {"deploymentConfig":{"versionNumber":$VERSION_NUMBER,"manifestFileName":"appsscript","description":"BudgetSoft TEST published from budgetsoft-import-lab"}}
           JSON
           UPDATED=0
+          READ_ONLY=0
+          FAILED=0
           while IFS= read -r DEPLOYMENT_ID; do
             [ -n "$DEPLOYMENT_ID" ] || continue
             HTTP_CODE=$(curl -sS -o /tmp/deployment-update-response.json -w '%{http_code}' -X PUT \
@@ -202,11 +204,24 @@ jobs:
               -H "Content-Type: application/json" \
               --data-binary @/tmp/deployment-update.json \
               "https://script.googleapis.com/v1/projects/$SCRIPT_ID/deployments/$DEPLOYMENT_ID")
-            if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
-              echo "Apps Script deployments.update failed with HTTP $HTTP_CODE for $DEPLOYMENT_ID"
-              python3 -m json.tool /tmp/deployment-update-response.json || true
-              exit 1
+            if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+              UPDATED=$((UPDATED+1))
+              continue
             fi
-            UPDATED=$((UPDATED+1))
+            if [ "$HTTP_CODE" = "400" ] && grep -q "Read-only deployments may not be modified" /tmp/deployment-update-response.json; then
+              READ_ONLY=$((READ_ONLY+1))
+              echo "Skipping read-only deployment $DEPLOYMENT_ID."
+              continue
+            fi
+            FAILED=$((FAILED+1))
+            echo "Apps Script deployments.update failed with HTTP $HTTP_CODE for $DEPLOYMENT_ID"
+            python3 -m json.tool /tmp/deployment-update-response.json || true
           done < /tmp/web-deployment-ids.txt
-          echo "TEST web app deployments updated to version $VERSION_NUMBER: $UPDATED/$DEPLOYMENT_COUNT."
+          echo "TEST web app deployments: updated=$UPDATED read-only=$READ_ONLY failed=$FAILED total=$DEPLOYMENT_COUNT."
+          if [ "$FAILED" -gt 0 ]; then
+            exit 1
+          fi
+          if [ "$UPDATED" -lt 1 ]; then
+            echo "No mutable TEST WEB_APP deployment was updated."
+            exit 1
+          fi
