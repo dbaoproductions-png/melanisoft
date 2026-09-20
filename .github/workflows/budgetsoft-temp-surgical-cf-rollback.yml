@@ -1,0 +1,196 @@
+name: BudgetSoft - TEMP surgical CF rollback
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - budgetsoft-import-lab
+    paths:
+      - '.github/workflows/budgetsoft-temp-surgical-cf-rollback.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rollback-seven-cf-links:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SCRIPT_ID: 1tvGARYmwH11M0XfsoRKmtLoETCL6_8fmXD16iU39oGWgHHULGiYbDT-n
+    steps:
+      - name: Obtain Google OAuth access token
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          GOOGLE_OAUTH_REFRESH_TOKEN: ${{ secrets.GOOGLE_OAUTH_REFRESH_TOKEN }}
+        run: |
+          set -euo pipefail
+          HTTP_CODE=$(curl -sS -o /tmp/oauth-response.json -w '%{http_code}' -X POST https://oauth2.googleapis.com/token \
+            --data-urlencode "client_id=$GOOGLE_OAUTH_CLIENT_ID" \
+            --data-urlencode "client_secret=$GOOGLE_OAUTH_CLIENT_SECRET" \
+            --data-urlencode "refresh_token=$GOOGLE_OAUTH_REFRESH_TOKEN" \
+            --data-urlencode "grant_type=refresh_token")
+          test "$HTTP_CODE" -ge 200 -a "$HTTP_CODE" -lt 300
+          ACCESS_TOKEN=$(python3 -c 'import json; print(json.load(open("/tmp/oauth-response.json")).get("access_token",""))')
+          test -n "$ACCESS_TOKEN"
+          echo "ACCESS_TOKEN=$ACCESS_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Resolve bound spreadsheet
+        run: |
+          set -euo pipefail
+          HTTP_CODE=$(curl -sS -o /tmp/project.json -w '%{http_code}' \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            "https://script.googleapis.com/v1/projects/$SCRIPT_ID")
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "Unable to read Apps Script project metadata: HTTP $HTTP_CODE"
+            python3 -m json.tool /tmp/project.json || true
+            exit 1
+          fi
+          SPREADSHEET_ID=$(python3 - <<'PY'
+import json
+p=json.load(open('/tmp/project.json'))
+print(p.get('parentId',''))
+PY
+          )
+          if [ -z "$SPREADSHEET_ID" ]; then
+            echo "No parentId returned for the bound Apps Script project."
+            python3 -m json.tool /tmp/project.json
+            exit 1
+          fi
+          echo "SPREADSHEET_ID=$SPREADSHEET_ID" >> "$GITHUB_ENV"
+          echo "Bound spreadsheet resolved."
+
+      - name: Read Operations and safety backup
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+import os, urllib.parse, subprocess
+sid=os.environ['SPREADSHEET_ID']
+tok=os.environ['ACCESS_TOKEN']
+for name,out in [('Operations','/tmp/ops.json'),('Operations_sauvegarde_securite','/tmp/backup.json')]:
+    rng=urllib.parse.quote(name+'!A:S', safe='')
+    url=f'https://sheets.googleapis.com/v4/spreadsheets/{sid}/values/{rng}?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER'
+    cp=subprocess.run(['curl','-sS','-o',out,'-w','%{http_code}','-H',f'Authorization: Bearer {tok}',url],capture_output=True,text=True,check=True)
+    code=int(cp.stdout)
+    if code<200 or code>=300:
+        print(f'Unable to read {name}: HTTP {code}')
+        print(open(out).read())
+        raise SystemExit(1)
+PY
+
+      - name: Build exact surgical update
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+import json, os
+TARGET_IDS=[
+'ab07cfa2-6603-45e3-9456-d2a82b51d3ca',
+'1b105e7c-7990-4d7b-9fa1-d4fbda6f73f8',
+'dd883d4e-c187-4c26-9b9b-ad6f71b55439',
+'49af6e8a-9e56-475e-acf7-bedf01366488',
+'629f4122-3f6e-47e3-a09f-ebee29bf51ac',
+'50ec8153-5251-4766-9cac-c09986083ebc',
+'370523e1-2a13-4ec8-a0cb-b1a84211a577',
+]
+ALLOWED={'charge_fixe_id','statut_bancaire','modifie_le'}
+ops=json.load(open('/tmp/ops.json')).get('values',[])
+bak=json.load(open('/tmp/backup.json')).get('values',[])
+if not ops or not bak: raise SystemExit('Operations or backup is empty.')
+headers=[str(x) for x in ops[0]]
+bh=[str(x) for x in bak[0]]
+if headers!=bh: raise SystemExit('Header mismatch between Operations and backup.')
+idx={h:i for i,h in enumerate(headers)}
+for required in ['id','charge_fixe_id','statut_bancaire','modifie_le']:
+    if required not in idx: raise SystemExit('Missing column '+required)
+def rows(values):
+    out={}
+    for rnum,row in enumerate(values[1:], start=2):
+        row=list(row)+['']*(len(headers)-len(row))
+        rid=str(row[idx['id']]) if idx['id']<len(row) else ''
+        if rid: out[rid]=(rnum,row)
+    return out
+O=rows(ops); B=rows(bak)
+updates=[]
+report=[]
+def col_letter(n):
+    s=''
+    n+=1
+    while n:
+        n,rem=divmod(n-1,26); s=chr(65+rem)+s
+    return s
+for rid in TARGET_IDS:
+    if rid not in O or rid not in B: raise SystemExit('Target ID missing: '+rid)
+    rnum,cur=O[rid]; _,old=B[rid]
+    diffs=[]
+    for i,h in enumerate(headers):
+        cv=cur[i] if i<len(cur) else ''
+        ov=old[i] if i<len(old) else ''
+        if cv!=ov: diffs.append(h)
+    unexpected=[h for h in diffs if h not in ALLOWED]
+    if unexpected:
+        raise SystemExit(f'Unexpected differences for {rid}: {unexpected}')
+    if str(cur[idx['charge_fixe_id']])==str(old[idx['charge_fixe_id']]) and str(cur[idx['statut_bancaire']])==str(old[idx['statut_bancaire']]):
+        raise SystemExit('Target no longer differs as expected: '+rid)
+    for h in ['charge_fixe_id','statut_bancaire','modifie_le']:
+        col=col_letter(idx[h])
+        updates.append({'range':f"Operations!{col}{rnum}",'values':[[old[idx[h]]]]})
+    report.append({
+      'id':rid,'row':rnum,
+      'libelle':cur[idx.get('libelle_bancaire',idx.get('libelle',0))],
+      'montant':cur[idx.get('montant',0)],
+      'from_charge_fixe_id':cur[idx['charge_fixe_id']],
+      'to_charge_fixe_id':old[idx['charge_fixe_id']],
+      'from_statut':cur[idx['statut_bancaire']],
+      'to_statut':old[idx['statut_bancaire']],
+    })
+json.dump({'valueInputOption':'RAW','data':updates,'includeValuesInResponse':True},open('/tmp/update.json','w'))
+json.dump(report,open('/tmp/report.json','w'),ensure_ascii=False,indent=2)
+print(json.dumps(report,ensure_ascii=False,indent=2))
+PY
+
+      - name: Apply surgical update
+        run: |
+          set -euo pipefail
+          HTTP_CODE=$(curl -sS -o /tmp/update-response.json -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/update.json \
+            "https://sheets.googleapis.com/v4/spreadsheets/$SPREADSHEET_ID/values:batchUpdate")
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "Surgical Sheets update failed with HTTP $HTTP_CODE"
+            python3 -m json.tool /tmp/update-response.json || cat /tmp/update-response.json
+            exit 1
+          fi
+          echo "Seven exact Operations rows restored from safety backup."
+
+      - name: Verify restored fields
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+import os, urllib.parse, subprocess, json
+sid=os.environ['SPREADSHEET_ID']; tok=os.environ['ACCESS_TOKEN']
+rng=urllib.parse.quote('Operations!A:S',safe='')
+url=f'https://sheets.googleapis.com/v4/spreadsheets/{sid}/values/{rng}?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER'
+cp=subprocess.run(['curl','-sS','-o','/tmp/ops-after.json','-w','%{http_code}','-H',f'Authorization: Bearer {tok}',url],capture_output=True,text=True,check=True)
+if int(cp.stdout)<200 or int(cp.stdout)>=300: raise SystemExit('Unable to verify Operations.')
+ops=json.load(open('/tmp/ops-after.json')).get('values',[])
+bak=json.load(open('/tmp/backup.json')).get('values',[])
+h=[str(x) for x in ops[0]]; idx={x:i for i,x in enumerate(h)}
+def maprows(vals):
+    out={}
+    for row in vals[1:]:
+        row=list(row)+['']*(len(h)-len(row))
+        if row[idx['id']]: out[str(row[idx['id']])]=row
+    return out
+O=maprows(ops); B=maprows(bak)
+targets=[x['id'] for x in json.load(open('/tmp/report.json'))]
+for rid in targets:
+    for col in ['charge_fixe_id','statut_bancaire','modifie_le']:
+        if O[rid][idx[col]]!=B[rid][idx[col]]:
+            raise SystemExit(f'Verification failed {rid} {col}: {O[rid][idx[col]]!r} != {B[rid][idx[col]]!r}')
+print('VERIFY OK: the 7 accidental CF links are surgically restored to the safety backup state.')
+PY
+
+      - name: Show audit report
+        run: |
+          cat /tmp/report.json
