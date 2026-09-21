@@ -32,7 +32,7 @@ function auditerArchitectureBudgetSoft20260917(){
   return r;
 }
 
-const BUDGETSOFT_INTERMODULE_SUPERVISION_20260921_VERSION='2026-09-21.3';
+const BUDGETSOFT_INTERMODULE_SUPERVISION_20260921_VERSION='2026-09-21.4';
 
 function sourceFonctionSupervisionBudgetSoft20260921_(nom){
   try{
@@ -168,6 +168,10 @@ function auditerSupervisionIntermoduleBudgetSoft20260921(){
     projection:projCb&&Math.abs(Number(projCb.montant||0))
   });
 
+  const doctrineCb=typeof auditerDoctrineImputationCbPilotableBudgetSoft20260921==='function'
+    ?auditerDoctrineImputationCbPilotableBudgetSoft20260921()
+    :{ok:false,erreur:'Garde doctrine CB pilotable absente'};
+
   const perf=e&&e.performance&&e.performance.modules||{};
   const performances=Object.keys(perf).map(k=>({module:k,dureeMs:Number(perf[k]||0)})).sort((a,b)=>b.dureeMs-a.dureeMs);
   const lents=performances.filter(x=>x.dureeMs>10000);
@@ -184,7 +188,8 @@ function auditerSupervisionIntermoduleBudgetSoft20260921(){
     {code:'EP_TOTAL_TRANSVERSAL_UNIQUE',ok:epTotal.ok,detail:'écart '+String(epTotal.ecart)},
     {code:'EP_RESTANT_TRANSVERSAL_UNIQUE',ok:epReste.ok,detail:'écart '+String(epReste.ecart)},
     {code:'P_SOUTENABLE_TRANSVERSAL_UNIQUE',ok:pSoutenable.ok,detail:'écart '+String(pSoutenable.ecart)},
-    {code:'CB_DIFFEREE_ENGAGEE_TRANSVERSALE',ok:cbEngagee.ok,detail:'écart '+String(cbEngagee.ecart)+' · '+JSON.stringify(cbEngagee.valeurs)}
+    {code:'CB_DIFFEREE_ENGAGEE_TRANSVERSALE',ok:cbEngagee.ok,detail:'écart '+String(cbEngagee.ecart)+' · '+JSON.stringify(cbEngagee.valeurs)},
+    {code:'DOCTRINE_CB_PILOTABLE_DATE_ACHAT',ok:doctrineCb.ok===true,detail:JSON.stringify(doctrineCb.controles||doctrineCb.erreur||'')}
   ];
 
   const out={
@@ -199,7 +204,7 @@ function auditerSupervisionIntermoduleBudgetSoft20260921(){
     controles,
     endpoints:controlesEndpoints,
     modules:{requis:modulesRequis,absents:modulesAbsents},
-    transversales:{soldes,dates,epTotal,epReste,pSoutenable,cbEngagee},
+    transversales:{soldes,dates,epTotal,epReste,pSoutenable,cbEngagee,doctrineCb},
     performances:{modules:performances,lentsPlusDe10s:lents,reconstructionLente:lents.length>0},
     architecture:{
       constructeur:'reconstruireSnapshotGlobalSyntheseBudgetSoft20260907',
