@@ -1,25 +1,36 @@
-const BUDGETSOFT_SNAPSHOT_CONSUMPTION_AUDIT_VERSION='2026-09-09.1';
+const BUDGETSOFT_SNAPSHOT_CONSUMPTION_AUDIT_VERSION='2026-09-21.1';
 
 function auditerConsommationSnapshotGlobalBudgetSoft20260906(){
   const resultats={},erreurs=[];
   function mesurer(nom,fn){
     const t0=Date.now();
     try{
-      const r=fn();
-      const out={ok:!!r,dureeMs:Date.now()-t0,source:r&&((r.performance&&r.performance.source)||r.sourceBudgetSoft)||'',revisionBudgetSoft:r&&r.revisionBudgetSoft||'',version:r&&r.version||''};
-      resultats[nom]=out;return out;
+      const r=fn()||{};
+      const source=String((r.performance&&r.performance.source)||r.sourceBudgetSoft||r.source||'');
+      const out={ok:r.ok!==false,dureeMs:Date.now()-t0,source,revisionBudgetSoft:String(r.revisionBudgetSoft||''),version:String(r.version||'')};
+      resultats[nom]=out;
+      if(out.source!=='snapshot_global'&&out.source.indexOf('snapshot_global')!==0)erreurs.push({module:nom,erreur:'Source non globale : '+out.source});
+      return out;
     }catch(e){const out={ok:false,dureeMs:Date.now()-t0,erreur:String(e&&e.message||e)};resultats[nom]=out;erreurs.push({module:nom,erreur:out.erreur});return out;}
   }
-  const c=mesurer('comptes',()=>chargerSyntheseComptes20260828());
-  const cr=mesurer('credits',()=>chargerCreditsEtDettesV2());
-  const p=mesurer('patrimoine',()=>chargerPatrimoine());
-  const ce=mesurer('cerbereExpress',()=>chargerVueCerbereExpress20260827());
-  const revisions=[c,cr,p,ce].map(x=>x&&x.revisionBudgetSoft).filter(Boolean);
-  const unique=[...new Set(revisions)];
-  if(unique.length!==1)erreurs.push({module:'transversal',erreur:'Les écrans ne consomment pas tous la même révision globale.',revisions:unique});
-  [c,cr,p,ce].forEach((x,i)=>{const nom=['comptes','credits','patrimoine','cerbereExpress'][i];if(x&&x.source!=='snapshot_global')erreurs.push({module:nom,erreur:'Source non globale : '+String(x.source||'')});});
-  const out={ok:erreurs.length===0,version:BUDGETSOFT_SNAPSHOT_CONSUMPTION_AUDIT_VERSION,revisionBudgetSoft:unique.length===1?unique[0]:'',resultats,erreurs};
-  console.log(JSON.stringify(out));return out;
+  const controles=[
+    ['comptes',()=>chargerSyntheseComptes20260828()],
+    ['credits',()=>chargerCreditsEtDettesV2()],
+    ['patrimoine',()=>chargerPatrimoine()],
+    ['dashboard',()=>chargerDashboardSyntheseV3BudgetSoft20260907()],
+    ['cerbere',()=>chargerCerbereCockpitCanonique20260914()],
+    ['cerbereExpress',()=>chargerVueCerbereExpress20260827()],
+    ['analyses',()=>chargerAnalysesBudgetairesV23(6)],
+    ['engagementsBancaires',()=>chargerEngagementsBancairesFuturs()],
+    ['budget',()=>chargerBudgetPeriode('')],
+    ['pluxee',()=>chargerPluxee()],
+    ['conseiller',()=>chargerConseillerFinancier()]
+  ];
+  controles.forEach(x=>mesurer(x[0],x[1]));
+  const revisions=Object.values(resultats).map(x=>x&&x.revisionBudgetSoft).filter(Boolean),uniques=[...new Set(revisions)];
+  if(uniques.length!==1)erreurs.push({module:'transversal',erreur:'Les consommateurs ne lisent pas tous la même révision globale.',revisions:uniques});
+  const out={ok:erreurs.length===0,version:BUDGETSOFT_SNAPSHOT_CONSUMPTION_AUDIT_VERSION,revisionBudgetSoft:uniques.length===1?uniques[0]:'',resultats,erreurs};
+  console.log('[AUDIT CONSOMMATION SNAPSHOT GLOBAL] '+JSON.stringify(out));return out;
 }
 
 /**
@@ -58,12 +69,9 @@ function auditerConsommateursTransversauxSnapshotBudgetSoft20260909(){
   const uniques=[...new Set(revisions)];
   if(uniques.length>1)erreurs.push({module:'revisionBudgetSoft',erreur:'Plusieurs révisions détectées parmi les consommateurs.',revisions:uniques});
 
-  // Modules secondaires explicitement hors prévisionnel : ils peuvent lire les tables
-  // pour produire de l'historique ou du descriptif, mais ne doivent pas devenir une
-  // source de solde bancaire prévisionnel.
-  const secondaires={
-    conseiller:{fonction:'chargerConseillerFinancier',role:'analyse historique / recommandations',autoriseHorsSnapshot:true},
-    engagementsBancaires:{fonction:'chargerEngagementsBancairesFuturs',role:'détail descriptif des engagements du cycle',autoriseHorsSnapshot:true}
+  const modulesSnapshotObligatoires={
+    conseiller:{fonction:'chargerConseillerFinancier',role:'analyse / recommandations',autoriseHorsSnapshot:false},
+    engagementsBancaires:{fonction:'chargerEngagementsBancairesFuturs',role:'engagements bancaires futurs',autoriseHorsSnapshot:false}
   };
 
   const out={
@@ -72,7 +80,7 @@ function auditerConsommateursTransversauxSnapshotBudgetSoft20260909(){
     revisionBudgetSoft:uniques.length===1?uniques[0]:'',
     dureeMs:Date.now()-t0,
     resultats:resultats,
-    secondaires:secondaires,
+    modulesSnapshotObligatoires:modulesSnapshotObligatoires,
     controles:{auditsSensiblesVerts:erreurs.filter(e=>e.module!=='revisionBudgetSoft').length===0,revisionUnique:uniques.length<=1,aucuneNouvelleVeriteMetier:true},
     erreurs:erreurs
   };
@@ -135,7 +143,7 @@ function auditerGardesCandidatCerbereSnapshotDonneesPartageesBudgetSoft20260911(
     const tComptes=Date.now();
     const comptes=typeof construireSyntheseComptes20260828_==='function'?construireSyntheseComptes20260828_():chargerSyntheseComptes20260828();
     const comptesMs=Date.now()-tComptes;
-    const tCredits=Date.now(),credits=typeof chargerCreditsEtDettesV2==='function'?chargerCreditsEtDettesV2():null,creditsMs=Date.now()-tCredits;
+    const tCredits=Date.now(),credits=typeof construireCreditsEtDettesV2_==='function'?construireCreditsEtDettesV2_():null,creditsMs=Date.now()-tCredits;
     const patrimoine=typeof composerPatrimoineCanoniqueBudgetSoft20260906_==='function'?composerPatrimoineCanoniqueBudgetSoft20260906_(sources,comptes,credits):(typeof chargerPatrimoine==='function'?chargerPatrimoine():null);
     const tresorerieComptable=typeof construireTresorerieComptableCanoniqueBudgetSoft20260906_==='function'?construireTresorerieComptableCanoniqueBudgetSoft20260906_(sources,comptes,finCourant,maintenant):null;
 
@@ -154,13 +162,13 @@ function auditerGardesCandidatCerbereSnapshotDonneesPartageesBudgetSoft20260911(
     const tCockpit=Date.now();
     let cerbere=cerbereBase;
     if(cerbereBase&&cerbereBase.ok!==false&&typeof composerCerbereCockpitDepuisBaseSnapshotBudgetSoft20260910_==='function')cerbere=composerCerbereCockpitDepuisBaseSnapshotBudgetSoft20260910_(cerbereBase);
-    else if(typeof chargerCerbereCockpit20260902==='function')cerbere=chargerCerbereCockpit20260902();
+    else if(typeof recalculerCerbereCockpitP1Frais20260912_==='function')cerbere=recalculerCerbereCockpitP1Frais20260912_({contexteExterne:true});
     const cockpitMs=Date.now()-tCockpit;
-    const soldeReelUnifie=Number(projectionEtendue&&projectionEtendue.soldeReel);
+    const soldeReelUnifie=Number(tresorerieComptable&&tresorerieComptable.soldeReel);
     if(cerbere&&Number.isFinite(soldeReelUnifie)){
       cerbere.reel=cerbere.reel||{};
       cerbere.reel.soldeBancaire=soldeReelUnifie;
-      cerbere.reel.sourceSoldeBancaire='projectionEtendue.soldeReel';
+      cerbere.reel.sourceSoldeBancaire='tresorerieComptable.soldeReel';cerbere.reel.dateReference=String(tresorerieComptable&&tresorerieComptable.dateReference||'');
     }
     const tExpress=Date.now();
     const cerbereExpress=typeof composerCerbereExpressDepuisCockpit20260910_==='function'?composerCerbereExpressDepuisCockpit20260910_(cerbere):{ok:false,erreur:'Compositeur Express absent'};
