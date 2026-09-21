@@ -1,8 +1,21 @@
 const ALIGNEMENT_PERIODES_ANALYSE_VERSION = '2026-09-21.1';
 
+function categorieRevenuAlignementAnalyse20260921_(cat){
+  const brut=String(cat||'').trim();
+  if(typeof categorieCibleBudgetSoft_==='function')return categorieCibleBudgetSoft_(brut);
+  const k=brut.toLowerCase();
+  if(k==='sacem')return'Droits artistiques';
+  if(k==='autres revenus')return'Revenus divers';
+  return brut;
+}
+function categoriesRevenusAlignementCanoniques20260921_(){
+  if(typeof categoriesRevenusBudgetSoftCanoniques20260921_==='function')return categoriesRevenusBudgetSoftCanoniques20260921_();
+  return['Salaires','France Travail','Cours','Concerts','Droits artistiques','Congés spectacles','Avantages employeur','Revenus fonciers','Prestations / aides','Revenus divers'];
+}
+
 function alignerAnalysesSurPeriodes2026_(recettes, depensesDetail, operations, categoriesRef, periodesBudgetaires) {
   const periodes = Array.isArray(periodesBudgetaires) ? periodesBudgetaires : [];
-  const ops = Array.isArray(operations) ? operations : [];
+  const ops = (Array.isArray(operations) ? operations : []).map(o=>Object.assign({},o,{categorie:categorieRevenuAlignementAnalyse20260921_(o&&o.categorie)}));
   const nb = periodes.length;
   if (![3, 6, 12].includes(nb) || !periodes.length) return { recettes: recettes, depensesDetail: depensesDetail };
 
