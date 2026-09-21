@@ -1,4 +1,4 @@
-const BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION='2026-09-21.1';
+const BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION='2026-09-21.2';
 
 /**
  * Adapte le chargeur Cerbère classique à une base déjà calculée sans modifier son
@@ -214,6 +214,18 @@ function reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(origine){
       if(engagementsBancaires&&typeof engagementsBancaires==='object')engagementsBancaires.revisionBudgetSoft='';
       const transversales=prendre('transversales',()=>typeof construireTransversalesBudgetSoft20260906_==='function'?construireTransversalesBudgetSoft20260906_(Object.assign({sources:sources},modules)):{});
       if(tresorerieComptable&&transversales&&transversales.tresorerie)transversales.tresorerie={version:tresorerieComptable.version||'',soldeReel:Number(tresorerieComptable.soldeReel),variationComptableCertaine:Number(tresorerieComptable.variationComptableCertaine),soldePrevisionnel:Number(tresorerieComptable.soldePrevisionnel),dateCible:tresorerieComptable.dateCible||'',nombreOperationsFutures:Number(tresorerieComptable.nombreOperationsFutures||0)};
+
+      // Contrat de complétude : une révision globale n'est jamais publiée si un
+      // module transversal attendu est absent ou s'est déclaré en erreur.
+      const modulesObligatoires=['comptes','credits','patrimoine','budget','pluxee','tresorerieComptable','projectionEtendue','cerbere','cerbereExpress','dashboard','analyses','engagementsBancaires','conseiller'];
+      modulesObligatoires.forEach(function(nom){
+        const module=modules[nom];
+        if(!module||module.ok===false){
+          const deja=erreurs.some(function(x){return String(x&&x.module||'')===nom;});
+          if(!deja)erreurs.push({module:nom,erreur:String(module&&module.erreur||module&&module.message||'module obligatoire absent ou invalide')});
+        }
+      });
+      modules.contratCompletudeSnapshot={ok:erreurs.filter(function(x){return modulesObligatoires.indexOf(String(x&&x.module||''))>=0;}).length===0,version:'2026-09-21.1',modulesObligatoires:modulesObligatoires.slice()};
 
       const unite=typeof auditerUniteModulesTresorerieBudgetSoft20260907_==='function'?auditerUniteModulesTresorerieBudgetSoft20260907_(modules):{ok:false,erreur:'Garde unité trésorerie absente'};
       modules.uniteTresorerie=unite;
