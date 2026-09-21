@@ -1,4 +1,4 @@
-const ANALYSES_CORRECTIONS_19082026_VERSION = '2.6.1';
+const ANALYSES_CORRECTIONS_19082026_VERSION = '2.6.2';
 
 function famillesAnalytiquesAnalyse2026_(categoriesRef){
   const map={};
@@ -12,11 +12,23 @@ function dateAnalyse20260904_(v){const d=v instanceof Date?new Date(v):new Date(
 function texteAnalyse20260904_(o){if(typeof texteMetier2026_==='function')return texteMetier2026_(o);return String([o&&o.marchand_normalise||'',o&&o.libelle_bancaire||'',o&&o.libelle||''].join(' ')).toUpperCase();}
 function montantMensuelChargeAnalyse20260904_(c){const m=Math.abs(Number(c&&c.montant||0)),f=String(c&&c.frequence||'Mensuelle').toLowerCase();if(f.indexOf('ann')>=0)return m/12;if(f.indexOf('trim')>=0)return m/3;if(f.indexOf('sem')>=0)return m*52/12;if(f.indexOf('hebdo')>=0)return m*52/12;if(f.indexOf('bimes')>=0)return m/2;if(f.indexOf('semes')>=0)return m/6;return m;}
 function periodeAnalyseDecalee20260904_(debutCourant,recul){const d=new Date(debutCourant.getFullYear(),debutCourant.getMonth()-recul,jourDebutCycleBudgetSoft_(),12,0,0,0);return calculerPeriodeBudgetaireCanonique_(d);}
+function categorieRevenuAnalyseCanonique20260921_(cat){
+  const brut=String(cat||'').trim();
+  if(typeof categorieCibleBudgetSoft_==='function')return categorieCibleBudgetSoft_(brut);
+  const k=brut.toLowerCase();
+  if(k==='sacem')return'Droits artistiques';
+  if(k==='autres revenus')return'Revenus divers';
+  return brut;
+}
+function categoriesRevenusAnalyseCanoniques20260921_(){
+  if(typeof categoriesRevenusBudgetSoftCanoniques20260921_==='function')return categoriesRevenusBudgetSoftCanoniques20260921_();
+  return['Salaires','France Travail','Cours','Concerts','Droits artistiques','Congés spectacles','Avantages employeur','Revenus fonciers','Prestations / aides','Revenus divers'];
+}
 function estTresorerieAnalyse20260904_(o,types){const cat=String(o&&o.categorie||'').trim();return String(o&&o.type||'').toLowerCase()==='tresorerie'||String(types&&types[cat]||'').toLowerCase()==='tresorerie'||cat==='Crédits de trésorerie'||cat==='Virements internes';}
 function estRevenuEconomiqueAnalyse20260904_(cat,type){if(typeof estCategorieRevenuEconomique2026_==='function')return estCategorieRevenuEconomique2026_(cat,type);return String(type||'').toLowerCase()==='revenu'&&String(cat||'').trim()!=='Remboursements santé';}
-function producteurAnalyse20260904_(cat){return typeof producteurRevenu2026_==='function'?producteurRevenu2026_(cat):(cat==='Salaires'?'Patrick':cat==='Revenus fonciers'?'Foyer':'Madame');}
-function structurelAnalyse20260904_(cat){return typeof estRevenuStructurel2026_==='function'?estRevenuStructurel2026_(cat):['Salaires','France Travail','Cours','Concerts','Congés spectacles','SACEM','Droits artistiques','Revenus fonciers'].includes(cat);}
-function variableAnalyse20260904_(cat){return typeof estRevenuVariable2026_==='function'?estRevenuVariable2026_(cat):['France Travail','Cours','Concerts','Congés spectacles','SACEM','Droits artistiques','Revenus divers','Autres revenus','Avantages employeur'].includes(cat);}
+function producteurAnalyse20260904_(cat){cat=categorieRevenuAnalyseCanonique20260921_(cat);return typeof producteurRevenu2026_==='function'?producteurRevenu2026_(cat):(cat==='Salaires'?'Patrick':cat==='Revenus fonciers'?'Foyer':'Madame');}
+function structurelAnalyse20260904_(cat){cat=categorieRevenuAnalyseCanonique20260921_(cat);return typeof estRevenuStructurel2026_==='function'?estRevenuStructurel2026_(cat):['Salaires','France Travail','Cours','Concerts','Congés spectacles','Droits artistiques','Revenus fonciers'].includes(cat);}
+function variableAnalyse20260904_(cat){cat=categorieRevenuAnalyseCanonique20260921_(cat);return typeof estRevenuVariable2026_==='function'?estRevenuVariable2026_(cat):['France Travail','Cours','Concerts','Congés spectacles','Droits artistiques','Revenus divers','Avantages employeur','Prestations / aides'].includes(cat);}
 
 function chargerAnalysesBudgetairesV23Source20260912_(nombrePeriodes){
   verifierInitialisation_();
@@ -35,7 +47,7 @@ function chargerAnalysesBudgetairesV23Source20260912_(nombrePeriodes){
   const params=Object.fromEntries(parametres.map(p=>[String(p.cle||''),p.valeur]));
   const maintenant=new Date();
   const finAujourdhui=bornerDateBancaireFinJour_(maintenant)||maintenant;
-  const operations=operationsBrutes.map(o=>{const x=Object.assign({},o);x.date_analyse=x.date_comptable||x.date;return x;});
+  const operations=operationsBrutes.map(o=>{const x=Object.assign({},o);x.categorie=categorieRevenuAnalyseCanonique20260921_(x.categorie);x.date_analyse=x.date_comptable||x.date;return x;});
   const datesConnues=operations.map(o=>dateAnalyse20260904_(o.date_analyse)).filter(d=>d&&dateBancaireConnueAuJour_(d,maintenant)).sort((a,b)=>b-a);
   const referenceBrute=datesConnues.length?datesConnues[0]:maintenant;
   const reference=debutJourBancaireBudgetSoft_(referenceBrute)||referenceBrute;
@@ -73,7 +85,7 @@ function chargerAnalysesBudgetairesV23Source20260912_(nombrePeriodes){
   const alertes=budgetCourant.map(b=>{const poste=String(b.poste||'').trim(),reel=poste==='Énergies'?(categoriesMap['Énergies']||0):(categoriesMap[familleAnalytiqueAnalyse2026_(poste,familles)]||0),prevu=Number(b.prevu||0);return{poste,prevu,reel,ecart:prevu-reel,taux:prevu>0?Math.round(reel/prevu*100):0};}).filter(a=>a.prevu>0&&a.reel>a.prevu).sort((a,b)=>a.ecart-b.ecart);
 
   let revenusEconomiques=0,revenusStructurels=0,revenusVariables=0,creditsTresorerie=0;
-  const producteurs={Patrick:0,Madame:0,Foyer:0},sources={},periodesSauvetage=new Set();
+  const producteurs={Patrick:0,Madame:0,Foyer:0},sources=Object.fromEntries(categoriesRevenusAnalyseCanoniques20260921_().map(n=>[n,0])),periodesSauvetage=new Set();
   const depParCat={},depOps=[];let rembSante=0,rembEnergie=0;
   opsFenetre.forEach(o=>{
     const m=Number(o.montant||0),cat=String(o.categorie||'').trim(),typeCat=types[cat]||'';
@@ -86,14 +98,14 @@ function chargerAnalysesBudgetairesV23Source20260912_(nombrePeriodes){
     if(m>0&&cat==='Remboursements'&&/TOTAL\s*ENERG|TOTALENERG/i.test(texteAnalyse20260904_(o))){rembEnergie+=m;return;}
     if(m>0&&estRevenuEconomiqueAnalyse20260904_(cat,typeCat)){
       revenusEconomiques+=m;if(structurelAnalyse20260904_(cat))revenusStructurels+=m;if(variableAnalyse20260904_(cat))revenusVariables+=m;
-      const prod=producteurAnalyse20260904_(cat);producteurs[prod]=(producteurs[prod]||0)+m;sources[cat||'Autres']=(sources[cat||'Autres']||0)+m;return;
+      const prod=producteurAnalyse20260904_(cat);producteurs[prod]=(producteurs[prod]||0)+m;const catCanon=categorieRevenuAnalyseCanonique20260921_(cat);if(Object.prototype.hasOwnProperty.call(sources,catCanon))sources[catCanon]+=m;return;
     }
     if(m<0&&typeCat==='depense'&&!estTresorerieAnalyse20260904_(o,types)){const v=Math.abs(m);depParCat[cat]=(depParCat[cat]||0)+v;depOps.push(o);}
   });
 
   const dernierSalaire=operations.filter(o=>Number(o.montant||0)>0&&String(o.categorie||'').trim()==='Salaires'&&dateAnalyse20260904_(o.date_analyse)<=finReference).sort((a,b)=>dateAnalyse20260904_(b.date_analyse)-dateAnalyse20260904_(a.date_analyse))[0];
   const recettes={version:'2026-09-04.2',fenetres:{},references:{salairePatrick:dernierSalaire?Number(dernierSalaire.montant||0):0,loyerAppartement:Number(params.loyer_reference_mensuel||750),garage:Number(params.garage_reference_mensuel||30),pluxeeMensuel:Number(params.pluxee_montant_mensuel||154),pluxeeMoisCarence:Number(params.pluxee_mois_carence||5),moisPrimesSalaire:String(params.salaire_mois_primes||'6,11,12')}};
-  recettes.fenetres[nb]={mois:nb,debut:debutFenetre,fin:borneFenetre,revenusEconomiques,moyenneMensuelle:moyenneRevenusCyclesComplets,baseMoyenneMensuelle:periodesCompletes.length,revenusStructurels,revenusVariables,partVariable:revenusEconomiques>0?revenusVariables/revenusEconomiques*100:0,producteurs,sources:Object.entries(sources).map(([nom,montant])=>({nom,montant})).sort((a,b)=>b.montant-a.montant),remboursementsProfessionnelsNeutralises:0,creditsTresorerie,moisAvecSauvetage:periodesSauvetage.size,dependanceCredit:revenusEconomiques>0?creditsTresorerie/revenusEconomiques*100:0,alignementPeriodes:'2026-09-04.2'};
+  recettes.fenetres[nb]={mois:nb,debut:debutFenetre,fin:borneFenetre,revenusEconomiques,moyenneMensuelle:moyenneRevenusCyclesComplets,baseMoyenneMensuelle:periodesCompletes.length,revenusStructurels,revenusVariables,partVariable:revenusEconomiques>0?revenusVariables/revenusEconomiques*100:0,producteurs,sources:categoriesRevenusAnalyseCanoniques20260921_().map(nom=>({nom,montant:Number(sources[nom]||0)})),remboursementsProfessionnelsNeutralises:0,creditsTresorerie,moisAvecSauvetage:periodesSauvetage.size,dependanceCredit:revenusEconomiques>0?creditsTresorerie/revenusEconomiques*100:0,alignementPeriodes:'2026-09-04.2'};
 
   const pluxeeValides=pluxeeOps.filter(o=>String(o.statut||'valide').toLowerCase()!=='refuse'&&Number(o.montant||0)<0).filter(o=>{const d=dateAnalyse20260904_(o.date);return d&&d>=debutFenetre&&d<=borneFenetre;});
   let pluxeeCourses=0,pluxeeRestaurants=0,pluxeeAClasser=0;
