@@ -64,6 +64,23 @@ const CATEGORIES_BUDGETSOFT_CIBLES_ = [
   {nom:'Épargne',type:'epargne'}
 ];
 
+const CATEGORIES_REVENUS_BUDGETSOFT_CANONIQUES_20260921 = [
+  'Salaires',
+  'France Travail',
+  'Cours',
+  'Concerts',
+  'Droits artistiques',
+  'Congés spectacles',
+  'Avantages employeur',
+  'Revenus fonciers',
+  'Prestations / aides',
+  'Revenus divers'
+];
+
+function categoriesRevenusBudgetSoftCanoniques20260921_(){
+  return CATEGORIES_REVENUS_BUDGETSOFT_CANONIQUES_20260921.slice();
+}
+
 const RENOMMAGES_CATEGORIES_BUDGETSOFT_ = {
   'logement':'Logements',
   'transport':'Transports',
@@ -72,6 +89,8 @@ const RENOMMAGES_CATEGORIES_BUDGETSOFT_ = {
   'frais bancaires':'Frais bancaires',
   'salaire':'Salaires',
   'divers':'Revenus divers',
+  'autres revenus':'Revenus divers',
+  'sacem':'Droits artistiques',
   'autres revenus':'Revenus divers',
   'revenu divers':'Revenus divers',
   'revenus divers':'Revenus divers',
@@ -135,6 +154,43 @@ function migrerReferencesCategoriesBudgetSoft_(renommages){
     });
   });
   return{cellulesModifiees:cellulesModifiees,feuillesModifiees:feuillesModifiees};
+}
+
+function fusionnerCanonRecettesCategoriesBudgetSoft20260921_(){
+  const ss=SpreadsheetApp.getActiveSpreadsheet(),nomFeuille=typeof CERBERE_RECETTES_CANON_SHEET!=='undefined'?CERBERE_RECETTES_CANON_SHEET:'Cerbere_Recettes_Canon_V1',f=ss.getSheetByName(nomFeuille);
+  if(!f||f.getLastRow()<2)return{ok:true,feuille:nomFeuille,groupesFusionnes:0,lignesAvant:Math.max(0,f?f.getLastRow()-1:0),lignesApres:Math.max(0,f?f.getLastRow()-1:0)};
+  const hs=f.getRange(1,1,1,f.getLastColumn()).getValues()[0].map(v=>String(v||'').trim()),iCat=hs.indexOf('categorie');
+  if(iCat<0)return{ok:true,feuille:nomFeuille,groupesFusionnes:0,raison:'colonne_categorie_absente'};
+  const iMont=hs.indexOf('montant'),iPrev=hs.indexOf('montant_precedent'),iEff=hs.indexOf('date_effet'),iOrd=hs.indexOf('ordre'),iAct=hs.indexOf('actif'),iCom=hs.indexOf('commentaire');
+  const rows=f.getRange(2,1,f.getLastRow()-1,hs.length).getValues(),groupes=new Map();
+  rows.forEach(r=>{
+    const avant=String(r[iCat]||'').trim();if(!avant)return;
+    const cat=categorieCibleBudgetSoft_(avant);r[iCat]=cat;
+    const cle=cleCategorieBudgetSoft_(cat);
+    if(!groupes.has(cle)){groupes.set(cle,[r]);return;}
+    groupes.get(cle).push(r);
+  });
+  let groupesFusionnes=0;const sortie=[];
+  groupes.forEach(xs=>{
+    if(xs.length===1){sortie.push(xs[0]);return;}
+    groupesFusionnes++;
+    const dates=iEff>=0?[...new Set(xs.map(r=>String(r[iEff]||'').trim()).filter(Boolean))]:[];
+    if(dates.length>1)throw new Error('Fusion R0 ambiguë pour '+String(xs[0][iCat]||'')+' : plusieurs date_effet ('+dates.join(', ')+').');
+    const base=xs[0].slice();
+    if(iMont>=0)base[iMont]=xs.reduce((s,r)=>s+Math.max(0,Number(r[iMont]||0)),0);
+    if(iPrev>=0){
+      const vals=xs.map(r=>r[iPrev]).filter(v=>v!==''&&v!=null);
+      base[iPrev]=vals.length?vals.reduce((s,v)=>s+Math.max(0,Number(v||0)),0):'';
+    }
+    if(iOrd>=0){const ords=xs.map(r=>Number(r[iOrd]||999)).filter(Number.isFinite);base[iOrd]=ords.length?Math.min.apply(null,ords):999;}
+    if(iAct>=0)base[iAct]=xs.some(r=>r[iAct]===true||String(r[iAct]).toLowerCase()==='true');
+    if(iCom>=0)base[iCom]=[...new Set(xs.map(r=>String(r[iCom]||'').trim()).filter(Boolean))].join(' · ');
+    sortie.push(base);
+  });
+  sortie.sort((a,b)=>(iOrd>=0?Number(a[iOrd]||999)-Number(b[iOrd]||999):0)||String(a[iCat]||'').localeCompare(String(b[iCat]||''),'fr'));
+  f.getRange(2,1,f.getLastRow()-1,hs.length).clearContent();
+  if(sortie.length)f.getRange(2,1,sortie.length,hs.length).setValues(sortie);
+  return{ok:true,feuille:nomFeuille,groupesFusionnes,lignesAvant:rows.length,lignesApres:sortie.length};
 }
 
 function installerArchitectureCategoriesBudgetSoft(){
