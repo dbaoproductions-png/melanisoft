@@ -140,6 +140,8 @@ function migrerReferencesCategoriesBudgetSoft_(renommages){
   const colonnesEligibles=new Set(['categorie','poste','categorie_actuelle','categorie_proposee']);
   let cellulesModifiees=0,feuillesModifiees={};
   ss.getSheets().forEach(function(f){
+    const nomFeuille=String(f.getName()||'');
+    if(/(?:sauvegarde|backup|archive|avant_annulation|avant_reparation|avant_migration)/i.test(nomFeuille))return;
     if(f.getLastRow()<2||f.getLastColumn()<1)return;
     const entetes=f.getRange(1,1,1,f.getLastColumn()).getValues()[0].map(function(v){return String(v||'').trim();});
     entetes.forEach(function(nomColonne,index){
@@ -287,50 +289,6 @@ function auditerReferentielRevenus10BudgetSoft20260921(){
   console.log('[AUDIT REFERENTIEL REVENUS 10 BUDGETSOFT 20260921] '+JSON.stringify(out));
   return out;
 }
-
-function migrerNomenclatureRevenusBudgetSoft20260921(){
-  verifierInitialisation_();
-  const ss=SpreadsheetApp.getActiveSpreadsheet(),aliases={'sacem':'Droits artistiques','autres revenus':'Revenus divers','revenus':'Revenus divers'};
-  const referencesModifiees=migrerReferencesCategoriesBudgetSoft_(aliases);
-  const f=ss.getSheetByName('Categories');
-  if(!f)throw new Error('Onglet Categories introuvable.');
-  const hs=f.getRange(1,1,1,f.getLastColumn()).getValues()[0].map(v=>String(v||'').trim()),iNom=hs.indexOf('nom'),iType=hs.indexOf('type');
-  if(iNom<0||iType<0)throw new Error('Schéma Categories incomplet.');
-  const rows=f.getLastRow()>1?f.getRange(2,1,f.getLastRow()-1,hs.length).getValues():[],parNom=new Map(),horsRevenus=[];
-  let categoriesRenommees=0,categoriesFusionnees=0;
-  rows.forEach(r=>{
-    const type=String(r[iType]||'').trim().toLowerCase();
-    if(type!=='revenu'){horsRevenus.push(r);return;}
-    const avant=String(r[iNom]||'').trim(),apres=aliases[cleCategorieBudgetSoft_(avant)]||avant;
-    if(apres!==avant)categoriesRenommees++;
-    r[iNom]=apres;
-    const k=cleCategorieBudgetSoft_(apres);
-    if(!parNom.has(k)){parNom.set(k,r);return;}
-    categoriesFusionnees++;
-    const base=parNom.get(k);
-    for(let i=0;i<base.length;i++)if((base[i]===''||base[i]==null)&&r[i]!==''&&r[i]!=null)base[i]=r[i];
-  });
-  const canons=categoriesRevenusBudgetSoftCanoniques20260921_(),parCanon=new Map(canons.map((n,i)=>[cleCategorieBudgetSoft_(n),i]));
-  const revenus=[...parNom.values()].filter(r=>parCanon.has(cleCategorieBudgetSoft_(r[iNom])));
-  const presents=new Set(revenus.map(r=>cleCategorieBudgetSoft_(r[iNom])));
-  canons.forEach(n=>{
-    const k=cleCategorieBudgetSoft_(n);if(presents.has(k))return;
-    const r=new Array(hs.length).fill('');
-    const iId=hs.indexOf('id'),iAct=hs.indexOf('actif');if(iId>=0)r[iId]=Utilities.getUuid();
-    r[iNom]=n;r[iType]='revenu';if(iAct>=0)r[iAct]=true;revenus.push(r);
-  });
-  revenus.sort((a,b)=>(parCanon.get(cleCategorieBudgetSoft_(a[iNom]))??999)-(parCanon.get(cleCategorieBudgetSoft_(b[iNom]))??999));
-  const sortie=horsRevenus.concat(revenus);
-  if(f.getLastRow()>1)f.getRange(2,1,f.getLastRow()-1,hs.length).clearContent();
-  if(sortie.length)f.getRange(2,1,sortie.length,hs.length).setValues(sortie);
-  const fusionCanon=fusionnerCanonRecettesCategoriesBudgetSoft20260921_();
-  SpreadsheetApp.flush();
-  if(typeof marquerSnapshotGlobalBudgetSoftObsolete20260916_==='function')marquerSnapshotGlobalBudgetSoftObsolete20260916_('migration_nomenclature_revenus_10');
-  const out={ok:true,version:'2026-09-21.1',categoriesRevenus:canons,nombreCategoriesRevenus:canons.length,referencesModifiees,categoriesRenommees,categoriesFusionnees,fusionCanon};
-  console.log('[MIGRATION NOMENCLATURE REVENUS 10 20260921] '+JSON.stringify(out));
-  return out;
-}
-
 function auditerNomenclatureRevenusBudgetSoft20260921(){
   verifierInitialisation_();
   const ss=SpreadsheetApp.getActiveSpreadsheet(),canons=categoriesRevenusBudgetSoftCanoniques20260921_(),attendu=JSON.stringify(canons),aliasInterdits=new Set(['sacem','autres revenus']);
