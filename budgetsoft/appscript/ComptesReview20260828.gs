@@ -29,7 +29,8 @@ function chargerSyntheseComptes20260828(){
   };
 }
 
-function construireSyntheseComptes20260828_(){
+function construireSyntheseComptes20260828_(ctx){
+  ctx=ctx||{};
   const comptes=lireTable_('Comptes');
   const operationsSource=lireTable_('Operations');
   const operations=typeof dedoublonnerOperationsCartesBudgetSoft_==='function'?dedoublonnerOperationsCartesBudgetSoft_(operationsSource):operationsSource;
@@ -76,7 +77,7 @@ function construireSyntheseComptes20260828_(){
   });
   const actifs=lignes.filter(function(c){return actifComptes20260828_(c.actif);});
   const sommeTypes=function(types){return arrondirComptes20260828_(actifs.filter(function(c){return types.indexOf(String(c.type||'').toLowerCase())>=0;}).reduce(function(s,c){return s+c.soldeReel;},0));};
-  let pluxee=null;try{const p=chargerPluxee();pluxee=p&&p.ok?Number(p.solde):null;}catch(e){pluxee=null;}
+  let pluxee=null;try{const p=ctx.pluxee||(typeof chargerPluxeeSource20260918_==='function'?chargerPluxeeSource20260918_():null);pluxee=p&&p.ok!==false?Number(p.solde):null;}catch(e){pluxee=null;}
   const avertissements=[];
   lignes.forEach(c=>{
     if(c.referenceFutureIgnoree)avertissements.push({code:'REFERENCE_SOLDE_FUTURE_IGNOREE',compte:c.nom,date:c.dateReferenceIgnoree});
