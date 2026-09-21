@@ -1,13 +1,14 @@
-const CERBERE_ROLLING_VERSION='3.6.3';
+const CERBERE_ROLLING_VERSION='3.6.4';
 
 /** Cerbère roulant 3.6.3 : le détail/tirettes ne porte que sur le pilotable P0. */
 function chargerCerbereRoulant(){
   const base=chargerCerbereV33();
   if(!base||base.ok===false)return base;
   const operations=lireTable_('Operations'),categories=lireTable_('Categories'),charges=lireTable_('Charges_fixes'),periodes=base.periodes||[];
-  const ventilation=construireVentilationOperationsBudgetSoft_(operations,categories,periodes);
+  const p0Pilotables=new Set((base.p0&&base.p0.postes||[]).map(x=>String(x.categorie||'').trim()).filter(Boolean));
+  const ventilation=construireVentilationOperationsBudgetSoft_(operations,categories,periodes,p0Pilotables);
   const r0Cats=new Set((base.recettesCanon&&base.recettesCanon.postes||[]).map(x=>String(x.categorie||'').trim()).filter(Boolean));
-  const p0Cats=new Set((base.p0&&base.p0.postes||[]).map(x=>String(x.categorie||'').trim()).filter(Boolean));p0Cats.add('Divers');
+  const p0Cats=new Set(p0Pilotables);p0Cats.add('Divers');
 
   periodes.forEach((p,i)=>{
     const b=ventilation.buckets[i]||{};assurerDiversDansPeriodeCerbere363_(p);
