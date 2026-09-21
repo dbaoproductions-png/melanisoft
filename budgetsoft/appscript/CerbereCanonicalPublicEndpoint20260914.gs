@@ -63,36 +63,10 @@ function chargerCerbereCockpitCanonique20260914(){
     return snapshot;
   }
 
-  if(typeof chargerCerbereCockpitProprietaire20260917_==='function'){
-    try{
-      const frais=chargerCerbereCockpitProprietaire20260917_();
-      if(frais&&frais.ok!==false){
-        frais.ok=true;
-        frais.sourceBudgetSoft=String(frais.sourceBudgetSoft||frais.source||'recalcul_secours');
-        frais.versionEndpointCanonique=CERBERE_CANONICAL_PUBLIC_ENDPOINT_20260914_VERSION;
-        frais.cfSnapshotBuildVersion=String(frais&&frais.diagnostic&&frais.diagnostic.cfSnapshotBuild20260914&&frais.diagnostic.cfSnapshotBuild20260914.version||'');
-        frais.fallbackEndpointCanonique=true;
-        frais.raisonFallbackEndpointCanonique=snapshot&&snapshot.ok!==false&&build!==attendu
-          ?'snapshot_cf_build_incompatible'
-          :(erreurSnapshot?'snapshot_erreur':'snapshot_indisponible');
-        harmoniserSoldeReelCerbereCanonique20260918_(frais);
-        frais.dureeEndpointCanoniqueMs=Date.now()-t0;
-        return frais;
-      }
-      return Object.assign({},frais||{}, {
-        ok:false,
-        versionEndpointCanonique:CERBERE_CANONICAL_PUBLIC_ENDPOINT_20260914_VERSION,
-        erreur:String(frais&&frais.erreur||frais&&frais.message||'Recalcul Cerbère indisponible.')
-      });
-    }catch(e){
-      return{
-        ok:false,
-        versionEndpointCanonique:CERBERE_CANONICAL_PUBLIC_ENDPOINT_20260914_VERSION,
-        erreur:'Snapshot et recalcul Cerbère indisponibles : '+String(e&&e.message||e),
-        erreurSnapshot:erreurSnapshot||''
-      };
-    }
-  }
+  // Lecture publique snapshot-only : le moteur Cerbère frais reste propriétaire
+  // de construction/diagnostic, mais l'UI ne doit jamais lancer un second calcul
+  // métier quand la révision globale est absente ou incompatible.
+
 
   return{
     ok:false,
