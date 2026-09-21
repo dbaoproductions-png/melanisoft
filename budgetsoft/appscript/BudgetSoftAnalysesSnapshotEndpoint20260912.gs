@@ -1,4 +1,4 @@
-const BUDGETSOFT_ANALYSES_SNAPSHOT_20260912_VERSION='2026-09-12.2';
+const BUDGETSOFT_ANALYSES_SNAPSHOT_20260912_VERSION='2026-09-21.1';
 
 function normaliserNombrePeriodesAnalysesSnapshot20260912_(nombrePeriodes){
   const n=parseInt(nombrePeriodes,10);
@@ -47,13 +47,7 @@ function servirAnalysesDepuisSnapshotBudgetSoft20260912_(nombrePeriodes){
 // Point d'entrée public conservé : l'UI n'a rien à changer.
 function chargerAnalysesBudgetairesV23(nombrePeriodes){
   const snapshot=servirAnalysesDepuisSnapshotBudgetSoft20260912_(nombrePeriodes);
-  if(snapshot)return snapshot;
-  const r=chargerAnalysesBudgetairesV23Source20260912_(nombrePeriodes);
-  if(r&&typeof r==='object'){
-    r.sourceBudgetSoft='recalcul_secours';
-    r.versionSnapshotAnalyses=BUDGETSOFT_ANALYSES_SNAPSHOT_20260912_VERSION;
-  }
-  return r;
+  return snapshot||{ok:false,sourceBudgetSoft:'snapshot_global_indisponible',versionSnapshotAnalyses:BUDGETSOFT_ANALYSES_SNAPSHOT_20260912_VERSION,erreur:'Analyses absentes du snapshot global.'};
 }
 
 function auditerAnalysesSnapshotBudgetSoft20260912(){
