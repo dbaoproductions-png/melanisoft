@@ -113,11 +113,11 @@ function auditerImpactVersementCautionLoyerAout20260921(){
   const operations=typeof lireTable_==='function'?(lireTable_('Operations')||[]):[];
   const op=operations.find(function(x){return String(x&&x.id||'').trim()===operationId;})||null;
 
-  const etat=typeof lireEtatGlobalBudgetSoftSiDisponible20260906_==='function'
+  const e=typeof lireEtatGlobalBudgetSoftSiDisponible20260906_==='function'
     ?lireEtatGlobalBudgetSoftSiDisponible20260906_()
     :null;
-  const disponible=!!(etat&&etat.disponible&&etat.etat);
-  const e=disponible?etat.etat:null,m=e&&e.modules||{};
+  const disponible=!!(e&&e.ok===true&&e.publie===true&&e.revisionBudgetSoft);
+  const m=e&&e.modules||{};
   const projection=m.projectionEtendue||{},cerbere=m.cerbere||{},dashboard=m.dashboard||{},analyses=m.analyses||{},engagements=m.engagementsBancaires||{};
 
   const lignesProjection=Array.isArray(projection&&projection.lignes)?projection.lignes:[];
@@ -149,7 +149,7 @@ function auditerImpactVersementCautionLoyerAout20260921(){
 
   const out={
     ok:controles.every(function(x){return x.ok;}),
-    version:'2026-09-21.1',
+    version:'2026-09-21.2',
     lectureSeule:true,
     evenement:{
       id:eventId,libelle:String(ev&&ev.libelle||''),type:String(ev&&ev.type||''),categorie:String(ev&&ev.categorie||''),
