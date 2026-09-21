@@ -6,7 +6,7 @@
  * modules.projectionEtendue. Le moteur 20260901 reste son implémentation métier.
  * Dashboard, Comptes et Cerbère lisent la même trajectoire et la même révision.
  */
-const BUDGETSOFT_UNIFIED_TREASURY_VERSION='2026-09-17.1';
+const BUDGETSOFT_UNIFIED_TREASURY_VERSION='2026-09-21.1';
 
 function jourTresorerieUnifiee20260907_(v){
   if(v===undefined||v===null||v==='')return '';
@@ -41,14 +41,12 @@ function auditerUniteModulesTresorerieBudgetSoft20260907_(modules){
 }
 
 function chargerTresorerieUnifieeBudgetSoft20260907(dateCible){
-  const s=chargerSnapshotGlobalBudgetSoft20260906(),e=s&&s.disponible&&s.etat,m=e&&e.modules||{};
-  let p=m.projectionEtendue||{},c=m.comptes||{},d=m.dashboard||{},sourceBudgetSoft='snapshot_global_projection_canonique',revisionBudgetSoft=e&&e.revisionBudgetSoft||'',genereLe=e&&e.genereLe||'';
+  const e=typeof lireEtatGlobalBudgetSoftSiDisponible20260906_==='function'?lireEtatGlobalBudgetSoftSiDisponible20260906_():null;
+  const m=e&&e.modules||{};
+  const p=m.projectionEtendue||{},c=m.comptes||{},d=m.dashboard||{};
+  const sourceBudgetSoft='snapshot_global_projection_canonique',revisionBudgetSoft=e&&e.revisionBudgetSoft||'',genereLe=e&&e.genereLe||'';
   if(!e||e.ok!==true||!p||p.ok===false){
-    if(typeof construireTrajectoireTresorerieCanoniqueBudgetSoft20260907!=='function')return{ok:false,version:BUDGETSOFT_UNIFIED_TREASURY_VERSION,erreur:'Snapshot global périmé et propriétaire canonique frais indisponible.'};
-    const executer=function(){return construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(dateCible);};
-    p=typeof avecContexteLectureBudgetSoft20260827_==='function'?avecContexteLectureBudgetSoft20260827_('tresorerie-unifiee-recalcul-secours',executer):executer();
-    if(!p||p.ok===false)return p||{ok:false,version:BUDGETSOFT_UNIFIED_TREASURY_VERSION,erreur:'Recalcul canonique de trésorerie indisponible.'};
-    c={};d={};sourceBudgetSoft='recalcul_secours_canonique';revisionBudgetSoft='';genereLe='';
+    return{ok:false,version:BUDGETSOFT_UNIFIED_TREASURY_VERSION,sourceBudgetSoft:'snapshot_global_indisponible',revisionBudgetSoft:revisionBudgetSoft,erreur:'Révision BudgetSoft globale indisponible : la trésorerie unifiée ne lance pas de recalcul métier depuis une interface.'};
   }
   const ref=jourTresorerieUnifiee20260907_(p.dateReference);
   const cibleDemandee=jourTresorerieUnifiee20260907_(dateCible);
