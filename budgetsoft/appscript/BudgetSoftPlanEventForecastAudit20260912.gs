@@ -76,3 +76,95 @@ function auditerEvenementsPrevusTresorerieBudgetSoft20260912(){
   console.log('[AUDIT événements prévus trésorerie] '+JSON.stringify(out));
   return out;
 }
+
+
+function normaliserLibelleAuditRapprochementPlan20260921_(v){
+  return String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim();
+}
+function compterRefsAuditRapprochementPlan20260921_(v,termes){
+  const txt=JSON.stringify(v||{});
+  const out={};
+  (termes||[]).forEach(function(t){
+    const s=String(t||'');if(!s){out[s]=0;return;}
+    let i=0,n=0;while((i=txt.indexOf(s,i))>=0){n++;i+=s.length;}
+    out[s]=n;
+  });
+  return out;
+}
+
+/**
+ * Audit ciblé lecture seule du rapprochement Plan -> Réel
+ * "Versement caution plus loyer août".
+ * Aucun recalcul métier, aucune écriture.
+ */
+function auditerImpactVersementCautionLoyerAout20260921(){
+  const cible='versement caution plus loyer aout';
+  const evenements=typeof lireFeuilleDynamiquePlan_==='function'?lireFeuilleDynamiquePlan_('Plan_Evenements'):[];
+  const matches=(evenements||[]).filter(function(e){
+    return normaliserLibelleAuditRapprochementPlan20260921_(e&&e.libelle)===cible;
+  });
+  if(matches.length!==1){
+    const out={ok:false,version:'2026-09-21.1',lectureSeule:true,erreur:'Événement cible non unique',nombre:matches.length,libelles:matches.map(function(x){return String(x&&x.libelle||'');})};
+    console.log('[AUDIT IMPACT RAPPROCHEMENT CAUTION LOYER AOUT 20260921] '+JSON.stringify(out));
+    return out;
+  }
+
+  const ev=matches[0],eventId=String(ev&&ev.id||'').trim(),operationId=String(ev&&ev.operation_reelle_id||'').trim();
+  const operations=typeof lireTable_==='function'?(lireTable_('Operations')||[]):[];
+  const op=operations.find(function(x){return String(x&&x.id||'').trim()===operationId;})||null;
+
+  const etat=typeof lireEtatGlobalBudgetSoftSiDisponible20260906_==='function'
+    ?lireEtatGlobalBudgetSoftSiDisponible20260906_()
+    :null;
+  const disponible=!!(etat&&etat.disponible&&etat.etat);
+  const e=disponible?etat.etat:null,m=e&&e.modules||{};
+  const projection=m.projectionEtendue||{},cerbere=m.cerbere||{},dashboard=m.dashboard||{},analyses=m.analyses||{},engagements=m.engagementsBancaires||{};
+
+  const lignesProjection=Array.isArray(projection&&projection.lignes)?projection.lignes:[];
+  const eventLines=lignesProjection.filter(function(l){return String(l&&l.source||'')==='evenement'&&String(l&&l.sourceId||'')===eventId;});
+  const opLines=lignesProjection.filter(function(l){return String(l&&l.sourceId||'')===operationId||String(l&&l.id||'').indexOf(operationId)>=0;});
+
+  const refs={
+    cerbere:compterRefsAuditRapprochementPlan20260921_(cerbere,[eventId,operationId]),
+    dashboard:compterRefsAuditRapprochementPlan20260921_(dashboard,[eventId,operationId]),
+    analyses:compterRefsAuditRapprochementPlan20260921_(analyses,[eventId,operationId]),
+    engagementsBancaires:compterRefsAuditRapprochementPlan20260921_(engagements,[eventId,operationId])
+  };
+
+  const statutNorm=typeof statutNormaliseEvenementPlanForecast20260912_==='function'
+    ?statutNormaliseEvenementPlanForecast20260912_(ev&&ev.statut)
+    :normaliserLibelleAuditRapprochementPlan20260921_(ev&&ev.statut);
+  const rapproNorm=typeof statutNormaliseEvenementPlanForecast20260912_==='function'
+    ?statutNormaliseEvenementPlanForecast20260912_(ev&&ev.rapprochement_statut)
+    :normaliserLibelleAuditRapprochementPlan20260921_(ev&&ev.rapprochement_statut);
+
+  const controles=[
+    {code:'PLAN_EVENEMENT_RAPPROCHE',ok:statutNorm==='rapproche'||rapproNorm==='rapproche',detail:{statut:String(ev&&ev.statut||''),rapprochementStatut:String(ev&&ev.rapprochement_statut||'')}},
+    {code:'PLAN_LIEN_OPERATION_REELLE',ok:!!operationId&&!!op,detail:{eventId:eventId,operationId:operationId,operationTrouvee:!!op}},
+    {code:'SNAPSHOT_FRAIS_APRES_RAPPROCHEMENT',ok:disponible,detail:{disponible:disponible,revisionBudgetSoft:String(e&&e.revisionBudgetSoft||''),genereLe:String(e&&e.genereLe||'')}},
+    {code:'PROJECTION_PREVISION_PLAN_NEUTRALISEE',ok:disponible&&eventLines.length===0,detail:{lignesEvenement:eventLines}},
+    {code:'PROJECTION_OPERATION_REELLE_NON_DOUBLEE',ok:disponible&&opLines.length<=1,detail:{nombreLignesOperation:opLines.length,lignes:opLines}},
+    {code:'MODULES_SNAPSHOT_PRESENTS',ok:disponible&&!!m.cerbere&&!!m.dashboard&&!!m.analyses&&!!m.engagementsBancaires,detail:{cerbere:!!m.cerbere,dashboard:!!m.dashboard,analyses:!!m.analyses,engagementsBancaires:!!m.engagementsBancaires}}
+  ];
+
+  const out={
+    ok:controles.every(function(x){return x.ok;}),
+    version:'2026-09-21.1',
+    lectureSeule:true,
+    evenement:{
+      id:eventId,libelle:String(ev&&ev.libelle||''),type:String(ev&&ev.type||''),categorie:String(ev&&ev.categorie||''),
+      montantPrevu:Number(ev&&ev.montant||0),statut:String(ev&&ev.statut||''),rapprochementStatut:String(ev&&ev.rapprochement_statut||''),
+      operationReelleId:operationId,montantReel:Number(ev&&ev.montant_reel||0),dateRealisation:String(ev&&ev.date_realisation||'')
+    },
+    operation:op?{
+      id:String(op.id||''),libelle:String(op.libelle_bancaire||op.libelle||''),montant:Number(op.montant||0),
+      categorie:String(op.categorie||''),dateComptable:String(op.date_comptable||''),dateAchat:String(op.date_achat||''),compte:String(op.compte||'')
+    }:null,
+    snapshot:{disponible:disponible,revisionBudgetSoft:String(e&&e.revisionBudgetSoft||''),genereLe:String(e&&e.genereLe||'')},
+    projection:{lignesEvenement:eventLines,lignesOperation:opLines},
+    referencesModules:refs,
+    controles:controles
+  };
+  console.log('[AUDIT IMPACT RAPPROCHEMENT CAUTION LOYER AOUT 20260921] '+JSON.stringify(out));
+  return out;
+}
