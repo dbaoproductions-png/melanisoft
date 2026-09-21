@@ -1,4 +1,4 @@
-const BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION='2026-09-18.1';
+const BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION='2026-09-21.1';
 
 /**
  * Adapte le chargeur Cerbère classique à une base déjà calculée sans modifier son
@@ -28,7 +28,9 @@ function composerCerbereCockpitDepuisBaseSnapshotBudgetSoft20260910_(base,projec
         return calculSs2Original(baseSs2,p2,projectionTresoreriePrecalculee);
       };
     }
-    const cockpit=chargerCerbereCockpit20260902();
+    const cockpit=typeof recalculerCerbereCockpitP1Frais20260912_==='function'
+      ?recalculerCerbereCockpitP1Frais20260912_({contexteExterne:true})
+      :base;
     return typeof enrichirCerbereRecettesCertainesDues20260919_==='function'
       ?enrichirCerbereRecettesCertainesDues20260919_(cockpit)
       :cockpit;
@@ -180,11 +182,13 @@ function reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(origine){
         return sante;
       });
       perf.cerbere=Number(perf.cerbere||0)+cerbereBaseMs;
-      const soldeReelUnifie=Number(projectionEtendue&&projectionEtendue.soldeReel);
+      const soldeReelUnifie=Number(tresorerieComptable&&tresorerieComptable.soldeReel);
       if(cerbere&&Number.isFinite(soldeReelUnifie)){
         cerbere.reel=cerbere.reel||{};
         cerbere.reel.soldeBancaire=soldeReelUnifie;
-        cerbere.reel.sourceSoldeBancaire='projectionEtendue.soldeReel';
+        cerbere.reel.dateReference=String(tresorerieComptable&&tresorerieComptable.dateReference||'');
+        cerbere.reel.sourceSoldeBancaire='tresorerieComptable.soldeReel';
+        cerbere.reel.revisionOwner='snapshot_global';
       }
 
       const cerbereExpress=prendre('cerbereExpress',()=>{
