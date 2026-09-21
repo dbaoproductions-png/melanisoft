@@ -65,3 +65,38 @@ et, pour la matérialisation bancaire des flux futurs :
 `Sources canoniques → projectionEtendue → Comptes / trajectoire bancaire Cerbère`
 
 La cohérence entre `Rt1` et la trajectoire ne doit pas être obtenue par duplication de formule mais par la consommation des propriétaires canoniques et par des gardes de cohérence intermodules.
+
+
+## 6. Nomenclature canonique des revenus
+
+La nomenclature des revenus économiques BudgetSoft est fermée à **10 catégories**, dans cet ordre :
+
+1. Salaires
+2. France Travail
+3. Cours
+4. Concerts
+5. Droits artistiques
+6. Congés spectacles
+7. Avantages employeur
+8. Revenus fonciers
+9. Prestations / aides
+10. Revenus divers
+
+Deux libellés historiques sont absorbés définitivement :
+- `SACEM` → `Droits artistiques` ;
+- `Autres revenus` → `Revenus divers`.
+
+Ces anciens libellés peuvent être reconnus comme alias entrants pour migration ou compatibilité, mais **aucun propriétaire ni consommateur BudgetSoft ne doit les republier**.
+
+Cette nomenclature est commune à `Categories`, `Operations`, au Plan, au canon R0, à Cerbère, au Dashboard et à Analyses. Une fusion de catégories ne doit jamais modifier le montant économique : les montants historiques et les références R0 fusionnées sont additionnés.
+
+Le module Analyses publie toujours les **10 catégories**, dans l'ordre canonique, y compris lorsqu'une catégorie ne comporte aucun mouvement sur la fenêtre étudiée ; son montant vaut alors `0`.
+
+### Invariants
+
+Une révision ou une migration est incohérente si :
+- le référentiel actif ne contient pas exactement ces 10 catégories de type `revenu` ;
+- `SACEM` ou `Autres revenus` subsiste dans une source métier après migration ;
+- Analyses publie un nombre différent de 10 catégories de revenus ;
+- Analyses publie une catégorie différente de la nomenclature canonique ;
+- une fusion de nomenclature modifie le total des revenus ou le total R0.
