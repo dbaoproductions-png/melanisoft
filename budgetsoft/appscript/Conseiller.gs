@@ -1,46 +1,43 @@
-const CONSEILLER_VERSION = '1.6';
+const CONSEILLER_VERSION = '1.7-snapshot-2026-09-21';
+
+function construireConseillerFinancierSource20260921_(ctx) {
+  ctx=ctx||{};
+  const analyse=ctx.analyse||{};
+  const creditsModule=ctx.credits||{};
+  const objectifs=Array.isArray(ctx.objectifs)?ctx.objectifs:[];
+  const charges=(Array.isArray(ctx.charges)?ctx.charges:[]).filter(c=>convertirBooleen_(c.actif));
+
+  const capitalRestant=Math.max(0,Number(creditsModule.capitalRestant!=null?creditsModule.capitalRestant:creditsModule.endettementTotal||0));
+  const mensualites=Math.max(0,Number(creditsModule.mensualites||0));
+  const chargesMensuelles=charges.reduce((s,c)=>s+equivalentMensuelConseiller_(c),0);
+  const indicateurs=analyse&&analyse.indicateurs||{};
+  const revenusMoyens=Number(indicateurs.revenusMoyens||0);
+  const depensesMoyennes=Number(indicateurs.depensesMoyennes||0);
+  const epargneMoyenne=revenusMoyens-depensesMoyennes;
+  const tauxEndettement=revenusMoyens>0?Math.round((mensualites/revenusMoyens)*1000)/10:0;
+  const poidsChargesFixes=revenusMoyens>0?Math.round((chargesMensuelles/revenusMoyens)*1000)/10:0;
+  const recommandations=construireRecommandationsConseiller_({analyse,objectifs,revenusMoyens,depensesMoyennes,epargneMoyenne,tauxEndettement,poidsChargesFixes,capitalRestant});
+  const score=calculerScoreConseiller_({analyse,revenusMoyens,epargneMoyenne,tauxEndettement,poidsChargesFixes});
+  return{
+    ok:true,
+    version:CONSEILLER_VERSION,
+    score,
+    niveau:score>=75?'Solide':score>=55?'À consolider':score>=35?'Fragile':'Prioritaire',
+    synthese:syntheseConseiller_(score,epargneMoyenne,indicateurs.evolutionDepenses),
+    indicateurs:{revenusMoyens,depensesMoyennes,epargneMoyenne,tauxEndettement,poidsChargesFixes,capitalRestant},
+    recommandations,
+    categories:(analyse.categories||[]).slice(0,6),
+    alertesBudget:(analyse.alertes||[]).slice(0,5),
+    objectifsActifs:objectifs.filter(o=>String(o.statut||'').toLowerCase()!=='terminé').length,
+    confidentialite:'Diagnostic calculé uniquement dans votre classeur Google Sheets. Aucune donnée bancaire n’est transmise à un service externe.',
+    sourceBudgetSoft:'constructeur_snapshot'
+  };
+}
 
 function chargerConseillerFinancier() {
-  verifierInitialisation_();
-  const analyse = chargerAnalysesBudgetaires(6);
-  const credits = lireTable_('Credits').concat(lireTable_('Dettes'));
-  const objectifs = lireTable_('Objectifs');
-  const charges = lireTable_('Charges_fixes').filter(c => convertirBooleen_(c.actif));
-  const operations = lireTable_('Operations');
-
-  const capitalRestant = credits.reduce((s, c) => s + Math.max(0, Number(c.capital_restant || 0)), 0);
-  const mensualites = credits.reduce((s, c) => s + Math.max(0, Number(c.mensualite || 0)), 0);
-  const chargesMensuelles = charges.reduce((s, c) => s + equivalentMensuelConseiller_(c), 0);
-  const revenusMoyens = Number(analyse.indicateurs.revenusMoyens || 0);
-  const depensesMoyennes = Number(analyse.indicateurs.depensesMoyennes || 0);
-  const epargneMoyenne = revenusMoyens - depensesMoyennes;
-  const tauxEndettement = revenusMoyens > 0 ? Math.round((mensualites / revenusMoyens) * 1000) / 10 : 0;
-  const poidsChargesFixes = revenusMoyens > 0 ? Math.round((chargesMensuelles / revenusMoyens) * 1000) / 10 : 0;
-
-  const recommandations = construireRecommandationsConseiller_({
-    analyse,
-    objectifs,
-    revenusMoyens,
-    depensesMoyennes,
-    epargneMoyenne,
-    tauxEndettement,
-    poidsChargesFixes,
-    capitalRestant
-  });
-
-  const score = calculerScoreConseiller_({ analyse, revenusMoyens, epargneMoyenne, tauxEndettement, poidsChargesFixes });
-  return {
-    version: CONSEILLER_VERSION,
-    score,
-    niveau: score >= 75 ? 'Solide' : score >= 55 ? 'À consolider' : score >= 35 ? 'Fragile' : 'Prioritaire',
-    synthese: syntheseConseiller_(score, epargneMoyenne, analyse.indicateurs.evolutionDepenses),
-    indicateurs: { revenusMoyens, depensesMoyennes, epargneMoyenne, tauxEndettement, poidsChargesFixes, capitalRestant },
-    recommandations,
-    categories: analyse.categories.slice(0, 6),
-    alertesBudget: analyse.alertes.slice(0, 5),
-    objectifsActifs: objectifs.filter(o => String(o.statut || '').toLowerCase() !== 'terminé').length,
-    confidentialite: 'Diagnostic calculé uniquement dans votre classeur Google Sheets. Aucune donnée bancaire n’est transmise à un service externe.'
-  };
+  const global=typeof lireModuleSnapshotGlobalBudgetSoft20260906_==='function'?lireModuleSnapshotGlobalBudgetSoft20260906_('conseiller'):null;
+  if(global)return global;
+  return{ok:false,version:CONSEILLER_VERSION,sourceBudgetSoft:'snapshot_global_indisponible',erreur:'Conseiller absent du snapshot global.'};
 }
 
 function simulerEconomiesConseiller(pourcentage) {
