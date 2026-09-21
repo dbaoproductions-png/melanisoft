@@ -32,7 +32,7 @@ function auditerArchitectureBudgetSoft20260917(){
   return r;
 }
 
-const BUDGETSOFT_INTERMODULE_SUPERVISION_20260921_VERSION='2026-09-21.2';
+const BUDGETSOFT_INTERMODULE_SUPERVISION_20260921_VERSION='2026-09-21.3';
 
 function sourceFonctionSupervisionBudgetSoft20260921_(nom){
   try{
@@ -159,6 +159,15 @@ function auditerSupervisionIntermoduleBudgetSoft20260921(){
     cerbere:cockpit.pSoutenable!=null?cockpit.pSoutenable:cockpit.p1Total
   });
 
+  const p1=m.cerbere&&Array.isArray(m.cerbere.periodes)?m.cerbere.periodes[1]:null;
+  const c1=p1&&p1.v37&&p1.v37.cockpit20260902||{};
+  const projCb=m.projectionEtendue&&m.projectionEtendue.decompositionCanonique&&m.projectionEtendue.decompositionCanonique.groupes&&m.projectionEtendue.decompositionCanonique.groupes.cbDiffereesEngagees;
+  const cbEngagee=ecartValeursSupervisionBudgetSoft20260921_({
+    dashboard:m.dashboard&&m.dashboard.cycleSuivant&&m.dashboard.cycleSuivant.cbDejaEngagee,
+    cerbere:c1&&c1.cbDejaEngagee,
+    projection:projCb&&Math.abs(Number(projCb.montant||0))
+  });
+
   const perf=e&&e.performance&&e.performance.modules||{};
   const performances=Object.keys(perf).map(k=>({module:k,dureeMs:Number(perf[k]||0)})).sort((a,b)=>b.dureeMs-a.dureeMs);
   const lents=performances.filter(x=>x.dureeMs>10000);
@@ -174,7 +183,8 @@ function auditerSupervisionIntermoduleBudgetSoft20260921(){
     {code:'DATE_REFERENCE_TRANSVERSALE_UNIQUE',ok:datesOk,detail:JSON.stringify(dates)},
     {code:'EP_TOTAL_TRANSVERSAL_UNIQUE',ok:epTotal.ok,detail:'écart '+String(epTotal.ecart)},
     {code:'EP_RESTANT_TRANSVERSAL_UNIQUE',ok:epReste.ok,detail:'écart '+String(epReste.ecart)},
-    {code:'P_SOUTENABLE_TRANSVERSAL_UNIQUE',ok:pSoutenable.ok,detail:'écart '+String(pSoutenable.ecart)}
+    {code:'P_SOUTENABLE_TRANSVERSAL_UNIQUE',ok:pSoutenable.ok,detail:'écart '+String(pSoutenable.ecart)},
+    {code:'CB_DIFFEREE_ENGAGEE_TRANSVERSALE',ok:cbEngagee.ok,detail:'écart '+String(cbEngagee.ecart)+' · '+JSON.stringify(cbEngagee.valeurs)}
   ];
 
   const out={
@@ -189,8 +199,8 @@ function auditerSupervisionIntermoduleBudgetSoft20260921(){
     controles,
     endpoints:controlesEndpoints,
     modules:{requis:modulesRequis,absents:modulesAbsents},
-    transversales:{soldes,dates,epTotal,epReste,pSoutenable},
-    performances:{modules:performances,lentsPlusDe10s:lents},
+    transversales:{soldes,dates,epTotal,epReste,pSoutenable,cbEngagee},
+    performances:{modules:performances,lentsPlusDe10s:lents,reconstructionLente:lents.length>0},
     architecture:{
       constructeur:'reconstruireSnapshotGlobalSyntheseBudgetSoft20260907',
       porteLecture:'lireEtatGlobalBudgetSoftSiDisponible20260906_',
