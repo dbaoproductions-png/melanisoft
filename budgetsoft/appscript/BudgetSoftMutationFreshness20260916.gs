@@ -1,12 +1,74 @@
-const BUDGETSOFT_MUTATION_FRESHNESS_20260916_VERSION='2026-09-21.1';
+const BUDGETSOFT_MUTATION_FRESHNESS_20260916_VERSION='2026-09-21.2';
 const BUDGETSOFT_GLOBAL_DIRTY_AT_20260916='BUDGETSOFT_GLOBAL_SNAPSHOT_DIRTY_LE';
 const BUDGETSOFT_GLOBAL_DIRTY_ORIGIN_20260916='BUDGETSOFT_GLOBAL_SNAPSHOT_DIRTY_ORIGINE';
+const BUDGETSOFT_MUTATION_REBUILD_HANDLER_20260921='reconstruireSnapshotBudgetSoftApresMutation20260921';
+const BUDGETSOFT_MUTATION_REBUILD_ORIGINS_20260921='BUDGETSOFT_GLOBAL_SNAPSHOT_REBUILD_ORIGINES';
+const BUDGETSOFT_MUTATION_REBUILD_LAST_ERROR_20260921='BUDGETSOFT_GLOBAL_SNAPSHOT_REBUILD_DERNIERE_ERREUR';
+
+function planifierReconstructionSnapshotApresMutation20260921_(origine){
+  const props=PropertiesService.getDocumentProperties(),o=String(origine||'mutation');
+  try{
+    const existantes=ScriptApp.getProjectTriggers().filter(function(t){
+      return t.getHandlerFunction()===BUDGETSOFT_MUTATION_REBUILD_HANDLER_20260921;
+    });
+    const anciennes=String(props.getProperty(BUDGETSOFT_MUTATION_REBUILD_ORIGINS_20260921)||'')
+      .split('|').map(function(x){return x.trim();}).filter(Boolean);
+    if(!anciennes.includes(o))anciennes.push(o);
+    props.setProperty(BUDGETSOFT_MUTATION_REBUILD_ORIGINS_20260921,anciennes.slice(-12).join('|'));
+    if(existantes.length)return{ok:true,planifiee:false,dejaPlanifiee:true,origines:anciennes.slice(-12)};
+    ScriptApp.newTrigger(BUDGETSOFT_MUTATION_REBUILD_HANDLER_20260921).timeBased().after(60000).create();
+    return{ok:true,planifiee:true,dejaPlanifiee:false,origines:anciennes.slice(-12)};
+  }catch(e){
+    props.setProperty(BUDGETSOFT_MUTATION_REBUILD_LAST_ERROR_20260921,new Date().toISOString()+' · planification · '+String(e&&e.message||e));
+    return{ok:false,planifiee:false,erreur:String(e&&e.message||e)};
+  }
+}
+
+function reconstruireSnapshotBudgetSoftApresMutation20260921(){
+  const props=PropertiesService.getDocumentProperties();
+  try{
+    ScriptApp.getProjectTriggers().filter(function(t){
+      return t.getHandlerFunction()===BUDGETSOFT_MUTATION_REBUILD_HANDLER_20260921;
+    }).forEach(function(t){try{ScriptApp.deleteTrigger(t);}catch(e){}});
+    const origines=String(props.getProperty(BUDGETSOFT_MUTATION_REBUILD_ORIGINS_20260921)||'mutation').trim();
+    props.deleteProperty(BUDGETSOFT_MUTATION_REBUILD_ORIGINS_20260921);
+    if(typeof reconstruireSnapshotGlobalBudgetSoft20260906!=='function')throw new Error('Constructeur public du snapshot global indisponible.');
+    const r=reconstruireSnapshotGlobalBudgetSoft20260906('mutation_differee:'+origines);
+    if(!r||r.ok!==true||r.publie!==true)throw new Error('La reconstruction différée n’a pas publié de snapshot valide.');
+    props.deleteProperty(BUDGETSOFT_MUTATION_REBUILD_LAST_ERROR_20260921);
+    return{ok:true,revisionBudgetSoft:r.revisionBudgetSoft||'',genereLe:r.genereLe||'',origines:origines};
+  }catch(e){
+    props.setProperty(BUDGETSOFT_MUTATION_REBUILD_LAST_ERROR_20260921,new Date().toISOString()+' · reconstruction · '+String(e&&e.message||e));
+    throw e;
+  }
+}
+
+function auditerReconstructionAutomatiqueSnapshotApresMutation20260921(){
+  const props=PropertiesService.getDocumentProperties();
+  const triggers=ScriptApp.getProjectTriggers().filter(function(t){
+    return t.getHandlerFunction()===BUDGETSOFT_MUTATION_REBUILD_HANDLER_20260921;
+  });
+  const s=typeof chargerSnapshotGlobalBudgetSoft20260906==='function'?chargerSnapshotGlobalBudgetSoft20260906():null;
+  const out={
+    ok:true,
+    version:'2026-09-21.1',
+    lectureSeule:true,
+    declencheurEnAttente:triggers.length>0,
+    nombreDeclencheurs:triggers.length,
+    originesEnAttente:String(props.getProperty(BUDGETSOFT_MUTATION_REBUILD_ORIGINS_20260921)||''),
+    derniereErreur:String(props.getProperty(BUDGETSOFT_MUTATION_REBUILD_LAST_ERROR_20260921)||''),
+    snapshot:{disponible:!!(s&&s.disponible),perime:!!(s&&s.perime),revisionBudgetSoft:String(s&&s.revisionBudgetSoft||''),genereLe:String(s&&s.genereLe||'')}
+  };
+  console.log('[AUDIT RECONSTRUCTION AUTO SNAPSHOT APRES MUTATION 20260921] '+JSON.stringify(out));
+  return out;
+}
 
 function marquerSnapshotGlobalBudgetSoftObsolete20260916_(origine){
-  const p=PropertiesService.getDocumentProperties(),maintenant=new Date().toISOString();
+  const p=PropertiesService.getDocumentProperties(),maintenant=new Date().toISOString(),o=String(origine||'mutation');
   p.setProperty(BUDGETSOFT_GLOBAL_DIRTY_AT_20260916,maintenant);
-  p.setProperty(BUDGETSOFT_GLOBAL_DIRTY_ORIGIN_20260916,String(origine||'mutation'));
-  return{ok:true,version:BUDGETSOFT_MUTATION_FRESHNESS_20260916_VERSION,obsoleteDepuis:maintenant,origine:String(origine||'mutation')};
+  p.setProperty(BUDGETSOFT_GLOBAL_DIRTY_ORIGIN_20260916,o);
+  const reconstruction=planifierReconstructionSnapshotApresMutation20260921_(o);
+  return{ok:true,version:BUDGETSOFT_MUTATION_FRESHNESS_20260916_VERSION,obsoleteDepuis:maintenant,origine:o,reconstructionAutomatique:reconstruction};
 }
 
 function compteLignesSourceSnapshot20260916_(nom){
