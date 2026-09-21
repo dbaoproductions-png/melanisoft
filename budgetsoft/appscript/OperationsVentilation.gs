@@ -125,3 +125,38 @@ function indicePeriodeVentilationBudgetSoft_(date,periodes){const d=dateValideVe
 function sommeObjetVentilationBudgetSoft_(o){return arrondirVentilationBudgetSoft_(Object.keys(o||{}).reduce((s,k)=>s+Math.max(0,Number(o[k]||0)),0));}
 function arrondirVentilationBudgetSoft_(n){return Math.round(Number(n||0)*100)/100;}
 function normaliserTexteVentilationBudgetSoft_(v){return String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim();}
+
+
+/**
+ * Garde pure de non-régression de la doctrine CB double rôle.
+ * Aucune lecture/écriture de feuille : uniquement des fixtures synthétiques.
+ */
+function auditerDoctrineImputationCbPilotableBudgetSoft20260921(){
+  const periodes=[
+    {periode:{debut:'2026-08-28',fin:'2026-09-27'}},
+    {periode:{debut:'2026-09-28',fin:'2026-10-27'}}
+  ];
+  const categories=[
+    {nom:'Restaurants',type:'depense',actif:true},
+    {nom:'Télécom / Internet / TV',type:'depense',actif:true}
+  ];
+  const pilotables=new Set(['Restaurants']);
+  const base={montant:-10,date_achat:'2026-09-17',date_comptable:'2026-09-30',carte_fin:'8938',source_bancaire:'flux'};
+  const ops=[
+    Object.assign({id:'pilotable',categorie:'Restaurants',libelle:'Achat restaurant'},base),
+    Object.assign({id:'orpheline',categorie:'Non classée',libelle:'Achat non classé'},base),
+    Object.assign({id:'cf',categorie:'Télécom / Internet / TV',libelle:'Abonnement CB',charge_fixe_id:'cf-1'},base)
+  ];
+  const r=construireVentilationOperationsBudgetSoft_(ops,categories,periodes,pilotables),b0=r.buckets[0]||{},b1=r.buckets[1]||{};
+  const pilotableC1=Number(b0.cbParCategorie&&b0.cbParCategorie.Restaurants||0);
+  const pilotableC2=Number(b1.cbParCategorie&&b1.cbParCategorie.Restaurants||0);
+  const orphelineC1=Number(b0.cbParCategorie&&b0.cbParCategorie.Divers||0);
+  const orphelineC2=Number(b1.cbParCategorie&&b1.cbParCategorie.Divers||0);
+  const cfC1=Number(b0.nombreChargesFixesReelles||0),cfC2=Number(b1.nombreChargesFixesReelles||0);
+  const controles=[
+    {code:'CB_PILOTABLE_DATE_ACHAT_C1',ok:Math.abs(pilotableC1-10)<.001&&Math.abs(pilotableC2)<.001,detail:{c1:pilotableC1,c2:pilotableC2}},
+    {code:'CB_HORS_PILOTABLE_DATE_BANQUE_C2',ok:Math.abs(orphelineC1)<.001&&Math.abs(orphelineC2-10)<.001,detail:{c1:orphelineC1,c2:orphelineC2}},
+    {code:'CF_CB_DATE_BANQUE_C2',ok:cfC1===0&&cfC2===1,detail:{c1:cfC1,c2:cfC2}}
+  ];
+  return{ok:controles.every(x=>x.ok),version:'2026-09-21.1',lectureSeule:true,fixtures:true,controles};
+}
