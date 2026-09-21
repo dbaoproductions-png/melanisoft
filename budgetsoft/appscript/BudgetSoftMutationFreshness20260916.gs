@@ -1,4 +1,4 @@
-const BUDGETSOFT_MUTATION_FRESHNESS_20260916_VERSION='2026-09-17.2';
+const BUDGETSOFT_MUTATION_FRESHNESS_20260916_VERSION='2026-09-21.1';
 const BUDGETSOFT_GLOBAL_DIRTY_AT_20260916='BUDGETSOFT_GLOBAL_SNAPSHOT_DIRTY_LE';
 const BUDGETSOFT_GLOBAL_DIRTY_ORIGIN_20260916='BUDGETSOFT_GLOBAL_SNAPSHOT_DIRTY_ORIGINE';
 
@@ -18,6 +18,9 @@ function diagnostiquerPeremptionSnapshot20260916_(etat){
   const genereLe=String(etat&&etat.genereLe||'');
   const raisons=[];
   if(dirtyAt&&(!genereLe||dirtyAt>genereLe))raisons.push({code:'MUTATION_APRES_SNAPSHOT',dirtyAt,genereLe,origine:dirtyOrigin});
+  const constructeurPublie=String(etat&&etat.versionConstructeur||'');
+  const constructeurCourant=String(typeof BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION!=='undefined'?BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION:'');
+  if(constructeurCourant&&constructeurPublie!==constructeurCourant)raisons.push({code:'VERSION_CONSTRUCTEUR_INCOMPATIBLE',constructeurPublie:constructeurPublie||'(absent)',constructeurCourant});
   const attendues=etat&&etat.modules&&etat.modules.sourceMeta&&etat.modules.sourceMeta.tables||{};
   ['Operations','Charges_fixes','Comptes','Parametres','Categories','Credits','Dettes','Actifs'].forEach(nom=>{
     if(!Object.prototype.hasOwnProperty.call(attendues,nom))return;
