@@ -1,20 +1,16 @@
-const COMPTES_REVIEW_20260828_VERSION='2026-09-06.6';
+const COMPTES_REVIEW_20260828_VERSION='2026-09-21.1';
 
 /**
  * Lecture prioritaire de la révision globale : l'ouverture de Comptes ne doit plus
  * recalculer un sous-ensemble ni choisir un snapshot local d'un âge différent.
  */
 function chargerSyntheseComptesDepuisSnapshotGlobal20260906_(){
-  if(typeof chargerSnapshotGlobalBudgetSoft20260906!=='function')return null;
+  if(typeof lireModuleSnapshotGlobalBudgetSoft20260906_!=='function')return null;
   try{
-    const g=chargerSnapshotGlobalBudgetSoft20260906();
-    const e=g&&g.disponible&&g.etat;
-    const c=e&&e.ok===true&&e.modules&&e.modules.comptes;
-    if(!c||c.ok!==true||String(c.version||'')!==COMPTES_REVIEW_20260828_VERSION)return null;
+    const c=lireModuleSnapshotGlobalBudgetSoft20260906_('comptes');
+    if(!c||c.ok!==true)return null;
     const r=JSON.parse(JSON.stringify(c));
-    r.revisionBudgetSoft=e.revisionBudgetSoft||g.revisionBudgetSoft||'';
-    r.genereLeBudgetSoft=e.genereLe||g.genereLe||'';
-    r.performance={dureeMs:0,controleDashboardExecute:false,source:'snapshot_global',snapshotPerime:false,snapshotGenereLe:r.genereLeBudgetSoft,revisionBudgetSoft:r.revisionBudgetSoft};
+    r.performance={dureeMs:0,controleDashboardExecute:false,source:'snapshot_global',snapshotPerime:false,snapshotGenereLe:r.genereLeBudgetSoft||'',revisionBudgetSoft:r.revisionBudgetSoft||''};
     r.snapshotPerime=false;
     return r;
   }catch(e){return null;}
