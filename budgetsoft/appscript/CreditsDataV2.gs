@@ -1,4 +1,4 @@
-const CREDITS_DATA_V2_VERSION = '2.6-2026-09-06';
+const CREDITS_DATA_V2_VERSION = '2.7-2026-09-21';
 
 function lireCreditsEtendusV2_() {
   const f=SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Credits');
@@ -49,10 +49,7 @@ function analyserCoherenceCreditsV2_(credits,dettes){
   return alertes;
 }
 
-function chargerCreditsEtDettesV2() {
-  const global=typeof lireModuleSnapshotGlobalBudgetSoft20260906_==='function'?lireModuleSnapshotGlobalBudgetSoft20260906_('credits'):null;
-  if(global)return global;
-
+function construireCreditsEtDettesV2_() {
   verifierInitialisation_();
   const credits=lireCreditsEtendusV2_().map(enrichirCreditV2_),dettes=typeof lireDettesV2_==='function'?lireDettesV2_():lireTable_('Dettes');
   const dettesActives=dettes.filter(d=>String(d.actif).toLowerCase()!=='false'&&Number(d.capital_restant||0)>0);
@@ -64,7 +61,13 @@ function chargerCreditsEtDettesV2() {
   const amortissables=credits.filter(c=>c.type_credit==='amortissable'),renouvelables=credits.filter(c=>c.type_credit==='revolving');
   const capitalRenouvelable=renouvelables.reduce((s,c)=>s+Number(c.capital_restant||0),0),coutRenouvelable=renouvelables.reduce((s,c)=>s+Number(c.cout_restant||0),0),tauxRenouvelablePondere=capitalRenouvelable?renouvelables.reduce((s,c)=>s+Number(c.capital_restant||0)*Number(c.taux||0),0)/capitalRenouvelable:0;
   const alertes=analyserCoherenceCreditsV2_(credits,dettes);
-  return {version:CREDITS_DATA_V2_VERSION,lignes:tous,capitalRestant,capitalCredits,dettesHorsCredit,endettementTotal:capitalRestant,mensualites,mensualitesCredits,mensualitesDettes,tauxPondere,echeancesRestantes,coutRestant,amortissables,renouvelables,dettes,dettesActives,capitalRenouvelable,coutRenouvelable,tauxRenouvelablePondere,alertes,sourceBudgetSoft:'recalcul_secours'};
+  return {version:CREDITS_DATA_V2_VERSION,lignes:tous,capitalRestant,capitalCredits,dettesHorsCredit,endettementTotal:capitalRestant,mensualites,mensualitesCredits,mensualitesDettes,tauxPondere,echeancesRestantes,coutRestant,amortissables,renouvelables,dettes,dettesActives,capitalRenouvelable,coutRenouvelable,tauxRenouvelablePondere,alertes,sourceBudgetSoft:'constructeur_snapshot'};
+}
+
+function chargerCreditsEtDettesV2() {
+  const global=typeof lireModuleSnapshotGlobalBudgetSoft20260906_==='function'?lireModuleSnapshotGlobalBudgetSoft20260906_('credits'):null;
+  if(global)return global;
+  return{ok:false,version:CREDITS_DATA_V2_VERSION,sourceBudgetSoft:'snapshot_global_indisponible',erreur:'Crédits/Dettes absents du snapshot global.'};
 }
 
 function enregistrerCreditV2(d){
