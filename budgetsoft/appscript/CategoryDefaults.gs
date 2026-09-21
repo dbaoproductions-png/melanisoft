@@ -192,12 +192,42 @@ function migrerReferentielRevenus10BudgetSoft20260921(){
 }
 
 function auditerReferentielRevenus10BudgetSoft20260921(){
-  const canon=categoriesRevenusEconomiquesBudgetSoft_();
+  const canon=categoriesRevenusEconomiquesBudgetSoft_(),legacy=new Set(['Autres revenus','SACEM']);
   const cats=(lireTable_('Categories')||[]).filter(function(x){return String(x&&x.type||'').toLowerCase()==='revenu'&&String(x&&x.actif)!=='0';}).map(function(x){return String(x.nom||'');});
-  const ops=(lireTable_('Operations')||[]).filter(function(o){return Number(o&&o.montant||0)>0;});
-  const legacyOps=ops.filter(function(o){return ['Autres revenus','SACEM'].includes(String(o&&o.categorie||'').trim());});
   const manquantes=canon.filter(function(x){return !cats.includes(x);}),intruses=cats.filter(function(x){return !canon.includes(x);});
-  const out={ok:cats.length===10&&manquantes.length===0&&intruses.length===0&&legacyOps.length===0,version:'2026-09-21.1',lectureSeule:true,canon:canon,categoriesActives:cats,manquantes:manquantes,intruses:intruses,operationsLegacy:legacyOps.map(function(o){return{id:o.id,categorie:o.categorie,montant:o.montant};})};
+
+  const ss=SpreadsheetApp.getActiveSpreadsheet(),occurrencesLegacy=[];
+  const colonnesEligibles=new Set(['categorie','poste','categorie_actuelle','categorie_proposee']);
+  ss.getSheets().forEach(function(sh){
+    if(sh.getLastRow()<2||sh.getLastColumn()<1)return;
+    const hs=sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(function(v){return String(v||'').trim();});
+    hs.forEach(function(h,col){
+      if(!colonnesEligibles.has(h))return;
+      const vals=sh.getRange(2,col+1,sh.getLastRow()-1,1).getValues();
+      vals.forEach(function(r,row){
+        const v=String(r[0]||'').trim();
+        if(legacy.has(v))occurrencesLegacy.push({feuille:sh.getName(),colonne:h,ligne:row+2,valeur:v});
+      });
+    });
+  });
+
+  let analyses={disponible:false,horizons:{},ok:false};
+  try{
+    const etat=typeof lireEtatGlobalBudgetSoftSiDisponible20260906_==='function'?lireEtatGlobalBudgetSoftSiDisponible20260906_():null;
+    const a=etat&&etat.modules&&etat.modules.analyses,fen=a&&a.recettes&&a.recettes.fenetres||{};
+    analyses.disponible=!!a;
+    [3,6,12].forEach(function(n){
+      const f=fen[n]||fen[String(n)]||null,src=Array.isArray(f&&f.sources)?f.sources:[],noms=src.map(function(x){return String(x&&x.nom||'');});
+      analyses.horizons[n]={nombre:noms.length,noms:noms,manquantes:canon.filter(function(x){return !noms.includes(x);}),intruses:noms.filter(function(x){return !canon.includes(x);}),ok:noms.length===10&&JSON.stringify(noms)===JSON.stringify(canon)};
+    });
+    analyses.ok=analyses.disponible&&[3,6,12].every(function(n){return analyses.horizons[n].ok;});
+  }catch(e){analyses={disponible:false,ok:false,erreur:String(e&&e.message||e),horizons:{}};}
+
+  const out={
+    ok:cats.length===10&&manquantes.length===0&&intruses.length===0&&occurrencesLegacy.length===0&&analyses.ok===true,
+    version:'2026-09-21.2',lectureSeule:true,canon:canon,categoriesActives:cats,
+    manquantes:manquantes,intruses:intruses,occurrencesLegacy:occurrencesLegacy,analyses:analyses
+  };
   console.log('[AUDIT REFERENTIEL REVENUS 10 BUDGETSOFT 20260921] '+JSON.stringify(out));
   return out;
 }
