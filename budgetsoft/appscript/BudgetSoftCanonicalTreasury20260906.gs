@@ -1,4 +1,4 @@
-const BUDGETSOFT_CANONICAL_TREASURY_VERSION='2026-09-06.4';
+const BUDGETSOFT_CANONICAL_TREASURY_VERSION='2026-09-21.1';
 
 function arrTresorerieCanoniqueBudgetSoft20260906_(n){return Math.round(Number(n||0)*100)/100;}
 function finJourTresorerieCanoniqueBudgetSoft20260906_(v){
@@ -38,27 +38,21 @@ function construireTresorerieComptableCanoniqueBudgetSoft20260906_(sources,compt
 }
 
 function lireTresorerieComptableSnapshotBudgetSoft20260906_(dateCible){
-  if(typeof chargerSnapshotGlobalBudgetSoft20260906!=='function')return null;
   try{
-    const g=chargerSnapshotGlobalBudgetSoft20260906(),e=g&&g.disponible&&g.etat,t=e&&e.ok===true&&e.modules&&e.modules.tresorerieComptable;
+    if(typeof lireModuleSnapshotGlobalBudgetSoft20260906_!=='function')return null;
+    const t=lireModuleSnapshotGlobalBudgetSoft20260906_('tresorerieComptable');
     if(!t||t.ok!==true||String(t.version||'')!==BUDGETSOFT_CANONICAL_TREASURY_VERSION)return null;
     const ref=jourReferenceCanonBudgetSoft20260906_(t.dateReference),max=jourReferenceCanonBudgetSoft20260906_(t.dateCible),cible=jourReferenceCanonBudgetSoft20260906_(dateCible||max);
-    if(cible<ref||cible>max)return null;
+    if(!ref||!max||!cible||cible<ref||cible>max)return null;
     const lignes=(t.operationsFutures||[]).filter(x=>{const j=jourReferenceCanonBudgetSoft20260906_(x.date);return j>ref&&j<=cible;});
     const variation=arrTresorerieCanoniqueBudgetSoft20260906_(lignes.reduce((s,x)=>s+Number(x.montantSigne||0),0));
-    return {ok:true,version:BUDGETSOFT_CANONICAL_TREASURY_VERSION,source:'snapshot_global',revisionBudgetSoft:e.revisionBudgetSoft||g.revisionBudgetSoft||'',genereLeBudgetSoft:e.genereLe||g.genereLe||'',doctrine:t.doctrine||'date comptable uniquement',dateReference:ref,dateCible:cible,soldeReel:Number(t.soldeReel||0),variationComptableCertaine:variation,variationPrevue:variation,soldePrevisionnel:arrTresorerieCanoniqueBudgetSoft20260906_(Number(t.soldeReel||0)+variation),operationsFutures:lignes,nombreOperationsFutures:lignes.length,confiance:{niveau:'certain',libelle:'Comptable'}};
+    return {ok:true,version:BUDGETSOFT_CANONICAL_TREASURY_VERSION,source:'snapshot_global',sourceBudgetSoft:'snapshot_global',revisionBudgetSoft:t.revisionBudgetSoft||'',genereLeBudgetSoft:t.genereLeBudgetSoft||'',doctrine:t.doctrine||'date comptable uniquement',dateReference:ref,dateCible:cible,soldeReel:Number(t.soldeReel||0),variationComptableCertaine:variation,variationPrevue:variation,soldePrevisionnel:arrTresorerieCanoniqueBudgetSoft20260906_(Number(t.soldeReel||0)+variation),operationsFutures:lignes,nombreOperationsFutures:lignes.length,confiance:{niveau:'certain',libelle:'Comptable'}};
   }catch(e){return null;}
 }
 
 function chargerTresorerieComptableCanoniqueBudgetSoft20260906(dateCible){
   const snapshot=lireTresorerieComptableSnapshotBudgetSoft20260906_(dateCible);
-  if(snapshot)return snapshot;
-  const executer=function(){
-    const sources=chargerToutesLesDonnees();
-    const comptes=typeof construireSyntheseComptes20260828_==='function'?construireSyntheseComptes20260828_():chargerSyntheseComptes20260828();
-    const r=construireTresorerieComptableCanoniqueBudgetSoft20260906_(sources,comptes,dateCible,new Date());r.source='recalcul_secours';return r;
-  };
-  return typeof avecContexteLectureBudgetSoft20260827_==='function'?avecContexteLectureBudgetSoft20260827_('tresorerie-comptable-canonique',executer):executer();
+  return snapshot||{ok:false,version:BUDGETSOFT_CANONICAL_TREASURY_VERSION,source:'snapshot_global_indisponible',sourceBudgetSoft:'snapshot_global_indisponible',erreur:'Trésorerie comptable canonique absente ou cible hors horizon du snapshot global.'};
 }
 
 function auditerTresorerieComptableCanoniqueBudgetSoft20260906(dateCible){const r=chargerTresorerieComptableCanoniqueBudgetSoft20260906(dateCible);console.log(JSON.stringify(r));return r;}
