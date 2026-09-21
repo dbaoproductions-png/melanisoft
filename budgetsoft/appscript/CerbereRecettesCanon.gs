@@ -76,8 +76,10 @@ function enregistrerCanonRecettesCerbereV1(postes) {
     const cat=String(o.categorie||'').trim();if(cat)oldByCat[cat]=o;
   });
 
-  const rows=postes.map((x,i)=>{
-    const cat=String(x.categorie||'').trim(),old=oldByCat[cat]||{};
+  const rowsBrutes=postes.map((x,i)=>{
+    const brut=String(x.categorie||'').trim();
+    const cat=typeof categorieCibleBudgetSoft_==='function'?categorieCibleBudgetSoft_(brut):(brut.toLowerCase()==='sacem'?'Droits artistiques':brut.toLowerCase()==='autres revenus'?'Revenus divers':brut);
+    const old=oldByCat[cat]||oldByCat[brut]||{};
     const prev=x.montant_precedent!==undefined?x.montant_precedent:old.montant_precedent;
     const effet=x.date_effet!==undefined?x.date_effet:old.date_effet;
     return [
@@ -87,6 +89,23 @@ function enregistrerCanonRecettesCerbereV1(postes) {
       normaliserDateCanonRecettes_(effet)
     ];
   }).filter(r=>r[0]);
+  const groupes=new Map();
+  rowsBrutes.forEach(r=>{const k=String(r[0]||'').toLowerCase();if(!groupes.has(k))groupes.set(k,[]);groupes.get(k).push(r);});
+  const rows=[];
+  groupes.forEach(xs=>{
+    if(xs.length===1){rows.push(xs[0]);return;}
+    const dates=[...new Set(xs.map(r=>String(r[7]||'')).filter(Boolean))];
+    if(dates.length>1)throw new Error('R0 : fusion impossible pour '+xs[0][0]+' car plusieurs date_effet coexistent ('+dates.join(', ')+').');
+    const r=xs[0].slice();
+    r[1]=xs.reduce((s,x)=>s+Math.max(0,Number(x[1]||0)),0);
+    const prevs=xs.map(x=>x[6]).filter(v=>v!==''&&v!=null);
+    r[6]=prevs.length?prevs.reduce((s,v)=>s+Math.max(0,Number(v||0)),0):'';
+    r[3]=Math.min.apply(null,xs.map(x=>Number(x[3]||999)));
+    r[4]=xs.some(x=>x[4]!==false);
+    r[5]=[...new Set(xs.map(x=>String(x[5]||'').trim()).filter(Boolean))].join(' · ');
+    rows.push(r);
+  });
+  rows.sort((a,b)=>Number(a[3]||999)-Number(b[3]||999)||String(a[0]||'').localeCompare(String(b[0]||''),'fr'));
   if(sh.getLastRow()>1)sh.getRange(2,1,sh.getLastRow()-1,Math.max(sh.getLastColumn(),headers.length)).clearContent();
   if(rows.length)sh.getRange(2,1,rows.length,headers.length).setValues(rows);
   SpreadsheetApp.flush();
