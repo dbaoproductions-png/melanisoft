@@ -1,4 +1,4 @@
-const TREASURY_FORECAST_20260830_VERSION='2026-08-30.2';
+const TREASURY_FORECAST_20260830_VERSION='2026-09-21.1';
 
 /**
  * Prévision de trésorerie bancaire commune à Comptes / Opérations / Cerbère.
@@ -113,7 +113,7 @@ function operationsFuturesTresorerie_(ops,now,cible,comptes){
   return (ops||[]).filter(o=>{
     if(/\[RECURRENCE:[^\]]+\]/.test(String(o.commentaire||'')))return false;
     const d=dateOpTresorerie_(o);return d&&d>now&&d<=cible&&compteDansPerimetreTresorerie_(o.compte,comptes)&&Math.abs(Number(o.montant||0))>.0001;
-  }).map(o=>({id:'op:'+String(o.id||''),source:'operation_future',sourceId:o.id||'',date:(dateOpTresorerie_(o)).toISOString(),libelle:o.libelle||o.libelle_bancaire||'Opération future',categorie:o.categorie||'',compte:o.compte||'',montantSigne:arrondiTresorerie_(signeOpTresorerie_(o)),certitude:'certain',preuve:'Date comptable déjà connue',dateConventionnelle:false,charge_fixe_id:o.charge_fixe_id||''}));
+  }).map(o=>({id:'op:'+String(o.id||''),source:'operation_future',sourceId:o.id||'',date:(dateOpTresorerie_(o)).toISOString(),libelle:o.libelle||o.libelle_bancaire||'Opération future',categorie:o.categorie||'',compte:o.compte||'',montantSigne:arrondiTresorerie_(signeOpTresorerie_(o)),certitude:'certain',preuve:'Date comptable déjà connue',dateConventionnelle:false,charge_fixe_id:o.charge_fixe_id||'',carte_fin:String(o.carte_fin||''),mode_paiement:String(o.mode_paiement||''),date_achat:o.date_achat||'',date_comptable:o.date_comptable||o.date||'',source_bancaire:String(o.source_bancaire||'')}));
 }
 
 function occurrencesChargesTresorerie_(charges,hard,actions,now,cible,comptes){
