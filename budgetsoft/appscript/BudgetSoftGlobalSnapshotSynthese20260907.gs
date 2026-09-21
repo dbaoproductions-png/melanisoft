@@ -109,9 +109,11 @@ function reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(origine){
       modules.sourceMeta={version:sources&&sources.meta&&sources.meta.version||'',tables:{}};
       Object.keys(sources||{}).forEach(k=>{if(Array.isArray(sources[k]))modules.sourceMeta.tables[k]=sources[k].length;});
 
-      const comptes=prendre('comptes',()=>typeof construireSyntheseComptes20260828_==='function'?construireSyntheseComptes20260828_():{ok:false,erreur:'Constructeur interne Comptes absent.'});
+      const budget=prendre('budget',()=>typeof chargerBudgetPeriodeSource20260918_==='function'?chargerBudgetPeriodeSource20260918_(''):{ok:false,erreur:'Constructeur source Budget absent.'});
+      const pluxee=prendre('pluxee',()=>typeof chargerPluxeeSource20260918_==='function'?chargerPluxeeSource20260918_():{ok:false,erreur:'Constructeur source Pluxee absent.'});
+      const comptes=prendre('comptes',()=>typeof construireSyntheseComptes20260828_==='function'?construireSyntheseComptes20260828_({pluxee:pluxee}):{ok:false,erreur:'Constructeur interne Comptes absent.'});
       const credits=prendre('credits',()=>typeof construireCreditsEtDettesV2_==='function'?construireCreditsEtDettesV2_():null);
-      const patrimoine=prendre('patrimoine',()=>typeof composerPatrimoineCanoniqueBudgetSoft20260906_==='function'?composerPatrimoineCanoniqueBudgetSoft20260906_(sources,comptes,credits):{ok:false,erreur:'Constructeur interne Patrimoine absent.'}); const budget=prendre('budget',()=>typeof chargerBudgetPeriodeSource20260918_==='function'?chargerBudgetPeriodeSource20260918_(''):{ok:false,erreur:'Constructeur source Budget absent.'}); const pluxee=prendre('pluxee',()=>typeof chargerPluxeeSource20260918_==='function'?chargerPluxeeSource20260918_():{ok:false,erreur:'Constructeur source Pluxee absent.'});
+      const patrimoine=prendre('patrimoine',()=>typeof composerPatrimoineCanoniqueBudgetSoft20260906_==='function'?composerPatrimoineCanoniqueBudgetSoft20260906_(sources,comptes,credits):{ok:false,erreur:'Constructeur interne Patrimoine absent.'});
       const maintenant=new Date(),finCourant=typeof dateFinCycleCanonBudgetSoft20260906_==='function'?dateFinCycleCanonBudgetSoft20260906_(maintenant):new Date(maintenant.getFullYear(),maintenant.getMonth(),27),finSuivant=new Date(finCourant.getFullYear(),finCourant.getMonth()+1,finCourant.getDate());
       const finBancaireSuivante=new Date(finSuivant.getFullYear(),finSuivant.getMonth()+1,0,23,59,59,999);
       const cibleSuivante=Utilities.formatDate(finSuivant,Session.getScriptTimeZone(),'yyyy-MM-dd');
