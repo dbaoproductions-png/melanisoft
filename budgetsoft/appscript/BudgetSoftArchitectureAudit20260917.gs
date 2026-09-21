@@ -32,7 +32,7 @@ function auditerArchitectureBudgetSoft20260917(){
   return r;
 }
 
-const BUDGETSOFT_INTERMODULE_SUPERVISION_20260921_VERSION='2026-09-21.1';
+const BUDGETSOFT_INTERMODULE_SUPERVISION_20260921_VERSION='2026-09-21.2';
 
 function sourceFonctionSupervisionBudgetSoft20260921_(nom){
   try{
@@ -100,13 +100,25 @@ function auditerSupervisionIntermoduleBudgetSoft20260921(){
   ];
   const appelsPublicsTrouves=appelsPublicsInterdits.filter(x=>constructeur.indexOf(x)>=0||compositeurCerbere.indexOf(x)>=0);
 
-  let brut={ok:false,disponible:false};
+  let brut={ok:false,disponible:false},effectif={ok:false,disponible:false};
   try{
     brut=typeof chargerSnapshotGlobalLegacyBudgetSoft20260906_==='function'
       ?chargerSnapshotGlobalLegacyBudgetSoft20260906_()
       :(typeof chargerSnapshotGlobalBudgetSoft20260906==='function'?chargerSnapshotGlobalBudgetSoft20260906():brut);
   }catch(e){brut={ok:false,disponible:false,erreur:String(e&&e.message||e)};}
-  const e=brut&&brut.disponible&&brut.etat||null,m=e&&e.modules||{};
+  try{
+    effectif=typeof chargerSnapshotGlobalBudgetSoft20260906==='function'
+      ?chargerSnapshotGlobalBudgetSoft20260906()
+      :effectif;
+  }catch(e){effectif={ok:false,disponible:false,erreur:String(e&&e.message||e)};}
+  const stocke=brut&&brut.disponible&&brut.etat||null;
+  const e=effectif&&effectif.disponible&&effectif.etat||null;
+  const m=e&&e.modules||{};
+  const peremption=effectif&&effectif.fraicheur||(
+    stocke&&typeof diagnostiquerPeremptionSnapshot20260916_==='function'
+      ?diagnostiquerPeremptionSnapshot20260916_(stocke)
+      :null
+  );
 
   const modulesRequis=['comptes','credits','patrimoine','budget','pluxee','tresorerieComptable','projectionEtendue','cerbere','cerbereExpress','dashboard','analyses','engagementsBancaires','conseiller'];
   const modulesAbsents=modulesRequis.filter(n=>!m[n]||m[n].ok===false);
@@ -152,8 +164,9 @@ function auditerSupervisionIntermoduleBudgetSoft20260921(){
   const lents=performances.filter(x=>x.dureeMs>10000);
 
   const controles=[
-    {code:'SNAPSHOT_PUBLIE',ok:!!(e&&e.ok===true&&e.publie===true&&e.revisionBudgetSoft),detail:e&&e.revisionBudgetSoft||brut&&brut.erreur||'indisponible'},
-    {code:'VERSION_CONSTRUCTEUR_COURANTE',ok:!!(e&&String(e.versionConstructeur||'')===String(typeof BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION!=='undefined'?BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION:'')),detail:String(e&&e.versionConstructeur||'')},
+    {code:'SNAPSHOT_STOCKE',ok:!!(stocke&&stocke.publie===true&&stocke.revisionBudgetSoft),detail:String(stocke&&stocke.revisionBudgetSoft||brut&&brut.erreur||'indisponible')},
+    {code:'SNAPSHOT_EFFECTIF_FRAIS',ok:!!(e&&e.ok===true&&e.publie===true&&e.revisionBudgetSoft),detail:e&&e.revisionBudgetSoft||JSON.stringify(peremption&&peremption.raisons||[])||effectif&&effectif.erreur||'indisponible'},
+    {code:'VERSION_CONSTRUCTEUR_COURANTE',ok:!!(e&&String(e.versionConstructeur||'')===String(typeof BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION!=='undefined'?BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION:'')),detail:'stockée='+String(stocke&&stocke.versionConstructeur||'')+' ; courante='+String(typeof BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION!=='undefined'?BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION:'')},
     {code:'MODULES_CANONIQUES_COMPLETS',ok:modulesAbsents.length===0,detail:modulesAbsents.join(', ')||'tous présents'},
     {code:'ENDPOINTS_PUBLICS_SNAPSHOT_ONLY',ok:controlesEndpoints.every(x=>x.ok),detail:controlesEndpoints.filter(x=>!x.ok).map(x=>x.nom+':'+x.erreurs.join('|')).join('; ')||'conformes'},
     {code:'CONSTRUCTEUR_SANS_ENDPOINT_PUBLIC',ok:appelsPublicsTrouves.length===0,detail:appelsPublicsTrouves.join(', ')||'aucun appel public'},
@@ -171,6 +184,8 @@ function auditerSupervisionIntermoduleBudgetSoft20260921(){
     dureeMs:Date.now()-t0,
     revisionBudgetSoft:String(e&&e.revisionBudgetSoft||''),
     genereLe:String(e&&e.genereLe||''),
+    snapshotStocke:{revisionBudgetSoft:String(stocke&&stocke.revisionBudgetSoft||''),genereLe:String(stocke&&stocke.genereLe||''),versionConstructeur:String(stocke&&stocke.versionConstructeur||'')},
+    snapshotEffectif:{disponible:!!(effectif&&effectif.disponible),perime:!!(effectif&&effectif.perime),fraicheur:peremption||null},
     controles,
     endpoints:controlesEndpoints,
     modules:{requis:modulesRequis,absents:modulesAbsents},
