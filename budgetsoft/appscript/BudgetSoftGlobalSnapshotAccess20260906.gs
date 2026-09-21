@@ -1,4 +1,4 @@
-const BUDGETSOFT_GLOBAL_ACCESS_VERSION='2026-09-21.1';
+const BUDGETSOFT_GLOBAL_ACCESS_VERSION='2026-09-21.2';
 
 /**
  * Lecture commune du dernier snapshot global publié.
@@ -29,7 +29,18 @@ function lireEtatGlobalBudgetSoftSiDisponible20260906_(){
     if(typeof chargerSnapshotGlobalBudgetSoft20260906!=='function')return null;
     let s=chargerSnapshotGlobalBudgetSoft20260906();
     let e=s&&s.disponible&&s.etat;
-    if(!e||e.ok!==true||e.publie!==true||!e.revisionBudgetSoft)return null;
+
+    // Une interface ne doit jamais fabriquer sa propre vérité métier. En revanche,
+    // la porte d'entrée globale peut reconstruire UNE FOIS le snapshot atomique
+    // s'il est absent/invalide : tous les consommateurs liront ensuite la même
+    // révision publiée.
+    const valide=!!(e&&e.ok===true&&e.publie===true&&e.revisionBudgetSoft);
+    if(!valide){
+      if(typeof reconstruireSnapshotGlobalBudgetSoft20260906!=='function')return null;
+      const reconstruit=reconstruireSnapshotGlobalBudgetSoft20260906('snapshot_absent_ou_invalide');
+      if(!reconstruit||reconstruit.ok!==true||reconstruit.publie!==true)return null;
+      e=reconstruit;
+    }
 
     // Garde de fraîcheur journalière : à minuit, une révision de la veille ne
     // peut plus être servie comme vérité courante. On reconstruit une fois le
