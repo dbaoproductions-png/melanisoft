@@ -1,9 +1,15 @@
-const BUDGETSOFT_TREASURY_CANONICAL_20260907_VERSION='2026-09-08.1';
+const BUDGETSOFT_TREASURY_CANONICAL_20260907_VERSION='2026-09-21.1';
 const BUDGETSOFT_TREASURY_CANONICAL_OWNER='construireTrajectoireTresorerieCanoniqueBudgetSoft20260907';
 
 function arrondiTresorerieCanonique20260907_(n){return Math.round((Number(n)||0)*100)/100;}
 function estCbTresorerieCanonique20260907_(l){
-  const s=String((l&&l.categorie||'')+' '+(l&&l.libelle||'')+' '+(l&&l.preuve||'')).toLowerCase();
+  if(!l)return false;
+  if(String(l.carte_fin||'').trim())return true;
+  const mode=String(l.mode_paiement||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  if(/^(cb|carte|carte bancaire)$/.test(mode))return true;
+  const achat=l.date_achat?new Date(l.date_achat):null,compta=l.date_comptable?new Date(l.date_comptable):null;
+  if(achat&&compta&&!isNaN(achat)&&!isNaN(compta)&&compta>achat)return true;
+  const s=String((l.categorie||'')+' '+(l.libelle||'')+' '+(l.preuve||'')).toLowerCase();
   return /\bcb\b|carte|débit différé|debit differe/.test(s);
 }
 function sommeLignesTresorerieCanonique20260907_(ls){return arrondiTresorerieCanonique20260907_((ls||[]).reduce((s,x)=>s+Number(x&&x.montantSigne||0),0));}
