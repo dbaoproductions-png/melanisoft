@@ -1,4 +1,4 @@
-const BUDGETSOFT_BUDGET_PLUXEE_SNAPSHOT_20260918_VERSION='2026-09-18.1';
+const BUDGETSOFT_BUDGET_PLUXEE_SNAPSHOT_20260918_VERSION='2026-09-21.1';
 
 /*
  * Budget et Pluxee restent propriétaires de leurs calculs/écritures.
@@ -9,14 +9,12 @@ const BUDGETSOFT_BUDGET_PLUXEE_SNAPSHOT_20260918_VERSION='2026-09-18.1';
 function servirBudgetDepuisSnapshotBudgetSoft20260918_(clePeriode){
   try{
     const cle=String(clePeriode||'').trim();
-    const s=chargerSnapshotGlobalBudgetSoft20260906();
-    const e=s&&s.disponible&&s.etat,m=e&&e.modules&&e.modules.budget;
+    const m=typeof lireModuleSnapshotGlobalBudgetSoft20260906_==='function'?lireModuleSnapshotGlobalBudgetSoft20260906_('budget'):null;
     if(!m||typeof m!=='object')return null;
     const cleSnapshot=String(m&&m.periode&&m.periode.cle||'');
     if(cle&&cleSnapshot&&cle!==cleSnapshot)return null;
     const r=JSON.parse(JSON.stringify(m));
     r.sourceBudgetSoft='snapshot_global';
-    r.revisionBudgetSoft=String(e.revisionBudgetSoft||'');
     r.versionSnapshotBudgetPluxee=BUDGETSOFT_BUDGET_PLUXEE_SNAPSHOT_20260918_VERSION;
     return r;
   }catch(e){return null;}
@@ -24,12 +22,10 @@ function servirBudgetDepuisSnapshotBudgetSoft20260918_(clePeriode){
 
 function servirPluxeeDepuisSnapshotBudgetSoft20260918_(){
   try{
-    const s=chargerSnapshotGlobalBudgetSoft20260906();
-    const e=s&&s.disponible&&s.etat,m=e&&e.modules&&e.modules.pluxee;
+    const m=typeof lireModuleSnapshotGlobalBudgetSoft20260906_==='function'?lireModuleSnapshotGlobalBudgetSoft20260906_('pluxee'):null;
     if(!m||typeof m!=='object')return null;
     const r=JSON.parse(JSON.stringify(m));
     r.sourceBudgetSoft='snapshot_global';
-    r.revisionBudgetSoft=String(e.revisionBudgetSoft||'');
     r.versionSnapshotBudgetPluxee=BUDGETSOFT_BUDGET_PLUXEE_SNAPSHOT_20260918_VERSION;
     return r;
   }catch(e){return null;}
@@ -37,24 +33,12 @@ function servirPluxeeDepuisSnapshotBudgetSoft20260918_(){
 
 function chargerBudgetPeriode(clePeriode){
   const snap=servirBudgetDepuisSnapshotBudgetSoft20260918_(clePeriode);
-  if(snap)return snap;
-  const r=chargerBudgetPeriodeSource20260918_(clePeriode);
-  if(r&&typeof r==='object'){
-    r.sourceBudgetSoft='recalcul_secours';
-    r.versionSnapshotBudgetPluxee=BUDGETSOFT_BUDGET_PLUXEE_SNAPSHOT_20260918_VERSION;
-  }
-  return r;
+  return snap||{ok:false,sourceBudgetSoft:'snapshot_global_indisponible',versionSnapshotBudgetPluxee:BUDGETSOFT_BUDGET_PLUXEE_SNAPSHOT_20260918_VERSION,erreur:'Budget courant absent du snapshot global.'};
 }
 
 function chargerPluxee(){
   const snap=servirPluxeeDepuisSnapshotBudgetSoft20260918_();
-  if(snap)return snap;
-  const r=chargerPluxeeSource20260918_();
-  if(r&&typeof r==='object'){
-    r.sourceBudgetSoft='recalcul_secours';
-    r.versionSnapshotBudgetPluxee=BUDGETSOFT_BUDGET_PLUXEE_SNAPSHOT_20260918_VERSION;
-  }
-  return r;
+  return snap||{ok:false,sourceBudgetSoft:'snapshot_global_indisponible',versionSnapshotBudgetPluxee:BUDGETSOFT_BUDGET_PLUXEE_SNAPSHOT_20260918_VERSION,erreur:'Pluxee absent du snapshot global.'};
 }
 
 function auditerBudgetPluxeeSnapshotBudgetSoft20260918(){
