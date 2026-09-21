@@ -1,15 +1,16 @@
-const OPERATIONS_VENTILATION_VERSION = '1.0.1';
+const OPERATIONS_VENTILATION_VERSION = '2026-09-21.1';
 
 /**
  * Socle commun de lecture des opérations BudgetSoft.
  * - catégorie enregistrée = autorité ; Categories porte le type ;
  * - seules les orphelines tombent dans Divers ;
  * - CB différée = données structurées date_achat/carte_fin/cle_rapprochement ;
- * - Cerbère : CB de M => M+1 ; autres mouvements => date_comptable puis date ;
+ * - Cerbère : dépense CB pilotable => date d'achat/engagement ; impact bancaire => date_comptable ;
  * - réel CF0 = charge_fixe_id renseigné ;
  * - trésorerie livrée avec son signe.
  */
-function construireVentilationOperationsBudgetSoft_(operations, categories, periodes) {
+function construireVentilationOperationsBudgetSoft_(operations, categories, periodes, categoriesPilotables) {
+  const pilotables = categoriesPilotables instanceof Set ? categoriesPilotables : new Set(Array.isArray(categoriesPilotables)?categoriesPilotables:[]);
   const ref = construireReferentielCategoriesBudgetSoft_(categories || []);
   const ops = dedoublonnerOperationsCartesBudgetSoft_(operations || []);
   const buckets = (periodes || []).map(() => creerBucketVentilationBudgetSoft_());
@@ -28,7 +29,10 @@ function construireVentilationOperationsBudgetSoft_(operations, categories, peri
     if (chargeFixe) stats.chargesFixesReelles++;
     const cb = estCarteStructureeBudgetSoft_(o, montant);
     if (cb) stats.cbStructurees++;
-    const dateImputation = cb ? dateImputationCarteCerbereBudgetSoft_(o) : dateOperationCouranteBudgetSoft_(o);
+    const pilotableCb = cb && !chargeFixe && catValide && pilotables.has(catBrute);
+    const dateImputation = cb
+      ? dateImputationCarteCerbereBudgetSoft_(o,pilotableCb)
+      : dateOperationCouranteBudgetSoft_(o);
     if (!dateImputation) return;
     const pi = indicePeriodeVentilationBudgetSoft_(dateImputation, periodes || []);
     if (pi < 0) return;
@@ -108,7 +112,13 @@ function metaCleRapprochementBudgetSoft_(o){
 function dateAchatMetierBudgetSoft_(o){const m=metaCleRapprochementBudgetSoft_(o);return dateValideVentilationBudgetSoft_(m.dateAchat)||dateValideVentilationBudgetSoft_(o&&o.date_achat);}
 function carteMetierBudgetSoft_(o){const m=metaCleRapprochementBudgetSoft_(o);return String(m.carte||o&&o.carte_fin||'').trim();}
 function estCarteStructureeBudgetSoft_(o,montant){if(Number(montant)>=0)return false;return !!dateAchatMetierBudgetSoft_(o)&&!!carteMetierBudgetSoft_(o);}
-function dateImputationCarteCerbereBudgetSoft_(o){const d=dateAchatMetierBudgetSoft_(o);if(!d)return null;const debut=d.getDate()>=28?new Date(d.getFullYear(),d.getMonth(),28):new Date(d.getFullYear(),d.getMonth()-1,28);return new Date(debut.getFullYear(),debut.getMonth()+1,28);}
+function dateImputationCarteCerbereBudgetSoft_(o,pilotable){
+  if(pilotable===true){
+    const achat=dateAchatMetierBudgetSoft_(o);
+    if(achat)return achat;
+  }
+  return dateOperationCouranteBudgetSoft_(o);
+}
 function dateOperationCouranteBudgetSoft_(o){return dateValideVentilationBudgetSoft_(o&&o.date_comptable)||dateValideVentilationBudgetSoft_(o&&o.date);}
 function dateValideVentilationBudgetSoft_(v){if(!v)return null;const d=v instanceof Date?new Date(v.getTime()):new Date(v);return isNaN(d.getTime())?null:d;}
 function indicePeriodeVentilationBudgetSoft_(date,periodes){const d=dateValideVentilationBudgetSoft_(date);if(!d)return-1;const t=new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime();for(let i=0;i<(periodes||[]).length;i++){const p=periodes[i].periode||periodes[i],a=dateValideVentilationBudgetSoft_(p.debut),z=dateValideVentilationBudgetSoft_(p.fin);if(!a||!z)continue;const ta=new Date(a.getFullYear(),a.getMonth(),a.getDate()).getTime(),tz=new Date(z.getFullYear(),z.getMonth(),z.getDate()).getTime();if(t>=ta&&t<=tz)return i;}return-1;}
