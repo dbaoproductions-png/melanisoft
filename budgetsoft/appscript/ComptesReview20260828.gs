@@ -20,13 +20,13 @@ function chargerSyntheseComptes20260828(){
   const t0=Date.now();
   const global=chargerSyntheseComptesDepuisSnapshotGlobal20260906_();
   if(global){global.performance.dureeMs=Date.now()-t0;return global;}
-
-  // Secours unique : recalcul frais en lecture seule. Les anciens snapshots locaux
-  // Comptes ne participent plus au chemin de lecture et ne sont plus rafraîchis ici.
-  const r=construireSyntheseComptes20260828_();
-  r.performance={dureeMs:Date.now()-t0,controleDashboardExecute:false,source:'recalcul_secours',snapshotPerime:false,snapshotGenereLe:''};
-  r.snapshotPerime=false;
-  return r;
+  return{
+    ok:false,
+    version:COMPTES_REVIEW_20260828_VERSION,
+    sourceBudgetSoft:'snapshot_global_indisponible',
+    erreur:'Révision BudgetSoft globale indisponible : Comptes ne recalcule pas un solde concurrent.',
+    performance:{dureeMs:Date.now()-t0,controleDashboardExecute:false,source:'snapshot_global_indisponible'}
+  };
 }
 
 function construireSyntheseComptes20260828_(){
