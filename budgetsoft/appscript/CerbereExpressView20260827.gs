@@ -1,4 +1,4 @@
-const CERBERE_EXPRESS_VIEW_VERSION = '2026-09-15.4';
+const CERBERE_EXPRESS_VIEW_VERSION = '2026-09-21.1';
 
 /**
  * Adapte le moteur Cerbère Express vers la vue mobile, sans recalcul métier.
@@ -29,8 +29,7 @@ function composerVueCerbereExpressDepuisMoteur20260913_(e,sourceBudgetSoft,revis
 function chargerVueCerbereExpress20260827(){
   const global=typeof lireModuleSnapshotGlobalBudgetSoft20260906_==='function'?lireModuleSnapshotGlobalBudgetSoft20260906_('cerbereExpress'):null;
   if(global)return composerVueCerbereExpressDepuisMoteur20260913_(global,'snapshot_global',global.revisionBudgetSoft||'');
-  if(typeof avecContexteLectureBudgetSoft20260827_==='function')return avecContexteLectureBudgetSoft20260827_('cerbere-express-calcul-frais',chargerVueCerbereExpressSansContexte20260827_);
-  return chargerVueCerbereExpressSansContexte20260827_();
+  return{ok:false,version:CERBERE_EXPRESS_VIEW_VERSION,sourceBudgetSoft:'snapshot_global_indisponible',erreur:'Cerbère Express absent du snapshot global.'};
 }
 function chargerVueCerbereExpressSansContexte20260827_(){return composerVueCerbereExpressDepuisMoteur20260913_(chargerCerbereExpress20260827(),'recalcul_secours','');}
 function ouvrirCerbereExpress20260827(){const html=HtmlService.createTemplateFromFile('CerbereExpressEpMobile20260913').evaluate().setTitle('Cerbère Express');SpreadsheetApp.getUi().showSidebar(html);}
