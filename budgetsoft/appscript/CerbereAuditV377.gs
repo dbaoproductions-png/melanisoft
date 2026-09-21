@@ -1,4 +1,4 @@
-const CERBERE_AUDIT_V377_VERSION='3.7.9';
+const CERBERE_AUDIT_V377_VERSION='3.7.10';
 
 /**
  * Cerbère 3.7.9 — audit comptable durci.
@@ -82,7 +82,7 @@ function appliquerAuditCerbereLegacyV377_(base){
     const fuiteCfParCat={};
     operations.forEach(o=>{
       const opId=String(o&&o.id||'').trim(),cfId=cfMatchByOp[opId];if(!cfId)return;
-      const d=dateImputationCerbereV377_(o);if(!d||!dateDansCycleV377_(d,periode))return;
+      const d=dateOperationBanqueV377_(o);if(!d||!dateDansCycleV377_(d,periode))return;
       const cat=String(o&&o.categorie||'').trim();if(!p0Cats.has(cat))return;
       fuiteCfParCat[cat]=(fuiteCfParCat[cat]||0)+Math.abs(Number(o&&o.montant||0));
     });
@@ -102,7 +102,7 @@ function appliquerAuditCerbereLegacyV377_(base){
     // 5) Toutes les sorties réelles hors P0/CF pèsent immédiatement sur SCt1.
     let het1=0;const heDetail={};
     operations.forEach(o=>{
-      const d=dateImputationCerbereV377_(o),m=Number(o&&o.montant||0),cat=String(o&&o.categorie||'').trim();
+      const d=dateImputationCerbereV377_(o,p0Cats),m=Number(o&&o.montant||0),cat=String(o&&o.categorie||'').trim();
       if(!d||!dateDansCycleV377_(d,periode)||m>=0||p0Cats.has(cat))return;
       const opId=String(o&&o.id||'').trim();if(cfMatchByOp[opId])return;
       if(estReglementCbTechniqueV377_(o))return;
@@ -220,8 +220,16 @@ function migrerOpodoEnChargeFixeAnnuelleV377(){
   SpreadsheetApp.flush();return {ok:true,id};
 }
 
-function dateImputationCerbereV377_(o){
-  const da=dateV377_(o&&o.date_achat),fin=String(o&&o.carte_fin||'').trim();if(da&&fin){const d0=new Date(da.getFullYear(),da.getMonth(),28),cycleStart=da.getDate()>=28?d0:new Date(da.getFullYear(),da.getMonth()-1,28);return new Date(cycleStart.getFullYear(),cycleStart.getMonth()+1,28);}
+function dateImputationCerbereV377_(o,categoriesPilotables){
+  const cat=String(o&&o.categorie||'').trim();
+  const pilotable=categoriesPilotables instanceof Set&&categoriesPilotables.has(cat);
+  const estCb=typeof estAchatCbDoubleRole20260905_==='function'
+    ?estAchatCbDoubleRole20260905_(o)
+    :!!(String(o&&o.carte_fin||'').trim()&&String(o&&o.date_achat||'').trim());
+  if(pilotable&&estCb){
+    const da=typeof dateAchatCbDoubleRole20260905_==='function'?dateAchatCbDoubleRole20260905_(o):dateV377_(o&&o.date_achat);
+    if(da)return da;
+  }
   return dateOperationBanqueV377_(o);
 }
 function dateOperationBanqueV377_(o){return dateV377_(o&&(o.date_comptable||o.date||o.date_achat));}
