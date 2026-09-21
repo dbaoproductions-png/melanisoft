@@ -1,4 +1,4 @@
-const ALIGNEMENT_PERIODES_ANALYSE_VERSION = '2026-08-19.1';
+const ALIGNEMENT_PERIODES_ANALYSE_VERSION = '2026-09-21.1';
 
 function alignerAnalysesSurPeriodes2026_(recettes, depensesDetail, operations, categoriesRef, periodesBudgetaires) {
   const periodes = Array.isArray(periodesBudgetaires) ? periodesBudgetaires : [];
@@ -19,12 +19,14 @@ function alignerAnalysesSurPeriodes2026_(recettes, depensesDetail, operations, c
     const types = Object.fromEntries((categoriesRef || []).map(c => [String(c.nom || '').trim(), String(c.type || '').toLowerCase()]));
     let economiques = 0, structurels = 0, variables = 0, sauvetages = 0;
     const producteurs = { Patrick: 0, Madame: 0, Foyer: 0 };
-    const sources = {};
+    const canon = typeof categoriesRevenusEconomiquesBudgetSoft_==='function'?categoriesRevenusEconomiquesBudgetSoft_():['Salaires','France Travail','Cours','Concerts','Congés spectacles','Droits artistiques','Avantages employeur','Revenus fonciers','Prestations / aides','Revenus divers'];
+    const sources = Object.fromEntries(canon.map(function(x){return [x,0];}));
     const periodesAvecSauvetage = new Set();
 
     dansFenetre.forEach(o => {
       const montant = Number(o.montant || 0);
-      const cat = String(o.categorie || '').trim();
+      const brut = String(o.categorie || '').trim();
+      const cat = typeof categorieCibleBudgetSoft_==='function'?categorieCibleBudgetSoft_(brut):brut;
       if (montant > 0 && cat === 'Crédits de trésorerie') {
         sauvetages += montant;
         const d = dateMetier2026_(o.date);
@@ -35,13 +37,13 @@ function alignerAnalysesSurPeriodes2026_(recettes, depensesDetail, operations, c
         if (idx >= 0) periodesAvecSauvetage.add(idx);
         return;
       }
-      if (montant <= 0 || !estCategorieRevenuEconomique2026_(cat, types[cat])) return;
+      if (montant <= 0 || !estCategorieRevenuEconomique2026_(cat, types[cat]||types[brut])) return;
       economiques += montant;
       if (estRevenuStructurel2026_(cat)) structurels += montant;
       if (estRevenuVariable2026_(cat)) variables += montant;
       const prod = producteurRevenu2026_(cat);
       producteurs[prod] += montant;
-      sources[cat || 'Autres'] = (sources[cat || 'Autres'] || 0) + montant;
+      if(Object.prototype.hasOwnProperty.call(sources,cat))sources[cat] += montant;
     });
 
     recettes.fenetres[nb] = {
@@ -54,7 +56,7 @@ function alignerAnalysesSurPeriodes2026_(recettes, depensesDetail, operations, c
       revenusVariables: variables,
       partVariable: economiques > 0 ? variables / economiques * 100 : 0,
       producteurs: producteurs,
-      sources: Object.entries(sources).map(([nom, montant]) => ({ nom: nom, montant: montant })).sort((a, b) => b.montant - a.montant),
+      sources: canon.map(nom => ({ nom: nom, montant: Number(sources[nom] || 0) })),
       remboursementsProfessionnelsNeutralises: 0,
       creditsTresorerie: sauvetages,
       moisAvecSauvetage: periodesAvecSauvetage.size,
