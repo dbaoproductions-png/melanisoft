@@ -191,6 +191,7 @@ function importerFluxBancaireControleV2(lignes,compte,decisionsAmbiguites){
     const vals=out.map(o=>serialiserOpBancaire_(o,headers));f.clearContents();f.getRange(1,1,1,headers.length).setValues([headers]);if(vals.length)f.getRange(2,1,vals.length,headers.length).setValues(vals);f.setFrozenRows(1);SpreadsheetApp.flush();
     const apresOps=lireOperationsBancaires_(),apres=checksumOperationsBanque_(apresOps),attendu=avant.nombre-p.absorbees.length-p.orphelines.length+resolu.nouvelles.length;const cles=apresOps.map(o=>String(o.cle_rapprochement||'').trim()).filter(Boolean);
     if(apres.nombre!==attendu||apres.ids!==apres.nombre||cles.length!==new Set(cles).size){f.clearContents();const bv=backup.getDataRange().getValues();f.getRange(1,1,bv.length,bv[0].length).setValues(bv);SpreadsheetApp.flush();throw new Error('Contrôle après écriture échoué ; restauration automatique effectuée.');}
+    if(typeof marquerSnapshotGlobalBudgetSoftObsolete20260916_==='function')marquerSnapshotGlobalBudgetSoftObsolete20260916_('import_flux_bancaire_controle');
     return{bloque:false,recues:incoming.length,remplacees:modifieesExistantes,existantes:resolu.matches.length,protegeesPdf,creees:resolu.nouvelles.length,categorisees,ambiguesIgnorees:resolu.ignorees.length,ambiguesResolues:p.ambigues.length-resolu.ignorees.length,groupesRapproches:(p.groupesRapproches||[]).length,placeholdersSupprimes:p.absorbees.length,orphelinesSupprimees:p.orphelines.length,controle:ctl,sauvegarde:backup.getName(),totalApres:apres.nombre};
   }finally{lock.releaseLock();}
 }
