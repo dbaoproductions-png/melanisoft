@@ -5,31 +5,34 @@
  * est servi lorsqu'il est compatible ; sinon l'endpoint délègue au propriétaire
  * interne moderne chargerCerbereCockpitProprietaire20260917_().
  */
-const CERBERE_CANONICAL_PUBLIC_ENDPOINT_20260914_VERSION='2026-09-18.1';
+const CERBERE_CANONICAL_PUBLIC_ENDPOINT_20260914_VERSION='2026-09-21.1';
 
 function harmoniserSoldeReelCerbereCanonique20260918_(r){
   if(!r||r.ok===false)return r;
   try{
-    if(typeof chargerSyntheseComptes20260828==='function'){
-      const comptes=chargerSyntheseComptes20260828();
-      const solde=Number(comptes&&comptes.synthese&&comptes.synthese.disponible);
-      if(Number.isFinite(solde)){
-        r.reel=r.reel||{};
-        r.reel.soldeBancaire=Math.round(solde*100)/100;
-        r.reel.sourceSoldeBancaire='chargerSyntheseComptes20260828.synthese.disponible';
-        r.diagnostic=r.diagnostic||{};
-        r.diagnostic.soldeReelCanonique20260918={
-          ok:true,
-          version:'2026-09-18.1',
-          solde:r.reel.soldeBancaire,
-          source:'comptes frais canoniques',
-          doctrine:'Le solde réel Cerbère frais est la même valeur bancaire canonique que Comptes ; Cerbère ne recalcule pas un solde concurrent.'
-        };
-      }
+    const tres=typeof lireModuleSnapshotGlobalBudgetSoft20260906_==='function'
+      ?lireModuleSnapshotGlobalBudgetSoft20260906_('tresorerieComptable')
+      :null;
+    const solde=Number(tres&&tres.soldeReel);
+    if(Number.isFinite(solde)){
+      r.reel=r.reel||{};
+      r.reel.soldeBancaire=Math.round(solde*100)/100;
+      r.reel.dateReference=String(tres.dateReference||'');
+      r.reel.sourceSoldeBancaire='snapshot_global.tresorerieComptable.soldeReel';
+      r.diagnostic=r.diagnostic||{};
+      r.diagnostic.soldeReelCanonique20260918={
+        ok:true,
+        version:'2026-09-21.1',
+        solde:r.reel.soldeBancaire,
+        dateReference:r.reel.dateReference,
+        revisionBudgetSoft:String(tres.revisionBudgetSoft||r.revisionBudgetSoft||''),
+        source:'tresorerieComptable du snapshot global',
+        doctrine:'Une valeur transversale, un propriétaire : Cerbère affiche le solde réel canonique de la même révision BudgetSoft, sans recalcul local.'
+      };
     }
   }catch(e){
     r.diagnostic=r.diagnostic||{};
-    r.diagnostic.soldeReelCanonique20260918={ok:false,version:'2026-09-18.1',erreur:String(e&&e.message||e)};
+    r.diagnostic.soldeReelCanonique20260918={ok:false,version:'2026-09-21.1',erreur:String(e&&e.message||e)};
   }
   return r;
 }
@@ -55,6 +58,7 @@ function chargerCerbereCockpitCanonique20260914(){
     snapshot.sourceBudgetSoft='snapshot_global_endpoint_canonique_20260914';
     snapshot.versionEndpointCanonique=CERBERE_CANONICAL_PUBLIC_ENDPOINT_20260914_VERSION;
     snapshot.cfSnapshotBuildVersion=build;
+    harmoniserSoldeReelCerbereCanonique20260918_(snapshot);
     snapshot.dureeEndpointCanoniqueMs=Date.now()-t0;
     return snapshot;
   }
