@@ -1,4 +1,4 @@
-const CREDITS_PATRIMOINE_INTEGRATION_20260915_VERSION='2026-09-15.1';
+const CREDITS_PATRIMOINE_INTEGRATION_20260915_VERSION='2026-09-21.1';
 
 /**
  * Vue d'intégration strictement en lecture seule entre Crédits et Patrimoine.
@@ -7,19 +7,11 @@ const CREDITS_PATRIMOINE_INTEGRATION_20260915_VERSION='2026-09-15.1';
  * révision du snapshot global.
  */
 function chargerCreditsPatrimoineIntegres20260915(){
-  let credits=null,patrimoine=null,revisionBudgetSoft='',sourceBudgetSoft='recalcul_secours';
-  if(typeof chargerSnapshotGlobalBudgetSoft20260906==='function'){
-    const s=chargerSnapshotGlobalBudgetSoft20260906();
-    const e=s&&s.disponible&&s.etat;
-    if(e&&e.ok===true&&e.publie===true&&e.modules){
-      credits=e.modules.credits||null;
-      patrimoine=e.modules.patrimoine||null;
-      revisionBudgetSoft=String(e.revisionBudgetSoft||'');
-      sourceBudgetSoft='snapshot_global';
-    }
-  }
-  if(!credits&&typeof chargerCreditsEtDettesV2==='function')credits=chargerCreditsEtDettesV2();
-  if(!patrimoine&&typeof chargerPatrimoine==='function')patrimoine=chargerPatrimoine();
+  const etat=typeof lireEtatGlobalBudgetSoftSiDisponible20260906_==='function'?lireEtatGlobalBudgetSoftSiDisponible20260906_():null;
+  const credits=etat&&etat.modules&&etat.modules.credits||null;
+  const patrimoine=etat&&etat.modules&&etat.modules.patrimoine||null;
+  const revisionBudgetSoft=String(etat&&etat.revisionBudgetSoft||'');
+  const sourceBudgetSoft=etat?'snapshot_global':'snapshot_global_indisponible';
 
   const r=n=>Math.round(Number(n||0)*100)/100;
   const endettementTotal=r(credits&&credits.endettementTotal);
@@ -37,14 +29,8 @@ function chargerCreditsPatrimoineIntegres20260915(){
     revisionBudgetSoft,
     credits,
     patrimoine,
-    coherence:{
-      endettementTotal,
-      totalDettesPatrimoine,
-      patrimoineTotal,
-      patrimoineNet,
-      ecartDette,
-      ecartNet
-    }
+    coherence:{endettementTotal,totalDettesPatrimoine,patrimoineTotal,patrimoineNet,ecartDette,ecartNet},
+    erreur:credits&&patrimoine?'':'Crédits ou Patrimoine absents du snapshot global.'
   };
 }
 
