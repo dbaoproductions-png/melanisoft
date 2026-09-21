@@ -1,4 +1,4 @@
-const TREASURY_FORECAST_CORRECTIONS_20260831_VERSION='2026-09-01.1';
+const TREASURY_FORECAST_CORRECTIONS_20260831_VERSION='2026-09-21.1';
 
 /**
  * Socle minimal requis par le correctif 20260831.
@@ -9,14 +9,25 @@ const TREASURY_FORECAST_CORRECTIONS_20260831_VERSION='2026-09-01.1';
  * supprimé sans être utilisé. Le chargeur 20260830 reste inchangé pour ses
  * éventuels consommateurs historiques.
  */
-function construireSocleMinimalTresorerie20260831_(){
-  const synthese=chargerSyntheseComptes20260828();
-  const comptes=(synthese&&synthese.comptes||[]).filter(function(c){return actifComptes20260828_(c.actif);});
+function construireSocleMinimalTresorerie20260831_(ctx){
+  ctx=ctx||{};
+  const synthese=ctx.comptes||(
+    typeof construireSyntheseComptes20260828_==='function'
+      ?construireSyntheseComptes20260828_({pluxee:ctx.pluxee||null})
+      :null
+  );
+  if(!synthese||synthese.ok===false)return{ok:false,erreur:'Synthèse Comptes interne indisponible pour le socle de trésorerie.'};
+  const comptes=(synthese.comptes||[]).filter(function(c){return actifComptes20260828_(c.actif);});
   const courants=comptes.filter(estCompteCourantTresorerie_);
   const comptesBase=courants.length?courants:comptes.filter(function(c){return !estEpargneTresorerie_(c);});
+  const tres=ctx.tresorerieComptable||null;
+  const soldeCanon=Number(tres&&tres.soldeReel);
+  const soldeCalcule=arrondiTresorerie_(comptesBase.reduce(function(s,c){return s+Number(c&&c.soldeReel||0);},0));
   return{
     ok:true,
-    soldeReel:arrondiTresorerie_(comptesBase.reduce(function(s,c){return s+Number(c&&c.soldeReel||0);},0)),
+    soldeReel:Number.isFinite(soldeCanon)?arrondiTresorerie_(soldeCanon):soldeCalcule,
+    dateReferenceCanonique:String(tres&&tres.dateReference||synthese.dateReferenceReel||''),
+    sourceSoldeReel:Number.isFinite(soldeCanon)?'tresorerieComptable.soldeReel':'comptes internes',
     comptes:comptesBase.map(function(c){return{id:c.id,nom:c.nom,soldeReel:c.soldeReel,dateSolde:c.dateSolde,sourceSolde:c.sourceSolde};})
   };
 }
@@ -34,9 +45,9 @@ function construireSocleMinimalTresorerie20260831_(){
  * Cerbère n'est pas un second moteur de trésorerie. Il fournit uniquement une
  * hypothèse pour la partie encore inconnue du prochain débit CB différé.
  */
-function chargerTresoreriePrevisionnelle20260831(dateCible){
+function chargerTresoreriePrevisionnelle20260831(dateCible,ctx){
   return avecContexteLectureBudgetSoft20260827_('tresorerie_previsionnelle_20260901',function(){
-    const socle=construireSocleMinimalTresorerie20260831_();
+    const socle=construireSocleMinimalTresorerie20260831_(ctx);
     if(!socle||!socle.ok)return socle;
 
     const ops=lireTable_('Operations');
@@ -124,6 +135,11 @@ function listerMouvementsFutursTresorerie20260831(dateCible){
 
 /** Le solde affiché par Comptes reste maître. Sa date, si disponible, devient la frontière du Réel. */
 function dateReferenceBancaireTresorerie20260901_(socle,ops){
+  const canon=String(socle&&socle.dateReferenceCanonique||'');
+  if(canon){
+    const dc=new Date(canon);
+    if(!isNaN(dc))return finJourTresorerie_(dc);
+  }
   const ds=(socle&&socle.comptes||[]).map(c=>new Date(c&&c.dateSolde||0)).filter(d=>!isNaN(d));
   let d=null;
   if(ds.length){
