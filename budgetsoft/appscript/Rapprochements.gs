@@ -57,3 +57,22 @@ function rapprocherEvenementBudgetSoft_(eventId,operationId){
 }
 function reclasserOperationRapprochementBudgetSoft_(operationId,nouvelleCategorie){const id=String(operationId||'').trim(),cat=String(nouvelleCategorie||'').trim();if(!id||!cat)throw new Error('Opération ou catégorie manquante.');const sh=SpreadsheetApp.getActive().getSheetByName('Operations');if(!sh)throw new Error('Feuille Operations introuvable.');const values=sh.getDataRange().getValues();if(!values.length)throw new Error('Feuille Operations vide.');const headers=values[0].map(x=>String(x||'').trim()),idCol=headers.indexOf('id'),catCol=headers.indexOf('categorie');if(idCol<0||catCol<0)throw new Error('Colonnes id/categorie introuvables.');for(let i=1;i<values.length;i++){if(String(values[i][idCol]||'').trim()!==id)continue;sh.getRange(i+1,catCol+1).setValue(cat);if(typeof invaliderProjectionBudgetSoft_==='function')invaliderProjectionBudgetSoft_('rapprochement-imprevu-categorie');return{ok:true,type:'imprevu_categorie',operation_id:id,categorie:cat};}throw new Error('Opération introuvable : '+id);}
 function deciderRapprochementChargeFixeBudgetSoft_(id,decision){verifierInitialisation_();const choix=String(decision||'').toLowerCase();if(!['valider','ignorer'].includes(choix))throw new Error('Décision inconnue.');const feuille=initialiserRapprochementsChargesFixes_(),indexId=FIXED_CHARGE_MATCH_HEADERS.indexOf('id'),ids=feuille.getLastRow()>1?feuille.getRange(2,indexId+1,feuille.getLastRow()-1,1).getValues().flat():[],pos=ids.findIndex(v=>String(v)===String(id));if(pos<0)throw new Error('Rapprochement charge fixe introuvable.');const no=pos+2,valeurs=feuille.getRange(no,1,1,FIXED_CHARGE_MATCH_HEADERS.length).getValues()[0],objet=Object.fromEntries(FIXED_CHARGE_MATCH_HEADERS.map((h,i)=>[h,valeurs[i]]));objet.statut=choix==='valider'?'Validé':'Ignoré';objet.decision=choix==='valider'?'Rapproché à l’opération réelle':'Proposition ignorée';objet.modifie_le=new Date().toISOString();feuille.getRange(no,1,1,FIXED_CHARGE_MATCH_HEADERS.length).setValues([FIXED_CHARGE_MATCH_HEADERS.map(h=>objet[h]??'')]);if(choix==='valider'){marquerOperationRapprocheeChargeFixe_(objet);if(typeof appliquerAmortissementCreditDepuisRapprochement20260915_==='function')appliquerAmortissementCreditDepuisRapprochement20260915_(objet.charge_fixe_id,objet.operation_id);}if(typeof invaliderProjectionBudgetSoft_==='function')invaliderProjectionBudgetSoft_('rapprochement-charge-fixe');return Object.assign({ok:true,type:'charge_fixe'},objet);}
+
+
+/** Réparation ponctuelle 2026-09-21 — à supprimer après exécution. */
+function reparerCategorieVersementCautionLoyerAout20260921(){
+  assurerPlanActionsV4_();
+  const ev=(lireFeuilleDynamiquePlan_('Plan_Evenements')||[]).find(function(x){
+    return String(x&&x.id||'')==='1d207b7c-b59f-41f9-aade-babee152d967';
+  });
+  if(!ev)throw new Error('Événement Versement caution plus loyer août introuvable.');
+  const operationId=String(ev.operation_reelle_id||'').trim();
+  if(!operationId)throw new Error('Aucune opération réelle rapprochée.');
+  const op=(lireTable_('Operations')||[]).find(function(x){return String(x&&x.id||'')===operationId;});
+  if(!op)throw new Error('Opération réelle rapprochée introuvable.');
+  const actuelle=String(op.categorie||'').trim(),cible=String(ev.categorie||'').trim();
+  if(actuelle)return{ok:true,modifiee:false,operation_id:operationId,categorie:actuelle,raison:'categorie_deja_presente'};
+  if(!cible)throw new Error('La catégorie de l’événement est vide.');
+  enregistrerLigne('Operations',Object.assign({},op,{categorie:cible}));
+  return{ok:true,modifiee:true,operation_id:operationId,categorie:cible};
+}
