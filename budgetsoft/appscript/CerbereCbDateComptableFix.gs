@@ -218,6 +218,14 @@ function auditerImputationReelleCbPilotableBudgetSoft20260921(){
   });
 
   Object.keys(attenduParCategorie).forEach(k=>attenduParCategorie[k]=Math.round(attenduParCategorie[k]*100)/100);
+
+  // Doctrine Santé : la molette consomme le net des remboursements réellement encaissés.
+  const santeRoulant=p&&p.roulant&&p.roulant.sante||{};
+  const remboursementsSante=Math.max(0,Number(santeRoulant.remboursements||0));
+  if(Object.prototype.hasOwnProperty.call(attenduParCategorie,'Santé')){
+    attenduParCategorie['Santé']=Math.round(Math.max(0,Number(attenduParCategorie['Santé']||0)-remboursementsSante)*100)/100;
+  }
+
   const publieParCategorie={};
   env.forEach(x=>{
     const cat=String(x&&x.categorie||'').trim();
@@ -235,11 +243,12 @@ function auditerImputationReelleCbPilotableBudgetSoft20260921(){
   const totalPublie=Math.round(Object.values(publieParCategorie).reduce((s,v)=>s+Number(v||0),0)*100)/100;
   const out={
     ok:ecarts.length===0,
-    version:'2026-09-21.1',
+    version:'2026-09-21.2',
     lectureSeule:true,
     revisionBudgetSoft:String(snap&&snap.revisionBudgetSoft||''),
     cycle:{debut:p.periode.debut,fin:p.periode.fin,maintenant:maintenant.toISOString()},
     totaux:{attendu:totalAttendu,publie:totalPublie,ecart:Math.round((totalPublie-totalAttendu)*100)/100},
+    sante:{remboursementsEncaisses:Math.round(remboursementsSante*100)/100,source:'roulant.sante.remboursements'},
     ecartsCategories:ecarts,
     candidatesCb:candidatesCb.sort((a,b)=>String(a.dateAchat).localeCompare(String(b.dateAchat))||a.categorie.localeCompare(b.categorie,'fr')),
     retenuesPilotablesNombre:toutesPilotables.length
