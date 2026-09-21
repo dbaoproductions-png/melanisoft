@@ -1,4 +1,4 @@
-const BUDGETSOFT_ENGAGEMENTS_SNAPSHOT_20260912_VERSION='2026-09-12.2';
+const BUDGETSOFT_ENGAGEMENTS_SNAPSHOT_20260912_VERSION='2026-09-21.1';
 
 function construireModuleEngagementsBancairesSnapshotBudgetSoft20260912_(dashboardRevision){
   const t0=Date.now();
@@ -34,13 +34,7 @@ function servirEngagementsBancairesDepuisSnapshotBudgetSoft20260912_(){
 // Point d'entrée public conservé : aucune modification de l'UI.
 function chargerEngagementsBancairesFuturs(){
   const snapshot=servirEngagementsBancairesDepuisSnapshotBudgetSoft20260912_();
-  if(snapshot)return snapshot;
-  const r=chargerEngagementsBancairesFutursSource20260912_();
-  if(r&&typeof r==='object'){
-    r.sourceBudgetSoft='recalcul_secours';
-    r.versionSnapshotEngagements=BUDGETSOFT_ENGAGEMENTS_SNAPSHOT_20260912_VERSION;
-  }
-  return r;
+  return snapshot||{ok:false,sourceBudgetSoft:'snapshot_global_indisponible',versionSnapshotEngagements:BUDGETSOFT_ENGAGEMENTS_SNAPSHOT_20260912_VERSION,erreur:'Engagements bancaires absents du snapshot global.'};
 }
 
 function auditerEngagementsBancairesSnapshotBudgetSoft20260912(){
