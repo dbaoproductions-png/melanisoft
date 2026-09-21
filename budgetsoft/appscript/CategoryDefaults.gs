@@ -1,3 +1,20 @@
+const CATEGORIES_REVENUS_ECONOMIQUES_BUDGETSOFT_ = [
+  'Salaires',
+  'France Travail',
+  'Cours',
+  'Concerts',
+  'Congés spectacles',
+  'Droits artistiques',
+  'Avantages employeur',
+  'Revenus fonciers',
+  'Prestations / aides',
+  'Revenus divers'
+];
+
+function categoriesRevenusEconomiquesBudgetSoft_(){
+  return CATEGORIES_REVENUS_ECONOMIQUES_BUDGETSOFT_.slice();
+}
+
 const CATEGORIES_BUDGETSOFT_CIBLES_ = [
   // Dépenses économiques
   {nom:'Logements',type:'depense'},
@@ -30,14 +47,12 @@ const CATEGORIES_BUDGETSOFT_CIBLES_ = [
   {nom:'France Travail',type:'revenu'},
   {nom:'Cours',type:'revenu'},
   {nom:'Concerts',type:'revenu'},
-  {nom:'SACEM',type:'revenu'},
   {nom:'Congés spectacles',type:'revenu'},
   {nom:'Droits artistiques',type:'revenu'},
   {nom:'Avantages employeur',type:'revenu',definition:"Avantages, participations et aides liés à l’employeur ou au statut professionnel, hors salaire."},
   {nom:'Revenus fonciers',type:'revenu'},
   {nom:'Prestations / aides',type:'revenu'},
   {nom:'Revenus divers',type:'revenu'},
-  {nom:'Autres revenus',type:'revenu'},
 
   // Mouvements de trésorerie : ils affectent le solde bancaire mais jamais le résultat économique.
   {nom:'Crédits de trésorerie',type:'tresorerie',definition:"Apports de trésorerie issus d’un financement ou d’espèces réinjectées sur le compte ; exclus des revenus économiques."},
@@ -52,11 +67,15 @@ const CATEGORIES_BUDGETSOFT_CIBLES_ = [
 const RENOMMAGES_CATEGORIES_BUDGETSOFT_ = {
   'logement':'Logements',
   'transport':'Transports',
-  'revenus':'Autres revenus',
+  'revenus':'Revenus divers',
   'banque':'Frais bancaires',
   'frais bancaires':'Frais bancaires',
   'salaire':'Salaires',
   'divers':'Revenus divers',
+  'autres revenus':'Revenus divers',
+  'revenu divers':'Revenus divers',
+  'revenus divers':'Revenus divers',
+  'sacem':'Droits artistiques',
   'dépense diverse':'Dépenses diverses',
   'depense diverse':'Dépenses diverses',
   'dépenses diverses':'Dépenses diverses',
@@ -99,20 +118,23 @@ function typeCategorieCibleBudgetSoft_(nom,typeActuel){const cible=CATEGORIES_BU
 
 function migrerReferencesCategoriesBudgetSoft_(renommages){
   const ss=SpreadsheetApp.getActiveSpreadsheet();
-  const specifications=[
-    ['Operations','categorie'],['Charges_fixes','categorie'],['Correspondances_bancaires','categorie'],['Regles_categories','categorie'],
-    ['Budget','poste'],['Corrections_a_valider','categorie_actuelle'],['Corrections_a_valider','categorie_proposee']
-  ];
-  let cellulesModifiees=0;
-  specifications.forEach(([nomFeuille,nomColonne])=>{
-    const f=ss.getSheetByName(nomFeuille);if(!f||f.getLastRow()<2||f.getLastColumn()<1)return;
-    const entetes=f.getRange(1,1,1,f.getLastColumn()).getValues()[0].map(v=>String(v||'').trim());
-    const index=entetes.indexOf(nomColonne);if(index<0)return;
-    const plage=f.getRange(2,index+1,f.getLastRow()-1,1),valeurs=plage.getValues();let change=false;
-    valeurs.forEach(r=>{const avant=String(r[0]||'').trim();if(!avant)return;const apres=renommages[cleCategorieBudgetSoft_(avant)]||avant;if(apres!==avant){r[0]=apres;cellulesModifiees++;change=true;}});
-    if(change)plage.setValues(valeurs);
+  const colonnesEligibles=new Set(['categorie','poste','categorie_actuelle','categorie_proposee']);
+  let cellulesModifiees=0,feuillesModifiees={};
+  ss.getSheets().forEach(function(f){
+    if(f.getLastRow()<2||f.getLastColumn()<1)return;
+    const entetes=f.getRange(1,1,1,f.getLastColumn()).getValues()[0].map(function(v){return String(v||'').trim();});
+    entetes.forEach(function(nomColonne,index){
+      if(!colonnesEligibles.has(nomColonne))return;
+      const plage=f.getRange(2,index+1,f.getLastRow()-1,1),valeurs=plage.getValues();let change=false,n=0;
+      valeurs.forEach(function(r){
+        const avant=String(r[0]||'').trim();if(!avant)return;
+        const apres=renommages[cleCategorieBudgetSoft_(avant)]||avant;
+        if(apres!==avant){r[0]=apres;cellulesModifiees++;n++;change=true;}
+      });
+      if(change){plage.setValues(valeurs);feuillesModifiees[f.getName()]=(feuillesModifiees[f.getName()]||0)+n;}
+    });
   });
-  return cellulesModifiees;
+  return{cellulesModifiees:cellulesModifiees,feuillesModifiees:feuillesModifiees};
 }
 
 function installerArchitectureCategoriesBudgetSoft(){
@@ -126,7 +148,7 @@ function installerArchitectureCategoriesBudgetSoft(){
   const idxId=entetes.indexOf('id'),idxNom=entetes.indexOf('nom'),idxType=entetes.indexOf('type'),idxCouleur=entetes.indexOf('couleur'),idxActif=entetes.indexOf('actif'),idxDefinition=entetes.indexOf('definition'),idxFamille=entetes.indexOf('famille_analytique');
   if([idxId,idxNom,idxType,idxActif,idxDefinition,idxFamille].some(i=>i<0))throw new Error('Schéma Categories incomplet.');
 
-  const renommages=Object.assign({},RENOMMAGES_CATEGORIES_BUDGETSOFT_),referencesModifiees=migrerReferencesCategoriesBudgetSoft_(renommages);
+  const renommages=Object.assign({},RENOMMAGES_CATEGORIES_BUDGETSOFT_),migrationReferences=migrerReferencesCategoriesBudgetSoft_(renommages),referencesModifiees=Number(migrationReferences&&migrationReferences.cellulesModifiees||0);
   const lignes=feuille.getLastRow()>1?feuille.getRange(2,1,feuille.getLastRow()-1,largeur).getValues():[],parNom=new Map(),renommees=[];
   lignes.forEach(r=>{
     const ancien=String(r[idxNom]||'').trim();if(!ancien)return;
@@ -153,6 +175,29 @@ function installerArchitectureCategoriesBudgetSoft(){
   if(feuille.getLastRow()>1)feuille.getRange(2,1,feuille.getLastRow()-1,largeur).clearContent();
   if(finales.length){const sortie=finales.map(c=>{const r=new Array(largeur).fill('');r[idxId]=c.id;r[idxNom]=c.nom;r[idxType]=c.type;if(idxCouleur>=0)r[idxCouleur]=c.couleur;r[idxActif]=true;r[idxDefinition]=c.definition||'';r[idxFamille]=c.famille_analytique||'';return r;});feuille.getRange(2,1,sortie.length,largeur).setValues(sortie);}
   feuille.setFrozenRows(1);feuille.autoResizeColumns(1,largeur);
-  return{ok:true,version:'2026-08-20-final',categories:finales.length,ajoutees,renommees,referencesModifiees,tresorerie:CATEGORIES_BUDGETSOFT_CIBLES_.filter(c=>c.type==='tresorerie').map(c=>c.nom),definitions:CATEGORIES_BUDGETSOFT_CIBLES_.filter(c=>c.definition).map(c=>c.nom),familles:CATEGORIES_BUDGETSOFT_CIBLES_.filter(c=>c.famille_analytique).map(c=>({nom:c.nom,famille:c.famille_analytique}))};
+  return{ok:true,version:'2026-09-21-revenus-10',categories:finales.length,ajoutees,renommees,referencesModifiees,migrationReferences:migrationReferences,revenusEconomiques:categoriesRevenusEconomiquesBudgetSoft_(),tresorerie:CATEGORIES_BUDGETSOFT_CIBLES_.filter(c=>c.type==='tresorerie').map(c=>c.nom),definitions:CATEGORIES_BUDGETSOFT_CIBLES_.filter(c=>c.definition).map(c=>c.nom),familles:CATEGORIES_BUDGETSOFT_CIBLES_.filter(c=>c.famille_analytique).map(c=>({nom:c.nom,famille:c.famille_analytique}))};
 }
 function installerCategoriesRevenusBudgetSoft(){return installerArchitectureCategoriesBudgetSoft();}
+
+
+function migrerReferentielRevenus10BudgetSoft20260921(){
+  const avant=(lireTable_('Categories')||[]).filter(function(x){return String(x&&x.type||'').toLowerCase()==='revenu';}).map(function(x){return String(x.nom||'');});
+  const installation=installerArchitectureCategoriesBudgetSoft();
+  if(typeof invaliderProjectionBudgetSoft_==='function')invaliderProjectionBudgetSoft_('migration_revenus_10_20260921');
+  const apres=(lireTable_('Categories')||[]).filter(function(x){return String(x&&x.type||'').toLowerCase()==='revenu'&&String(x&&x.actif)!=='0';}).map(function(x){return String(x.nom||'');});
+  const canon=categoriesRevenusEconomiquesBudgetSoft_(),manquantes=canon.filter(function(x){return !apres.includes(x);}),intruses=apres.filter(function(x){return !canon.includes(x);});
+  const out={ok:manquantes.length===0&&intruses.length===0&&apres.length===10,version:'2026-09-21.1',avant:avant,apres:apres,canon:canon,manquantes:manquantes,intruses:intruses,installation:installation};
+  console.log('[MIGRATION REFERENTIEL REVENUS 10 BUDGETSOFT 20260921] '+JSON.stringify(out));
+  return out;
+}
+
+function auditerReferentielRevenus10BudgetSoft20260921(){
+  const canon=categoriesRevenusEconomiquesBudgetSoft_();
+  const cats=(lireTable_('Categories')||[]).filter(function(x){return String(x&&x.type||'').toLowerCase()==='revenu'&&String(x&&x.actif)!=='0';}).map(function(x){return String(x.nom||'');});
+  const ops=(lireTable_('Operations')||[]).filter(function(o){return Number(o&&o.montant||0)>0;});
+  const legacyOps=ops.filter(function(o){return ['Autres revenus','SACEM'].includes(String(o&&o.categorie||'').trim());});
+  const manquantes=canon.filter(function(x){return !cats.includes(x);}),intruses=cats.filter(function(x){return !canon.includes(x);});
+  const out={ok:cats.length===10&&manquantes.length===0&&intruses.length===0&&legacyOps.length===0,version:'2026-09-21.1',lectureSeule:true,canon:canon,categoriesActives:cats,manquantes:manquantes,intruses:intruses,operationsLegacy:legacyOps.map(function(o){return{id:o.id,categorie:o.categorie,montant:o.montant};})};
+  console.log('[AUDIT REFERENTIEL REVENUS 10 BUDGETSOFT 20260921] '+JSON.stringify(out));
+  return out;
+}
