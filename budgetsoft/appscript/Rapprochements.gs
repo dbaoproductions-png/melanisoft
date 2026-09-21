@@ -33,6 +33,27 @@ function listerCandidatsRapprochementBudgetSoft(d){
   if(type!=='evenement')return serialiserCerberePourClient_([]);
   assurerPlanActionsV4_();const eventId=String(d.previsionnel_id||d.event_id||'').trim(),ev=lireFeuilleDynamiquePlan_('Plan_Evenements').find(x=>String(x.id)===eventId);if(!ev)throw new Error('Événement introuvable.');const montant=Math.abs(Number(ev.montant||0)),date=ev.date_effet?new Date(ev.date_effet):null,cat=String(ev.categorie||''),nature=String(ev.type||'').trim().toLowerCase();let ops=lireTable_('Operations').filter(o=>{const m=Number(o.montant||0);if(nature==='recette')return m>0;if(nature==='depense'||nature==='dépense')return m<0;return m!==0;});ops=ops.map(o=>{const om=Math.abs(Number(o.montant||0)),od=new Date(o.date_comptable||o.date||o.date_operation||0),jours=date&&!isNaN(date)&&!isNaN(od)?Math.abs(od-date)/86400000:99,score=Math.abs(om-montant)+(jours*2)+(cat&&String(o.categorie||'')!==cat?50:0);return{id:o.id||'',libelle:o.libelle||o.libelle_bancaire||'',montant:Number(o.montant||0),date:o.date_comptable||o.date||o.date_operation||'',categorie:o.categorie||'',score};}).sort((a,b)=>a.score-b.score).slice(0,15);return serialiserCerberePourClient_(ops);
 }
-function rapprocherEvenementBudgetSoft_(eventId,operationId){assurerPlanActionsV4_();const ev=lireFeuilleDynamiquePlan_('Plan_Evenements').find(x=>String(x.id)===String(eventId));if(!ev)throw new Error('Événement introuvable.');const op=lireTable_('Operations').find(x=>String(x.id)===String(operationId));if(!op)throw new Error('Opération introuvable.');ev.operation_reelle_id=operationId;ev.montant_reel=Math.abs(Number(op.montant||0));ev.date_realisation=op.date_comptable||op.date||op.date_operation||'';ev.rapprochement_statut='Rapproché';ev.statut='Rapproché';upsertDynamiquePlanV4_('Plan_Evenements',ev);recalculerPlanBudgetSoft_('rapprochement_evenement');return{ok:true,type:'evenement',previsionnel_id:String(eventId),operation_id:String(operationId)};}
+function rapprocherEvenementBudgetSoft_(eventId,operationId){
+  assurerPlanActionsV4_();
+  const ev=lireFeuilleDynamiquePlan_('Plan_Evenements').find(x=>String(x.id)===String(eventId));
+  if(!ev)throw new Error('Événement introuvable.');
+  let op=lireTable_('Operations').find(x=>String(x.id)===String(operationId));
+  if(!op)throw new Error('Opération introuvable.');
+
+  const catOperation=String(op.categorie||'').trim(),catEvenement=String(ev.categorie||'').trim();
+  if(!catOperation&&catEvenement){
+    op=Object.assign({},op,{categorie:catEvenement});
+    enregistrerLigne('Operations',op);
+  }
+
+  ev.operation_reelle_id=operationId;
+  ev.montant_reel=Math.abs(Number(op.montant||0));
+  ev.date_realisation=op.date_comptable||op.date||op.date_operation||'';
+  ev.rapprochement_statut='Rapproché';
+  ev.statut='Rapproché';
+  upsertDynamiquePlanV4_('Plan_Evenements',ev);
+  recalculerPlanBudgetSoft_('rapprochement_evenement');
+  return{ok:true,type:'evenement',previsionnel_id:String(eventId),operation_id:String(operationId),categorie_operation:String(op.categorie||''),categorie_heritee:!catOperation&&!!catEvenement};
+}
 function reclasserOperationRapprochementBudgetSoft_(operationId,nouvelleCategorie){const id=String(operationId||'').trim(),cat=String(nouvelleCategorie||'').trim();if(!id||!cat)throw new Error('Opération ou catégorie manquante.');const sh=SpreadsheetApp.getActive().getSheetByName('Operations');if(!sh)throw new Error('Feuille Operations introuvable.');const values=sh.getDataRange().getValues();if(!values.length)throw new Error('Feuille Operations vide.');const headers=values[0].map(x=>String(x||'').trim()),idCol=headers.indexOf('id'),catCol=headers.indexOf('categorie');if(idCol<0||catCol<0)throw new Error('Colonnes id/categorie introuvables.');for(let i=1;i<values.length;i++){if(String(values[i][idCol]||'').trim()!==id)continue;sh.getRange(i+1,catCol+1).setValue(cat);if(typeof invaliderProjectionBudgetSoft_==='function')invaliderProjectionBudgetSoft_('rapprochement-imprevu-categorie');return{ok:true,type:'imprevu_categorie',operation_id:id,categorie:cat};}throw new Error('Opération introuvable : '+id);}
 function deciderRapprochementChargeFixeBudgetSoft_(id,decision){verifierInitialisation_();const choix=String(decision||'').toLowerCase();if(!['valider','ignorer'].includes(choix))throw new Error('Décision inconnue.');const feuille=initialiserRapprochementsChargesFixes_(),indexId=FIXED_CHARGE_MATCH_HEADERS.indexOf('id'),ids=feuille.getLastRow()>1?feuille.getRange(2,indexId+1,feuille.getLastRow()-1,1).getValues().flat():[],pos=ids.findIndex(v=>String(v)===String(id));if(pos<0)throw new Error('Rapprochement charge fixe introuvable.');const no=pos+2,valeurs=feuille.getRange(no,1,1,FIXED_CHARGE_MATCH_HEADERS.length).getValues()[0],objet=Object.fromEntries(FIXED_CHARGE_MATCH_HEADERS.map((h,i)=>[h,valeurs[i]]));objet.statut=choix==='valider'?'Validé':'Ignoré';objet.decision=choix==='valider'?'Rapproché à l’opération réelle':'Proposition ignorée';objet.modifie_le=new Date().toISOString();feuille.getRange(no,1,1,FIXED_CHARGE_MATCH_HEADERS.length).setValues([FIXED_CHARGE_MATCH_HEADERS.map(h=>objet[h]??'')]);if(choix==='valider'){marquerOperationRapprocheeChargeFixe_(objet);if(typeof appliquerAmortissementCreditDepuisRapprochement20260915_==='function')appliquerAmortissementCreditDepuisRapprochement20260915_(objet.charge_fixe_id,objet.operation_id);}if(typeof invaliderProjectionBudgetSoft_==='function')invaliderProjectionBudgetSoft_('rapprochement-charge-fixe');return Object.assign({ok:true,type:'charge_fixe'},objet);}
