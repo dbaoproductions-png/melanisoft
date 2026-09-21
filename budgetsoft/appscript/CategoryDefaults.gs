@@ -287,3 +287,74 @@ function auditerReferentielRevenus10BudgetSoft20260921(){
   console.log('[AUDIT REFERENTIEL REVENUS 10 BUDGETSOFT 20260921] '+JSON.stringify(out));
   return out;
 }
+
+function migrerNomenclatureRevenusBudgetSoft20260921(){
+  verifierInitialisation_();
+  const ss=SpreadsheetApp.getActiveSpreadsheet(),aliases={'sacem':'Droits artistiques','autres revenus':'Revenus divers','revenus':'Revenus divers'};
+  const referencesModifiees=migrerReferencesCategoriesBudgetSoft_(aliases);
+  const f=ss.getSheetByName('Categories');
+  if(!f)throw new Error('Onglet Categories introuvable.');
+  const hs=f.getRange(1,1,1,f.getLastColumn()).getValues()[0].map(v=>String(v||'').trim()),iNom=hs.indexOf('nom'),iType=hs.indexOf('type');
+  if(iNom<0||iType<0)throw new Error('Schéma Categories incomplet.');
+  const rows=f.getLastRow()>1?f.getRange(2,1,f.getLastRow()-1,hs.length).getValues():[],parNom=new Map(),horsRevenus=[];
+  let categoriesRenommees=0,categoriesFusionnees=0;
+  rows.forEach(r=>{
+    const type=String(r[iType]||'').trim().toLowerCase();
+    if(type!=='revenu'){horsRevenus.push(r);return;}
+    const avant=String(r[iNom]||'').trim(),apres=aliases[cleCategorieBudgetSoft_(avant)]||avant;
+    if(apres!==avant)categoriesRenommees++;
+    r[iNom]=apres;
+    const k=cleCategorieBudgetSoft_(apres);
+    if(!parNom.has(k)){parNom.set(k,r);return;}
+    categoriesFusionnees++;
+    const base=parNom.get(k);
+    for(let i=0;i<base.length;i++)if((base[i]===''||base[i]==null)&&r[i]!==''&&r[i]!=null)base[i]=r[i];
+  });
+  const canons=categoriesRevenusBudgetSoftCanoniques20260921_(),parCanon=new Map(canons.map((n,i)=>[cleCategorieBudgetSoft_(n),i]));
+  const revenus=[...parNom.values()].filter(r=>parCanon.has(cleCategorieBudgetSoft_(r[iNom])));
+  const presents=new Set(revenus.map(r=>cleCategorieBudgetSoft_(r[iNom])));
+  canons.forEach(n=>{
+    const k=cleCategorieBudgetSoft_(n);if(presents.has(k))return;
+    const r=new Array(hs.length).fill('');
+    const iId=hs.indexOf('id'),iAct=hs.indexOf('actif');if(iId>=0)r[iId]=Utilities.getUuid();
+    r[iNom]=n;r[iType]='revenu';if(iAct>=0)r[iAct]=true;revenus.push(r);
+  });
+  revenus.sort((a,b)=>(parCanon.get(cleCategorieBudgetSoft_(a[iNom]))??999)-(parCanon.get(cleCategorieBudgetSoft_(b[iNom]))??999));
+  const sortie=horsRevenus.concat(revenus);
+  if(f.getLastRow()>1)f.getRange(2,1,f.getLastRow()-1,hs.length).clearContent();
+  if(sortie.length)f.getRange(2,1,sortie.length,hs.length).setValues(sortie);
+  const fusionCanon=fusionnerCanonRecettesCategoriesBudgetSoft20260921_();
+  SpreadsheetApp.flush();
+  if(typeof marquerSnapshotGlobalBudgetSoftObsolete20260916_==='function')marquerSnapshotGlobalBudgetSoftObsolete20260916_('migration_nomenclature_revenus_10');
+  const out={ok:true,version:'2026-09-21.1',categoriesRevenus:canons,nombreCategoriesRevenus:canons.length,referencesModifiees,categoriesRenommees,categoriesFusionnees,fusionCanon};
+  console.log('[MIGRATION NOMENCLATURE REVENUS 10 20260921] '+JSON.stringify(out));
+  return out;
+}
+
+function auditerNomenclatureRevenusBudgetSoft20260921(){
+  verifierInitialisation_();
+  const ss=SpreadsheetApp.getActiveSpreadsheet(),canons=categoriesRevenusBudgetSoftCanoniques20260921_(),attendu=JSON.stringify(canons),aliasInterdits=new Set(['sacem','autres revenus']);
+  const cats=(typeof lireTable_==='function'?lireTable_('Categories'):[]).filter(c=>String(c&&c.type||'').trim().toLowerCase()==='revenu').map(c=>String(c&&c.nom||'').trim());
+  const anomalies=[];
+  const specs=[['Operations','categorie'],['Charges_fixes','categorie'],['Correspondances_bancaires','categorie'],['Regles_categories','categorie'],['Budget','poste'],['Plan_Evenements','categorie'],['Plan_Actions','categorie'],['Cerbere_Recettes_Canon_V1','categorie']];
+  specs.forEach(([nom,col])=>{
+    const f=ss.getSheetByName(nom);if(!f||f.getLastRow()<2)return;
+    const hs=f.getRange(1,1,1,f.getLastColumn()).getValues()[0].map(v=>String(v||'').trim()),idx=hs.indexOf(col);if(idx<0)return;
+    f.getRange(2,idx+1,f.getLastRow()-1,1).getValues().forEach((r,i)=>{const v=String(r[0]||'').trim();if(aliasInterdits.has(cleCategorieBudgetSoft_(v)))anomalies.push({feuille:nom,ligne:i+2,colonne:col,valeur:v});});
+  });
+  let sourcesAnalyse=[];
+  try{
+    const a=typeof chargerAnalysesBudgetairesV23Source20260912_==='function'?chargerAnalysesBudgetairesV23Source20260912_(6):null;
+    const fen=a&&a.recettes&&a.recettes.fenetres&&(a.recettes.fenetres[6]||a.recettes.fenetres['6']);
+    sourcesAnalyse=(fen&&Array.isArray(fen.sources)?fen.sources:[]).map(x=>String(x&&x.nom||''));
+  }catch(e){anomalies.push({module:'Analyses',erreur:String(e&&e.message||e)});}
+  const controles=[
+    {code:'REFERENTIEL_10_REVENUS',ok:JSON.stringify(cats)===attendu,detail:{attendu:canons,obtenu:cats}},
+    {code:'ANCIENS_LIBELLES_ABSENTS',ok:anomalies.length===0,detail:{anomalies}},
+    {code:'ANALYSES_10_REVENUS',ok:JSON.stringify(sourcesAnalyse)===attendu,detail:{attendu:canons,obtenu:sourcesAnalyse}}
+  ];
+  const out={ok:controles.every(x=>x.ok),version:'2026-09-21.1',lectureSeule:true,categoriesRevenus:canons,controles};
+  console.log('[AUDIT NOMENCLATURE REVENUS 10 20260921] '+JSON.stringify(out));
+  return out;
+}
+
