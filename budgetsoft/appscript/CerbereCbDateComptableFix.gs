@@ -143,3 +143,107 @@ function corrigerReelPilotableDateAchat20260902_(base){
   });
   cfg.forEach(c=>c.env.forEach(x=>{const cat=String(x&&x.categorie||'').trim();x.reelNetPrevisionnel=arrCockpit20260902_(Number(c.reel[cat]||0));x.reelPilotableDepuisDebutCycle=x.reelNetPrevisionnel;}));
 }
+
+
+/**
+ * Audit lecture seule de l'imputation réelle des CB pilotables du cycle courant.
+ * Ne modifie aucune donnée et n'alimente aucun calcul métier.
+ */
+function auditerImputationReelleCbPilotableBudgetSoft20260921(){
+  const snap=typeof lireModuleSnapshotGlobalBudgetSoft20260906_==='function'
+    ?lireModuleSnapshotGlobalBudgetSoft20260906_('cerbere')
+    :null;
+  const p=snap&&Array.isArray(snap.periodes)?snap.periodes[0]:null;
+  if(!p||!p.periode)return{ok:false,erreur:'Cycle courant Cerbère indisponible dans le snapshot.'};
+
+  const env=Array.isArray(p.enveloppes)?p.enveloppes:[];
+  const pilotables=new Set(env.map(x=>String(x&&x.categorie||'').trim()).filter(Boolean));
+  const debut=dateCockpit20260902_(p.periode.debut),fin=dateCockpit20260902_(p.periode.fin),maintenant=new Date();
+  if(!debut||!fin)return{ok:false,erreur:'Bornes du cycle courant invalides.'};
+
+  const ops0=lireTable_('Operations')||[];
+  const operations=typeof dedoublonnerOperationsCartesBudgetSoft_==='function'
+    ?dedoublonnerOperationsCartesBudgetSoft_(ops0):ops0;
+  const charges=lireTable_('Charges_fixes')||[];
+  const rapprochements=typeof lireRapprochementsChargesFixes==='function'?lireRapprochementsChargesFixes():[];
+  const liensCf=typeof construireLiensCfCertainsV377_==='function'
+    ?construireLiensCfCertainsV377_(operations,charges,rapprochements):{};
+
+  const attenduParCategorie={};
+  const candidatesCb=[];
+  const toutesPilotables=[];
+
+  operations.forEach(o=>{
+    const montant=Number(o&&o.montant||0);
+    if(!Number.isFinite(montant)||montant>=0)return;
+    const id=String(o&&o.id||'').trim();
+    const cat=String(o&&o.categorie||'').trim();
+    const estPilotable=pilotables.has(cat);
+    const lienCf=String(o&&o.charge_fixe_id||'').trim()||(id&&liensCf[id]||'');
+    const technique=typeof estReglementCbTechniqueV377_==='function'&&estReglementCbTechniqueV377_(o);
+    const estCb=typeof estAchatCbDoubleRole20260905_==='function'
+      ?estAchatCbDoubleRole20260905_(o)
+      :!!(String(o&&o.carte_fin||'').trim()&&String(o&&o.date_achat||'').trim());
+    const da=typeof dateAchatCbDoubleRole20260905_==='function'
+      ?dateAchatCbDoubleRole20260905_(o)
+      :dateAchatCockpit20260902_(o);
+    const db=typeof dateOperationBanqueV377_==='function'
+      ?dateOperationBanqueV377_(o)
+      :dateOperationCouranteBudgetSoft_(o);
+    const dansCycleAchat=!!(da&&da>=debut&&da<=fin&&da<=maintenant);
+    const retenue=estPilotable&&!lienCf&&!technique&&!!da&&dansCycleAchat;
+
+    if(retenue){
+      attenduParCategorie[cat]=Number(attenduParCategorie[cat]||0)+Math.abs(montant);
+      toutesPilotables.push(id);
+    }
+
+    if(estCb&&da&&da>=debut&&da<=maintenant){
+      candidatesCb.push({
+        id:id,
+        libelle:String(o&&o.libelle_bancaire||o&&o.libelle||''),
+        categorie:cat,
+        montant:Math.round(Math.abs(montant)*100)/100,
+        dateAchat:Utilities.formatDate(da,Session.getScriptTimeZone(),'yyyy-MM-dd'),
+        dateComptable:db?Utilities.formatDate(db,Session.getScriptTimeZone(),'yyyy-MM-dd'):'',
+        carteFin:String(o&&o.carte_fin||''),
+        pilotable:estPilotable,
+        lienChargeFixe:lienCf||'',
+        reglementTechnique:!!technique,
+        dansCycleAchat:dansCycleAchat,
+        retenueEp:retenue,
+        raisonExclusion:retenue?'':(!estPilotable?'categorie_non_pilotable':lienCf?'liee_charge_fixe':technique?'reglement_cb_technique':!dansCycleAchat?'hors_cycle_achat':'autre')
+      });
+    }
+  });
+
+  Object.keys(attenduParCategorie).forEach(k=>attenduParCategorie[k]=Math.round(attenduParCategorie[k]*100)/100);
+  const publieParCategorie={};
+  env.forEach(x=>{
+    const cat=String(x&&x.categorie||'').trim();
+    publieParCategorie[cat]=Math.round(Number(x&&x.reelNetPrevisionnel!=null?x.reelNetPrevisionnel:(x&&x.reelImpute||0))*100)/100;
+  });
+  const categories=Array.from(new Set(Object.keys(attenduParCategorie).concat(Object.keys(publieParCategorie)))).sort();
+  const ecarts=categories.map(cat=>({
+    categorie:cat,
+    attendu:Number(attenduParCategorie[cat]||0),
+    publie:Number(publieParCategorie[cat]||0),
+    ecart:Math.round((Number(publieParCategorie[cat]||0)-Number(attenduParCategorie[cat]||0))*100)/100
+  })).filter(x=>Math.abs(x.ecart)>.01);
+
+  const totalAttendu=Math.round(Object.values(attenduParCategorie).reduce((s,v)=>s+Number(v||0),0)*100)/100;
+  const totalPublie=Math.round(Object.values(publieParCategorie).reduce((s,v)=>s+Number(v||0),0)*100)/100;
+  const out={
+    ok:ecarts.length===0,
+    version:'2026-09-21.1',
+    lectureSeule:true,
+    revisionBudgetSoft:String(snap&&snap.revisionBudgetSoft||''),
+    cycle:{debut:p.periode.debut,fin:p.periode.fin,maintenant:maintenant.toISOString()},
+    totaux:{attendu:totalAttendu,publie:totalPublie,ecart:Math.round((totalPublie-totalAttendu)*100)/100},
+    ecartsCategories:ecarts,
+    candidatesCb:candidatesCb.sort((a,b)=>String(a.dateAchat).localeCompare(String(b.dateAchat))||a.categorie.localeCompare(b.categorie,'fr')),
+    retenuesPilotablesNombre:toutesPilotables.length
+  };
+  console.log('[AUDIT IMPUTATION REELLE CB PILOTABLE 20260921] '+JSON.stringify(out));
+  return out;
+}
