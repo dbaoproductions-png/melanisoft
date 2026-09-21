@@ -1,13 +1,13 @@
-const TREASURY_FORECAST_DOCTRINE_20260901_VERSION='2026-09-13.3';
+const TREASURY_FORECAST_DOCTRINE_20260901_VERSION='2026-09-21.1';
 
-function chargerSocleTresorerie20260831SansDebitCbLegacy20260910_(dateCible){
+function chargerSocleTresorerie20260831SansDebitCbLegacy20260910_(dateCible,ctx){
   if(typeof chargerTresoreriePrevisionnelle20260831!=='function')return null;
-  if(typeof estimationDebitCbDiffereTresorerie20260901_!=='function')return chargerTresoreriePrevisionnelle20260831(dateCible);
+  if(typeof estimationDebitCbDiffereTresorerie20260901_!=='function')return chargerTresoreriePrevisionnelle20260831(dateCible,ctx);
   const legacy=estimationDebitCbDiffereTresorerie20260901_;
-  try{estimationDebitCbDiffereTresorerie20260901_=function(){return null;};return chargerTresoreriePrevisionnelle20260831(dateCible);}finally{estimationDebitCbDiffereTresorerie20260901_=legacy;}
+  try{estimationDebitCbDiffereTresorerie20260901_=function(){return null;};return chargerTresoreriePrevisionnelle20260831(dateCible,ctx);}finally{estimationDebitCbDiffereTresorerie20260901_=legacy;}
 }
-function chargerTresoreriePrevisionnelle20260901(dateCible,cerberePrecharge){
-  const r=chargerSocleTresorerie20260831SansDebitCbLegacy20260910_(dateCible);if(!r||!r.ok)return r;
+function chargerTresoreriePrevisionnelle20260901(dateCible,cerberePrecharge,ctx){
+  const r=chargerSocleTresorerie20260831SansDebitCbLegacy20260910_(dateCible,ctx);if(!r||!r.ok)return r;
   const reference=new Date(r.dateReference||new Date()),cible=new Date(r.dateCible||new Date()),evenements=lireFeuilleDynamiquePlan_('Plan_Evenements'),actions=lireFeuilleDynamiquePlan_('Plan_Actions'),ops=lireTable_('Operations'),hard=(r.lignes||[]).filter(x=>x.source==='operation_future');
   let lignes=recalerFluxPlanCarteTresorerie20260901_(r.lignes||[],evenements,actions,hard,reference,cible);
   lignes=filtrerActionsPlanEffectivesTresorerie20260908_(lignes,actions).filter(x=>!['debit_cb_estime','ep_immediat_estime'].includes(String(x&&x.source||'')));
