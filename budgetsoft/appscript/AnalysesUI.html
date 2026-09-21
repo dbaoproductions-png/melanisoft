@@ -81,7 +81,7 @@ function rendreAnalyseRecettes(d,zone){
     </div>
     <div class="analysis-grid">
       <section class="analysis-block"><h3>Producteurs de revenus</h3>${barresSimplesAnalyse([['Patrick',prod.Patrick||0],['Madame',prod.Madame||0],['Foyer',prod.Foyer||0]])}</section>
-      <section class="analysis-block"><h3>Sources</h3>${barresSimplesAnalyse((f.sources||[]).slice(0,10).map(x=>[x.nom,x.montant]))}</section>
+      <section class="analysis-block"><h3>Sources</h3>${barresSimplesAnalyse((f.sources||[]).map(x=>[x.nom,x.montant]))}</section>
     </div>
     <section class="analysis-block analysis-alerts"><h3>Références actuelles</h3>
       <div class="account-row"><div><strong>Salaire Patrick</strong><small>Dernier salaire net versé sur le compte</small></div><strong>${money.format(r.references.salairePatrick||0)}</strong></div>
