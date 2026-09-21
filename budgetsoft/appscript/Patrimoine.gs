@@ -1,6 +1,4 @@
-function chargerPatrimoine() {
-  const global=typeof lireModuleSnapshotGlobalBudgetSoft20260906_==='function'?lireModuleSnapshotGlobalBudgetSoft20260906_('patrimoine'):null;
-  if(global)return global;
+function construirePatrimoineLegacySource20260921_() {
 
   verifierInitialisation_();
   const actifs = lireTable_('Actifs');
@@ -60,8 +58,15 @@ function chargerPatrimoine() {
     totalDettesHorsCredit:r(totalDettesHorsCredit),
     totalDettes:r(totalDettes),
     patrimoineNet:r(patrimoineNet),
-    sourceBudgetSoft:'recalcul_secours'
+    sourceBudgetSoft:'constructeur_legacy'
   };
+}
+
+
+function chargerPatrimoine() {
+  const global=typeof lireModuleSnapshotGlobalBudgetSoft20260906_==='function'?lireModuleSnapshotGlobalBudgetSoft20260906_('patrimoine'):null;
+  if(global)return global;
+  return{ok:false,sourceBudgetSoft:'snapshot_global_indisponible',erreur:'Patrimoine absent du snapshot global.'};
 }
 
 function enregistrerActifPatrimonial(donnee) {
