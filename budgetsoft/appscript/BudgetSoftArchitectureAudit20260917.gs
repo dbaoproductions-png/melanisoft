@@ -32,7 +32,7 @@ function auditerArchitectureBudgetSoft20260917(){
   return r;
 }
 
-const BUDGETSOFT_INTERMODULE_SUPERVISION_20260921_VERSION='2026-09-21.4';
+const BUDGETSOFT_INTERMODULE_SUPERVISION_20260921_VERSION='2026-09-21.5';
 
 function sourceFonctionSupervisionBudgetSoft20260921_(nom){
   try{
@@ -172,6 +172,19 @@ function auditerSupervisionIntermoduleBudgetSoft20260921(){
     ?auditerDoctrineImputationCbPilotableBudgetSoft20260921()
     :{ok:false,erreur:'Garde doctrine CB pilotable absente'};
 
+  const envCourant=p0&&Array.isArray(p0.enveloppes)?p0.enveloppes:[];
+  const epConsommeDepuisLignes=Math.round(envCourant.reduce(function(s,x){
+    const v=Number(x&&x.reelNetPrevisionnel!=null?x.reelNetPrevisionnel:(x&&x.reelImpute||0));
+    return s+(Number.isFinite(v)?Math.max(0,v):0);
+  },0)*100)/100;
+  const epConsommePublie=Math.round(Number(epCer&&epCer.consomme||0)*100)/100;
+  const epConsommationInterne={
+    ok:Math.abs(epConsommeDepuisLignes-epConsommePublie)<=0.01,
+    lignes:epConsommeDepuisLignes,
+    publie:epConsommePublie,
+    ecart:Math.round((epConsommePublie-epConsommeDepuisLignes)*100)/100
+  };
+
   const perf=e&&e.performance&&e.performance.modules||{};
   const performances=Object.keys(perf).map(k=>({module:k,dureeMs:Number(perf[k]||0)})).sort((a,b)=>b.dureeMs-a.dureeMs);
   const lents=performances.filter(x=>x.dureeMs>10000);
@@ -189,7 +202,8 @@ function auditerSupervisionIntermoduleBudgetSoft20260921(){
     {code:'EP_RESTANT_TRANSVERSAL_UNIQUE',ok:epReste.ok,detail:'écart '+String(epReste.ecart)},
     {code:'P_SOUTENABLE_TRANSVERSAL_UNIQUE',ok:pSoutenable.ok,detail:'écart '+String(pSoutenable.ecart)},
     {code:'CB_DIFFEREE_ENGAGEE_TRANSVERSALE',ok:cbEngagee.ok,detail:'écart '+String(cbEngagee.ecart)+' · '+JSON.stringify(cbEngagee.valeurs)},
-    {code:'DOCTRINE_CB_PILOTABLE_DATE_ACHAT',ok:doctrineCb.ok===true,detail:JSON.stringify(doctrineCb.controles||doctrineCb.erreur||'')}
+    {code:'DOCTRINE_CB_PILOTABLE_DATE_ACHAT',ok:doctrineCb.ok===true,detail:JSON.stringify(doctrineCb.controles||doctrineCb.erreur||'')},
+    {code:'EP_CONSOMMATION_INTERNE_COHERENTE',ok:epConsommationInterne.ok,detail:JSON.stringify(epConsommationInterne)}
   ];
 
   const out={
@@ -204,7 +218,7 @@ function auditerSupervisionIntermoduleBudgetSoft20260921(){
     controles,
     endpoints:controlesEndpoints,
     modules:{requis:modulesRequis,absents:modulesAbsents},
-    transversales:{soldes,dates,epTotal,epReste,pSoutenable,cbEngagee,doctrineCb},
+    transversales:{soldes,dates,epTotal,epReste,pSoutenable,cbEngagee,doctrineCb,epConsommationInterne},
     performances:{modules:performances,lentsPlusDe10s:lents,reconstructionLente:lents.length>0},
     architecture:{
       constructeur:'reconstruireSnapshotGlobalSyntheseBudgetSoft20260907',
