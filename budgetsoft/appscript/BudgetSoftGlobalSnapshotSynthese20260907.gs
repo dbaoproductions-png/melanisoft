@@ -1,4 +1,4 @@
-const BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION='2026-09-21.2';
+const BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION='2026-09-21.3';
 
 /**
  * Adapte le chargeur Cerbère classique à une base déjà calculée sans modifier son
@@ -137,7 +137,7 @@ function reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(origine){
       const projectionEtendue=prendre('projectionEtendue',()=>{
         if(typeof construireTrajectoireTresorerieCanoniqueBudgetSoft20260907!=='function')return{ok:false,erreur:'Propriétaire canonique de trésorerie absent.'};
         if(typeof sousVueTrajectoireTresorerieCanoniqueBudgetSoft20260910_!=='function')return{ok:false,erreur:'Sous-vue canonique anti-régression absente.'};
-        projectionCalculUnique=construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(cibleCalculUnique,cerbereBase&&cerbereBase.ok!==false?cerbereBase:null);
+        projectionCalculUnique=construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(cibleCalculUnique,cerbereBase&&cerbereBase.ok!==false?cerbereBase:null,{comptes:comptes,tresorerieComptable:tresorerieComptable,pluxee:pluxee});
         if(!projectionCalculUnique||projectionCalculUnique.ok===false)return projectionCalculUnique;
         return sousVueTrajectoireTresorerieCanoniqueBudgetSoft20260910_(projectionCalculUnique,cibleSuivante);
       });
