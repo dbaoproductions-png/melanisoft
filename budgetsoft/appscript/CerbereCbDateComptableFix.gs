@@ -219,11 +219,13 @@ function auditerImputationReelleCbPilotableBudgetSoft20260921(){
 
   Object.keys(attenduParCategorie).forEach(k=>attenduParCategorie[k]=Math.round(attenduParCategorie[k]*100)/100);
 
-  // Doctrine Santé : la molette consomme le net des remboursements réellement encaissés.
-  const santeRoulant=p&&p.roulant&&p.roulant.sante||{};
-  const remboursementsSante=Math.max(0,Number(santeRoulant.remboursements||0));
+  // Doctrine Santé : utiliser exactement le même propriétaire de faits Santé que le moteur.
+  const faitsSante=typeof faitsSantePeriode20260915_==='function'
+    ?faitsSantePeriode20260915_(p)
+    :{depenses:Number(attenduParCategorie['Santé']||0),remboursements:0,source:'fallback audit'};
+  const remboursementsSante=Math.max(0,Number(faitsSante&&faitsSante.remboursements||0));
   if(Object.prototype.hasOwnProperty.call(attenduParCategorie,'Santé')){
-    attenduParCategorie['Santé']=Math.round(Math.max(0,Number(attenduParCategorie['Santé']||0)-remboursementsSante)*100)/100;
+    attenduParCategorie['Santé']=Math.round(Math.max(0,Number(faitsSante&&faitsSante.depenses||attenduParCategorie['Santé']||0)-remboursementsSante)*100)/100;
   }
 
   const publieParCategorie={};
@@ -243,12 +245,12 @@ function auditerImputationReelleCbPilotableBudgetSoft20260921(){
   const totalPublie=Math.round(Object.values(publieParCategorie).reduce((s,v)=>s+Number(v||0),0)*100)/100;
   const out={
     ok:ecarts.length===0,
-    version:'2026-09-21.2',
+    version:'2026-09-21.3',
     lectureSeule:true,
     revisionBudgetSoft:String(snap&&snap.revisionBudgetSoft||''),
     cycle:{debut:p.periode.debut,fin:p.periode.fin,maintenant:maintenant.toISOString()},
     totaux:{attendu:totalAttendu,publie:totalPublie,ecart:Math.round((totalPublie-totalAttendu)*100)/100},
-    sante:{remboursementsEncaisses:Math.round(remboursementsSante*100)/100,source:'roulant.sante.remboursements'},
+    sante:{depensesBrutes:Math.round(Number(faitsSante&&faitsSante.depenses||0)*100)/100,remboursementsEncaisses:Math.round(remboursementsSante*100)/100,source:String(faitsSante&&faitsSante.source||'')},
     ecartsCategories:ecarts,
     candidatesCb:candidatesCb.sort((a,b)=>String(a.dateAchat).localeCompare(String(b.dateAchat))||a.categorie.localeCompare(b.categorie,'fr')),
     retenuesPilotablesNombre:toutesPilotables.length
