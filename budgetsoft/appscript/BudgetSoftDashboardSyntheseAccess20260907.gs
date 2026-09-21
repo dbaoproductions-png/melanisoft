@@ -1,25 +1,14 @@
 function chargerDashboardSyntheseV3BudgetSoft20260907(){
   try{
-    if(typeof lireModuleSnapshotGlobalBudgetSoft20260906_==='function'){
-      const d=lireModuleSnapshotGlobalBudgetSoft20260906_('dashboard');
-      if(d&&String(d.version||'')===BUDGETSOFT_DASHBOARD_SYNTHESE_VERSION){
-        d.source='snapshot_global';d.sourceBudgetSoft='snapshot_global';return typeof corrigerSemantiqueDashboardBudgetSoft20260907_==='function'?corrigerSemantiqueDashboardBudgetSoft20260907_(d):d;
-      }
-    }
-  }catch(e){}
-  const executer=function(){
-    const sources=chargerToutesLesDonnees();
-    const comptes=typeof construireSyntheseComptes20260828_==='function'?construireSyntheseComptes20260828_():chargerSyntheseComptes20260828();
-    const maintenant=new Date(),finCourant=typeof dateFinCycleCanonBudgetSoft20260906_==='function'?dateFinCycleCanonBudgetSoft20260906_(maintenant):new Date(maintenant.getFullYear(),maintenant.getMonth(),27);
-    const finSuivant=new Date(finCourant.getFullYear(),finCourant.getMonth()+1,finCourant.getDate());
-    const tres=construireTresorerieComptableCanoniqueBudgetSoft20260906_(sources,comptes,finCourant,maintenant);
-    const proj=typeof construireTrajectoireTresorerieCanoniqueBudgetSoft20260907==='function'?construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(finSuivant):null;
-    const cer=typeof chargerCerbereCockpitCanonique20260914==='function'?chargerCerbereCockpitCanonique20260914():null;
-    const exp=typeof composerCerbereExpressDepuisCockpit20260910_==='function'&&cer&&cer.ok!==false?composerCerbereExpressDepuisCockpit20260910_(cer):null;
-    const r=composerDashboardSyntheseBudgetSoft20260907_({sources:sources,comptes:comptes,tresorerieComptable:tres,projectionEtendue:proj,cerbere:cer,cerbereExpress:exp});
-    r.source='recalcul_secours';r.sourceBudgetSoft='recalcul_secours';return r;
-  };
-  const d=typeof avecContexteLectureBudgetSoft20260827_==='function'?avecContexteLectureBudgetSoft20260827_('dashboard-synthese-v3-secours',executer):executer();return typeof corrigerSemantiqueDashboardBudgetSoft20260907_==='function'?corrigerSemantiqueDashboardBudgetSoft20260907_(d):d;
+    if(typeof lireModuleSnapshotGlobalBudgetSoft20260906_!=='function')return{ok:false,sourceBudgetSoft:'snapshot_global_indisponible',erreur:'Accès snapshot global indisponible.'};
+    const d=lireModuleSnapshotGlobalBudgetSoft20260906_('dashboard');
+    if(!d)return{ok:false,sourceBudgetSoft:'snapshot_global_indisponible',erreur:'Dashboard absent du snapshot global.'};
+    if(String(d.version||'')!==String(BUDGETSOFT_DASHBOARD_SYNTHESE_VERSION))return{ok:false,sourceBudgetSoft:'snapshot_global_incompatible',revisionBudgetSoft:String(d.revisionBudgetSoft||''),erreur:'Version Dashboard du snapshot incompatible.'};
+    d.source='snapshot_global';d.sourceBudgetSoft='snapshot_global';
+    return typeof corrigerSemantiqueDashboardBudgetSoft20260907_==='function'?corrigerSemantiqueDashboardBudgetSoft20260907_(d):d;
+  }catch(e){
+    return{ok:false,sourceBudgetSoft:'snapshot_global_erreur',erreur:String(e&&e.message||e)};
+  }
 }
 function auditerDashboardSyntheseV3BudgetSoft20260907(){const t0=Date.now(),d=chargerDashboardSyntheseV3BudgetSoft20260907(),r={ok:!!(d&&d.ok!==false),version:d&&d.version||'',source:d&&d.source||d&&d.sourceBudgetSoft||'',revisionBudgetSoft:d&&d.revisionBudgetSoft||'',dureeMs:Date.now()-t0,courant:d&&d.courtTerme||null,suivant:d&&d.cycleSuivant||null,precedent:d&&d.cyclePrecedent||null};console.log(JSON.stringify(r));return r;}
 
