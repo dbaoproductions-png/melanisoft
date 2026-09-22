@@ -1,4 +1,4 @@
-const BUDGETSOFT_MUTATION_FRESHNESS_20260916_VERSION='2026-09-21.2';
+const BUDGETSOFT_MUTATION_FRESHNESS_20260916_VERSION='2026-09-22.1';
 const BUDGETSOFT_GLOBAL_DIRTY_AT_20260916='BUDGETSOFT_GLOBAL_SNAPSHOT_DIRTY_LE';
 const BUDGETSOFT_GLOBAL_DIRTY_ORIGIN_20260916='BUDGETSOFT_GLOBAL_SNAPSHOT_DIRTY_ORIGINE';
 const BUDGETSOFT_MUTATION_REBUILD_HANDLER_20260921='reconstruireSnapshotBudgetSoftApresMutation20260921';
@@ -80,6 +80,8 @@ function diagnostiquerPeremptionSnapshot20260916_(etat){
   const genereLe=String(etat&&etat.genereLe||'');
   const raisons=[];
   if(dirtyAt&&(!genereLe||dirtyAt>genereLe))raisons.push({code:'MUTATION_APRES_SNAPSHOT',dirtyAt,genereLe,origine:dirtyOrigin});
+  const planDernier=String(p.getProperty('PLAN_DERNIER_RECALCUL')||''),planOrigine=String(p.getProperty('PLAN_DERNIERE_ORIGINE')||'');
+  if(planDernier&&(!genereLe||planDernier>genereLe))raisons.push({code:'PLAN_MODIFIE_APRES_SNAPSHOT',planDernier,genereLe,origine:planOrigine});
   const constructeurPublie=String(etat&&etat.versionConstructeur||'');
   const constructeurCourant=String(typeof BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION!=='undefined'?BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION:'');
   if(constructeurCourant&&constructeurPublie!==constructeurCourant)raisons.push({code:'VERSION_CONSTRUCTEUR_INCOMPATIBLE',constructeurPublie:constructeurPublie||'(absent)',constructeurCourant});
@@ -89,7 +91,7 @@ function diagnostiquerPeremptionSnapshot20260916_(etat){
     const courant=compteLignesSourceSnapshot20260916_(nom),attendu=Number(attendues[nom]);
     if(courant!==null&&Number.isFinite(attendu)&&courant!==attendu)raisons.push({code:'NOMBRE_LIGNES_SOURCE_MODIFIE',table:nom,attendu,courant});
   });
-  return{perime:raisons.length>0,raisons,dirtyAt,dirtyOrigin,genereLe};
+  return{perime:raisons.length>0,raisons,dirtyAt,dirtyOrigin,planDernier:String(p.getProperty('PLAN_DERNIER_RECALCUL')||''),planOrigine:String(p.getProperty('PLAN_DERNIERE_ORIGINE')||''),genereLe};
 }
 
 /**
