@@ -115,9 +115,13 @@ function actionActiveSurPeriode_(a, d0, d1) {
   return effet <= d1;
 }
 function evenementActifSurPeriode_(e, d0, d1) {
-  if (['Réalisé','Annulé','Rapproché'].indexOf(String(e.statut)) >= 0) return false;
+  if (['Réalisé','Annulé','Rapproché','Abandonné','Abandonnée'].indexOf(String(e.statut)) >= 0 || String(e.operation_reelle_id||'').trim()) return false;
   const effet = e.date_effet ? debutJour_(new Date(e.date_effet)) : null;
-  return !!effet && !isNaN(effet.getTime()) && effet >= d0 && effet <= d1;
+  if(!effet || isNaN(effet.getTime())) return false;
+  if(effet>=d0&&effet<=d1)return true;
+  const aujourdHui=debutJour_(new Date());
+  const periodeCourante=aujourdHui>=d0&&aujourdHui<=d1;
+  return periodeCourante&&effet<d0;
 }
 function normaliserDatePlan_(v) {
   if (!v) return '';
