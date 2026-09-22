@@ -231,6 +231,7 @@ function completerEvenementsEffectifsTresorerie20260831_(lignes,evenements,refer
     if(!total)return;
 
     for(let i=0;i<n;i++){
+      if(typeof occurrenceEvenementRapprocheeBudgetSoft20260922_==='function'&&occurrenceEvenementRapprocheeBudgetSoft20260922_(e,i+1))continue;
       const origine=new Date(base);
       if(i){if(per==='annuel')origine.setFullYear(origine.getFullYear()+i);else origine.setMonth(origine.getMonth()+i);}
       if(origine>cible)continue;
