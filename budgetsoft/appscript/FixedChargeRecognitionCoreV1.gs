@@ -1,4 +1,4 @@
-const FIXED_CHARGE_RECOGNITION_CORE_VERSION='1.0.2';
+const FIXED_CHARGE_RECOGNITION_CORE_VERSION='1.0.3';
 
 /**
  * Coeur commun de reconnaissance des charges fixes.
@@ -47,12 +47,20 @@ function reconnaitreChargeFixeCommune_(operation,charges,rapprochements){
  * donc la porte d'entree, mais conserve la semantique validee.
  */
 function construireLiensChargesFixesCommuns_(operations,charges,rapprochements){
-  if(typeof construireLiensCfV3717_==='function'){
-    const legacy=construireLiensCfV3717_(operations||[],charges||[],rapprochements||[]);
-    const copie={};Object.keys(legacy||{}).forEach(k=>copie[k]=legacy[k]);
-    return copie;
-  }
-  const out={};(operations||[]).forEach(o=>{const id=String(o&&o.id||'').trim();if(!id)return;const r=reconnaitreChargeFixeCommune_(o,charges||[],rapprochements||[]);if(r&&r.charge_fixe_id)out[id]=r.charge_fixe_id;});return out;
+  /*
+   * Contrat intermodule :
+   * - pour tout calcul métier de masse, un lien Réel -> Charge_fixe n'existe
+   *   que s'il est déjà persisté dans Operations / commentaire / rapprochement validé ;
+   * - les matchers automatiques restent réservés à la détection/proposition et
+   *   ne peuvent plus fabriquer silencieusement des liens consommés par les modules.
+   */
+  const out={};
+  (operations||[]).forEach(function(o){
+    const id=String(o&&o.id||'').trim();if(!id)return;
+    const cf=idCfPersisteCommun_(o,rapprochements||[]);
+    if(cf)out[id]=String(cf);
+  });
+  return out;
 }
 
 /** Audit LECTURE SEULE : aucune decision Operations existante ne doit regresser. */
