@@ -9,7 +9,7 @@
  *   sont historisés après publication du snapshot global, un point par cycle.
  * - Dette : Crédits est propriétaire. Capital : Patrimoine est propriétaire.
  */
-const BUDGETSOFT_ANALYSIS_SERIES_20260922_VERSION='2026-09-22.1';
+const BUDGETSOFT_ANALYSIS_SERIES_20260922_VERSION='2026-09-22.2';
 const BUDGETSOFT_ANALYSIS_STRUCTURAL_HISTORY_SHEET_20260922='Analyse_HistoriqueStructurel';
 const BUDGETSOFT_ANALYSIS_STRUCTURAL_HISTORY_HEADERS_20260922=[
   'periode','date_point','revision_budgetsoft','famille','sous_poste','montant','source','maj_le'
@@ -52,9 +52,9 @@ function lireHistoriqueStructurelAnalyses20260922_(){
 function lignesDettesCourantesAnalyseSeries20260922_(credits){
   credits=credits||{};
   const out=[];
-  (credits.amortissables||[]).forEach(function(x){const m=Math.max(0,Number(x&&x.capital_restant||0));if(m>0)out.push({nom:String(x&&x.nom||'Crédit amortissable'),montant:arrAnalyseSeries20260922_(m),source:'Crédits · amortissable'});});
-  (credits.renouvelables||[]).forEach(function(x){const m=Math.max(0,Number(x&&x.capital_restant||0));if(m>0)out.push({nom:String(x&&x.nom||'Crédit renouvelable'),montant:arrAnalyseSeries20260922_(m),source:'Crédits · revolving'});});
-  (credits.dettesActives||[]).forEach(function(x){const m=Math.max(0,Number(x&&x.capital_restant||0));if(m>0)out.push({nom:String(x&&x.nom||'Dette'),montant:arrAnalyseSeries20260922_(m),source:'Dettes'});});
+  (credits.amortissables||[]).forEach(function(x){const m=Math.max(0,Number(x&&x.capital_restant||0));if(m>0)out.push({nom:'Crédit · '+String(x&&x.nom||'Amortissable'),montant:arrAnalyseSeries20260922_(m),source:'Crédits · amortissable'});});
+  (credits.renouvelables||[]).forEach(function(x){const m=Math.max(0,Number(x&&x.capital_restant||0));if(m>0)out.push({nom:'Revolving · '+String(x&&x.nom||'Renouvelable'),montant:arrAnalyseSeries20260922_(m),source:'Crédits · revolving'});});
+  (credits.dettesActives||[]).forEach(function(x){const m=Math.max(0,Number(x&&x.capital_restant||0));if(m>0)out.push({nom:'Dette · '+String(x&&x.nom||'Hors crédit'),montant:arrAnalyseSeries20260922_(m),source:'Dettes'});});
   return out;
 }
 
@@ -137,14 +137,18 @@ function construireSeriesFluxAnalysesBudgetSoft20260922_(periodes,operations,cat
   const dedup=typeof dedoublonnerOperationsCartesBudgetSoft_==='function'?dedoublonnerOperationsCartesBudgetSoft_(ops):ops;
   (dedup||[]).forEach(function(o){
     const m=Number(o&&o.montant||0);if(!Number.isFinite(m)||m>=0)return;
-    const opId=String(o&&o.id||''),cfId=String(o&&o.charge_fixe_id||'').trim()||liens[opId]||'';
+    const opId=String(o&&o.id||'');let cfId=String(o&&o.charge_fixe_id||'').trim()||liens[opId]||'';
+    if(!cfId&&typeof chargeFixeLieeOperation20260828_==='function')cfId=String(chargeFixeLieeOperation20260828_(o)||'').trim();
     if(!cfId||!cfVals[cfId])return;
     const d=typeof dateOperationCouranteBudgetSoft_==='function'?dateOperationCouranteBudgetSoft_(o):dateAnalyseSeries20260922_(o&&o.date_comptable||o&&o.date);
     if(!d)return;
     const idx=(periodes||[]).findIndex(function(p){const a=dateAnalyseSeries20260922_(p.debut),z=dateAnalyseSeries20260922_(p.fin);return a&&z&&d>=a&&d<=z;});
     if(idx>=0)cfVals[cfId][idx]+=Math.abs(m);
   });
-  const cfByName={};Object.keys(cfVals).forEach(function(id){const nom=nomsCf[id];if(cfVals[id].some(function(v){return Math.abs(v)>.009;}))cfByName[nom]=cfVals[id];});
+  const cfByName={};Object.keys(cfVals).forEach(function(id){
+    let nom=nomsCf[id]||id;if(Object.prototype.hasOwnProperty.call(cfByName,nom))nom=nom+' · '+String(id).slice(0,6);
+    cfByName[nom]=cfVals[id];
+  });
 
   return{
     revenus:Object.assign({titre:'Revenus',unite:'€',source:'Operations · revenus économiques',doctrine:'Réel économique par cycle ; une ligne par catégorie canonique de revenu.'},seriesDepuisMatriceAnalyse20260922_(periodes,revenuCanon,revenusVals,'Total revenus')),
