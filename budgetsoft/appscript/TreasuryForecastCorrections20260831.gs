@@ -206,13 +206,6 @@ function evenementEffectifTresorerie20260831_(id,evenements){
 }
 function debutJourTresorerie20260831_(d){return new Date(d.getFullYear(),d.getMonth(),d.getDate(),0,0,0,0);}
 
-function statutRecetteEncoreDueProjection20260912_(ev){
-  if(!ev||String(ev.type||'').trim().toLowerCase()!=='recette')return false;
-  if(typeof evenementClosProuveRevenuePublicationFix20260912_==='function'&&evenementClosProuveRevenuePublicationFix20260912_(ev))return false;
-  const n=typeof normRevenuePublicationFix20260912_==='function'?normRevenuePublicationFix20260912_(ev.statut):String(ev.statut||'').trim().toLowerCase();
-  return ['effective','effectif','effectives','effectifs','realise a rapprocher','realisee a rapprocher'].includes(n);
-}
-
 function completerEvenementsEffectifsTresorerie20260831_(lignes,evenements,reference,cible){
   const out=(lignes||[]).slice(),report=dateJourSuivantPlanForecast20260912_(reference);
   (evenements||[]).forEach(function(e){
