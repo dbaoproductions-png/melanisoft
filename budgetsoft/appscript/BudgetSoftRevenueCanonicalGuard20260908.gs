@@ -29,46 +29,54 @@ function jourHabituelRecetteCanonGardeBudgetSoft20260908_(ops,reference,categori
 function auditerGardeRecettesCanoniquesBudgetSoft20260908(projection){
   const erreurs=[],details=[];
   function err(code,message,detail){erreurs.push({code:code,message:message,detail:detail||null});}
-
-  if(typeof revenuCanonMoisDejaEncaisseBudgetSoft20260908_!=='function'){
-    return {ok:false,version:BUDGETSOFT_REVENUE_CANONICAL_GUARD_20260908_VERSION,erreurs:[{code:'R0_RAPPROCHEMENT_ABSENT',message:'Le moteur de rapprochement canonique des recettes est absent.'}],details:[]};
-  }
-
   const p=projection&&typeof projection==='object'?projection:null;
   if(!p||!Array.isArray(p.lignes)){
-    return {ok:false,version:BUDGETSOFT_REVENUE_CANONICAL_GUARD_20260908_VERSION,erreurs:[{code:'R0_PROJECTION_ABSENTE',message:'La trajectoire canonique est absente ou sans lignes.'}],details:[]};
+    return {ok:false,version:'2026-09-22.1',erreurs:[{code:'PROJECTION_ABSENTE',message:'La trajectoire canonique est absente ou sans lignes.'}],details:[]};
   }
-
   const reference=new Date(p.dateReference||0),cible=new Date(p.dateCible||0);
   if(isNaN(reference)||isNaN(cible)){
-    return {ok:false,version:BUDGETSOFT_REVENUE_CANONICAL_GUARD_20260908_VERSION,erreurs:[{code:'R0_DATES_INVALIDES',message:'Les dates de référence/cible de la trajectoire sont invalides.'}],details:[]};
+    return {ok:false,version:'2026-09-22.1',erreurs:[{code:'DATES_INVALIDES',message:'Les dates de référence/cible de la trajectoire sont invalides.'}],details:[]};
   }
+  const finCycle=typeof dateFinCycleCanonBudgetSoft20260906_==='function'
+    ?dateFinCycleCanonBudgetSoft20260906_(reference)
+    :new Date(reference.getDate()<=27?reference.getFullYear():reference.getFullYear(),reference.getDate()<=27?reference.getMonth():reference.getMonth()+1,27,23,59,59,999);
 
-  const ops=lireTable_('Operations')||[],canon=lireCanonRecettesTresorerie20260831_()||[];
-  canon.forEach(c=>{
-    if(!actifTresorerie_(c.actif)||String(c.nature||'').toLowerCase()!=='structurelle')return;
-    const categorie=String(c.categorie||'').trim();if(!categorie)return;
-    const montant=Math.abs(Number(c.montant||0));if(!(montant>0))return;
-    const jour=jourHabituelRecetteCanonGardeBudgetSoft20260908_(ops,reference,categorie,montant);
-    const echeance=new Date(reference.getFullYear(),reference.getMonth(),jour,12,0,0,0);
-    const echue=echeance<=reference;
-    const dejaEncaisse=revenuCanonMoisDejaEncaisseBudgetSoft20260908_(ops,reference,categorie,montant);
-    const sourceId='canon:'+categorie;
-    const lignesMois=(p.lignes||[]).filter(x=>x&&x.source==='revenu_recurrent'&&String(x.sourceId||'')===sourceId).filter(x=>{
-      const d=new Date(x.date||0);return !isNaN(d)&&d.getFullYear()===reference.getFullYear()&&d.getMonth()===reference.getMonth();
+  const r0Courant=(p.lignes||[]).filter(function(x){
+    if(String(x&&x.source||'')!=='revenu_recurrent')return false;
+    const d=new Date(x&&x.date||0);return !isNaN(d)&&d>reference&&d<=finCycle;
+  });
+  details.push({type:'R0_cycle_courant',nombre:r0Courant.length,lignes:r0Courant.map(function(x){return{sourceId:x.sourceId,date:x.date,montant:x.montantSigne};})});
+  if(r0Courant.length)err('R0_CYCLE_COURANT_INTERDIT','Le cycle courant contient encore des recettes R0 implicites.',details[details.length-1]);
+
+  let evs=[];try{evs=lireFeuilleDynamiquePlan_('Plan_Evenements')||[];}catch(e){evs=[];}
+  const ouvertes=evs.filter(function(ev){
+    if(String(ev&&ev.type||'').trim().toLowerCase()!=='recette')return false;
+    if(typeof evenementClosProuveRevenuePublicationFix20260912_==='function'&&evenementClosProuveRevenuePublicationFix20260912_(ev))return false;
+    const cert=String(ev&&ev.certitude||'certaine').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    if(['incertaine','incertain','hypothetique'].includes(cert))return false;
+    let d=null;try{const dr=datePlanTresorerie_(ev,reference,false);d=dr&&dr.date?new Date(dr.date):null;}catch(e){}
+    if(!d||isNaN(d))d=new Date(ev&&ev.date_effet||ev&&ev.date_prevue||0);
+    return !isNaN(d)&&d<=finCycle;
+  });
+  ouvertes.forEach(function(ev){
+    const id=String(ev&&ev.id||''),trouve=(p.lignes||[]).some(function(x){
+      const d=new Date(x&&x.date||0);
+      return String(x&&x.source||'')==='evenement'&&String(x&&x.sourceId||'')===id&&!isNaN(d)&&d>reference&&d<=cible&&Number(x&&x.montantSigne||0)>0;
     });
-    const detail={categorie:categorie,montantCanon:montant,jourHabituel:jour,echue:echue,dejaEncaisse:dejaEncaisse,lignesProjeteesMois:lignesMois.map(x=>({date:x.date,montant:x.montantSigne,preuve:x.preuve,echeanceDepassee:!!x.echeanceDepassee}))};
+    const detail={id:id,libelle:String(ev&&ev.libelle||''),montant:Math.abs(Number(ev&&ev.montant||0)),datePrevue:String(ev&&ev.date_effet||ev&&ev.date_prevue||''),presenteProjection:trouve};
     details.push(detail);
-
-    if(echue&&!dejaEncaisse&&cible>=reference&&lignesMois.length===0){
-      err('R0_ECHUE_ABSENTE','Une recette canonique structurelle échue, non encaissée, a disparu de la trajectoire.',detail);
-    }
-    if(dejaEncaisse&&lignesMois.length>0){
-      err('R0_REEL_DOUBLON','Une recette canonique déjà encaissée reste projetée une seconde fois dans le même mois.',detail);
-    }
+    if(!trouve)err('EVENEMENT_RECETTE_DU_ABSENT','Une recette Plan encore due a disparu de la projection.',detail);
   });
 
-  return {ok:erreurs.length===0,version:BUDGETSOFT_REVENUE_CANONICAL_GUARD_20260908_VERSION,dateReference:p.dateReference||'',dateCible:p.dateCible||'',erreurs:erreurs,details:details};
+  return {
+    ok:erreurs.length===0,
+    version:'2026-09-22.1',
+    dateReference:p.dateReference||'',
+    dateCible:p.dateCible||'',
+    doctrine:'Cycle courant = aucun complément implicite vers R0 ; seules les recettes Plan ouvertes restent dues. Une date dépassée ne clôt jamais un événement.',
+    erreurs:erreurs,
+    details:details
+  };
 }
 
 function auditerGardeRecettesCanoniques30092026BudgetSoft20260908(){
