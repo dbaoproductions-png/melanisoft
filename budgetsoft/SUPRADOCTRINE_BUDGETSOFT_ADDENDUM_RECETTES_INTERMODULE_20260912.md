@@ -175,3 +175,21 @@ Les lignes prévisionnelles Plan exposent deux notions distinctes et ne doivent 
 Exemple : une échéance de tennis de 100 € est représentée par `montant = 100` et `montantSigne = -100`.
 
 Aucun consommateur ne doit inférer le sens bancaire à partir du seul champ `montant` lorsqu'un champ `montantSigne` est disponible.
+
+
+## 9. Actions RECEVOIR : levier structurel, mesure réelle et absence de créance implicite
+
+Une Action Plan de fonction `RECEVOIR` représente une **démarche visant à créer ou augmenter un revenu**. Elle est distincte du flux bancaire qu'elle cherche à provoquer.
+
+Règles :
+
+- le statut `Réalisée` / `Effective` signifie que **l'action elle-même est accomplie** (par exemple : demande employeur déposée) ;
+- ce statut ne prouve jamais qu'une somme a été encaissée ;
+- la cible et sa fréquence alimentent les indicateurs stratégiques du Plan (`gain attendu`) ;
+- une Action `RECEVOIR` ne doit jamais alimenter directement `Rt1`, la projection bancaire ni créer une créance implicite ;
+- si une recette précise est confirmée comme due avant son encaissement, elle doit être matérialisée par un **Événement Plan de type recette** ;
+- sinon, le gain effectif de l'Action est mesuré uniquement à partir d'une **opération réelle de revenu** ;
+- lorsqu'une catégorie est renseignée sur l'Action, cette catégorie constitue le critère autoritaire de rattachement automatique : l'absence d'opération réelle dans cette catégorie signifie `0 réalisé`, sans fallback vers d'autres revenus ;
+- si aucune catégorie n'est fournie, un rattachement par source/libellé doit produire un match explicite ; à défaut, `0 réalisé`.
+
+Exemple : une demande de participation employeur Vélo Toulouse ciblée à 10,40 €/mois peut être marquée comme Action réalisée dès que la demande est effectivement envoyée. Elle reste néanmoins à 0 € de gain effectif tant qu'aucune opération réelle correspondante n'est observée. Une confirmation employeur du montant peut justifier un Événement recette séparé si l'on souhaite représenter la créance avant encaissement.
