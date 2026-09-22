@@ -13,6 +13,7 @@ function afficherModuleAnalyses(){
       <button data-analysis-view="general" class="active">Vue générale</button>
       <button data-analysis-view="recettes">Recettes</button>
       <button data-analysis-view="depenses">Dépenses</button>
+      <button data-analysis-view="courbes">Courbes</button>
     </div>
     <div id="analyses-status" class="helper-text">Chargement…</div>
     <div id="analyses-content"></div>
@@ -38,6 +39,7 @@ function rendreAnalyses(){
   if(status)status.textContent=`Période courante : ${dateAnalyse(d.courante.debut)} → ${dateAnalyse(d.courante.fin)}${ref} · moteur ${echapper(d.version||'')}`;
   if(analysesUI.vue==='recettes')return rendreAnalyseRecettes(d,zone);
   if(analysesUI.vue==='depenses')return rendreAnalyseDepenses(d,zone);
+  if(analysesUI.vue==='courbes')return rendreAnalyseCourbes(d,zone);
   rendreAnalyseGenerale(d,zone);
 }
 
@@ -119,6 +121,87 @@ function rendreAnalyseDepenses(d,zone){
     <section class="analysis-block analysis-alerts"><h3>Regroupements thématiques</h3>${barresSimplesAnalyse((f.themes||[]).map(x=>[x.nom,x.montant]))}</section>`;
 }
 
+
+function couleurSerieAnalyse(i,total){
+  if(total)return '#153c34';
+  const palette=['#147d64','#d77b53','#5c6fb3','#9a6bb0','#c08b2f','#3e8aa8','#8b6f47','#b45f6f','#6d8f4d','#7c6fa6','#4f8c79','#9b7a3f'];
+  return palette[i%palette.length];
+}
+
+function segmentsCourbeAnalyse(valeurs,xFor,yFor){
+  const segments=[];let courant=[];
+  (valeurs||[]).forEach((v,i)=>{
+    if(v==null||!Number.isFinite(Number(v))){if(courant.length){segments.push(courant);courant=[];}return;}
+    courant.push([xFor(i),yFor(Number(v))]);
+  });
+  if(courant.length)segments.push(courant);
+  return segments;
+}
+
+function svgCourbeMultiAnalyse(cfg,key){
+  const labels=cfg&&Array.isArray(cfg.labels)?cfg.labels:[],series=cfg&&Array.isArray(cfg.series)?cfg.series:[];
+  const W=920,H=330,L=68,R=20,T=20,B=58,plotW=W-L-R,plotH=H-T-B;
+  const valeurs=series.flatMap(s=>(s.valeurs||[]).filter(v=>v!=null&&Number.isFinite(Number(v))).map(Number));
+  const max=Math.max(1,...valeurs),maxY=max*1.08;
+  const xFor=i=>labels.length<=1?L+plotW/2:L+(plotW*i/(labels.length-1));
+  const yFor=v=>T+plotH-(Math.max(0,Number(v||0))/maxY*plotH);
+  const grid=[0,.25,.5,.75,1].map(fr=>{
+    const y=T+plotH-(fr*plotH),v=maxY*fr;
+    return '<line x1="'+L+'" y1="'+y+'" x2="'+(W-R)+'" y2="'+y+'" class="curve-grid-line"></line><text x="'+(L-10)+'" y="'+(y+4)+'" text-anchor="end" class="curve-axis-text">'+echapper(money.format(v))+'</text>';
+  }).join('');
+  const xAxis=labels.map((lab,i)=>'<text x="'+xFor(i)+'" y="'+(H-24)+'" text-anchor="middle" class="curve-axis-text">'+echapper(courtLibelleAnalyse(lab))+'</text>').join('');
+  const traces=series.map((s,si)=>{
+    const col=couleurSerieAnalyse(si,!!s.total),segs=segmentsCourbeAnalyse(s.valeurs||[],xFor,yFor);
+    const paths=segs.map(seg=>'<polyline data-chart="'+echapper(key)+'" data-serie="'+echapper(s.id)+'" points="'+seg.map(p=>p[0]+','+p[1]).join(' ')+'" fill="none" stroke="'+col+'" stroke-width="'+(s.total?4:2)+'" stroke-linecap="round" stroke-linejoin="round" class="'+(s.total?'curve-total':'curve-subserie')+'"></polyline>').join('');
+    const pts=(s.valeurs||[]).map((v,i)=>{
+      if(v==null||!Number.isFinite(Number(v)))return'';
+      return '<circle data-chart="'+echapper(key)+'" data-serie="'+echapper(s.id)+'" cx="'+xFor(i)+'" cy="'+yFor(Number(v))+'" r="'+(s.total?4.5:3.2)+'" fill="'+col+'"><title>'+echapper(s.nom+' · '+String(labels[i]||'')+' · '+money.format(Number(v)))+'</title></circle>';
+    }).join('');
+    return paths+pts;
+  }).join('');
+  return '<div class="curve-svg-wrap"><svg class="analysis-line-chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="'+echapper(cfg.titre||'Courbe')+'">'+grid+'<line x1="'+L+'" y1="'+(T+plotH)+'" x2="'+(W-R)+'" y2="'+(T+plotH)+'" class="curve-axis-line"></line>'+xAxis+traces+'</svg></div>';
+}
+
+function legendeCourbeAnalyse(cfg,key){
+  return '<div class="curve-legend">'+(cfg.series||[]).map((s,i)=>{
+    const col=couleurSerieAnalyse(i,!!s.total);
+    return '<label class="'+(s.total?'curve-legend-total':'')+'"><input type="checkbox" checked data-chart-toggle="'+echapper(key)+'" data-serie-toggle="'+echapper(s.id)+'"><span class="curve-swatch" style="background:'+col+'"></span><span>'+echapper(s.nom)+'</span></label>';
+  }).join('')+'</div>';
+}
+
+function blocCourbeAnalyse(cfg,key){
+  if(!cfg)return '<section class="analysis-block"><div class="empty-state">Série indisponible.</div></section>';
+  const connus=(cfg.series||[]).flatMap(s=>(s.valeurs||[]).filter(v=>v!=null)).length;
+  const noteStructure=cfg.historiquePartiel?'<p class="curve-history-note">Historique structurel : les périodes antérieures au premier point fiable restent volontairement vides.</p>':'';
+  return '<section class="analysis-block curve-analysis-block"><div class="curve-heading"><div><h3>'+echapper(cfg.titre||'Courbe')+'</h3><small>'+echapper(cfg.source||'')+'</small></div><span>'+((cfg.labels||[]).length)+' période(s)</span></div>'+
+    (connus?svgCourbeMultiAnalyse(cfg,key):'<div class="empty-state">Aucun point disponible.</div>')+
+    legendeCourbeAnalyse(cfg,key)+noteStructure+
+    '<p class="curve-doctrine">'+echapper(cfg.doctrine||'')+'</p></section>';
+}
+
+function initialiserCourbesAnalyse(zone){
+  zone.querySelectorAll('[data-chart-toggle]').forEach(cb=>{
+    cb.addEventListener('change',()=>{
+      const chart=cb.getAttribute('data-chart-toggle'),serie=cb.getAttribute('data-serie-toggle');
+      zone.querySelectorAll('[data-chart="'+CSS.escape(chart)+'"][data-serie="'+CSS.escape(serie)+'"]').forEach(el=>{el.style.display=cb.checked?'':'none';});
+    });
+  });
+}
+
+function rendreAnalyseCourbes(d,zone){
+  const s=d&&d.seriesCourbes;
+  if(!s||s.ok===false){zone.innerHTML='<div class="empty-state">Les séries de courbes ne sont pas encore disponibles dans ce snapshot.</div>';return;}
+  const blocs=[
+    ['revenus',s.revenus],
+    ['charges-fixes',s.chargesFixes],
+    ['pilotable',s.pilotable],
+    ['dettes',s.dettes],
+    ['capital',s.capital]
+  ];
+  zone.innerHTML='<div class="analysis-curves">'+blocs.map(x=>blocCourbeAnalyse(x[1],x[0])).join('')+'</div>';
+  initialiserCourbesAnalyse(zone);
+}
+
 function barresSimplesAnalyse(lignes){
   const max=Math.max(1,...lignes.map(x=>Number(x[1]||0)));
   return `<div class="category-analysis">${lignes.map(x=>`<div class="category-analysis-row"><div><strong>${echapper(x[0])}</strong></div><div class="analysis-track"><span style="width:${Math.max(2,Number(x[1]||0)/max*100)}%"></span></div><strong>${money.format(Number(x[1]||0))}</strong></div>`).join('')}</div>`;
@@ -128,7 +211,9 @@ function installerStylesAnalyses(){
   if(document.getElementById('analyses-ui-styles'))return;
   const style=document.createElement('style');style.id='analyses-ui-styles';style.textContent=`
     .analysis-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 16px}.analysis-tabs button{border:1px solid rgba(20,125,100,.2);background:#fff;border-radius:999px;padding:8px 13px;cursor:pointer}.analysis-tabs button.active{background:#147d64;color:#fff;border-color:#147d64}
-    .analysis-grid{display:grid;grid-template-columns:1.15fr 1fr;gap:18px;margin-top:18px}.analysis-block{border:1px solid rgba(20,125,100,.16);border-radius:16px;padding:18px;background:#fff}.analysis-block h3{margin:0 0 16px}.flow-chart{display:flex;align-items:flex-end;gap:12px;min-height:210px;overflow-x:auto;padding:12px 4px 0}.flow-column{display:grid;justify-items:center;gap:6px;min-width:66px;flex:1}.flow-bars{height:155px;display:flex;align-items:flex-end;gap:5px}.flow-bar{display:block;width:15px;border-radius:6px 6px 2px 2px}.flow-bar.income{background:#147d64}.flow-bar.expense{background:#d77b53}.flow-column small{white-space:nowrap}.flow-column strong{font-size:.82rem}.analysis-legend{display:flex;gap:16px;justify-content:center;margin-top:12px;font-size:.85rem;flex-wrap:wrap}.analysis-legend span:first-child{color:#147d64}.analysis-legend span:nth-child(2){color:#b75b37}.category-analysis{display:grid;gap:13px}.category-analysis-row{display:grid;grid-template-columns:minmax(120px,1fr) 2fr auto;gap:10px;align-items:center}.category-analysis-row small{display:block}.analysis-track{height:9px;background:rgba(20,125,100,.1);border-radius:999px;overflow:hidden}.analysis-track span{display:block;height:100%;background:#147d64;border-radius:999px}.analysis-alerts{margin-top:18px}.analysis-alerts .account-row{grid-template-columns:1fr auto}.analyses-metrics-4{grid-template-columns:repeat(4,minmax(0,1fr))}.warning-card{border-color:rgba(215,123,83,.35)!important}.analysis-warning-row{background:rgba(215,123,83,.08);border-radius:10px}.total-row{border-top:1px solid rgba(20,125,100,.16);padding-top:10px;margin-top:6px}
+    .analysis-grid{display:grid;grid-template-columns:1.15fr 1fr;gap:18px;margin-top:18px}
+    .analysis-curves{display:grid;gap:18px;margin-top:18px}.curve-analysis-block{overflow:hidden}.curve-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.curve-heading h3{margin-bottom:4px}.curve-heading small{color:#65736f}.curve-heading>span{font-size:.8rem;color:#65736f;white-space:nowrap}.curve-svg-wrap{overflow-x:auto;margin:8px 0 4px}.analysis-line-chart{display:block;width:100%;min-width:700px;height:auto}.curve-grid-line{stroke:rgba(20,125,100,.12);stroke-width:1}.curve-axis-line{stroke:rgba(20,60,52,.35);stroke-width:1}.curve-axis-text{font-size:11px;fill:#65736f}.curve-subserie{opacity:.82}.curve-total{opacity:1}.curve-legend{display:flex;gap:8px 14px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid rgba(20,125,100,.10)}.curve-legend label{display:flex;align-items:center;gap:6px;font-size:.82rem;cursor:pointer}.curve-legend input{margin:0}.curve-swatch{width:16px;height:3px;border-radius:999px;display:inline-block}.curve-legend-total{font-weight:700}.curve-history-note,.curve-doctrine{margin:10px 0 0;color:#65736f;font-size:.82rem}.curve-history-note{padding:8px 10px;border-radius:9px;background:rgba(20,125,100,.06)}
+.analysis-block{border:1px solid rgba(20,125,100,.16);border-radius:16px;padding:18px;background:#fff}.analysis-block h3{margin:0 0 16px}.flow-chart{display:flex;align-items:flex-end;gap:12px;min-height:210px;overflow-x:auto;padding:12px 4px 0}.flow-column{display:grid;justify-items:center;gap:6px;min-width:66px;flex:1}.flow-bars{height:155px;display:flex;align-items:flex-end;gap:5px}.flow-bar{display:block;width:15px;border-radius:6px 6px 2px 2px}.flow-bar.income{background:#147d64}.flow-bar.expense{background:#d77b53}.flow-column small{white-space:nowrap}.flow-column strong{font-size:.82rem}.analysis-legend{display:flex;gap:16px;justify-content:center;margin-top:12px;font-size:.85rem;flex-wrap:wrap}.analysis-legend span:first-child{color:#147d64}.analysis-legend span:nth-child(2){color:#b75b37}.category-analysis{display:grid;gap:13px}.category-analysis-row{display:grid;grid-template-columns:minmax(120px,1fr) 2fr auto;gap:10px;align-items:center}.category-analysis-row small{display:block}.analysis-track{height:9px;background:rgba(20,125,100,.1);border-radius:999px;overflow:hidden}.analysis-track span{display:block;height:100%;background:#147d64;border-radius:999px}.analysis-alerts{margin-top:18px}.analysis-alerts .account-row{grid-template-columns:1fr auto}.analyses-metrics-4{grid-template-columns:repeat(4,minmax(0,1fr))}.warning-card{border-color:rgba(215,123,83,.35)!important}.analysis-warning-row{background:rgba(215,123,83,.08);border-radius:10px}.total-row{border-top:1px solid rgba(20,125,100,.16);padding-top:10px;margin-top:6px}
     @media(max-width:1000px){.analyses-metrics-4{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:850px){.analysis-grid{grid-template-columns:1fr}.category-analysis-row{grid-template-columns:1fr auto}.analysis-track{grid-column:1/-1;grid-row:2}}@media(max-width:600px){.analyses-metrics-4{grid-template-columns:1fr}}
   `;document.head.appendChild(style);
 }
