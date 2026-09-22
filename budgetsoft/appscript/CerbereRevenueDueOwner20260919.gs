@@ -1,4 +1,4 @@
-const CERBERE_REVENUE_DUE_OWNER_20260919_VERSION='2026-09-22.1';
+const CERBERE_REVENUE_DUE_OWNER_20260919_VERSION='2026-09-22.2';
 
 function arrCerbereRevenueDueOwner20260919_(n){return Math.round(Number(n||0)*100)/100;}
 function normCerbereRevenueDueOwner20260919_(v){return String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');}
@@ -47,12 +47,21 @@ function revenusConstatesCycleCerbereRevenueDueOwner20260922_(debut,fin){
   return{total:arrCerbereRevenueDueOwner20260919_(total),detail:detail};
 }
 
-function evenementAppartientOuEstDuAuCycleCerbereRevenueDueOwner20260922_(ev,debut,fin,indexCycle,reference){
-  if(!evenementCertainEncoreDuCerbereRevenueDueOwner20260919_(ev))return false;
-  const d=dateEvenementCerbereRevenueDueOwner20260919_(ev,reference);
-  if(!d)return indexCycle===0;
-  if(indexCycle===0)return d<=fin;
-  return d>=debut&&d<=fin;
+function occurrencesDuesCycleCerbereRevenueDueOwner20260922_(ev,debut,fin,indexCycle,reference){
+  if(!evenementCertainEncoreDuCerbereRevenueDueOwner20260919_(ev))return[];
+  let occ=[];
+  try{occ=typeof occurrencesEvenementEtatBudgetSoft20260922_==='function'?occurrencesEvenementEtatBudgetSoft20260922_(ev):occurrencesEvenementV4_(ev).map(function(o){return Object.assign({},o,{rapprochee:false});});}catch(e){occ=[];}
+  if(!occ.length){
+    const d=dateEvenementCerbereRevenueDueOwner20260919_(ev,reference);
+    occ=[{index:1,total:1,montant:Math.abs(Number(ev&&ev.montant||0)),date:d,rapprochee:false}];
+  }
+  return occ.filter(function(o){
+    if(o&&o.rapprochee)return false;
+    const d=dateCerbereRevenueDueOwner20260919_(o&&o.date);
+    if(!d)return indexCycle===0;
+    if(indexCycle===0)return d<=fin;
+    return d>=debut&&d<=fin;
+  }).map(function(o){return Object.assign({},o,{eventId:String(ev&&ev.id||''),libelle:String(ev&&ev.libelle||''),categorie:String(ev&&ev.categorie||''),statut:String(ev&&ev.statut||'')});});
 }
 
 function enrichirCerbereRecettesCertainesDues20260919_(base){
@@ -67,10 +76,9 @@ function enrichirCerbereRecettesCertainesDues20260919_(base){
     const debut=dateCerbereRevenueDueOwner20260919_(periode.debut),fin=dateCerbereRevenueDueOwner20260919_(periode.fin);
     if(!debut||!fin)return;
 
-    const dus=evs.filter(function(ev){
-      return evenementAppartientOuEstDuAuCycleCerbereRevenueDueOwner20260922_(ev,debut,fin,i,reference);
-    });
-    const montantDu=arrCerbereRevenueDueOwner20260919_(dus.reduce(function(s,ev){return s+Math.abs(Number(ev&&ev.montant||0));},0));
+    const dus=[];
+    evs.forEach(function(ev){occurrencesDuesCycleCerbereRevenueDueOwner20260922_(ev,debut,fin,i,reference).forEach(function(o){dus.push(o);});});
+    const montantDu=arrCerbereRevenueDueOwner20260919_(dus.reduce(function(s,o){return s+Math.abs(Number(o&&o.montant||0));},0));
 
     if(i===0){
       const reel=revenusConstatesCycleCerbereRevenueDueOwner20260922_(debut,fin);
@@ -82,10 +90,9 @@ function enrichirCerbereRecettesCertainesDues20260919_(base){
       v.rt1Audit.revenusConstatesCycle=Number(reel.total||0);
       v.rt1Audit.revenusConstatesDetail=reel.detail||{};
       v.rt1Audit.evenementsDus=montantDu;
-      v.rt1Audit.evenementsDusDetail=dus.map(function(ev){return{
-        id:String(ev&&ev.id||''),libelle:String(ev&&ev.libelle||''),montant:Math.abs(Number(ev&&ev.montant||0)),
-        datePrevue:isoCerbereRevenueDueOwner20260919_(dateEvenementCerbereRevenueDueOwner20260919_(ev,reference)),
-        statut:String(ev&&ev.statut||''),enRetard:!!(dateEvenementCerbereRevenueDueOwner20260919_(ev,reference)&&dateEvenementCerbereRevenueDueOwner20260919_(ev,reference)<reference)
+      v.rt1Audit.evenementsDusDetail=dus.map(function(o){const d=dateCerbereRevenueDueOwner20260919_(o&&o.date);return{
+        id:String(o&&o.eventId||''),libelle:String(o&&o.libelle||''),occurrence:Number(o&&o.index||1),occurrences:Number(o&&o.total||1),montant:Math.abs(Number(o&&o.montant||0)),
+        datePrevue:isoCerbereRevenueDueOwner20260919_(d),statut:String(o&&o.statut||''),enRetard:!!(d&&d<reference)
       };});
       v.rt1Audit.complementCanonR0Implicite=0;
       const dt1=Number(v.dt1||0);
@@ -97,7 +104,7 @@ function enrichirCerbereRecettesCertainesDues20260919_(base){
       return;
     }
 
-    diagnostic.push({index:i+1,mode:'cycle_futur_canon_R0',rt1:Number(v.rt1||0),evenementsDusDetectes:montantDu,detail:dus.map(function(ev){return{id:String(ev&&ev.id||''),libelle:String(ev&&ev.libelle||''),montant:Math.abs(Number(ev&&ev.montant||0))};})});
+    diagnostic.push({index:i+1,mode:'cycle_futur_canon_R0',rt1:Number(v.rt1||0),evenementsDusDetectes:montantDu,detail:dus.map(function(o){return{id:String(o&&o.eventId||''),libelle:String(o&&o.libelle||''),occurrence:Number(o&&o.index||1),montant:Math.abs(Number(o&&o.montant||0)),date:isoCerbereRevenueDueOwner20260919_(o&&o.date)};})});
   });
 
   base.diagnostic=base.diagnostic||{};
