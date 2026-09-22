@@ -206,3 +206,36 @@ function auditerChargeFixeAnalyseBudgetSoft20260922(chargeId,nombrePeriodes){
   console.log('[AUDIT CHARGE FIXE ANALYSES DETAIL 20260922] '+JSON.stringify(out));
   return out;
 }
+
+
+function auditerSyntheseChargesFixesAnalysesBudgetSoft20260922(nombrePeriodes){
+  const global=auditerChargesFixesAnalysesBudgetSoft20260922(nombrePeriodes);
+  const lignes=(global.lignes||[]).map(function(x){
+    return{
+      id:x.id,
+      libelle:x.libelle,
+      categorie:x.categorie,
+      actif:x.actif,
+      montantReference:x.montantReference,
+      analyse:x.valeursAnalyse,
+      coeurCommun:x.valeursCoeurCommun,
+      nbOpsAnalyse:(x.operationsAnalyse||[]).length,
+      nbOpsCoeurCommun:(x.operationsCoeurCommun||[]).length,
+      alertes:x.alertes
+    };
+  });
+  const out={
+    ok:global.ok,
+    lectureSeule:true,
+    version:BUDGETSOFT_CF_ANALYSIS_AUDIT_20260922_VERSION,
+    revisionBudgetSoft:global.revisionBudgetSoft,
+    periodes:global.periodes,
+    synthese:global.synthese,
+    liensVersChargeAbsente:(global.liensVersChargeAbsente||[]).map(function(x){
+      return{operation_id:x.operation_id,charge_fixe_id:x.charge_fixe_id,montant:x.montant,libelle:x.libelle};
+    }),
+    lignes:lignes
+  };
+  console.log('[AUDIT SYNTHESE CHARGES FIXES ANALYSES 20260922] '+JSON.stringify(out));
+  return out;
+}
