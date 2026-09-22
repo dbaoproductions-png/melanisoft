@@ -1,4 +1,4 @@
-const PLAN_PERFORMANCE_V56_VERSION='5.6.1';
+const PLAN_PERFORMANCE_V56_VERSION='5.6.2';
 
 /**
  * Contexte d'enquête Plan à la demande.
@@ -68,9 +68,11 @@ function evaluerTransfertPlanV56_(a,cible,ctx){
   return {realise,attendu_a_date:attenduLineairePlanV5_(a,cible),confiance:preuves.length?'certaine':'à_valider',preuves};
 }
 function evaluerReceptionPlanV56_(a,cible,ctx){
-  let ops=opsFenetrePlanV56_(a,ctx).filter(o=>String(o.type||'').toLowerCase()==='revenu');ops=filtrerOperationsSourcePlanV5_(ops,a);
+  const opsFenetre=opsFenetrePlanV56_(a,ctx);
+  if(String(a&&a.mode_preuve_reception||'operation_distincte').toLowerCase()==='integre_salaire')return evaluerReceptionIntegreeSalairePlanV5_(a,cible,opsFenetre);
+  let ops=opsFenetre.filter(o=>String(o.type||'').toLowerCase()==='revenu');ops=filtrerOperationsSourcePlanV5_(ops,a);
   const realise=ops.reduce((s,o)=>s+Math.abs(Number(o.montant||0)),0),attendu=String(a.impact_frequence||'ponctuel')==='mensuel'?attenduMensuelCumulePlanV5_(a,cible):attenduLineairePlanV5_(a,cible);
-  return {realise,attendu_a_date:attendu,confiance:ops.length?'certaine':'à_valider',preuves:ops.slice(0,20).map(preuveOperationPlanV5_)};
+  return {realise,attendu_a_date:attendu,confiance:ops.length?'certaine':'à_valider',preuves:ops.slice(0,20).map(preuveOperationPlanV5_),mode_preuve:'operation_distincte'};
 }
 function evaluerReductionPlanV56_(a,cible,ctx){
   if(a.source_type!=='charge_fixe')return {statut:'Charge fixe requise'};const cf=ctx.cfs.find(x=>String(x.id)===String(a.source_id));if(!cf)return {statut:'Charge fixe introuvable'};
