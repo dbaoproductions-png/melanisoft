@@ -235,3 +235,89 @@ function auditerLiensOrphelinsChargesFixesIntermodule20260922(){
   });
   return out;
 }
+
+
+function auditerHistoriqueChargesFixesNonRapprochees20260922(nombrePeriodes){
+  const nb=[3,6,12].includes(parseInt(nombrePeriodes,10))?parseInt(nombrePeriodes,10):6;
+  const analyse=typeof chargerAnalysesBudgetairesV23==='function'?chargerAnalysesBudgetairesV23(nb):null;
+  const periodes=analyse&&Array.isArray(analyse.periodes)?analyse.periodes:[];
+  const operations0=lireTable_('Operations')||[];
+  const operations=typeof dedoublonnerOperationsCartesBudgetSoft_==='function'
+    ?dedoublonnerOperationsCartesBudgetSoft_(operations0):operations0;
+  const charges=(lireTable_('Charges_fixes')||[]).filter(function(c){
+    return typeof convertirBooleen_==='function'?convertirBooleen_(c&&c.actif):!!(c&&c.actif);
+  });
+  const rapprochements=typeof lireRapprochementsChargesFixes==='function'?(lireRapprochementsChargesFixes()||[]):[];
+  const persist=mapLiensPersistesCfIntermodule20260922_(operations,rapprochements);
+
+  function idxPeriode_(d){
+    if(!d)return-1;
+    return periodes.findIndex(function(p){
+      const a=dateAnalyseSeries20260922_(p&&p.debut),z=dateAnalyseSeries20260922_(p&&p.fin);
+      return !!(a&&z&&d>=a&&d<=z);
+    });
+  }
+  function score_(c,o){
+    let r=null;
+    try{
+      if(typeof evaluerRapprochementChargeFixeSouple20260829_==='function')r=evaluerRapprochementChargeFixeSouple20260829_(c,o,{derniereDate:new Date()});
+      else if(typeof evaluerRapprochementChargeFixe_==='function')r=evaluerRapprochementChargeFixe_(c,o);
+    }catch(e){r=null;}
+    return r;
+  }
+
+  const lignes=charges.map(function(c){
+    const id=String(c&&c.id||'').trim();
+    const trouves=[];
+    operations.forEach(function(o){
+      const opId=String(o&&o.id||'').trim(),m=Number(o&&o.montant||0);
+      if(!opId||m>=0||persist[opId])return;
+      const d=typeof dateOperationCouranteBudgetSoft_==='function'
+        ?dateOperationCouranteBudgetSoft_(o)
+        :dateAnalyseSeries20260922_(o&&o.date_comptable||o&&o.date);
+      const pi=idxPeriode_(d); if(pi<0)return;
+      const r=score_(c,o); if(!r)return;
+      const sc=Number(r.score||0);
+      if(sc<80)return;
+      trouves.push({
+        periode:clePeriodeAnalyseSeries20260922_(periodes[pi]),
+        operation_id:opId,
+        date:d?Utilities.formatDate(d,Session.getScriptTimeZone(),'yyyy-MM-dd'):'',
+        montant:Math.abs(m),
+        categorie:String(o&&o.categorie||''),
+        libelle:String(o&&o.libelle_bancaire||o&&o.libelle||''),
+        score:sc,
+        ecart_montant:r.ecart_montant==null?null:Number(r.ecart_montant),
+        similarite_crediteur:r.similarite_crediteur==null?null:Number(r.similarite_crediteur)
+      });
+    });
+    trouves.sort(function(a,b){return a.periode.localeCompare(b.periode)||b.score-a.score;});
+    return{
+      id:id,
+      libelle:String(c&&c.libelle||''),
+      categorie:String(c&&c.categorie||''),
+      montantReference:Math.abs(Number(c&&c.montant||0)),
+      candidats:trouves,
+      nombreCandidats:trouves.length
+    };
+  }).filter(function(x){return x.nombreCandidats>0;});
+
+  const out={
+    ok:true,
+    lectureSeule:true,
+    version:BUDGETSOFT_CF_INTERMODULE_AUDIT_20260922_VERSION,
+    revisionBudgetSoft:analyse&&analyse.revisionBudgetSoft||'',
+    periodes:periodes.map(function(p){return clePeriodeAnalyseSeries20260922_(p);}),
+    chargesAvecCandidats:lignes.length,
+    doctrine:'Candidats historiques non persistés, score >= 80 uniquement. Aucun rattachement automatique : validation charge par charge et opération par opération requise.',
+    lignes:lignes
+  };
+  console.log('[AUDIT HISTORIQUE CF NON RAPPROCHEES 20260922] '+JSON.stringify(out));
+  lignes.forEach(function(x,i){
+    console.log('[CF HIST '+String(i+1).padStart(2,'0')+'] '+x.libelle+' | '+x.categorie+' | ref='+x.montantReference+' | candidats='+x.nombreCandidats);
+    x.candidats.forEach(function(o){
+      console.log('  '+o.periode+' | '+o.operation_id+' | '+o.montant+' | score='+o.score+' | '+o.libelle);
+    });
+  });
+  return out;
+}
