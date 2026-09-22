@@ -201,3 +201,78 @@ function auditerSeriesAnalysesBudgetSoft20260922(){
   const out={ok:!!s&&controles.every(function(x){return x.ok;}),version:BUDGETSOFT_ANALYSIS_SERIES_20260922_VERSION,source:r&&r.sourceBudgetSoft||'',revisionBudgetSoft:r&&r.revisionBudgetSoft||'',controles:controles};
   console.log('[AUDIT SERIES ANALYSES 20260922] '+JSON.stringify(out));return out;
 }
+
+
+/**
+ * Audit de preuve — imputation des salaires dans les courbes Analyses.
+ * Lecture seule : aucune écriture, aucun recalcul métier alternatif.
+ * Retourne, pour chaque période demandée, les opérations classées Salaires
+ * et le total qui alimente la série correspondante.
+ */
+function auditerImputationSalairesAnalysesBudgetSoft20260922(nombrePeriodes){
+  const nb=[3,6,12].includes(parseInt(nombrePeriodes,10))?parseInt(nombrePeriodes,10):6;
+  const analyse=typeof chargerAnalysesBudgetairesV23==='function'?chargerAnalysesBudgetairesV23(nb):null;
+  const periodes=analyse&&Array.isArray(analyse.periodes)?analyse.periodes:[];
+  const operations=(lireTable_('Operations')||[]).map(function(o){
+    const x=Object.assign({},o);
+    if(typeof categorieCibleBudgetSoft_==='function')x.categorie=categorieCibleBudgetSoft_(x.categorie);
+    return x;
+  });
+  const lignes=periodes.map(function(p){
+    const debut=dateAnalyseSeries20260922_(p&&p.debut),fin=dateAnalyseSeries20260922_(p&&p.fin);
+    const ops=operations.filter(function(o){
+      if(String(o&&o.categorie||'').trim()!=='Salaires'||Number(o&&o.montant||0)<=0)return false;
+      const d=typeof dateOperationCouranteBudgetSoft_==='function'
+        ?dateOperationCouranteBudgetSoft_(o)
+        :dateAnalyseSeries20260922_(o&&o.date_comptable||o&&o.date);
+      return !!(d&&debut&&fin&&d>=debut&&d<=fin);
+    }).map(function(o){
+      const d=typeof dateOperationCouranteBudgetSoft_==='function'
+        ?dateOperationCouranteBudgetSoft_(o)
+        :dateAnalyseSeries20260922_(o&&o.date_comptable||o&&o.date);
+      return{
+        id:String(o&&o.id||''),
+        date:String(o&&o.date||''),
+        dateComptable:String(o&&o.date_comptable||''),
+        dateImputation:d?Utilities.formatDate(d,Session.getScriptTimeZone(),'yyyy-MM-dd'):'',
+        libelle:String(o&&o.libelle_bancaire||o&&o.libelle||o&&o.details||''),
+        montant:arrAnalyseSeries20260922_(Number(o&&o.montant||0)),
+        categorie:String(o&&o.categorie||'')
+      };
+    });
+    const total=arrAnalyseSeries20260922_(ops.reduce(function(s,o){return s+Number(o&&o.montant||0);},0));
+    return{
+      cle:clePeriodeAnalyseSeries20260922_(p),
+      libelle:libellePeriodeAnalyseSeries20260922_(p),
+      debut:String(p&&p.debut||''),
+      fin:String(p&&p.fin||''),
+      totalSalaires:total,
+      nombreOperations:ops.length,
+      operations:ops
+    };
+  });
+  const serie=analyse&&analyse.seriesCourbes&&analyse.seriesCourbes.revenus&&Array.isArray(analyse.seriesCourbes.revenus.series)
+    ?analyse.seriesCourbes.revenus.series.find(function(s){return String(s&&s.nom||'')==='Salaires';})
+    :null;
+  const controles=lignes.map(function(x,i){
+    const trace=serie&&Array.isArray(serie.valeurs)?Number(serie.valeurs[i]||0):null;
+    return{
+      periode:x.cle,
+      totalOperations:x.totalSalaires,
+      valeurSerie:trace,
+      ok:trace!==null&&Math.abs(Number(trace)-Number(x.totalSalaires))<.01
+    };
+  });
+  const out={
+    ok:controles.every(function(x){return x.ok;}),
+    lectureSeule:true,
+    version:BUDGETSOFT_ANALYSIS_SERIES_20260922_VERSION,
+    sourceAnalyse:analyse&&analyse.sourceBudgetSoft||'',
+    revisionBudgetSoft:analyse&&analyse.revisionBudgetSoft||'',
+    doctrine:'Preuve directe de la série Salaires depuis Operations, avec imputation par date_comptable puis date.',
+    lignes:lignes,
+    controles:controles
+  };
+  console.log('[AUDIT IMPUTATION SALAIRES ANALYSES 20260922] '+JSON.stringify(out));
+  return out;
+}
