@@ -125,3 +125,50 @@ function auditerSimulationFractionnementPlan30020260922(){
   const out={ok:controles.every(function(x){return x.ok;}),version:'2026-09-22.2',lectureSeule:true,aucuneEcriture:true,evenementSimule:ev,controles:controles};
   console.log('[AUDIT SIMULATION FRACTIONNEMENT PLAN 300 20260922] '+JSON.stringify(out));return out;
 }
+
+
+function auditerEvenementTennisReel20260922(){
+  const arr=function(n){return Math.round(Number(n||0)*100)/100;};
+  let evs=[];try{evs=lireFeuilleDynamiquePlan_('Plan_Evenements')||[];}catch(e){evs=[];}
+  const candidats=evs.filter(function(e){
+    const lib=String(e&&e.libelle||'').trim().toLowerCase();
+    return lib.indexOf('tennis')>=0&&String(e&&e.type||'').trim().toLowerCase()==='depense'&&Math.abs(Number(e&&e.montant||0)-300)<.011;
+  }).sort(function(a,b){return String(b&&b.modifie_le||b&&b.dernier_recalcul||'').localeCompare(String(a&&a.modifie_le||a&&a.dernier_recalcul||''));});
+  const ev=candidats[0]||null;
+  if(!ev){
+    const out={ok:false,version:'2026-09-22.1',lectureSeule:true,erreur:'Événement tennis 300 € introuvable dans Plan_Evenements.'};
+    console.log('[AUDIT EVENEMENT TENNIS REEL 20260922] '+JSON.stringify(out));return out;
+  }
+
+  const occ=typeof occurrencesEvenementEtatBudgetSoft20260922_==='function'?occurrencesEvenementEtatBudgetSoft20260922_(ev):[];
+  const etat=typeof lireEtatGlobalBudgetSoftSiDisponible20260906_==='function'?lireEtatGlobalBudgetSoftSiDisponible20260906_():null;
+  const m=etat&&etat.modules||{},cer=m.cerbere||{},proj=m.projectionEtendue||{},periodes=Array.isArray(cer.periodes)?cer.periodes:[];
+  const lignesProj=Array.isArray(proj.lignes)?proj.lignes:[];
+  const id=String(ev.id||'');
+
+  const effets=periodes.slice(0,4).map(function(p){
+    const v=p&&p.v37||{},l=Array.isArray(v.actionsEvenementsCycle)?v.actionsEvenementsCycle:[];
+    return {periode:p&&p.periode||p,lignes:l.filter(function(x){return String(x&&x.id||'')===id;})};
+  });
+  const projTennis=lignesProj.filter(function(x){return String(x&&x.source||'')==='evenement'&&String(x&&x.sourceId||'')===id;});
+
+  const plan=typeof construireLignesPrevisionnellesV4_==='function'?construireLignesPrevisionnellesV4_([], [ev]).filter(function(x){return String(x&&x.source_id||'')===id;}):[];
+  const parPeriode=function(n){return plan.filter(function(x){return Number(x&&x.periode||0)===n;});};
+
+  const p1=parPeriode(1),p2=parPeriode(2),p3=parPeriode(3),p4=parPeriode(4);
+  const sommeSigne=function(xs){return arr(xs.reduce(function(s,x){return s+Number(x&&x.montantSigne||0);},0));};
+
+  const fraicheur=typeof auditerFraicheurSnapshotGlobalBudgetSoft20260916==='function'?auditerFraicheurSnapshotGlobalBudgetSoft20260916():null;
+  const controles=[
+    {code:'EVENEMENT_REEL_DEPENSE_LOISIRS_300',ok:String(ev.type||'')==='depense'&&String(ev.categorie||'')==='Loisirs'&&Math.abs(Number(ev.montant||0)-300)<.011,detail:{id:id,libelle:ev.libelle,type:ev.type,categorie:ev.categorie,montant:ev.montant,statut:ev.statut,certitude:ev.certitude,mode_paiement:ev.mode_paiement}},
+    {code:'FRACTIONNEMENT_3_MENSUEL',ok:ev.fractionne===true||String(ev.fractionne)==='true',detail:{fractionne:ev.fractionne,nombre_fois:ev.nombre_fois,periodicite:ev.periodicite_fractionnement}},
+    {code:'OCCURRENCES_100_100_100',ok:occ.length===3&&occ.every(function(o){return Math.abs(Number(o.montant||0)-100)<.011;}),detail:occ},
+    {code:'AUCUN_IMPACT_SEPTEMBRE',ok:p1.length===0&&effets[0]&&effets[0].lignes.length===0,detail:{plan:p1,cerbere:effets[0]&&effets[0].lignes||[]}},
+    {code:'PLAN_OCT_NOV_DEC_MOINS_100',ok:p2.length===1&&p3.length===1&&p4.length===1&&sommeSigne(p2)===-100&&sommeSigne(p3)===-100&&sommeSigne(p4)===-100,detail:{octobre:p2,novembre:p3,decembre:p4}},
+    {code:'CERBERE_PILOTABLE_OCT_NOV_DEC',ok:[1,2,3].every(function(i){const l=effets[i]&&effets[i].lignes||[];return l.length===1&&String(l[0].cible||'')==='pilotable'&&String(l[0].categorie||'')==='Loisirs'&&Math.abs(Number(l[0].montantSigne||0)+100)<.011;}),detail:effets},
+    {code:'PROJECTION_TRESORERIE_MOINS_300_TOTAL',ok:Math.abs(arr(projTennis.reduce(function(s,x){return s+Number(x&&x.montantSigne||0);},0))+300)<.011,detail:projTennis.map(function(x){return{occurrence:x.occurrence,date:x.date,montantSigne:x.montantSigne,enRetard:!!x.enRetard};})},
+    {code:'SNAPSHOT_FRAIS_APRES_MUTATION',ok:!!(etat&&etat.genereLe)&&(!fraicheur||fraicheur.ok!==false),detail:{revisionBudgetSoft:etat&&etat.revisionBudgetSoft||'',genereLe:etat&&etat.genereLe||'',fraicheur:fraicheur}}
+  ];
+  const out={ok:controles.every(function(x){return x.ok;}),version:'2026-09-22.1',lectureSeule:true,aucuneEcriture:true,evenement:{id:id,libelle:ev.libelle,type:ev.type,categorie:ev.categorie,montant:Number(ev.montant||0),date_effet:ev.date_effet,statut:ev.statut,certitude:ev.certitude,mode_paiement:ev.mode_paiement,fractionne:ev.fractionne,nombre_fois:ev.nombre_fois,periodicite_fractionnement:ev.periodicite_fractionnement},snapshot:{revisionBudgetSoft:etat&&etat.revisionBudgetSoft||'',genereLe:etat&&etat.genereLe||''},controles:controles};
+  console.log('[AUDIT EVENEMENT TENNIS REEL 20260922] '+JSON.stringify(out));return out;
+}
