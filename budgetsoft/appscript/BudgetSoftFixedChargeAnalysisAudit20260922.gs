@@ -239,3 +239,42 @@ function auditerSyntheseChargesFixesAnalysesBudgetSoft20260922(nombrePeriodes){
   console.log('[AUDIT SYNTHESE CHARGES FIXES ANALYSES 20260922] '+JSON.stringify(out));
   return out;
 }
+
+
+function auditerTableauChargesFixesAnalysesBudgetSoft20260922(nombrePeriodes){
+  const global=auditerChargesFixesAnalysesBudgetSoft20260922(nombrePeriodes);
+  const lignes=global.lignes||[];
+  console.log('[AUDIT TABLEAU CHARGES FIXES ANALYSES 20260922] version='+BUDGETSOFT_CF_ANALYSIS_AUDIT_20260922_VERSION
+    +' revision='+String(global.revisionBudgetSoft||'')
+    +' charges='+lignes.length
+    +' alertes='+String(global.synthese&&global.synthese.chargesAvecAlerte||0)
+    +' ecartsMoteur='+String(global.synthese&&global.synthese.ecartsMoteur||0)
+    +' liensOrphelins='+String(global.synthese&&global.synthese.liensVersChargeAbsente||0));
+  console.log('PERIODES | '+(global.periodes||[]).map(function(p){return p.cle;}).join(' | '));
+  lignes.forEach(function(x,i){
+    console.log(
+      String(i+1).padStart(2,'0')+' | '
+      +String(x.libelle||'')+' | cat='+String(x.categorie||'')
+      +' | actif='+(x.actif?'1':'0')
+      +' | ref='+String(x.montantReference||0)
+      +' | A=['+(x.valeursAnalyse||[]).join(';')+']'
+      +' | C=['+(x.valeursCoeurCommun||[]).join(';')+']'
+      +' | opsA='+String((x.operationsAnalyse||[]).length)
+      +' | opsC='+String((x.operationsCoeurCommun||[]).length)
+      +' | '+((x.alertes||[]).join(',')||'OK')
+    );
+  });
+  console.log('LIENS_ORPHELINS | '+(global.liensVersChargeAbsente||[]).map(function(x){
+    return String(x.charge_fixe_id||'')+':'+String(x.operation_id||'')+':'+String(x.montant||0);
+  }).join(' | '));
+  return {
+    ok:global.ok,
+    lectureSeule:true,
+    version:BUDGETSOFT_CF_ANALYSIS_AUDIT_20260922_VERSION,
+    synthese:global.synthese,
+    lignes:lignes.map(function(x){return{
+      id:x.id,libelle:x.libelle,categorie:x.categorie,actif:x.actif,montantReference:x.montantReference,
+      analyse:x.valeursAnalyse,coeurCommun:x.valeursCoeurCommun,alertes:x.alertes
+    };})
+  };
+}
