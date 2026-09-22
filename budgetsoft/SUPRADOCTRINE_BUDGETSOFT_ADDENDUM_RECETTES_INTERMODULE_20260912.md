@@ -137,3 +137,29 @@ Un événement ouvert provenant d'un cycle antérieur reste une créance/dette e
 - aucun complément implicite vers R0 ne doit apparaître dans ce reste attendu ;
 - une recette Plan ouverte dont la date est dépassée reste représentée dans la projection et dans Rt1 ;
 - les cycles futurs conservent R0 comme référence prévisionnelle normale.
+
+
+## 8. Événements fractionnés et séparation Actions / créances
+
+Une **Action Plan** décrit une décision, une démarche ou un levier. Elle ne constitue pas, à elle seule, une créance bancaire du cycle courant. Une recette ne peut entrer dans le `Rt1` courant comme somme encore due que lorsqu'elle est matérialisée par un **Événement Plan de type recette** encore ouvert, ou par une opération réelle déjà constatée.
+
+Pour un événement fractionné, le propriétaire métier est l'événement parent mais l'unité de réalisation est **l'occurrence** :
+
+- le montant total est ventilé une seule fois par `occurrencesEvenementV4_` ;
+- chaque occurrence possède son montant et sa date indicative d'origine ;
+- une occurrence peut être rapprochée indépendamment des autres ;
+- le rapprochement d'une occurrence la retire du prévisionnel sans clôturer les occurrences restantes ;
+- l'événement parent devient `Partiellement rapproché` tant qu'au moins une occurrence reste due ;
+- il devient `Rapproché` uniquement lorsque toutes ses occurrences sont rapprochées ;
+- une même opération réelle ne peut solder qu'une occurrence du même événement ;
+- Cerbère, la projection de trésorerie, le Dashboard et les gardes utilisent la même liste d'occurrences encore dues.
+
+La date d'une occurrence reste indicative. Si elle est dépassée sans preuve de clôture, l'occurrence reste due et est reportée techniquement dans la projection, sans réécriture de sa date d'origine.
+
+### Invariants
+
+- le total des occurrences d'un événement est égal au montant total de l'événement, au centime près ;
+- une occurrence rapprochée n'apparaît plus dans aucun prévisionnel ;
+- une occurrence non rapprochée apparaît une seule fois dans la projection pertinente ;
+- `Rt1(cycle courant) = Réel économique constaté + somme des occurrences de recettes encore dues appartenant au cycle courant ou en retard` ;
+- une Action de type « hausse de revenu » ne doit pas créer à elle seule une recette attendue du cycle courant.
