@@ -183,8 +183,12 @@ function construireEffetsCycleV3712_(actions,evenements,opById,periode,p0Cats,ca
   const ajouter=(source,x,o)=>{
     if(!x||!o)return;
     let impact=o.date||x.date_effet||x.date_prevue;
-    const type=normaliserV377_(x.type||''),impactType=normaliserV377_(x.impact_type||''),nature=normaliserV377_(x.nature_action||'');
-    const estRecette=type==='recette'||impactType==='hausse revenu'||nature==='encaisser'||nature==='recouvrer';
+    const type=normaliserV377_(x.type||''),impactType=normaliserV377_(x.impact_type||''),nature=normaliserV377_(x.nature_action||''),fonction=normaliserV377_(x.fonction_plan||'');
+    // Doctrine Actions / flux : une Action RECEVOIR ou hausse_revenu décrit un levier
+    // stratégique mesurable, jamais une créance bancaire. Seul un Événement recette
+    // explicite (ou le Réel dans Operations) peut alimenter Rt1.
+    const actionRevenu=source==='Action'&&(impactType==='hausse revenu'||impactType==='hausse_revenu'||nature==='recevoir'||nature==='encaisser'||nature==='recouvrer'||fonction==='recevoir');
+    const estRecette=source==='Événement'&&type==='recette';
     const estDepense=type==='depense'||['acheter','rembourser','reserver','investir','payer'].includes(nature);
     if(!estRecette&&normaliserV377_(x.mode_paiement)==='cb'&&(estDepense||source==='Événement'))impact=typeof dateImpactCbPlanV37_==='function'?dateImpactCbPlanV37_(impact):impact;
     if(source==='Événement'){if(!evenementOuvertDansCycleOuEnRetardV3712_(x,impact,periode,opById))return;}else if(!dateDansCycleV3712_(impact,periode))return;
@@ -202,13 +206,14 @@ function construireEffetsCycleV3712_(actions,evenements,opById,periode,p0Cats,ca
     let cible='information',sens=0;
 
     if(estRecette){cible='recette';sens=1;}
+    else if(actionRevenu){cible='information';sens=0;}
     else if(source==='Action'&&(impactType==='baisse charge'||impactType==='baisse_charge'||nature==='supprimer')){cible='charge_fixe';sens=1;}
     else if(source==='Action'&&(impactType==='hausse charge'||impactType==='hausse_charge')){cible='charge_fixe';sens=-1;}
     else if(type==='charge supprimee temporairement'||type==='charge_supprimee_temporairement'||type==='charge deplacee'||type==='charge_deplacee'){cible='charge_fixe';sens=1;}
     else if(type==='argent reserve'||type==='argent_reserve'||impactType==='reservation objectif'||impactType==='reservation_objectif'){cible='hors_pilotable';sens=-1;}
     else if(estDepense||type==='depense'){cible=p0Cats.has(cat)?'pilotable':'hors_pilotable';sens=-1;}
 
-    const statutAffiche=op?'Rapproché au réel':realise?'Réalisé à rapprocher':(String(x.statut||'Prévu'));
+    const statutAffiche=actionRevenu?(realise?'Action réalisée · revenu à constater':'Action de revenu · sans créance bancaire'):(op?'Rapproché au réel':realise?'Réalisé à rapprocher':(String(x.statut||'Prévu')));
     lignes.push({
       source:source,id:String(x.id||''),libelle:String(x.libelle||x.nom||''),categorie:cat,cible:cible,
       montant:arrV3712_(montantRetenu),montantSigne:arrV3712_(sens*montantRetenu),montantPrevu:arrV3712_(montantPrevu),
