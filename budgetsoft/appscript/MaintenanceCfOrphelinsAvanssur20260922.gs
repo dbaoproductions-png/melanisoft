@@ -9,7 +9,7 @@
  * La fonction est volontairement bornée aux IDs et signatures constatés par
  * l'audit du 22/09/2026. Elle abandonne dès qu'une précondition n'est plus vraie.
  */
-const MAINT_CF_ORPHELINS_AVANSSUR_20260922_VERSION='2026-09-22.1';
+const MAINT_CF_ORPHELINS_AVANSSUR_20260922_VERSION='2026-09-22.2';
 
 function reparerLiensOrphelinsAvanssurIntermodule20260922(){
   const OLD_CF='5f1a2b1a-dc1a-4366-9a37-f1cd2e823c1c';
@@ -100,7 +100,15 @@ function reparerLiensOrphelinsAvanssurIntermodule20260922(){
           if(is>=0)fr.getRange(no,is+1).setValue('Ignoré');
           if(idc>=0)fr.getRange(no,idc+1).setValue('Lien orphelin supprimé — opération Tolosan sans motif Avanssur');
           if(im>=0)fr.getRange(no,im+1).setValue(new Date().toISOString());
-        }else throw new Error('ABANDON : autre rapprochement vers OLD_CF détecté : '+opId);
+        }else{
+          const statut=String(r[is]||'').trim().toLowerCase();
+          if(statut==='ignoré'||statut==='ignore'){
+            // Proposition historique déjà rejetée : elle n'est pas une preuve métier
+            // et peut conserver l'ancien ID à des fins de traçabilité.
+            return;
+          }
+          throw new Error('ABANDON : autre rapprochement actif/non ignoré vers OLD_CF détecté : '+opId+' statut='+String(r[is]||''));
+        }
       });
     }
 
