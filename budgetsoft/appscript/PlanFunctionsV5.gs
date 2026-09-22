@@ -26,7 +26,8 @@ function assurerPlanFunctionsV5_(){
   assurerColonnesPlanV4_('Plan_Actions',[
     'fonction_plan','cible_valeur','date_cible','compte_source_id','compte_destination_id',
     'valeur_depart','valeur_remplacement','enquete_auto','tolerance_mesure','dernier_resultat_mesure','derniere_enquete',
-    'condition_libelle','condition_statut','condition_date','source_remplacement_id','source_remplacement_libelle'
+    'condition_libelle','condition_statut','condition_date','source_remplacement_id','source_remplacement_libelle',
+    'mode_preuve_reception'
   ]);
 }
 
@@ -71,6 +72,7 @@ function enregistrerActionPlanV5(d){
   d.condition_libelle=String(d.condition_libelle||'').trim();
   d.condition_statut=String(d.condition_statut||'').trim();
   d.condition_date=d.condition_date||'';
+  d.mode_preuve_reception=['operation_distincte','integre_salaire'].includes(String(d.mode_preuve_reception||'').toLowerCase())?String(d.mode_preuve_reception).toLowerCase():'operation_distincte';
 
   const ancienne=lireFeuilleDynamiquePlan_('Plan_Actions').find(x=>String(x.id)===String(d.id||''))||{};
   if(!d.valeur_depart)d.valeur_depart=ancienne.valeur_depart||valeurDepartPlanV5_(d);
@@ -189,12 +191,28 @@ function evaluerTransfertPlanV5_(a,cible){
   return {realise,attendu_a_date:attenduLineairePlanV5_(a,cible),confiance:preuves.length?'certaine':'à_valider',preuves};
 }
 
+function evaluerReceptionIntegreeSalairePlanV5_(a,cible,ops){
+  const debut=dateDebutActionPlanV5_(a);
+  if(!debut)return {realise:0,attendu_a_date:null,progression:0,statut:'Date d’effet requise pour une réception intégrée au salaire',confiance:'à_valider',preuves:[],mode_preuve:'integre_salaire'};
+  const now=new Date();
+  if(now<debut)return {realise:0,attendu_a_date:0,progression:0,statut:'Programmé · en attente du premier salaire après prise d’effet',confiance:'certaine',preuves:[{type:'date_effet',date:a.date_effet||''}],mode_preuve:'integre_salaire'};
+  const salaires=(ops||[]).filter(function(o){
+    const cat=String(o&&o.categorie||'').trim();
+    return cat==='Salaires'&&Number(o&&o.montant||0)>0;
+  }).sort(function(x,y){return dateMesurePlanV5_(x)-dateMesurePlanV5_(y);});
+  if(!salaires.length)return {realise:0,attendu_a_date:cible,progression:0,statut:'En attente du premier salaire après prise d’effet',confiance:'à_valider',preuves:[],mode_preuve:'integre_salaire'};
+  const preuve=salaires[0];
+  return {realise:cible,attendu_a_date:cible,progression:100,statut:'Activé via salaire',confiance:'certaine',preuves:[Object.assign(preuveOperationPlanV5_(preuve),{type:'salaire_preuve_activation',composante_non_isolee:true,cible_activee:cible})],mode_preuve:'integre_salaire'};
+}
+
 function evaluerReceptionPlanV5_(a,cible){
-  let ops=operationsDansFenetrePlanV5_(a).filter(o=>String(o.type||'').toLowerCase()==='revenu');
+  const opsFenetre=operationsDansFenetrePlanV5_(a);
+  if(String(a&&a.mode_preuve_reception||'operation_distincte').toLowerCase()==='integre_salaire')return evaluerReceptionIntegreeSalairePlanV5_(a,cible,opsFenetre);
+  let ops=opsFenetre.filter(o=>String(o.type||'').toLowerCase()==='revenu');
   ops=filtrerOperationsSourcePlanV5_(ops,a);
   const realise=ops.reduce((s,o)=>s+Math.abs(Number(o.montant||0)),0);
   const attendu=String(a.impact_frequence||'ponctuel')==='mensuel'?attenduMensuelCumulePlanV5_(a,cible):attenduLineairePlanV5_(a,cible);
-  return {realise,attendu_a_date:attendu,confiance:ops.length?'certaine':'à_valider',preuves:ops.slice(0,20).map(preuveOperationPlanV5_)};
+  return {realise,attendu_a_date:attendu,confiance:ops.length?'certaine':'à_valider',preuves:ops.slice(0,20).map(preuveOperationPlanV5_),mode_preuve:'operation_distincte'};
 }
 
 function evaluerReductionPlanV5_(a,cible){
