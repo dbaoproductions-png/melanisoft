@@ -78,36 +78,31 @@ function construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(dateCible,ce
     ?dateFinCycleCanonBudgetSoft20260906_(reference)
     :new Date(reference.getFullYear(),reference.getMonth()+1,27,23,59,59,999);
 
-  const dus=typeof evenementsRecettesCertainesDuesRevenuePublicationFix20260912_==='function'
-    ?evenementsRecettesCertainesDuesRevenuePublicationFix20260912_(reference,debutCycle,finCycle)
+  const dus=typeof occurrencesRecettesCertainesDuesRevenuePublicationFix20260922_==='function'
+    ?occurrencesRecettesCertainesDuesRevenuePublicationFix20260922_(reference,debutCycle,finCycle)
     :[];
   const lignes=Array.isArray(r.lignes)?r.lignes.slice():[];
   const report=new Date(reference);report.setDate(report.getDate()+1);report.setHours(12,0,0,0);
   const ajoutes=[];
 
-  dus.forEach(function(ev){
-    const id=String(ev&&ev.id||''),montant=Math.abs(Number(ev&&ev.montant||0));
+  dus.forEach(function(occ){
+    const id=String(occ&&occ.eventId||occ&&occ.id||''),idx=Number(occ&&occ.occurrence||1),montant=Math.abs(Number(occ&&occ.montant||0));
     if(!id||!Number.isFinite(montant)||montant<=0)return;
-    const deja=lignes.some(function(l){
-      const d=typeof dateRevenuePublicationFix20260912_==='function'?dateRevenuePublicationFix20260912_(l&&l.date):new Date(l&&l.date);
-      return String(l&&l.source||'')==='evenement'&&String(l&&l.sourceId||'')===id&&d&&!isNaN(d)&&d>reference&&d<=cible&&Number(l&&l.montantSigne||0)>0;
-    });
-    if(deja)return;
-
-    let origine=null;
-    try{
-      const dr=typeof datePlanTresorerie_==='function'?datePlanTresorerie_(ev,reference,false):null;
-      origine=dr&&dr.date?(typeof dateRevenuePublicationFix20260912_==='function'?dateRevenuePublicationFix20260912_(dr.date):new Date(dr.date)):null;
-    }catch(e){}
-    if(!origine)origine=typeof dateRevenuePublicationFix20260912_==='function'
-      ?dateRevenuePublicationFix20260912_(ev.date_effet||ev.date_prevue)
-      :new Date(ev.date_effet||ev.date_prevue);
+    const origine=typeof dateRevenuePublicationFix20260912_==='function'
+      ?dateRevenuePublicationFix20260912_(occ&&occ.date_effet||occ&&occ.date_prevue)
+      :new Date(occ&&occ.date_effet||occ&&occ.date_prevue);
     const d=origine&&origine>reference?new Date(origine):new Date(report);
     if(d>cible)return;
-
+    const deja=lignes.some(function(l){
+      const ld=typeof dateRevenuePublicationFix20260912_==='function'?dateRevenuePublicationFix20260912_(l&&l.date):new Date(l&&l.date);
+      if(String(l&&l.source||'')!=='evenement'||String(l&&l.sourceId||'')!==id||!ld||isNaN(ld)||Number(l&&l.montantSigne||0)<=0)return false;
+      if(Number(l&&l.occurrence||0)===idx)return true;
+      return Math.abs(ld-d)<43200000&&Math.abs(Number(l&&l.montantSigne||0)-montant)<.011;
+    });
+    if(deja)return;
     const arr=typeof arrRevenuePublicationFix20260912_==='function'?arrRevenuePublicationFix20260912_:arrondiTresorerieCanonique20260907_;
     const iso=typeof isoRevenuePublicationFix20260912_==='function'?isoRevenuePublicationFix20260912_:function(v){return Utilities.formatDate(new Date(v),Session.getScriptTimeZone(),'yyyy-MM-dd');};
-    const ligne={id:'event:'+id+':certain-du',source:'evenement',sourceId:id,date:d.toISOString(),libelle:String(ev.libelle||'Événement'),categorie:String(ev.categorie||''),compte:String(ev.compte||''),montantSigne:arr(montant),certitude:'certaine',preuve:'Événement certain encore dû · aucune opération réelle ni rapprochement confirmé',enRetard:!!(origine&&origine<=reference),datePrevueOrigine:iso(origine)};
+    const ligne={id:'event:'+id+':occ:'+idx+':certain-du',source:'evenement',sourceId:id,occurrence:idx,occurrences:Number(occ&&occ.occurrences||1),date:d.toISOString(),libelle:String(occ&&occ.libelle||'Événement'),categorie:String(occ&&occ.categorie||''),compte:String(occ&&occ.compte||''),montantSigne:arr(montant),certitude:'certaine',preuve:'Occurrence de recette Plan encore due · aucune opération réelle ni rapprochement confirmé',enRetard:!!(origine&&origine<=reference),datePrevueOrigine:iso(origine)};
     lignes.push(ligne);ajoutes.push(ligne);
   });
 
@@ -146,17 +141,15 @@ function sousVueTrajectoireTresorerieCanoniqueBudgetSoft20260910_(trajectoire,da
   const copie=Object.assign({},trajectoire);
   copie.lignes=(trajectoire.lignes||[]).filter(function(l){const d=new Date(l&&l.date);if(isNaN(d.getTime()))return false;return Utilities.formatDate(d,tz,'yyyy-MM-dd')<=cible;});
   const reference=typeof dateRevenuePublicationFix20260912_==='function'?dateRevenuePublicationFix20260912_(trajectoire.dateReference||new Date()):new Date(trajectoire.dateReference||new Date());
-  const fin=cibleDate,dus=typeof evenementsRecettesCertainesDuesRevenuePublicationFix20260912_==='function'?evenementsRecettesCertainesDuesRevenuePublicationFix20260912_(reference,null,fin):[];
+  const fin=cibleDate,dus=typeof occurrencesRecettesCertainesDuesRevenuePublicationFix20260922_==='function'?occurrencesRecettesCertainesDuesRevenuePublicationFix20260922_(reference,null,fin):[];
   const report=new Date(reference);report.setDate(report.getDate()+1);report.setHours(12,0,0,0);
   const ajoutes=[];
-  (dus||[]).forEach(function(ev){
-    const id=String(ev&&ev.id||''),montant=Math.abs(Number(ev&&ev.montant||0));if(!id||!Number.isFinite(montant)||montant<=0)return;
-    const deja=copie.lignes.some(function(l){const d=typeof dateRevenuePublicationFix20260912_==='function'?dateRevenuePublicationFix20260912_(l&&l.date):new Date(l&&l.date);return String(l&&l.source||'')==='evenement'&&String(l&&l.sourceId||'')===id&&d&&!isNaN(d)&&d>reference&&d<=fin&&Number(l&&l.montantSigne||0)>0;});
+  (dus||[]).forEach(function(occ){
+    const id=String(occ&&occ.eventId||occ&&occ.id||''),idx=Number(occ&&occ.occurrence||1),montant=Math.abs(Number(occ&&occ.montant||0));if(!id||!Number.isFinite(montant)||montant<=0)return;
+    const origine=new Date(occ&&occ.date_effet||occ&&occ.date_prevue||0),d=origine&&!isNaN(origine)&&origine>reference?origine:report;if(d>fin)return;
+    const deja=copie.lignes.some(function(l){const ld=typeof dateRevenuePublicationFix20260912_==='function'?dateRevenuePublicationFix20260912_(l&&l.date):new Date(l&&l.date);if(String(l&&l.source||'')!=='evenement'||String(l&&l.sourceId||'')!==id||!ld||isNaN(ld)||Number(l&&l.montantSigne||0)<=0)return false;if(Number(l&&l.occurrence||0)===idx)return true;return Math.abs(ld-d)<43200000&&Math.abs(Number(l&&l.montantSigne||0)-montant)<.011;});
     if(deja)return;
-    let origine=null;try{const dr=typeof datePlanTresorerie_==='function'?datePlanTresorerie_(ev,reference,false):null;origine=dr&&dr.date?new Date(dr.date):null;}catch(e){}
-    if(!origine||isNaN(origine))origine=new Date(ev&&ev.date_effet||ev&&ev.date_prevue||0);
-    const d=origine&&!isNaN(origine)&&origine>reference?origine:report;if(d>fin)return;
-    const ligne={id:'event:'+id+':certain-du-subview',source:'evenement',sourceId:id,date:new Date(d).toISOString(),libelle:String(ev&&ev.libelle||'Événement'),categorie:String(ev&&ev.categorie||''),compte:String(ev&&ev.compte||''),montantSigne:Math.round(montant*100)/100,certitude:'certaine',preuve:'Événement certain encore dû · conservé dans la sous-vue canonique · aucune opération réelle ni rapprochement confirmé',enRetard:!!(origine&&!isNaN(origine)&&origine<=reference),datePrevueOrigine:origine&&!isNaN(origine)&&typeof isoRevenuePublicationFix20260912_==='function'?isoRevenuePublicationFix20260912_(origine):''};
+    const ligne={id:'event:'+id+':occ:'+idx+':certain-du-subview',source:'evenement',sourceId:id,occurrence:idx,occurrences:Number(occ&&occ.occurrences||1),date:new Date(d).toISOString(),libelle:String(occ&&occ.libelle||'Événement'),categorie:String(occ&&occ.categorie||''),compte:String(occ&&occ.compte||''),montantSigne:Math.round(montant*100)/100,certitude:'certaine',preuve:'Occurrence de recette Plan encore due · conservée dans la sous-vue canonique',enRetard:!!(origine&&!isNaN(origine)&&origine<=reference),datePrevueOrigine:origine&&!isNaN(origine)&&typeof isoRevenuePublicationFix20260912_==='function'?isoRevenuePublicationFix20260912_(origine):''};
     copie.lignes.push(ligne);ajoutes.push(ligne);
   });
   copie.lignes.sort(function(a,b){return new Date(a.date)-new Date(b.date);});
