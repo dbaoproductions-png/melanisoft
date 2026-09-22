@@ -1,4 +1,4 @@
-const BUDGETSOFT_REVENUE_PUBLICATION_FIX_20260912_VERSION='2026-09-12.7';
+const BUDGETSOFT_REVENUE_PUBLICATION_FIX_20260912_VERSION='2026-09-22.1';
 
 function arrRevenuePublicationFix20260912_(n){return Math.round(Number(n||0)*100)/100;}
 function normRevenuePublicationFix20260912_(v){return String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');}
@@ -19,7 +19,9 @@ function evenementsRecettesCertainesDuesRevenuePublicationFix20260912_(reference
     if(String(ev&&ev.type||'').trim().toLowerCase()!=='recette')return false;
     if(evenementClosProuveRevenuePublicationFix20260912_(ev))return false;
     const st=normRevenuePublicationFix20260912_(ev.statut);
-    if(!['effective','effectif','effectives','effectifs','realise a rapprocher','realisee a rapprocher'].includes(st))return false;
+    if(['annule','annulee','abandonne','abandonnee','rapproche','rapprochee'].includes(st))return false;
+    const cert=normRevenuePublicationFix20260912_(ev.certitude||'certaine');
+    if(['incertaine','incertain','hypothetique'].includes(cert))return false;
     let d=null;try{const dr=datePlanTresorerie_(ev,ref,false);d=dr&&dr.date?dateRevenuePublicationFix20260912_(dr.date):null;}catch(e){}
     if(!d)d=dateRevenuePublicationFix20260912_(ev.date_effet||ev.date_prevue);
     return !!(d&&d<=fin);
