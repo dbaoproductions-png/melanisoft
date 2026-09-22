@@ -95,6 +95,10 @@ function auditerSimulationFractionnementPlan30020260922(){
     }).map(function(o){return{occurrence:Number(o.index||1),montantSigne:-arr(o.montant),date:String(o.date).slice(0,10),categorie:'Loisirs'};});
   });
 
+  const effetsCerbere=cycles.map(function(p){
+    if(typeof construireEffetsCycleV3712_!=='function')return null;
+    return construireEffetsCycleV3712_([], [ev], {}, p, new Set(['Loisirs']), {'Loisirs':'depense'});
+  });
   const lignesPrevisionnelles=typeof construireLignesPrevisionnellesV4_==='function'?construireLignesPrevisionnellesV4_([], [ev]):[];
   const lignesTennis=(lignesPrevisionnelles||[]).filter(function(x){return String(x&&x.source_id||'')==='SIMULATION_300_TENNIS';});
   const totalSeptembre=arr(lignesTennis.filter(function(x){return Number(x&&x.periode||0)===1;}).reduce(function(s,x){return s+Number(x&&x.montant||0);},0));
@@ -111,6 +115,9 @@ function auditerSimulationFractionnementPlan30020260922(){
     {code:'AUCUN_IMPACT_CYCLE_SEPTEMBRE',ok:repartition[0].length===0&&Math.abs(totalSeptembre)<=.01,detail:{repartition:repartition[0],lignePlan:totalSeptembre}},
     {code:'UNE_OCCURRENCE_PAR_CYCLE_FUTUR',ok:repartition[1].length===1&&repartition[2].length===1&&repartition[3].length===1,detail:repartition},
     {code:'PLAN_PREVISIONNEL_NEGATIF_100_PAR_CYCLE',ok:Math.abs(totalOct+100)<=.01&&Math.abs(totalNov+100)<=.01&&Math.abs(totalDec+100)<=.01,detail:{octobre:totalOct,novembre:totalNov,decembre:totalDec,lignes:lignesTennis}},
+    {code:'AUCUN_IMPACT_RT1',ok:effetsCerbere.filter(Boolean).every(function(e){return Math.abs(Number(e.recettesPrevisionnelles||0))<=.01;}),detail:effetsCerbere.map(function(e){return e?{recettesPrevisionnelles:e.recettesPrevisionnelles,resume:e.resume}:null;})},
+    {code:'DEPENSE_PILOTABLE_LOISIRS',ok:[1,2,3].every(function(i){const e=effetsCerbere[i];return !!(e&&Array.isArray(e.lignes)&&e.lignes.length===1&&String(e.lignes[0].cible)==='pilotable'&&Math.abs(Number(e.lignes[0].montantSigne||0)+100)<=.01&&String(e.lignes[0].categorie)==='Loisirs');}),detail:effetsCerbere.map(function(e){return e&&e.lignes||[];})},
+    {code:'PAS_CHARGE_FIXE_NI_HORS_PILOTABLE',ok:[1,2,3].every(function(i){const e=effetsCerbere[i];return !!(e&&Math.abs(Number(e.chargesEviteesPrevisionnelles||0))<=.01&&Math.abs(Number(e.haussesChargesPrevisionnelles||0))<=.01&&Math.abs(Number(e.sortiesHorsPilotablePrevisionnelles||0))<=.01);}),detail:effetsCerbere.map(function(e){return e?{chargesEvitees:e.chargesEviteesPrevisionnelles,haussesCharges:e.haussesChargesPrevisionnelles,sortiesHorsPilotable:e.sortiesHorsPilotablePrevisionnelles}:null;})},
     {code:'PREMIER_RAPPROCHEMENT_NE_CLOT_PAS_LES_AUTRES',ok:apres.length===3&&apres[0].rapprochee===true&&ouvertes.length===2&&ouvertes.every(function(o){return Number(o.index)>1;}),detail:{apres:apres,ouvertes:ouvertes}}
   ];
 
