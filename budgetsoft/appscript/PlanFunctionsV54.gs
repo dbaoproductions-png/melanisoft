@@ -1,4 +1,4 @@
-const PLAN_FUNCTIONS_V54_VERSION='5.4.5';
+const PLAN_FUNCTIONS_V54_VERSION='5.4.6';
 const PLAN_V54_CACHE_TTL=45;
 
 function cachePlanV54_(){return CacheService.getScriptCache();}
@@ -95,6 +95,9 @@ function enregistrerActionPlanV54(d){
   d.cible_valeur=Math.max(0,Number(d.cible_valeur||0));
   d.impact_montant=d.cible_valeur;
   d.impact_frequence=['mensuel','annuel','ponctuel'].includes(String(d.impact_frequence||'').toLowerCase())?String(d.impact_frequence).toLowerCase():'ponctuel';
+  d.mode_preuve_reception=['operation_distincte','integre_salaire'].includes(String(d.mode_preuve_reception||'').toLowerCase())?String(d.mode_preuve_reception).toLowerCase():'operation_distincte';
+  if(f!=='RECEVOIR')d.mode_preuve_reception='operation_distincte';
+  if(f==='RECEVOIR'&&d.mode_preuve_reception==='integre_salaire'&&!d.date_effet)throw new Error('Une réception intégrée au salaire nécessite une date de début / effet.');
   d.enquete_auto=d.enquete_auto!==false&&String(d.enquete_auto)!=='false';
   d.reevaluer_charges_fixes=d.reevaluer_charges_fixes===true||String(d.reevaluer_charges_fixes)==='true';
   d.impact_confirme=d.impact_confirme===true||String(d.impact_confirme)==='true';
