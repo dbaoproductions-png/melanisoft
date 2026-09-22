@@ -1,4 +1,4 @@
-const PLAN_FUNCTIONS_V5_VERSION='5.1.0';
+const PLAN_FUNCTIONS_V5_VERSION='5.1.1';
 
 /**
  * PLAN V5 — actions mesurables.
