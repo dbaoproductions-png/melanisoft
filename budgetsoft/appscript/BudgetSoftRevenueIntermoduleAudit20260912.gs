@@ -78,3 +78,29 @@ function auditerDoctrineRecettesPlanIntermodule20260922(){
 
 
 
+
+
+function auditerDoctrineActionsRecevoirBudgetSoft20260922(){
+  const actions=typeof lireFeuilleDynamiquePlan_==='function'?lireFeuilleDynamiquePlan_('Plan_Actions'):[];
+  const recevoir=(actions||[]).filter(function(a){return String(a&&a.fonction_plan||'').toUpperCase()==='RECEVOIR';});
+  const etat=typeof lireEtatGlobalBudgetSoftSiDisponible20260906_==='function'?lireEtatGlobalBudgetSoftSiDisponible20260906_():null;
+  const modules=etat&&etat.modules||{},cerbere=modules.cerbere||{},projection=modules.projectionEtendue||{};
+  const ids=new Set(recevoir.map(function(a){return String(a&&a.id||'');}).filter(Boolean));
+  const lignesCerbere=[];
+  (cerbere.periodes||[]).forEach(function(p,i){
+    const ls=p&&p.v37&&Array.isArray(p.v37.actionsEvenementsCycle)?p.v37.actionsEvenementsCycle:[];
+    ls.forEach(function(x){if(ids.has(String(x&&x.id||'')))lignesCerbere.push({periode:i+1,source:x.source,cible:x.cible,montant:x.montant,montantSigne:x.montantSigne,statut:x.statut,id:x.id,libelle:x.libelle});});
+  });
+  const lignesProjection=(projection.lignes||[]).filter(function(x){return ids.has(String(x&&x.sourceId||''))||ids.has(String(x&&x.id||''));});
+  let paquet=null;
+  try{paquet=typeof evaluerToutesActionsPlanV56_==='function'?evaluerToutesActionsPlanV56_(recevoir):null;}catch(e){paquet={erreur:String(e&&e.message||e)};}
+  const mesures=paquet&&paquet.mesures||[];
+  const controles=[
+    {code:'AUCUNE_ACTION_RECEVOIR_DANS_RT1',ok:lignesCerbere.every(function(x){return String(x.cible||'')!=='recette'&&Math.abs(Number(x.montantSigne||0))<.011;}),detail:lignesCerbere},
+    {code:'AUCUNE_ACTION_RECEVOIR_DANS_PROJECTION_BANCAIRE',ok:lignesProjection.length===0,detail:lignesProjection},
+    {code:'MESURE_PAR_REEL_DISPONIBLE',ok:mesures.length===recevoir.length,detail:mesures},
+    {code:'AUCUN_FALLBACK_GLOBAL_SANS_PREUVE',ok:mesures.every(function(m){const a=recevoir.find(function(x){return String(x.id)===String(m.id);})||{};const mm=m&&m.mesure||{};if(String(a.categorie||'').trim()&&Number(mm.realise||0)>0){return (mm.preuves||[]).every(function(p){return String(p&&p.categorie||'')===String(a.categorie||'');});}return true;}),detail:mesures.map(function(m){const a=recevoir.find(function(x){return String(x.id)===String(m.id);})||{};return{id:m.id,libelle:m.libelle,categorie:a.categorie||'',realise:m.mesure&&m.mesure.realise||0,preuves:m.mesure&&m.mesure.preuves||[]};})}
+  ];
+  const out={ok:controles.every(function(x){return x.ok;}),version:'2026-09-22.1',lectureSeule:true,actionsRecevoir:recevoir.map(function(a){return{id:a.id,libelle:a.libelle,statut:a.statut,categorie:a.categorie,cible:Number(a.cible_valeur||a.impact_montant||0),frequence:a.impact_frequence,date_effet:a.date_effet,condition:a.condition_libelle||'',condition_statut:a.condition_statut||'',impact_confirme:a.impact_confirme};}),controles:controles,revisionBudgetSoft:etat&&etat.revisionBudgetSoft||'',genereLe:etat&&etat.genereLe||''};
+  console.log('[AUDIT DOCTRINE ACTIONS RECEVOIR 20260922] '+JSON.stringify(out));return out;
+}
