@@ -289,11 +289,20 @@ function operationsDansFenetrePlanV5_(a){
 }
 
 function filtrerOperationsSourcePlanV5_(ops,a){
-  const q=normaliserRechercheAction_(a.source_libelle||a.libelle||'');
-  const cat=String(a.categorie||'');
-  if(cat){const cc=ops.filter(o=>String(o.categorie||'')===cat);if(cc.length)return cc;}
-  if(q.length>=3){const mots=q.split(' ').filter(x=>x.length>=3);const mm=ops.filter(o=>{const t=normaliserRechercheAction_((o.libelle_bancaire||'')+' '+(o.libelle||''));return mots.some(m=>t.includes(m));});if(mm.length)return mm;}
-  return ops;
+  const cat=String(a&&a.categorie||'').trim();
+  const source=String(a&&a.source_libelle||'').trim();
+  const q=normaliserRechercheAction_(source||a&&a.libelle||'');
+  // Une mesure RECEVOIR doit produire une preuve, jamais une approximation opportuniste.
+  // Si une catégorie est renseignée, elle est autoritaire : absence de match = zéro réalisé.
+  if(cat)return (ops||[]).filter(o=>String(o&&o.categorie||'').trim()===cat);
+  // À défaut de catégorie, une source/libellé explicite doit réellement matcher.
+  if(q.length>=3){
+    const mots=q.split(' ').filter(x=>x.length>=3);
+    if(!mots.length)return[];
+    return (ops||[]).filter(o=>{const t=normaliserRechercheAction_((o&&o.libelle_bancaire||'')+' '+(o&&o.libelle||''));return mots.some(m=>t.includes(m));});
+  }
+  // Sans critère de rattachement, aucune recette ne peut être attribuée automatiquement.
+  return [];
 }
 
 function trouverCompteMesurePlanV5_(id){
