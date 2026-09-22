@@ -169,15 +169,15 @@ function occurrencesEvenementsTresorerie_(events,hard,now,cible,comptes){
   const out=[];(events||[]).forEach(e=>{
     if(['Réalisé','Rapproché','Annulé','Annulée'].includes(String(e.statut||'')))return;
     const cert=String(e.certitude||'certaine').toLowerCase(),niveau=cert==='certaine'?'tres_probable':cert==='probable'?'prevu':'estime';
-    const dr=datePlanTresorerie_(e,now,false),base=dr.date;if(!base||isNaN(base))return;
-    const n=(e.fractionne===true||String(e.fractionne)==='true')?Math.max(1,Number(e.nombre_fois||1)):1,per=String(e.periodicite_fractionnement||'mensuel').toLowerCase(),total=Math.abs(Number(e.montant||0));
-    for(let i=0;i<n;i++){
-      if(typeof occurrenceEvenementRapprocheeBudgetSoft20260922_==='function'&&occurrenceEvenementRapprocheeBudgetSoft20260922_(e,i+1))continue;
-      const d=new Date(base);if(i){if(per==='annuel')d.setFullYear(d.getFullYear()+i);else d.setMonth(d.getMonth()+i);}if(d<=now||d>cible)continue;
-      const m=(String(e.type||'depense').toLowerCase()==='recette'?1:-1)*(total/n);
-      if(operationCouvrePrevisionTresorerie_(hard,d,m,e.libelle||''))continue;
-      out.push({id:'event:'+String(e.id||'')+':'+i,source:'evenement',sourceId:e.id||'',occurrence:i+1,occurrences:n,date:d.toISOString(),libelle:e.libelle||'Événement',categorie:e.categorie||'',compte:e.compte||'',montantSigne:arrondiTresorerie_(m),certitude:niveau,preuve:preuveDatePlanTresorerie_('Événement du Plan',dr),dateConventionnelle:!!dr.conventionnelle});
-    }
+    let occ=[];try{occ=typeof occurrencesEvenementEtatBudgetSoft20260922_==='function'?occurrencesEvenementEtatBudgetSoft20260922_(e):occurrencesEvenementV4_(e).map(o=>Object.assign({},o,{rapprochee:false}));}catch(err){occ=[];}
+    if(!occ.length){const dr=datePlanTresorerie_(e,now,false),base=dr.date;if(!base||isNaN(base))return;occ=[{index:1,total:1,montant:Math.abs(Number(e.montant||0)),date:base,rapprochee:false,dateConventionnelle:!!dr.conventionnelle}];}
+    occ.forEach(o=>{
+      if(o&&o.rapprochee)return;
+      const d=new Date(o&&o.date||0);if(isNaN(d)||d<=now||d>cible)return;
+      const m=(String(e.type||'depense').toLowerCase()==='recette'?1:-1)*Math.abs(Number(o&&o.montant||0));if(!m)return;
+      if(operationCouvrePrevisionTresorerie_(hard,d,m,e.libelle||''))return;
+      out.push({id:'event:'+String(e.id||'')+':'+Number(o.index||1),source:'evenement',sourceId:e.id||'',occurrence:Number(o.index||1),occurrences:Number(o.total||1),date:d.toISOString(),libelle:e.libelle||'Événement',categorie:e.categorie||'',compte:e.compte||'',montantSigne:arrondiTresorerie_(m),certitude:niveau,preuve:'Occurrence de l’événement Plan · date indicative d’origine',dateConventionnelle:false,datePrevueOrigine:isoPlanForecast20260912_(d)});
+    });
   });return out;
 }
 
