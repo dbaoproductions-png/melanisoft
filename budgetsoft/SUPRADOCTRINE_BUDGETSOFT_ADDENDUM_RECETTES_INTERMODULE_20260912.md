@@ -100,3 +100,40 @@ Une révision ou une migration est incohérente si :
 - Analyses publie un nombre différent de 10 catégories de revenus ;
 - Analyses publie une catégorie différente de la nomenclature canonique ;
 - une fusion de nomenclature modifie le total des revenus ou le total R0.
+
+
+## 7. Cycle courant : constaté + explicitement dû
+
+Pour le **cycle courant**, le canon R0 n'est pas une créance. Il décrit un niveau normal de recettes mais ne justifie jamais, à lui seul, un complément de recette « encore attendu ».
+
+La règle autoritaire est :
+
+`Rt1(cycle courant) = recettes réellement constatées dans le cycle + événements Plan de recette explicitement encore dus`.
+
+Conséquences :
+
+- un écart entre le réel d'une catégorie R0 et son montant canonique ne crée pas automatiquement une recette future ;
+- R0 reste utilisé comme référence et comme prévision des **cycles futurs** ;
+- une recette ponctuelle attendue doit être matérialisée par un événement Plan ouvert ;
+- un événement Plan ne sort du dû que sur preuve : rapprochement/opération réelle liée, annulation ou abandon explicite ;
+- le simple passage de la date prévue ne constitue jamais une preuve de réalisation.
+
+### Date des événements
+
+La date saisie pour un événement Plan est une **date d'affectation au cycle et une indication de calendrier**, pas une date d'expiration.
+
+Si la date prévue est dépassée sans preuve de clôture :
+
+- l'événement reste actif ;
+- sa date prévue d'origine est conservée pour l'audit et l'explication ;
+- pour la projection bancaire, il peut être reporté techniquement au premier jour projetable après la date de référence, avec un marqueur `enRetard` ;
+- il ne doit être ni supprimé ni déplacé silencieusement vers un autre événement.
+
+Un événement ouvert provenant d'un cycle antérieur reste une créance/dette en retard et continue à peser sur le cycle courant jusqu'à clôture explicite.
+
+### Invariants supplémentaires
+
+- `Dashboard.revenusAttendus - Dashboard.revenusConstates` doit être égal au total des recettes Plan encore dues du cycle courant, à un centime près ;
+- aucun complément implicite vers R0 ne doit apparaître dans ce reste attendu ;
+- une recette Plan ouverte dont la date est dépassée reste représentée dans la projection et dans Rt1 ;
+- les cycles futurs conservent R0 comme référence prévisionnelle normale.
