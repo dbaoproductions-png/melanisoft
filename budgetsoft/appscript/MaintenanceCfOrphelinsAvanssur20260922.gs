@@ -120,3 +120,69 @@ function reparerLiensOrphelinsAvanssurIntermodule20260922(){
     return out;
   }finally{lock.releaseLock();}
 }
+
+
+function auditerEtatMaintenanceCfOrphelinsAvanssur20260922(){
+  const OLD_CF='5f1a2b1a-dc1a-4366-9a37-f1cd2e823c1c';
+  const CF_A='2aa5491a-b8a4-4fce-bc44-2df6ae79f59e';
+  const operations=lireTable_('Operations')||[];
+  const rapprochements=typeof lireRapprochementsChargesFixes==='function'?(lireRapprochementsChargesFixes()||[]):[];
+
+  const ops=operations.filter(function(o){
+    const cf=String(o&&o.charge_fixe_id||'').trim();
+    const com=String(o&&o.commentaire||'');
+    return cf===OLD_CF||cf===CF_A||com.indexOf('[CHARGE_FIXE:'+OLD_CF+']')>=0||com.indexOf('[CHARGE_FIXE:'+CF_A+']')>=0;
+  }).map(function(o){
+    return{
+      id:String(o&&o.id||''),
+      date:String(o&&o.date_comptable||o&&o.date||''),
+      montant:Number(o&&o.montant||0),
+      categorie:String(o&&o.categorie||''),
+      libelle:String(o&&o.libelle_bancaire||o&&o.libelle||''),
+      charge_fixe_id:String(o&&o.charge_fixe_id||''),
+      commentaire:String(o&&o.commentaire||'')
+    };
+  });
+
+  const raps=rapprochements.filter(function(r){
+    const cf=String(r&&r.charge_fixe_id||'').trim();
+    return cf===OLD_CF||cf===CF_A;
+  }).map(function(r){
+    const opId=String(r&&r.operation_id||'').trim();
+    const o=operations.find(function(x){return String(x&&x.id||'').trim()===opId;})||{};
+    return{
+      id:String(r&&r.id||''),
+      operation_id:opId,
+      charge_fixe_id:String(r&&r.charge_fixe_id||''),
+      statut:String(r&&r.statut||''),
+      decision:String(r&&r.decision||''),
+      date_operation:String(r&&r.date_operation||''),
+      montant_reel:Number(r&&r.montant_reel||0),
+      operationExiste:!!(o&&o.id),
+      operation_charge_fixe_id:String(o&&o.charge_fixe_id||''),
+      operation_montant:Number(o&&o.montant||0),
+      operation_categorie:String(o&&o.categorie||''),
+      operation_libelle:String(o&&o.libelle_bancaire||o&&o.libelle||'')
+    };
+  });
+
+  const out={
+    ok:true,
+    lectureSeule:true,
+    version:MAINT_CF_ORPHELINS_AVANSSUR_20260922_VERSION,
+    operationsOldCf:ops.filter(function(x){return x.charge_fixe_id===OLD_CF||x.commentaire.indexOf('[CHARGE_FIXE:'+OLD_CF+']')>=0;}).length,
+    operationsCfA:ops.filter(function(x){return x.charge_fixe_id===CF_A||x.commentaire.indexOf('[CHARGE_FIXE:'+CF_A+']')>=0;}).length,
+    rapprochementsOldCf:raps.filter(function(x){return x.charge_fixe_id===OLD_CF;}).length,
+    rapprochementsCfA:raps.filter(function(x){return x.charge_fixe_id===CF_A;}).length,
+    operations:ops,
+    rapprochements:raps
+  };
+  console.log('[AUDIT ETAT MAINT CF ORPHELINS AVANSSUR 20260922] '+JSON.stringify(out));
+  raps.forEach(function(x,i){
+    console.log('[RAPPRO AVANSSUR '+String(i+1).padStart(2,'0')+'] '
+      +x.operation_id+' | cf='+x.charge_fixe_id+' | statut='+x.statut
+      +' | montant='+x.operation_montant+' | cat='+x.operation_categorie
+      +' | '+x.operation_libelle);
+  });
+  return out;
+}
