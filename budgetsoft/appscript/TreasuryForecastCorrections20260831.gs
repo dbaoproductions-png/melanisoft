@@ -214,45 +214,24 @@ function statutRecetteEncoreDueProjection20260912_(ev){
 }
 
 function completerEvenementsEffectifsTresorerie20260831_(lignes,evenements,reference,cible){
-  const out=(lignes||[]).slice();
-  const report=dateJourSuivantPlanForecast20260912_(reference);
+  const out=(lignes||[]).slice(),report=dateJourSuivantPlanForecast20260912_(reference);
   (evenements||[]).forEach(function(e){
-    if(!evenementStandardPlanForecast20260912_(e))return;
-    if(evenementProuveClosPlanForecast20260912_(e))return;
+    if(!evenementStandardPlanForecast20260912_(e)||evenementProuveClosPlanForecast20260912_(e))return;
     if(typeof estSuspensionTemporaireTresorerie20260831_==='function'&&estSuspensionTemporaireTresorerie20260831_(e))return;
-
     const cert=statutNormaliseEvenementPlanForecast20260912_(e.certitude||'certaine');
-    const statutEligibleRetard=!['incertaine','incertain','hypothetique'].includes(cert);
-    const dr=datePlanTresorerie_(e,reference,false),base=dr&&dr.date;
-    if(!base||isNaN(base))return;
-    const n=(e.fractionne===true||String(e.fractionne)==='true')?Math.max(1,Number(e.nombre_fois||1)):1;
-    const per=String(e.periodicite_fractionnement||'mensuel').toLowerCase();
-    const total=Math.abs(Number(e.montant||0));
-    if(!total)return;
-
-    for(let i=0;i<n;i++){
-      if(typeof occurrenceEvenementRapprocheeBudgetSoft20260922_==='function'&&occurrenceEvenementRapprocheeBudgetSoft20260922_(e,i+1))continue;
-      const origine=new Date(base);
-      if(i){if(per==='annuel')origine.setFullYear(origine.getFullYear()+i);else origine.setMonth(origine.getMonth()+i);}
-      if(origine>cible)continue;
-      const enRetard=origine<=reference;
-      if(enRetard&&!statutEligibleRetard)continue;
-      const d=enRetard?new Date(report):origine;
-      if(d<=reference||d>cible)continue;
-      if(out.some(function(x){return x.source==='evenement'&&String(x.sourceId||'')===String(e.id||'')&&Math.abs(new Date(x.date)-d)<43200000;}))continue;
-      const type=String(e.type||'depense').toLowerCase();
-      const montant=(type==='recette'?1:-1)*(total/n);
-      const preuve=enRetard
-        ?'Événement encore dû · date prévue '+isoPlanForecast20260912_(origine)+' · aucune opération réelle/rapprochement confirmé · maintenu au prévisionnel'
-        :preuveDatePlanTresorerie_('Événement du Plan',dr);
-      out.push({
-        id:'event:'+String(e.id||'')+':'+i+(enRetard?':retard':''),
-        source:'evenement',sourceId:e.id||'',date:d.toISOString(),
-        libelle:e.libelle||'Événement',categorie:e.categorie||'',compte:e.compte||'',
-        montantSigne:arrondiTresorerie_(montant),certitude:'tres_probable',preuve:preuve,
-        dateConventionnelle:!!dr.conventionnelle,datePrevueOrigine:isoPlanForecast20260912_(origine),enRetard:enRetard
-      });
-    }
+    if(['incertaine','incertain','hypothetique'].includes(cert))return;
+    let occ=[];try{occ=typeof occurrencesEvenementEtatBudgetSoft20260922_==='function'?occurrencesEvenementEtatBudgetSoft20260922_(e):occurrencesEvenementV4_(e).map(o=>Object.assign({},o,{rapprochee:false}));}catch(err){occ=[];}
+    if(!occ.length){const dr=datePlanTresorerie_(e,reference,false),base=dr&&dr.date;if(!base||isNaN(base))return;occ=[{index:1,total:1,montant:Math.abs(Number(e.montant||0)),date:base,rapprochee:false}];}
+    occ.forEach(function(o){
+      if(o&&o.rapprochee)return;
+      const origine=new Date(o&&o.date||0);if(isNaN(origine)||origine>cible)return;
+      const enRetard=origine<=reference,d=enRetard?new Date(report):new Date(origine);if(d<=reference||d>cible)return;
+      const idx=Number(o&&o.index||1),montantAbs=Math.abs(Number(o&&o.montant||0));if(!montantAbs)return;
+      if(out.some(function(x){return x.source==='evenement'&&String(x.sourceId||'')===String(e.id||'')&&(Number(x.occurrence||0)===idx||Math.abs(new Date(x.date)-d)<43200000)&&Math.abs(Math.abs(Number(x.montantSigne||0))-montantAbs)<.011;}))return;
+      const type=String(e.type||'depense').toLowerCase(),montant=(type==='recette'?1:-1)*montantAbs;
+      const preuve=enRetard?'Occurrence encore due · date prévue '+isoPlanForecast20260912_(origine)+' · aucune preuve de clôture · reportée au premier jour projetable':'Occurrence future de l’événement Plan';
+      out.push({id:'event:'+String(e.id||'')+':'+idx+(enRetard?':retard':''),source:'evenement',sourceId:e.id||'',occurrence:idx,occurrences:Number(o&&o.total||1),date:d.toISOString(),libelle:e.libelle||'Événement',categorie:e.categorie||'',compte:e.compte||'',montantSigne:arrondiTresorerie_(montant),certitude:'tres_probable',preuve:preuve,dateConventionnelle:false,datePrevueOrigine:isoPlanForecast20260912_(origine),enRetard:enRetard});
+    });
   });
   return out;
 }
