@@ -163,3 +163,15 @@ La date d'une occurrence reste indicative. Si elle est dépassée sans preuve de
 - une occurrence non rapprochée apparaît une seule fois dans la projection pertinente ;
 - `Rt1(cycle courant) = Réel économique constaté + somme des occurrences de recettes encore dues appartenant au cycle courant ou en retard` ;
 - une Action de type « hausse de revenu » ne doit pas créer à elle seule une recette attendue du cycle courant.
+
+
+### Convention de signe des lignes Plan
+
+Les lignes prévisionnelles Plan exposent deux notions distinctes et ne doivent plus les confondre :
+
+- `montant` : **grandeur budgétaire positive**, utilisée pour exprimer une quantité consommée, réservée ou attendue dans les moteurs de budget et d'enveloppes ;
+- `montantSigne` : **flux financier signé**, avec `+ recette` et `- dépense`, utilisé par les moteurs de trésorerie et les contrôles de sens financier.
+
+Exemple : une échéance de tennis de 100 € est représentée par `montant = 100` et `montantSigne = -100`.
+
+Aucun consommateur ne doit inférer le sens bancaire à partir du seul champ `montant` lorsqu'un champ `montantSigne` est disponible.
