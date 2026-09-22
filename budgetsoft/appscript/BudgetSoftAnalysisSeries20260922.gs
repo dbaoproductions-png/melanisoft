@@ -249,23 +249,26 @@ function auditerImputationSalairesAnalysesBudgetSoft20260922(nombrePeriodes){
     if(typeof categorieCibleBudgetSoft_==='function')x.categorie=categorieCibleBudgetSoft_(x.categorie);
     return x;
   });
+
   const lignes=periodes.map(function(p){
-    const debut=dateAnalyseSeries20260922_(p&&p.debut),fin=dateAnalyseSeries20260922_(p&&p.fin);
+    const cle=clePeriodeAnalyseSeries20260922_(p);
     const ops=operations.filter(function(o){
       if(String(o&&o.categorie||'').trim()!=='Salaires'||Number(o&&o.montant||0)<=0)return false;
-      const d=typeof dateOperationCouranteBudgetSoft_==='function'
-        ?dateOperationCouranteBudgetSoft_(o)
-        :dateAnalyseSeries20260922_(o&&o.date_comptable||o&&o.date);
-      return !!(d&&debut&&fin&&d>=debut&&d<=fin);
+      const d=dateImputationSalaireAnalyseSeries20260922_(o);
+      if(!d)return false;
+      const ym=Utilities.formatDate(d,Session.getScriptTimeZone(),'yyyy-MM');
+      return ym===cle;
     }).map(function(o){
-      const d=typeof dateOperationCouranteBudgetSoft_==='function'
+      const dEco=dateImputationSalaireAnalyseSeries20260922_(o);
+      const dBanque=typeof dateOperationCouranteBudgetSoft_==='function'
         ?dateOperationCouranteBudgetSoft_(o)
         :dateAnalyseSeries20260922_(o&&o.date_comptable||o&&o.date);
       return{
         id:String(o&&o.id||''),
         date:String(o&&o.date||''),
         dateComptable:String(o&&o.date_comptable||''),
-        dateImputation:d?Utilities.formatDate(d,Session.getScriptTimeZone(),'yyyy-MM-dd'):'',
+        dateImputationBancaire:dBanque?Utilities.formatDate(dBanque,Session.getScriptTimeZone(),'yyyy-MM-dd'):'',
+        dateImputationEconomique:dEco?Utilities.formatDate(dEco,Session.getScriptTimeZone(),'yyyy-MM-dd'):'',
         libelle:String(o&&o.libelle_bancaire||o&&o.libelle||o&&o.details||''),
         montant:arrAnalyseSeries20260922_(Number(o&&o.montant||0)),
         categorie:String(o&&o.categorie||'')
@@ -273,7 +276,7 @@ function auditerImputationSalairesAnalysesBudgetSoft20260922(nombrePeriodes){
     });
     const total=arrAnalyseSeries20260922_(ops.reduce(function(s,o){return s+Number(o&&o.montant||0);},0));
     return{
-      cle:clePeriodeAnalyseSeries20260922_(p),
+      cle:cle,
       libelle:libellePeriodeAnalyseSeries20260922_(p),
       debut:String(p&&p.debut||''),
       fin:String(p&&p.fin||''),
@@ -282,6 +285,7 @@ function auditerImputationSalairesAnalysesBudgetSoft20260922(nombrePeriodes){
       operations:ops
     };
   });
+
   const serie=analyse&&analyse.seriesCourbes&&analyse.seriesCourbes.revenus&&Array.isArray(analyse.seriesCourbes.revenus.series)
     ?analyse.seriesCourbes.revenus.series.find(function(s){return String(s&&s.nom||'')==='Salaires';})
     :null;
@@ -300,7 +304,7 @@ function auditerImputationSalairesAnalysesBudgetSoft20260922(nombrePeriodes){
     version:BUDGETSOFT_ANALYSIS_SERIES_20260922_VERSION,
     sourceAnalyse:analyse&&analyse.sourceBudgetSoft||'',
     revisionBudgetSoft:analyse&&analyse.revisionBudgetSoft||'',
-    doctrine:'Preuve directe de la série Salaires depuis Operations, avec imputation par date_comptable puis date.',
+    doctrine:'Preuve directe de la série Salaires selon le mois de paie explicite (PAYE MM YYYY) ; repli sur date_comptable puis date.',
     lignes:lignes,
     controles:controles
   };
