@@ -221,7 +221,8 @@ function completerEvenementsEffectifsTresorerie20260831_(lignes,evenements,refer
     if(evenementProuveClosPlanForecast20260912_(e))return;
     if(typeof estSuspensionTemporaireTresorerie20260831_==='function'&&estSuspensionTemporaireTresorerie20260831_(e))return;
 
-    const statutEligibleRetard=statutEffectiveEvenementPlanForecast20260912_(e.statut)||statutDeclareRealiseEvenementPlanForecast20260912_(e.statut);
+    const cert=statutNormaliseEvenementPlanForecast20260912_(e.certitude||'certaine');
+    const statutEligibleRetard=!['incertaine','incertain','hypothetique'].includes(cert);
     const dr=datePlanTresorerie_(e,reference,false),base=dr&&dr.date;
     if(!base||isNaN(base))return;
     const n=(e.fractionne===true||String(e.fractionne)==='true')?Math.max(1,Number(e.nombre_fois||1)):1;
