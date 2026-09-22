@@ -193,3 +193,22 @@ Règles :
 - si aucune catégorie n'est fournie, un rattachement par source/libellé doit produire un match explicite ; à défaut, `0 réalisé`.
 
 Exemple : une demande de participation employeur Vélo Toulouse ciblée à 10,40 €/mois peut être marquée comme Action réalisée dès que la demande est effectivement envoyée. Elle reste néanmoins à 0 € de gain effectif tant qu'aucune opération réelle correspondante n'est observée. Une confirmation employeur du montant peut justifier un Événement recette séparé si l'on souhaite représenter la créance avant encaissement.
+
+
+### Réception intégrée au salaire
+
+Certaines Actions `RECEVOIR` ne produisent pas un virement bancaire autonome : leur montant est incorporé dans une opération plus large, en particulier le salaire.
+
+Dans ce cas, l'Action peut utiliser `mode_preuve_reception = integre_salaire`.
+
+Règles :
+
+- la date d'effet est obligatoire : elle fixe le premier salaire susceptible de servir de preuve ;
+- une condition métier non remplie continue de bloquer l'activation ;
+- le premier Réel positif catégorisé `Salaires` postérieur à la date d'effet sert uniquement de **preuve d'activation** ;
+- le montant réalisé attribué à l'Action est la **cible de l'Action**, jamais le montant du salaire ;
+- le salaire reste une opération unique dans `Operations`, `Rt1` et la trésorerie ;
+- aucune opération fictive, aucun événement recette implicite et aucune ventilation bancaire artificielle ne sont créés ;
+- l'analyse stratégique conserve la catégorie de l'Action (par exemple `Prestations / aides`) même si la preuve bancaire est une opération `Salaires`.
+
+Ainsi, une participation employeur de 15 €/mois incorporée dans un salaire de plusieurs milliers d'euros est mesurée comme `15 € réalisés` pour l'Action une fois le salaire constaté, tout en conservant le salaire complet comme seul flux bancaire.
