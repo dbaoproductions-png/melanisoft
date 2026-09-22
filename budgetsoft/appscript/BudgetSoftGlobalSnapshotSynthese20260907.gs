@@ -1,4 +1,4 @@
-const BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION='2026-09-22.1';
+const BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION='2026-09-22.2';
 
 /**
  * Adapte le chargeur Cerbère classique à une base déjà calculée sans modifier son
