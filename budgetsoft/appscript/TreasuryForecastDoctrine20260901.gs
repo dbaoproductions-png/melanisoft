@@ -1,4 +1,4 @@
-const TREASURY_FORECAST_DOCTRINE_20260901_VERSION='2026-09-21.1';
+const TREASURY_FORECAST_DOCTRINE_20260901_VERSION='2026-09-22.1';
 
 function chargerSocleTresorerie20260831SansDebitCbLegacy20260910_(dateCible,ctx){
   if(typeof chargerTresoreriePrevisionnelle20260831!=='function')return null;
@@ -6,10 +6,23 @@ function chargerSocleTresorerie20260831SansDebitCbLegacy20260910_(dateCible,ctx)
   const legacy=estimationDebitCbDiffereTresorerie20260901_;
   try{estimationDebitCbDiffereTresorerie20260901_=function(){return null;};return chargerTresoreriePrevisionnelle20260831(dateCible,ctx);}finally{estimationDebitCbDiffereTresorerie20260901_=legacy;}
 }
+function filtrerRevenusCanonCycleCourantTresorerie20260922_(lignes,reference){
+  const ref=reference instanceof Date?new Date(reference):new Date(reference||0);if(isNaN(ref))return(lignes||[]).slice();
+  const fin=typeof dateFinCycleCanonBudgetSoft20260906_==='function'
+    ?dateFinCycleCanonBudgetSoft20260906_(ref)
+    :new Date(ref.getDate()<=27?ref.getFullYear():ref.getFullYear(),ref.getDate()<=27?ref.getMonth():ref.getMonth()+1,27,23,59,59,999);
+  return(lignes||[]).filter(function(x){
+    if(String(x&&x.source||'')!=='revenu_recurrent')return true;
+    const d=new Date(x&&x.date||0);if(isNaN(d))return true;
+    return !(d>ref&&d<=fin);
+  });
+}
+
 function chargerTresoreriePrevisionnelle20260901(dateCible,cerberePrecharge,ctx){
   const r=chargerSocleTresorerie20260831SansDebitCbLegacy20260910_(dateCible,ctx);if(!r||!r.ok)return r;
   const reference=new Date(r.dateReference||new Date()),cible=new Date(r.dateCible||new Date()),evenements=lireFeuilleDynamiquePlan_('Plan_Evenements'),actions=lireFeuilleDynamiquePlan_('Plan_Actions'),ops=lireTable_('Operations'),hard=(r.lignes||[]).filter(x=>x.source==='operation_future');
   let lignes=recalerFluxPlanCarteTresorerie20260901_(r.lignes||[],evenements,actions,hard,reference,cible);
+  lignes=filtrerRevenusCanonCycleCourantTresorerie20260922_(lignes,reference);
   lignes=filtrerActionsPlanEffectivesTresorerie20260908_(lignes,actions).filter(x=>!['debit_cb_estime','ep_immediat_estime'].includes(String(x&&x.source||'')));
   const projectionEp=projectionEnvelopePilotableTresorerie20260913_(ops,reference,cible,cerberePrecharge);
   if(projectionEp.immediat)lignes.push(projectionEp.immediat);if(projectionEp.debitsCb.length)lignes.push.apply(lignes,projectionEp.debitsCb);
@@ -55,4 +68,4 @@ function projectionEnvelopePilotableTresorerie20260913_(ops,reference,cible,cerb
 }
 function estimationsDebitsCbDiffereTresorerie20260908_(ops,reference,cible,cerberePrecharge){return projectionEnvelopePilotableTresorerie20260913_(ops,reference,cible,cerberePrecharge).debitsCb;}
 function estimationDebitCbDiffereTresorerie20260901V2_(ops,reference,cible,cerberePrecharge){const xs=estimationsDebitsCbDiffereTresorerie20260908_(ops,reference,cible,cerberePrecharge);return xs.length?xs[0]:null;}
-function recalculerSortieTresorerie20260901_(r,lignes,reference,cible){const variation=arrondiTresorerie_((lignes||[]).reduce((s,x)=>s+Number(x.montantSigne||0),0)),certain=arrondiTresorerie_((lignes||[]).filter(x=>x.certitude==='certain').reduce((s,x)=>s+Number(x.montantSigne||0),0)),tresProbable=arrondiTresorerie_((lignes||[]).filter(x=>['certain','tres_probable'].includes(x.certitude)).reduce((s,x)=>s+Number(x.montantSigne||0),0));r.version=TREASURY_FORECAST_DOCTRINE_20260901_VERSION;r.lignes=lignes;r.variationPrevue=variation;r.soldePrevisionnel=arrondiTresorerie_(Number(r.soldeReel||0)+variation);r.fourchette={certain:arrondiTresorerie_(Number(r.soldeReel||0)+certain),tresProbable:arrondiTresorerie_(Number(r.soldeReel||0)+tresProbable),toutesHypotheses:r.soldePrevisionnel};r.resume=resumeTresorerie20260831_(lignes);r.confiance=confianceTresorerie_(reference,cible,lignes);r.diagnostic20260831=r.diagnostic20260831||{};r.diagnostic20260831.passeTerminalePlanCb=true;r.diagnostic20260831.actionsPlanTresorerie='uniquement impact_confirme + statut Effectif/Effective';r.diagnostic20260831.debitCbDoctrine='EP restant ventilé une seule fois : immédiat à la frontière + CB différée à la date de débit';r.diagnostic20260831.optimisationCerbereCb='Cerbère préchargé finalisé en cockpit avant lecture EP';r.diagnostic20260831.suppressionCbLegacy20260831='estimation legacy neutralisée sur le chemin canonique';r.diagnostic20260831.reutilisationCerbereSnapshot='snapshot peut fournir une base Cerbère, finalisée avant projection EP';return r;}
+function recalculerSortieTresorerie20260901_(r,lignes,reference,cible){const variation=arrondiTresorerie_((lignes||[]).reduce((s,x)=>s+Number(x.montantSigne||0),0)),certain=arrondiTresorerie_((lignes||[]).filter(x=>x.certitude==='certain').reduce((s,x)=>s+Number(x.montantSigne||0),0)),tresProbable=arrondiTresorerie_((lignes||[]).filter(x=>['certain','tres_probable'].includes(x.certitude)).reduce((s,x)=>s+Number(x.montantSigne||0),0));r.version=TREASURY_FORECAST_DOCTRINE_20260901_VERSION;r.lignes=lignes;r.variationPrevue=variation;r.soldePrevisionnel=arrondiTresorerie_(Number(r.soldeReel||0)+variation);r.fourchette={certain:arrondiTresorerie_(Number(r.soldeReel||0)+certain),tresProbable:arrondiTresorerie_(Number(r.soldeReel||0)+tresProbable),toutesHypotheses:r.soldePrevisionnel};r.resume=resumeTresorerie20260831_(lignes);r.confiance=confianceTresorerie_(reference,cible,lignes);r.diagnostic20260831=r.diagnostic20260831||{};r.diagnostic20260831.passeTerminalePlanCb=true;r.diagnostic20260831.actionsPlanTresorerie='uniquement impact_confirme + statut Effectif/Effective';r.diagnostic20260831.revenusR0CycleCourant='aucune créance implicite R0 dans le cycle courant ; R0 reprend à partir du cycle suivant';r.diagnostic20260831.debitCbDoctrine='EP restant ventilé une seule fois : immédiat à la frontière + CB différée à la date de débit';r.diagnostic20260831.optimisationCerbereCb='Cerbère préchargé finalisé en cockpit avant lecture EP';r.diagnostic20260831.suppressionCbLegacy20260831='estimation legacy neutralisée sur le chemin canonique';r.diagnostic20260831.reutilisationCerbereSnapshot='snapshot peut fournir une base Cerbère, finalisée avant projection EP';return r;}
