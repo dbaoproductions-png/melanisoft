@@ -168,6 +168,16 @@ function appliquerConventionSalaireV3712_(v,periode,operations,base){
   };
 }
 
+function evenementOuvertDansCycleOuEnRetardV3712_(x,date,periode,opById){
+  const d=jourCivilV3712_(date),a=jourCivilV3712_(periode&&periode.debut),z=jourCivilV3712_(periode&&periode.fin),now=jourCivilV3712_(new Date());
+  if(!d||!a||!z)return false;
+  const opId=String(x&&x.operation_reelle_id||'').trim(),op=opId&&opById&&opById[opId]?opById[opId]:null;
+  const st=normaliserV377_(x&&x.rapprochement_statut||x&&x.statut||'');
+  const clos=!!op||['rapproche','rapprochee','realise','realisee','effective','effectif','annule','annulee','abandonne','abandonnee'].includes(st);
+  if(d>=a&&d<=z)return true;
+  return !clos&&now>=a&&now<=z&&d<a;
+}
+
 function construireEffetsCycleV3712_(actions,evenements,opById,periode,p0Cats,catType){
   const lignes=[];let recettesPrevisionnelles=0,sortiesHors=0,chargesEvitees=0,haussesCharges=0;
   const ajouter=(source,x,o)=>{
@@ -177,7 +187,7 @@ function construireEffetsCycleV3712_(actions,evenements,opById,periode,p0Cats,ca
     const estRecette=type==='recette'||impactType==='hausse revenu'||nature==='encaisser'||nature==='recouvrer';
     const estDepense=type==='depense'||['acheter','rembourser','reserver','investir','payer'].includes(nature);
     if(!estRecette&&normaliserV377_(x.mode_paiement)==='cb'&&(estDepense||source==='Événement'))impact=typeof dateImpactCbPlanV37_==='function'?dateImpactCbPlanV37_(impact):impact;
-    if(!dateDansCycleV3712_(impact,periode))return;
+    if(source==='Événement'){if(!evenementOuvertDansCycleOuEnRetardV3712_(x,impact,periode,opById))return;}else if(!dateDansCycleV3712_(impact,periode))return;
 
     const opId=String(x.operation_reelle_id||'').trim(),op=opId&&opById[opId]?opById[opId]:null;
     const statut=normaliserV377_(x.rapprochement_statut||x.statut||'');
