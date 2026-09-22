@@ -44,47 +44,33 @@ function auditerRecettesIntermodulesBudgetSoft20260912(){
 
 
 function auditerDoctrineRecettesPlanIntermodule20260922(){
-  const arr=function(n){return Math.round(Number(n||0)*100)/100;};
+  const arr=function(n){return Math.round(Number(n||0)*100)/100;},props=PropertiesService.getDocumentProperties();
   const etat=typeof lireEtatGlobalBudgetSoftSiDisponible20260906_==='function'?lireEtatGlobalBudgetSoftSiDisponible20260906_():null;
-  if(!etat||!etat.modules){
-    const out={ok:false,version:'2026-09-22.1',lectureSeule:true,erreur:'Snapshot global indisponible.'};
-    console.log('[AUDIT DOCTRINE RECETTES PLAN INTERMODULE 20260922] '+JSON.stringify(out));return out;
-  }
+  if(!etat||!etat.modules){const out={ok:false,version:'2026-09-22.2',lectureSeule:true,erreur:'Snapshot global indisponible ou périmé.',fraicheur:typeof auditerFraicheurSnapshotGlobalBudgetSoft20260916==='function'?auditerFraicheurSnapshotGlobalBudgetSoft20260916():null};console.log('[AUDIT DOCTRINE RECETTES PLAN INTERMODULE 20260922] '+JSON.stringify(out));return out;}
   const m=etat.modules||{},dash=m.dashboard||{},ct=dash.courtTerme||{},cer=m.cerbere||{},proj=m.projectionEtendue||{},p0=Array.isArray(cer.periodes)?cer.periodes[0]:null,v=p0&&p0.v37||{},periode=p0&&(p0.periode||p0)||{};
   const debut=new Date(periode.debut||0),fin=new Date(periode.fin||0),reference=new Date(proj.dateReference||etat.genereLe||new Date());
-  let evs=[];try{evs=lireFeuilleDynamiquePlan_('Plan_Evenements')||[];}catch(e){evs=[];}
-  const detailDus=[];let totalDu=0;
-  evs.forEach(function(ev){
-    if(String(ev&&ev.type||'').trim().toLowerCase()!=='recette')return;
-    if(typeof evenementClosProuveRevenuePublicationFix20260912_==='function'&&evenementClosProuveRevenuePublicationFix20260912_(ev))return;
-    const cert=String(ev&&ev.certitude||'certaine').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-    if(['incertaine','incertain','hypothetique'].includes(cert))return;
-    let occs=[];
-    try{occs=typeof occurrencesEvenementV4_==='function'?occurrencesEvenementV4_(ev):[];}catch(e){occs=[];}
-    if(!occs.length){
-      const d=new Date(ev&&ev.date_effet||ev&&ev.date_prevue||0);
-      occs=[{index:1,total:1,montant:Math.abs(Number(ev&&ev.montant||0)),date:isNaN(d)?'':d}];
-    }
-    occs.forEach(function(o){
-      const d=new Date(o&&o.date||0);if(isNaN(d)||isNaN(fin)||d>fin)return;
-      const montant=Math.abs(Number(o&&o.montant||0));if(!(montant>0))return;
-      totalDu+=montant;detailDus.push({eventId:String(ev.id||''),libelle:String(ev.libelle||''),occurrence:Number(o.index||1),montant:arr(montant),datePrevue:Utilities.formatDate(d,Session.getScriptTimeZone(),'yyyy-MM-dd'),enRetard:!isNaN(reference)&&d<=reference});
-    });
-  });
-  totalDu=arr(totalDu);
-
-  const revenusConstates=arr(ct.revenusConstates),revenusAttendus=arr(ct.revenusAttendus),resteDashboard=arr(revenusAttendus-revenusConstates),rt1=arr(v.rt1);
-  const lignes=Array.isArray(proj.lignes)?proj.lignes:[];
-  const lignesR0Courant=lignes.filter(function(l){if(String(l&&l.source||'')!=='revenu_recurrent')return false;const d=new Date(l&&l.date||0);return !isNaN(d)&&!isNaN(reference)&&!isNaN(fin)&&d>reference&&d<=fin;});
+  const dus=typeof occurrencesRecettesCertainesDuesRevenuePublicationFix20260922_==='function'?occurrencesRecettesCertainesDuesRevenuePublicationFix20260922_(reference,debut,fin):[];
+  const detailDus=dus.map(function(o){const d=new Date(o&&o.date_effet||o&&o.date_prevue||0);return{eventId:String(o&&o.eventId||o&&o.id||''),libelle:String(o&&o.libelle||''),occurrence:Number(o&&o.occurrence||1),occurrences:Number(o&&o.occurrences||1),montant:arr(Math.abs(Number(o&&o.montant||0))),datePrevue:isNaN(d)?'':Utilities.formatDate(d,Session.getScriptTimeZone(),'yyyy-MM-dd'),enRetard:!isNaN(reference)&&!isNaN(d)&&d<=reference};});
+  const totalDu=arr(detailDus.reduce(function(s,o){return s+Number(o.montant||0);},0));
+  let reelSource=null;try{reelSource=typeof revenusConstatesCycleCerbereRevenueDueOwner20260922_==='function'?revenusConstatesCycleCerbereRevenueDueOwner20260922_(debut,fin):null;}catch(e){}
+  const revenusConstates=arr(ct.revenusConstates),revenusAttendus=arr(ct.revenusAttendus),resteDashboard=arr(revenusAttendus-revenusConstates),rt1=arr(v.rt1),reelOwner=arr(reelSource&&reelSource.total),rt1Attendu=arr(reelOwner+totalDu);
+  const lignes=Array.isArray(proj.lignes)?proj.lignes:[],lignesR0Courant=lignes.filter(function(l){if(String(l&&l.source||'')!=='revenu_recurrent')return false;const d=new Date(l&&l.date||0);return !isNaN(d)&&!isNaN(reference)&&!isNaN(fin)&&d>reference&&d<=fin;});
   const lignesEvenementsCourant=lignes.filter(function(l){if(String(l&&l.source||'')!=='evenement'||Number(l&&l.montantSigne||0)<=0)return false;const d=new Date(l&&l.date||0);return !isNaN(d)&&!isNaN(reference)&&!isNaN(fin)&&d>reference&&d<=fin;});
   const totalEvenementsProjection=arr(lignesEvenementsCourant.reduce(function(s,l){return s+Number(l&&l.montantSigne||0);},0));
 
+  let canon=[],actualParCat=reelSource&&reelSource.detail||{},ancienneDoctrine=[];
+  try{canon=typeof chargerCanonRecettesCerbereV1==='function'?(chargerCanonRecettesCerbereV1().postes||[]):[];}catch(e){canon=[];}
+  canon.forEach(function(x){const cat=String(x&&x.categorie||''),r=Number(actualParCat[cat]||0),k=Math.max(0,Number(x&&x.montant||0)),complement=r>0?Math.max(0,k-r):k;if(complement>0)ancienneDoctrine.push({categorie:cat,canon:arr(k),reel:arr(r),complementImpliciteAncienneDoctrine:arr(complement)});});
+  const totalAncienComplement=arr(ancienneDoctrine.reduce(function(s,x){return s+Number(x.complementImpliciteAncienneDoctrine||0);},0));
+
   const controles=[
-    {code:'DASHBOARD_RESTE_EGAL_PLAN_DU',ok:Math.abs(resteDashboard-totalDu)<=0.01,detail:{revenusConstates:revenusConstates,revenusAttendus:revenusAttendus,resteDashboard:resteDashboard,totalPlanDu:totalDu}},
-    {code:'RT1_EGAL_DASHBOARD',ok:Math.abs(rt1-revenusAttendus)<=0.01,detail:{rt1:rt1,dashboard:revenusAttendus}},
+    {code:'RT1_FORMULE_REEL_PLUS_DU',ok:Math.abs(rt1-rt1Attendu)<=.01,detail:{rt1:rt1,reelOwner:reelOwner,totalPlanDu:totalDu,attendu:rt1Attendu}},
+    {code:'DASHBOARD_RESTE_EGAL_PLAN_DU',ok:Math.abs(resteDashboard-totalDu)<=.01,detail:{revenusConstates:revenusConstates,revenusAttendus:revenusAttendus,resteDashboard:resteDashboard,totalPlanDu:totalDu}},
+    {code:'RT1_EGAL_DASHBOARD',ok:Math.abs(rt1-revenusAttendus)<=.01,detail:{rt1:rt1,dashboard:revenusAttendus}},
     {code:'AUCUN_R0_IMPLICITE_CYCLE_COURANT',ok:lignesR0Courant.length===0,detail:{nombre:lignesR0Courant.length,lignes:lignesR0Courant.map(function(x){return{sourceId:x.sourceId,date:x.date,montant:x.montantSigne};})}},
-    {code:'PROJECTION_PLAN_DU_COHERENTE',ok:Math.abs(totalEvenementsProjection-totalDu)<=0.01,detail:{projectionEvenements:totalEvenementsProjection,totalPlanDu:totalDu,lignes:lignesEvenementsCourant.map(function(x){return{sourceId:x.sourceId,date:x.date,montant:x.montantSigne,enRetard:!!x.enRetard};})}}
+    {code:'PROJECTION_PLAN_DU_COHERENTE',ok:Math.abs(totalEvenementsProjection-totalDu)<=.01,detail:{projectionEvenements:totalEvenementsProjection,totalPlanDu:totalDu,lignes:lignesEvenementsCourant.map(function(x){return{sourceId:x.sourceId,occurrence:x.occurrence||1,date:x.date,montant:x.montantSigne,enRetard:!!x.enRetard};})}},
+    {code:'SNAPSHOT_POSTERIEUR_DERNIER_PLAN',ok:!String(props.getProperty('PLAN_DERNIER_RECALCUL')||'')||String(etat.genereLe||'')>=String(props.getProperty('PLAN_DERNIER_RECALCUL')||''),detail:{planDernier:String(props.getProperty('PLAN_DERNIER_RECALCUL')||''),snapshotGenereLe:String(etat.genereLe||'')}}
   ];
-  const out={ok:controles.every(function(x){return x.ok;}),version:'2026-09-22.1',lectureSeule:true,revisionBudgetSoft:String(etat.revisionBudgetSoft||''),genereLe:String(etat.genereLe||''),periode:{debut:periode.debut||'',fin:periode.fin||'',dateReference:proj.dateReference||''},recettes:{revenusConstates:revenusConstates,revenusAttendus:revenusAttendus,resteDashboard:resteDashboard,totalPlanDu:totalDu,detailDus:detailDus},controles:controles};
+  const out={ok:controles.every(function(x){return x.ok;}),version:'2026-09-22.2',lectureSeule:true,revisionBudgetSoft:String(etat.revisionBudgetSoft||''),genereLe:String(etat.genereLe||''),periode:{debut:periode.debut||'',fin:periode.fin||'',dateReference:proj.dateReference||''},recettes:{revenusConstatesDashboard:revenusConstates,reelOwner:reelOwner,revenusAttendus:revenusAttendus,resteDashboard:resteDashboard,totalPlanDu:totalDu,rt1Attendu:rt1Attendu,detailDus:detailDus},diagnosticAncienneDoctrine:{information:'Diagnostic explicatif uniquement ; ces compléments R0 ne doivent plus alimenter le cycle courant.',complements:ancienneDoctrine,totalComplement:totalAncienComplement},fraicheur:{planDernier:String(props.getProperty('PLAN_DERNIER_RECALCUL')||''),planOrigine:String(props.getProperty('PLAN_DERNIERE_ORIGINE')||'')},controles:controles};
   console.log('[AUDIT DOCTRINE RECETTES PLAN INTERMODULE 20260922] '+JSON.stringify(out));return out;
 }
