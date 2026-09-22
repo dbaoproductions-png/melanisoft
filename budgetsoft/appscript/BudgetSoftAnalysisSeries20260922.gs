@@ -9,7 +9,7 @@
  *   sont historisés après publication du snapshot global, un point par cycle.
  * - Dette : Crédits est propriétaire. Capital : Patrimoine est propriétaire.
  */
-const BUDGETSOFT_ANALYSIS_SERIES_20260922_VERSION='2026-09-22.2';
+const BUDGETSOFT_ANALYSIS_SERIES_20260922_VERSION='2026-09-22.3';
 const BUDGETSOFT_ANALYSIS_STRUCTURAL_HISTORY_SHEET_20260922='Analyse_HistoriqueStructurel';
 const BUDGETSOFT_ANALYSIS_STRUCTURAL_HISTORY_HEADERS_20260922=[
   'periode','date_point','revision_budgetsoft','famille','sous_poste','montant','source','maj_le'
@@ -116,6 +116,36 @@ function seriesDepuisMatriceAnalyse20260922_(periodes,noms,valeurs,totalNom){
   return{labels:labels,series:[{id:'total',nom:totalNom,total:true,valeurs:total}].concat(series)};
 }
 
+
+function dateImputationSalaireAnalyseSeries20260922_(o){
+  const texte=[o&&o.libelle_bancaire,o&&o.libelle,o&&o.details,o&&o.commentaire].filter(Boolean).join(' ').toUpperCase();
+  let m=texte.match(/\bPAYE\s*([01]?\d)[\s\/\-]+(20\d{2})\b/);
+  if(!m)m=texte.match(/\bPAYE([01]?\d)[\s\/\-]?(20\d{2})\b/);
+  if(m){
+    const mois=Math.max(1,Math.min(12,parseInt(m[1],10))),annee=parseInt(m[2],10);
+    if(Number.isFinite(mois)&&Number.isFinite(annee))return new Date(annee,mois-1,15,12,0,0,0);
+  }
+  return typeof dateOperationCouranteBudgetSoft_==='function'
+    ?dateOperationCouranteBudgetSoft_(o)
+    :dateAnalyseSeries20260922_(o&&o.date_comptable||o&&o.date);
+}
+
+function construireSerieSalairesEconomiqueAnalyse20260922_(periodes,operations){
+  const vals=(periodes||[]).map(function(){return 0;});
+  const dedup=typeof dedoublonnerOperationsCartesBudgetSoft_==='function'?dedoublonnerOperationsCartesBudgetSoft_(operations||[]):operations||[];
+  (dedup||[]).forEach(function(o){
+    if(String(o&&o.categorie||'').trim()!=='Salaires')return;
+    const montant=Number(o&&o.montant||0);if(!Number.isFinite(montant)||montant<=0)return;
+    const d=dateImputationSalaireAnalyseSeries20260922_(o);if(!d)return;
+    const idx=(periodes||[]).findIndex(function(p){
+      const cle=clePeriodeAnalyseSeries20260922_(p),ym=Utilities.formatDate(d,Session.getScriptTimeZone(),'yyyy-MM');
+      return cle===ym;
+    });
+    if(idx>=0)vals[idx]+=montant;
+  });
+  return vals.map(arrAnalyseSeries20260922_);
+}
+
 function construireSeriesFluxAnalysesBudgetSoft20260922_(periodes,operations,categories,charges){
   const periodesVent=(periodes||[]).map(function(p){return{debut:p.debut,fin:p.fin};});
   const ops=(operations||[]).map(function(o){const x=Object.assign({},o);if(typeof categorieCibleBudgetSoft_==='function')x.categorie=categorieCibleBudgetSoft_(x.categorie);return x;});
@@ -125,6 +155,7 @@ function construireSeriesFluxAnalysesBudgetSoft20260922_(periodes,operations,cat
 
   const revenuCanon=typeof categoriesRevenusBudgetSoftCanoniques20260921_==='function'?categoriesRevenusBudgetSoftCanoniques20260921_():['Salaires','France Travail','Cours','Concerts','Droits artistiques','Congés spectacles','Avantages employeur','Revenus fonciers','Prestations / aides','Revenus divers'];
   const revenusVals={};revenuCanon.forEach(function(c){revenusVals[c]=(periodes||[]).map(function(_,i){return Number(vent.buckets[i]&&vent.buckets[i].revenusReels&&vent.buckets[i].revenusReels[c]||0);});});
+  if(revenuCanon.includes('Salaires'))revenusVals['Salaires']=construireSerieSalairesEconomiqueAnalyse20260922_(periodes,ops);
 
   const pilotVals={};Array.from(p0Cats).sort(function(a,b){return a.localeCompare(b,'fr');}).forEach(function(c){
     pilotVals[c]=(periodes||[]).map(function(_,i){const b=vent.buckets[i]||{};return Number(b.nonCbParCategorie&&b.nonCbParCategorie[c]||0)+Number(b.cbParCategorie&&b.cbParCategorie[c]||0);});
