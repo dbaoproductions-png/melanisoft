@@ -6,23 +6,35 @@
  * Les noms publics historiques sont conservés pour compatibilité UI/déclencheurs,
  * et délèguent tous au constructeur synthèse autoritaire 20260907.
  */
-const BUDGETSOFT_SNAPSHOT_SYNTHESE_PROMOTION_VERSION='2026-09-07.1';
+const BUDGETSOFT_SNAPSHOT_SYNTHESE_PROMOTION_VERSION='2026-09-22.1';
+
+function reconstruireSnapshotGlobalAvecHistoriqueAnalyses20260922_(origine){
+  const r=reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(String(origine||'standard_synthese'));
+  if(r&&r.ok===true&&r.publie===true&&typeof enregistrerHistoriqueStructurelAnalysesBudgetSoft20260922_==='function'){
+    try{
+      const s=typeof chargerSnapshotGlobalBudgetSoft20260906==='function'?chargerSnapshotGlobalBudgetSoft20260906():null;
+      const etat=s&&s.disponible&&s.etat?s.etat:null;
+      r.historisationAnalyses=enregistrerHistoriqueStructurelAnalysesBudgetSoft20260922_(etat);
+    }catch(e){r.historisationAnalyses={ok:false,erreur:String(e&&e.message||e)};}
+  }
+  return r;
+}
 
 function reconstruireSnapshotGlobalBudgetSoft20260906(origine){
-  return reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(String(origine||'standard_synthese'));
+  return reconstruireSnapshotGlobalAvecHistoriqueAnalyses20260922_(String(origine||'standard_synthese'));
 }
 
 function actualiserBudgetSoftToutesLes30Minutes20260906(){
-  return reconstruireSnapshotGlobalSyntheseBudgetSoft20260907('planifie_30min');
+  return reconstruireSnapshotGlobalAvecHistoriqueAnalyses20260922_('planifie_30min');
 }
 
 function actualiserBudgetSoftMaintenant20260906(){
-  return reconstruireSnapshotGlobalSyntheseBudgetSoft20260907('manuel_force');
+  return reconstruireSnapshotGlobalAvecHistoriqueAnalyses20260922_('manuel_force');
 }
 
 function initialiserArchitectureSnapshotBudgetSoft20260906(){
   const installation=installerActualisationGlobaleBudgetSoft20260906();
-  const etat=reconstruireSnapshotGlobalSyntheseBudgetSoft20260907('initialisation');
+  const etat=reconstruireSnapshotGlobalAvecHistoriqueAnalyses20260922_('initialisation');
   return{ok:!!(installation&&installation.ok&&etat&&etat.ok),versionPromotion:BUDGETSOFT_SNAPSHOT_SYNTHESE_PROMOTION_VERSION,installation:installation,etat:etat};
 }
 
