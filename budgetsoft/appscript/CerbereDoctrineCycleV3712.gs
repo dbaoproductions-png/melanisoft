@@ -191,9 +191,12 @@ function construireEffetsCycleV3712_(actions,evenements,opById,periode,p0Cats,ca
 
     const opId=String(x.operation_reelle_id||'').trim(),op=opId&&opById[opId]?opById[opId]:null;
     const statut=normaliserV377_(x.rapprochement_statut||x.statut||'');
-    const realise=!!op||['rapproche','realise','realisee','effective','effectif'].includes(statut);
+    const occRapprochee=source==='Événement'&&typeof occurrenceEvenementRapprocheeBudgetSoft20260922_==='function'&&occurrenceEvenementRapprocheeBudgetSoft20260922_(x,o.index);
+    const occMap=occRapprochee&&typeof lireRapprochementsOccurrencesEvenementBudgetSoft20260922_==='function'?lireRapprochementsOccurrencesEvenementBudgetSoft20260922_(x):{};
+    const occRap=occRapprochee?occMap[String(o.index)]||null:null;
+    const realise=occRapprochee||!!op||['rapproche','realise','realisee','effective','effectif'].includes(statut);
     const montantPrevu=Math.abs(Number(o.montant!=null?o.montant:(x.montant!=null?x.montant:x.impact_montant)||0));
-    const montantReel=op?Math.abs(Number(op.montant||0)):Math.abs(Number(x.montant_reel||0));
+    const montantReel=occRap?Math.abs(Number(occRap.montant_reel||0)):(op?Math.abs(Number(op.montant||0)):Math.abs(Number(x.montant_reel||0)));
     const montantRetenu=realise&&(montantReel>0)?montantReel:montantPrevu;
     const cat=String(x.categorie||x.affectation||'').trim();
     let cible='information',sens=0;
