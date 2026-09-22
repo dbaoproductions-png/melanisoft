@@ -158,3 +158,80 @@ function auditerChargesFixesIntermoduleBudgetSoft20260922(nombrePeriodes){
   });
   return out;
 }
+
+
+function auditerLiensOrphelinsChargesFixesIntermodule20260922(){
+  const operations=lireTable_('Operations')||[];
+  const charges=lireTable_('Charges_fixes')||[];
+  const rapprochements=typeof lireRapprochementsChargesFixes==='function'?(lireRapprochementsChargesFixes()||[]):[];
+  const idsCharges=new Set(charges.map(function(c){return String(c&&c.id||'').trim();}).filter(Boolean));
+
+  const orphelins=[];
+  operations.forEach(function(o){
+    const opId=String(o&&o.id||'').trim();if(!opId)return;
+    const cf=typeof idCfPersisteCommun_==='function'?String(idCfPersisteCommun_(o,rapprochements)||'').trim():String(o&&o.charge_fixe_id||'').trim();
+    if(!cf||idsCharges.has(cf))return;
+    const brut=String(o&&o.libelle_bancaire||o&&o.libelle||'');
+    const motif=typeof extraireMotifStableBanque_==='function'?String(extraireMotifStableBanque_(brut)||''):'';
+    const candidats=charges.map(function(ch){
+      let evalR=null;
+      try{
+        if(typeof evaluerRapprochementChargeFixeSouple20260829_==='function')evalR=evaluerRapprochementChargeFixeSouple20260829_(ch,o,{derniereDate:new Date()});
+        else if(typeof evaluerRapprochementChargeFixe_==='function')evalR=evaluerRapprochementChargeFixe_(ch,o);
+      }catch(e){evalR=null;}
+      const lib=String(ch&&ch.libelle||'');
+      const bank=String(ch&&ch.libelle_bancaire||'');
+      return{
+        id:String(ch&&ch.id||''),
+        libelle:lib,
+        categorie:String(ch&&ch.categorie||''),
+        actif:typeof convertirBooleen_==='function'?convertirBooleen_(ch&&ch.actif):!!(ch&&ch.actif),
+        montant:Number(ch&&ch.montant||0),
+        libelle_bancaire:bank,
+        score:evalR?Number(evalR.score||0):0,
+        ecart_montant:evalR?Number(evalR.ecart_montant||0):null,
+        similarite_crediteur:evalR&&evalR.similarite_crediteur!=null?Number(evalR.similarite_crediteur):null
+      };
+    }).sort(function(a,b){return Number(b.score||0)-Number(a.score||0);}).slice(0,5);
+
+    const raps=rapprochements.filter(function(r){return String(r&&r.operation_id||'').trim()===opId;}).map(function(r){
+      return{id:String(r&&r.id||''),charge_fixe_id:String(r&&r.charge_fixe_id||''),statut:String(r&&r.statut||''),decision:String(r&&r.decision||'')};
+    });
+
+    orphelins.push({
+      operation_id:opId,
+      ancien_charge_fixe_id:cf,
+      date:String(o&&o.date_comptable||o&&o.date||''),
+      montant:Number(o&&o.montant||0),
+      categorie:String(o&&o.categorie||''),
+      libelle:brut,
+      motif_bancaire_stable:motif,
+      rapprochements:raps,
+      meilleursCandidats:candidats
+    });
+  });
+
+  const groupes={};
+  orphelins.forEach(function(x){
+    const k=String(x.ancien_charge_fixe_id||'');
+    if(!groupes[k])groupes[k]=[];
+    groupes[k].push(x);
+  });
+
+  const out={
+    ok:orphelins.length===0,
+    lectureSeule:true,
+    version:BUDGETSOFT_CF_INTERMODULE_AUDIT_20260922_VERSION,
+    nombreOrphelins:orphelins.length,
+    groupes:Object.keys(groupes).map(function(id){return{ancien_charge_fixe_id:id,nombre:groupes[id].length,operations:groupes[id]};}),
+    doctrine:'Aucune réparation automatique : chaque lien orphelin doit être qualifié à partir du libellé bancaire, du mandat/émetteur, du montant et des rapprochements persistés.'
+  };
+  console.log('[AUDIT LIENS ORPHELINS CF INTERMODULE 20260922] '+JSON.stringify(out));
+  orphelins.forEach(function(x,i){
+    console.log('[CF ORPHELIN '+String(i+1).padStart(2,'0')+'] '
+      +x.operation_id+' | '+x.montant+' | '+x.categorie+' | ancien='+x.ancien_charge_fixe_id
+      +' | '+x.libelle
+      +' | candidats='+x.meilleursCandidats.map(function(c){return c.id+':'+c.libelle+':'+c.score;}).join(' ; '));
+  });
+  return out;
+}
