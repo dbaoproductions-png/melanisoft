@@ -78,26 +78,42 @@ function auditerDoctrineRecettesPlanIntermodule20260922(){
 
 function auditerSimulationFractionnementPlan30020260922(){
   const arr=function(n){return Math.round(Number(n||0)*100)/100;};
-  const ev={id:'SIMULATION_300_TENNIS',libelle:'Règlement cours de tennis collectif',type:'recette',categorie:'Cours',montant:300,date_effet:'2026-10-15',certitude:'certaine',statut:'Prévu',mode_paiement:'Chèque',fractionne:true,nombre_fois:3,periodicite_fractionnement:'mensuel',rapprochements_occurrences_json:''};
+  const ev={id:'SIMULATION_300_TENNIS',libelle:'Règlement cours de tennis collectif',type:'depense',categorie:'Loisirs',montant:300,date_effet:'2026-10-15',certitude:'certaine',statut:'Prévu',mode_paiement:'Chèque',fractionne:true,nombre_fois:3,periodicite_fractionnement:'mensuel',rapprochements_occurrences_json:''};
   const brut=occurrencesEvenementEtatBudgetSoft20260922_(ev);
   const clone=Object.assign({},ev,{statut:'Partiellement rapproché',rapprochement_statut:'Partiel',rapprochements_occurrences_json:JSON.stringify({'1':{operation_id:'SIM_OP_1',montant_reel:100,date_realisation:'2026-10-15',rapproche_le:'2026-10-15T12:00:00.000Z'}})});
-  const apres=occurrencesEvenementEtatBudgetSoft20260922_(clone);
-  const ouvertes=apres.filter(function(o){return !o.rapprochee;});
+  const apres=occurrencesEvenementEtatBudgetSoft20260922_(clone),ouvertes=apres.filter(function(o){return !o.rapprochee;});
   const reference=new Date('2026-09-22T12:00:00'),cycles=[
     {debut:new Date('2026-08-28T00:00:00'),fin:new Date('2026-09-27T23:59:59')},
     {debut:new Date('2026-09-28T00:00:00'),fin:new Date('2026-10-27T23:59:59')},
     {debut:new Date('2026-10-28T00:00:00'),fin:new Date('2026-11-27T23:59:59')},
     {debut:new Date('2026-11-28T00:00:00'),fin:new Date('2026-12-27T23:59:59')}
   ];
-  const repartition=cycles.map(function(p,i){return occurrencesDuesCycleCerbereRevenueDueOwner20260922_(ev,p.debut,p.fin,i,reference).map(function(o){return{occurrence:Number(o.index||1),montant:arr(o.montant),date:isoCerbereRevenueDueOwner20260919_(o.date)};});});
+  const repartition=cycles.map(function(p,i){
+    return brut.filter(function(o){
+      const d=new Date(o&&o.date||0);if(isNaN(d))return false;
+      return d>=p.debut&&d<=p.fin;
+    }).map(function(o){return{occurrence:Number(o.index||1),montantSigne:-arr(o.montant),date:String(o.date).slice(0,10),categorie:'Loisirs'};});
+  });
+
+  const lignesPrevisionnelles=typeof construireLignesPrevisionnellesV4_==='function'?construireLignesPrevisionnellesV4_([], [ev]):[];
+  const lignesTennis=(lignesPrevisionnelles||[]).filter(function(x){return String(x&&x.source_id||'')==='SIMULATION_300_TENNIS';});
+  const totalSeptembre=arr(lignesTennis.filter(function(x){return Number(x&&x.periode||0)===1;}).reduce(function(s,x){return s+Number(x&&x.montant||0);},0));
+  const totalOct=arr(lignesTennis.filter(function(x){return Number(x&&x.periode||0)===2;}).reduce(function(s,x){return s+Number(x&&x.montant||0);},0));
+  const totalNov=arr(lignesTennis.filter(function(x){return Number(x&&x.periode||0)===3;}).reduce(function(s,x){return s+Number(x&&x.montant||0);},0));
+  const totalDec=arr(lignesTennis.filter(function(x){return Number(x&&x.periode||0)===4;}).reduce(function(s,x){return s+Number(x&&x.montant||0);},0));
+
   const controles=[
+    {code:'TYPE_DEPENSE_LOISIRS',ok:ev.type==='depense'&&ev.categorie==='Loisirs',detail:{type:ev.type,categorie:ev.categorie}},
     {code:'TROIS_OCCURRENCES',ok:brut.length===3,detail:brut},
     {code:'MONTANTS_100_100_100',ok:JSON.stringify(brut.map(function(o){return arr(o.montant);}))===JSON.stringify([100,100,100]),detail:brut.map(function(o){return arr(o.montant);})},
     {code:'DATES_OCT_NOV_DEC',ok:JSON.stringify(brut.map(function(o){return String(o.date).slice(0,10);}))===JSON.stringify(['2026-10-15','2026-11-15','2026-12-15']),detail:brut.map(function(o){return o.date;})},
-    {code:'AUCUN_IMPACT_CYCLE_SEPTEMBRE',ok:repartition[0].length===0,detail:repartition[0]},
+    {code:'SIGNES_NEGATIFS',ok:JSON.stringify(repartition.slice(1).map(function(x){return x[0]&&x[0].montantSigne;}))===JSON.stringify([-100,-100,-100]),detail:repartition},
+    {code:'AUCUN_IMPACT_CYCLE_SEPTEMBRE',ok:repartition[0].length===0&&Math.abs(totalSeptembre)<=.01,detail:{repartition:repartition[0],lignePlan:totalSeptembre}},
     {code:'UNE_OCCURRENCE_PAR_CYCLE_FUTUR',ok:repartition[1].length===1&&repartition[2].length===1&&repartition[3].length===1,detail:repartition},
+    {code:'PLAN_PREVISIONNEL_NEGATIF_100_PAR_CYCLE',ok:Math.abs(totalOct+100)<=.01&&Math.abs(totalNov+100)<=.01&&Math.abs(totalDec+100)<=.01,detail:{octobre:totalOct,novembre:totalNov,decembre:totalDec,lignes:lignesTennis}},
     {code:'PREMIER_RAPPROCHEMENT_NE_CLOT_PAS_LES_AUTRES',ok:apres.length===3&&apres[0].rapprochee===true&&ouvertes.length===2&&ouvertes.every(function(o){return Number(o.index)>1;}),detail:{apres:apres,ouvertes:ouvertes}}
   ];
-  const out={ok:controles.every(function(x){return x.ok;}),version:'2026-09-22.1',lectureSeule:true,aucuneEcriture:true,evenementSimule:ev,controles:controles};
+
+  const out={ok:controles.every(function(x){return x.ok;}),version:'2026-09-22.2',lectureSeule:true,aucuneEcriture:true,evenementSimule:ev,controles:controles};
   console.log('[AUDIT SIMULATION FRACTIONNEMENT PLAN 300 20260922] '+JSON.stringify(out));return out;
 }
