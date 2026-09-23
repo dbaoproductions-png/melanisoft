@@ -111,3 +111,69 @@ function reclasserOperationRapprochementBudgetSoft_(operationId,nouvelleCategori
 function deciderRapprochementChargeFixeBudgetSoft_(id,decision){verifierInitialisation_();const choix=String(decision||'').toLowerCase();if(!['valider','ignorer'].includes(choix))throw new Error('Décision inconnue.');const feuille=initialiserRapprochementsChargesFixes_(),indexId=FIXED_CHARGE_MATCH_HEADERS.indexOf('id'),ids=feuille.getLastRow()>1?feuille.getRange(2,indexId+1,feuille.getLastRow()-1,1).getValues().flat():[],pos=ids.findIndex(v=>String(v)===String(id));if(pos<0)throw new Error('Rapprochement charge fixe introuvable.');const no=pos+2,valeurs=feuille.getRange(no,1,1,FIXED_CHARGE_MATCH_HEADERS.length).getValues()[0],objet=Object.fromEntries(FIXED_CHARGE_MATCH_HEADERS.map((h,i)=>[h,valeurs[i]]));objet.statut=choix==='valider'?'Validé':'Ignoré';objet.decision=choix==='valider'?'Rapproché à l’opération réelle':'Proposition ignorée';objet.modifie_le=new Date().toISOString();feuille.getRange(no,1,1,FIXED_CHARGE_MATCH_HEADERS.length).setValues([FIXED_CHARGE_MATCH_HEADERS.map(h=>objet[h]??'')]);if(choix==='valider'){marquerOperationRapprocheeChargeFixe_(objet);if(typeof appliquerAmortissementCreditDepuisRapprochement20260915_==='function')appliquerAmortissementCreditDepuisRapprochement20260915_(objet.charge_fixe_id,objet.operation_id);}if(typeof invaliderProjectionBudgetSoft_==='function')invaliderProjectionBudgetSoft_('rapprochement-charge-fixe');return Object.assign({ok:true,type:'charge_fixe'},objet);}
 
 
+
+
+/**
+ * Migration historique canonique Réel -> Charge_fixe.
+ * Réservée aux reprises de données prouvées : écrit Operations + marqueur +
+ * Rapprochements_charges_fixes, sans rejouer les effets métier contemporains
+ * (notamment amortissement de crédit).
+ */
+function migrerLienHistoriqueChargeFixeBudgetSoft_(operationId,chargeFixeId,motif){
+  const opId=String(operationId||'').trim(),cfId=String(chargeFixeId||'').trim();
+  if(!opId||!cfId)throw new Error('Migration CF historique : identifiants manquants.');
+  const charges=lireTable_('Charges_fixes')||[];
+  const charge=charges.find(function(c){return String(c&&c.id||'').trim()===cfId;});
+  if(!charge)throw new Error('Migration CF historique : charge introuvable '+cfId);
+
+  const sh=SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Operations');
+  if(!sh)throw new Error('Migration CF historique : feuille Operations introuvable.');
+  const h=TABLES.Operations,idxId=h.indexOf('id'),idxCf=h.indexOf('charge_fixe_id'),idxCom=h.indexOf('commentaire'),idxStat=h.indexOf('statut_bancaire');
+  if(idxId<0||idxCf<0)throw new Error('Migration CF historique : colonnes Operations requises absentes.');
+  const ids=sh.getLastRow()>1?sh.getRange(2,idxId+1,sh.getLastRow()-1,1).getValues().flat():[];
+  const pos=ids.findIndex(function(v){return String(v||'').trim()===opId;});
+  if(pos<0)throw new Error('Migration CF historique : opération introuvable '+opId);
+  const no=pos+2,vals=sh.getRange(no,1,1,h.length).getValues()[0];
+  const op=Object.fromEntries(h.map(function(k,i){return[k,serialiserValeur_(vals[i])];}));
+  if(Number(op.montant||0)>=0)throw new Error('Migration CF historique : opération non débitrice '+opId);
+
+  const avant=String(vals[idxCf]||'').trim();
+  sh.getRange(no,idxCf+1).setValue(cfId);
+  if(idxCom>=0){
+    let com=String(sh.getRange(no,idxCom+1).getValue()||'');
+    com=com.replace(/\[CHARGE_FIXE:[^\]]+\]/g,'').replace(/\s{2,}/g,' ').trim();
+    com=[com,'[CHARGE_FIXE:'+cfId+']'].filter(Boolean).join(' ');
+    sh.getRange(no,idxCom+1).setValue(com);
+  }
+  if(idxStat>=0)sh.getRange(no,idxStat+1).setValue('rapprochee_charge_fixe');
+
+  const fr=initialiserRapprochementsChargesFixes_(),rh=FIXED_CHARGE_MATCH_HEADERS;
+  let rows=fr.getLastRow()>1?fr.getRange(2,1,fr.getLastRow()-1,rh.length).getValues():[];
+  const io=rh.indexOf('operation_id'),ic=rh.indexOf('charge_fixe_id'),is=rh.indexOf('statut');
+  const matches=[];
+  rows.forEach(function(r,i){if(String(r[io]||'').trim()===opId)matches.push({i:i,r:r});});
+  let cible=matches.find(function(x){return !/^ignor/i.test(String(x.r[is]||''));})||null;
+  const evalR=typeof evaluerRapprochementChargeFixe_==='function'?evaluerRapprochementChargeFixe_(charge,Object.assign({},op,{date:op.date_comptable||op.date})):null;
+  const objet={
+    id:cible?String(cible.r[rh.indexOf('id')]||''):Utilities.getUuid(),
+    charge_fixe_id:cfId,
+    operation_id:opId,
+    score:evalR&&evalR.score!=null?evalR.score:'',
+    statut:'Validé',
+    date_operation:evalR&&evalR.date_operation||String(op.date_comptable||op.date||''),
+    montant_reel:Math.abs(Number(op.montant||0)),
+    montant_attendu:Math.abs(Number(charge.montant||0)),
+    ecart_montant:evalR&&evalR.ecart_montant!=null?evalR.ecart_montant:'',
+    ecart_jours:evalR&&evalR.ecart_jours!=null?evalR.ecart_jours:'',
+    libelle_operation:String(op.libelle_bancaire||op.libelle||''),
+    libelle_charge:String(charge.libelle||''),
+    compte:String(op.compte||''),
+    decision:'Migration historique intermodule — '+String(motif||'preuve bancaire'),
+    cree_le:cible?String(cible.r[rh.indexOf('cree_le')]||''):new Date().toISOString(),
+    modifie_le:new Date().toISOString()
+  };
+  if(cible)fr.getRange(cible.i+2,1,1,rh.length).setValues([rh.map(function(k){return objet[k]==null?'':objet[k];})]);
+  else fr.getRange(fr.getLastRow()+1,1,1,rh.length).setValues([rh.map(function(k){return objet[k]==null?'':objet[k];})]);
+
+  return{ok:true,operation_id:opId,charge_fixe_id:cfId,charge_fixe_id_avant:avant,rapprochement_id:objet.id};
+}
