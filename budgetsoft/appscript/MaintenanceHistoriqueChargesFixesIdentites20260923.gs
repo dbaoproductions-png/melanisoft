@@ -5,7 +5,7 @@
  * libellé marchand stable ou, pour deux doublons connus, par cadence observée.
  * Aucune décision par score seul.
  */
-const MAINT_CF_HIST_IDENTITES_20260923_VERSION='2026-09-23.2';
+const MAINT_CF_HIST_IDENTITES_20260923_VERSION='2026-09-23.3';
 
 function reparerHistoriqueChargesFixesIdentites20260923(){
   return reparerHistoriqueChargesFixesIdentitesRapide20260923_();
@@ -324,4 +324,30 @@ function auditerContradictionsRepriseHistoriqueChargesFixes20260923(){
       +' | '+x.motif+' | '+x.libelle);
   });
   return out;
+}
+
+
+function corrigerContradictionNrjMobileRepriseHistorique20260923(){
+  const OP_ID='8f56156c-141b-4531-8e4a-1169e8dddf67';
+  const CF_CIBLE='17fa9825-9a4c-41f2-9c9c-a9f321279f54';
+  const CF_ERRONE='6de33ef0-5013-4ab2-8838-22059624cee7';
+  const lock=LockService.getScriptLock();lock.waitLock(30000);
+  try{
+    const ops=lireTable_('Operations')||[];
+    const o=ops.find(function(x){return String(x&&x.id||'').trim()===OP_ID;});
+    if(!o)throw new Error('Opération NRJ introuvable.');
+    const brut=String(o.libelle_bancaire||o.libelle||'').toUpperCase();
+    if(brut.indexOf('BOUYGUES TELECOM')<0||brut.indexOf('MDT/REF0018919719')<0)
+      throw new Error('ABANDON : identité bancaire REF0018919719 non prouvée.');
+    const actuel=String(o.charge_fixe_id||'').trim();
+    if(actuel!==CF_ERRONE&&actuel!==CF_CIBLE)
+      throw new Error('ABANDON : lien actuel inattendu '+actuel);
+    const r=migrerLienHistoriqueChargeFixeBudgetSoft_(OP_ID,CF_CIBLE,'Correction ciblée NRJ MOBILE · mandat REF0018919719');
+    if(typeof supprimerSnapshotChargesFixes20260828_==='function')supprimerSnapshotChargesFixes20260828_();
+    if(typeof invaliderProjectionBudgetSoft_==='function')invaliderProjectionBudgetSoft_('correction-nrj-mobile-ref0018919719-20260923');
+    const audit=auditerContradictionsRepriseHistoriqueChargesFixes20260923();
+    const out={ok:!!(audit&&audit.ok),version:MAINT_CF_HIST_IDENTITES_20260923_VERSION,correction:r,contradictionsRestantes:audit&&audit.nombre};
+    console.log('[CORRECTION NRJ MOBILE REPRISE HISTORIQUE 20260923] '+JSON.stringify(out));
+    return out;
+  }finally{lock.releaseLock();}
 }
