@@ -286,3 +286,42 @@ function reparerHistoriqueChargesFixesIdentitesRapide20260923_(){
     console.log('[MAINT HISTORIQUE CF IDENTITES RAPIDE 20260923] '+JSON.stringify(out));return out;
   }finally{lock.releaseLock();}
 }
+
+
+function auditerContradictionsRepriseHistoriqueChargesFixes20260923(){
+  const charges=lireTable_('Charges_fixes')||[],ops=lireTable_('Operations')||[];
+  const plan=construirePlanHistoriqueChargesFixesIdentites20260923_(charges,ops),mapOps={};
+  ops.forEach(function(o){mapOps[String(o&&o.id||'').trim()]=o;});
+  const contradictions=[];
+  plan.forEach(function(x){
+    const o=mapOps[x.operation_id]||{};
+    const actuel=String(o&&o.charge_fixe_id||'').trim();
+    if(actuel&&actuel!==x.charge_fixe_id){
+      const cible=charges.find(function(c){return String(c&&c.id||'').trim()===x.charge_fixe_id;})||{};
+      const courante=charges.find(function(c){return String(c&&c.id||'').trim()===actuel;})||{};
+      contradictions.push({
+        operation_id:x.operation_id,
+        date:String(o&&o.date_comptable||o&&o.date||''),
+        montant:Number(o&&o.montant||0),
+        categorie:String(o&&o.categorie||''),
+        libelle:String(o&&o.libelle_bancaire||o&&o.libelle||''),
+        charge_actuelle_id:actuel,
+        charge_actuelle_libelle:String(courante&&courante.libelle||''),
+        charge_cible_id:x.charge_fixe_id,
+        charge_cible_libelle:String(cible&&cible.libelle||''),
+        motif:x.motif,
+        commentaire:String(o&&o.commentaire||'')
+      });
+    }
+  });
+  const out={ok:contradictions.length===0,lectureSeule:true,version:MAINT_CF_HIST_IDENTITES_20260923_VERSION,nombre:contradictions.length,contradictions:contradictions};
+  console.log('[AUDIT CONTRADICTIONS REPRISE HISTORIQUE CF 20260923] '+JSON.stringify(out));
+  contradictions.forEach(function(x,i){
+    console.log('[CF CONTRADICTION '+String(i+1).padStart(2,'0')+'] '
+      +x.operation_id+' | '+x.date+' | '+x.montant
+      +' | actuel='+x.charge_actuelle_id+' ('+x.charge_actuelle_libelle+')'
+      +' | cible='+x.charge_cible_id+' ('+x.charge_cible_libelle+')'
+      +' | '+x.motif+' | '+x.libelle);
+  });
+  return out;
+}
