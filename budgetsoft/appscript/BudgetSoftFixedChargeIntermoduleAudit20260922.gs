@@ -321,3 +321,56 @@ function auditerHistoriqueChargesFixesNonRapprochees20260922(nombrePeriodes){
   });
   return out;
 }
+
+
+function auditerIdentitesChargesFixesAmbigues20260923(){
+  const charges=lireTable_('Charges_fixes')||[];
+  const operations=lireTable_('Operations')||[];
+  const norm=function(v){return String(v==null?'':v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();};
+  const groupes=[
+    {nom:'Suravenir',charge:/suravenir/i,operation:/SURAVENIR/i},
+    {nom:'Google One',charge:/google one/i,operation:/GOOGLE ONE/i},
+    {nom:'DGFIP',charge:/impot|d\.?g\.?f\.?i\.?p/i,operation:/D\.G\.F\.I\.P\.|IMPOT/i},
+    {nom:'Bouygues / NRJ Mobile',charge:/emetteur fr35zzz418323|bouygues|nrj/i,operation:/BOUYGUES TELECOM|NRJ MOBILE/i},
+    {nom:'Oney',charge:/oney/i,operation:/ONEY BANQUE ACCORD/i},
+    {nom:'Floa',charge:/floa/i,operation:/FLOA/i},
+    {nom:'Carrefour Banque',charge:/carrefour banque/i,operation:/CARREFOUR BANQUE/i}
+  ];
+  const out={ok:true,lectureSeule:true,version:'2026-09-23.1',groupes:[]};
+  groupes.forEach(function(g){
+    const cs=charges.filter(function(c){
+      return g.charge.test(String(c&&c.libelle||''))||g.charge.test(String(c&&c.libelle_bancaire||''));
+    }).map(function(c){
+      return{
+        id:String(c&&c.id||''),
+        libelle:String(c&&c.libelle||''),
+        categorie:String(c&&c.categorie||''),
+        actif:typeof convertirBooleen_==='function'?convertirBooleen_(c&&c.actif):!!(c&&c.actif),
+        montant:Number(c&&c.montant||0),
+        jour_execution:Number(c&&c.jour_execution||0),
+        date_debut:String(c&&c.date_debut||''),
+        date_fin:String(c&&c.date_fin||''),
+        libelle_bancaire:String(c&&c.libelle_bancaire||''),
+        motif_bancaire_stable:typeof extraireMotifStableBanque_==='function'?String(extraireMotifStableBanque_(c&&c.libelle_bancaire||c&&c.libelle)||''):''
+      };
+    });
+    const os=operations.filter(function(o){
+      const brut=String(o&&o.libelle_bancaire||o&&o.libelle||'');
+      return g.operation.test(brut);
+    }).map(function(o){
+      return{
+        id:String(o&&o.id||''),
+        date:String(o&&o.date_comptable||o&&o.date||''),
+        montant:Number(o&&o.montant||0),
+        categorie:String(o&&o.categorie||''),
+        charge_fixe_id:String(o&&o.charge_fixe_id||''),
+        libelle:String(o&&o.libelle_bancaire||o&&o.libelle||''),
+        motif_bancaire_stable:typeof extraireMotifStableBanque_==='function'?String(extraireMotifStableBanque_(o&&o.libelle_bancaire||o&&o.libelle)||''):''
+      };
+    });
+    out.groupes.push({nom:g.nom,charges:cs,operations:os});
+    console.log('[CF IDENTITE '+g.nom+'] charges='+JSON.stringify(cs));
+    os.forEach(function(o){console.log('  OP '+o.id+' | '+o.date+' | '+o.montant+' | cf='+o.charge_fixe_id+' | '+o.libelle);});
+  });
+  return out;
+}
