@@ -278,3 +278,47 @@ function auditerTableauChargesFixesAnalysesBudgetSoft20260922(nombrePeriodes){
     };})
   };
 }
+
+
+function auditerAnomaliesMetierChargesFixesAnalyse20260924(){
+  const ids={
+    ionos:'b4e6fe45-991c-4b9f-816d-b1fc0367415b',
+    avanssurB:'433feb19-297f-41fa-80fa-d7e64e40ae36',
+    avanssurC:'7b48a001-708b-4a3d-a390-3f420a2f0c58',
+    casden:'1df4db60-dae6-4ecd-b4f5-98e0dfef59d4',
+    carrefour:'22d488fe-6304-4bd0-ae87-28020fcd447f',
+    oney:'8b29a127-0c69-47e2-89b4-7fa01dd8d772'
+  };
+  const ops=lireTable_('Operations')||[];
+  const rs=typeof lireRapprochementsChargesFixes==='function'?(lireRapprochementsChargesFixes()||[]):[];
+  const liens=typeof construireLiensChargesFixesAnalyseSeries20260922_==='function'?construireLiensChargesFixesAnalyseSeries20260922_(ops):{};
+  function detail(cfId){
+    return ops.filter(function(o){
+      const id=String(o&&o.id||'').trim();
+      return String(o&&o.charge_fixe_id||'').trim()===cfId||String(liens[id]||'')===cfId;
+    }).map(function(o){
+      const brut=String(o&&o.libelle_bancaire||o&&o.libelle||'');
+      return{
+        id:String(o&&o.id||''),
+        date:String(o&&o.date_comptable||o&&o.date||''),
+        montant:Number(o&&o.montant||0),
+        categorie:String(o&&o.categorie||''),
+        libelle:brut,
+        commentaire:String(o&&o.commentaire||''),
+        charge_fixe_id:String(o&&o.charge_fixe_id||''),
+        mandat:(brut.match(/(?:MDT\/|MANDAT\s*)([^\s]+)/i)||[])[1]||'',
+        du:(brut.match(/\bDU\s+(\d{6})\b/i)||[])[1]||'',
+        libSousCompte:(brut.match(/LIB\/([^\s]+)/i)||[])[1]||''
+      };
+    }).sort(function(a,b){return String(a.date).localeCompare(String(b.date));});
+  }
+  const out={ok:true,lectureSeule:true,version:'2026-09-24.1'};
+  Object.keys(ids).forEach(function(k){out[k]=detail(ids[k]);});
+  console.log('[AUDIT ANOMALIES METIER CF ANALYSE 20260924] '+JSON.stringify(out));
+  Object.keys(ids).forEach(function(k){
+    console.log('[CF ANOMALIE '+k+'] '+out[k].map(function(x){
+      return x.id+'|'+x.date+'|'+x.montant+'|mdt='+x.mandat+'|du='+x.du+'|lib='+x.libSousCompte+'|'+x.libelle;
+    }).join(' || '));
+  });
+  return out;
+}
