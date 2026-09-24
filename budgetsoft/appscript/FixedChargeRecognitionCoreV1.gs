@@ -1,4 +1,4 @@
-const FIXED_CHARGE_RECOGNITION_CORE_VERSION='1.0.3';
+const FIXED_CHARGE_RECOGNITION_CORE_VERSION='1.0.4';
 
 /**
  * Coeur commun de reconnaissance des charges fixes.
@@ -19,7 +19,13 @@ function idCfPersisteCommun_(o,rapprochements){
   const direct=String(o&&o.charge_fixe_id||'').trim();if(direct)return direct;
   const m=String(o&&o.commentaire||'').match(/\[CHARGE_FIXE:([^\]]+)\]/i);if(m&&m[1])return String(m[1]).trim();
   const id=String(o&&o.id||'').trim();if(!id)return'';
-  const r=(rapprochements||[]).find(x=>String(x&&x.operation_id||'').trim()===id&&/valid/i.test(String(x&&x.statut||'')));
+  const r=(rapprochements||[]).find(function(x){
+    if(String(x&&x.operation_id||'').trim()!==id)return false;
+    if(typeof rapprochementValideCfSnapshotBuild20260914_==='function')
+      return rapprochementValideCfSnapshotBuild20260914_(x);
+    const s=String(x&&x.statut||x&&x.decision||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+    return (s==='valide'||s==='rapproche'||s==='rapprochee'||s==='rapproché'||s==='rapprochée') && s!=='a valider';
+  });
   return r?String(r.charge_fixe_id||'').trim():'';
 }
 
@@ -91,4 +97,25 @@ function auditerPariteCerbereChargesFixesCommune(){
 
 function comparerDeuxFormatsPourChargeFixeCommune(opPdf,opCopierColler){
   const a=normaliserOperationCfCommune_(opPdf||{}),b=normaliserOperationCfCommune_(opCopierColler||{});return{memeCompte:a.compte===b.compte,memeMontant:Math.abs(Math.abs(a.montant)-Math.abs(b.montant))<.011,memeMotif:a.motif_bancaire_stable===b.motif_bancaire_stable,motifPdf:a.motif_bancaire_stable,motifCopierColler:b.motif_bancaire_stable,canonPdf:a,canonCopierColler:b};
+}
+
+
+function auditerStatutsPersistesChargesFixesCommun20260924(){
+  const ops=lireTable_('Operations')||[];
+  const rs=typeof lireRapprochementsChargesFixes==='function'?(lireRapprochementsChargesFixes()||[]):[];
+  let fauxPositifsAValider=0,valides=0;const details=[];
+  rs.forEach(function(r){
+    const opId=String(r&&r.operation_id||'').trim();if(!opId)return;
+    const s=String(r&&r.statut||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+    const o=ops.find(function(x){return String(x&&x.id||'').trim()===opId;})||{};
+    const cf=idCfPersisteCommun_(o,rs);
+    if(s==='a valider'&&cf&&!String(o&&o.charge_fixe_id||'').trim()&&!/\[CHARGE_FIXE:[^\]]+\]/i.test(String(o&&o.commentaire||''))){
+      fauxPositifsAValider++;
+      details.push({operation_id:opId,statut:String(r&&r.statut||''),charge_fixe_id:String(r&&r.charge_fixe_id||''),persisteCommun:cf});
+    }
+    if(s==='valide')valides++;
+  });
+  const out={ok:fauxPositifsAValider===0,lectureSeule:true,version:FIXED_CHARGE_RECOGNITION_CORE_VERSION,valides:valides,fauxPositifsAValider:fauxPositifsAValider,details:details};
+  console.log('[AUDIT STATUTS PERSISTES CF COMMUN 20260924] '+JSON.stringify(out));
+  return out;
 }
