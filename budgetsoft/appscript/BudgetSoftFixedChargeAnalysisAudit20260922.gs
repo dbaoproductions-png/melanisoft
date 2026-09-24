@@ -322,3 +322,76 @@ function auditerAnomaliesMetierChargesFixesAnalyse20260924(){
   });
   return out;
 }
+
+
+function auditerCorrectionsMetierChargesFixes20260924(){
+  const ids={
+    avanssurB:'433feb19-297f-41fa-80fa-d7e64e40ae36',
+    avanssurC:'7b48a001-708b-4a3d-a390-3f420a2f0c58',
+    casden:'1df4db60-dae6-4ecd-b4f5-98e0dfef59d4',
+    oney:'8b29a127-0c69-47e2-89b4-7fa01dd8d772',
+    carrefour:'22d488fe-6304-4bd0-ae87-28020fcd447f',
+    ionos:'b4e6fe45-991c-4b9f-816d-b1fc0367415b'
+  };
+  const ops=lireTable_('Operations')||[];
+  const rs=typeof lireRapprochementsChargesFixes==='function'?(lireRapprochementsChargesFixes()||[]):[];
+  function cf_(o){
+    return typeof idCfPersisteCommun_==='function'
+      ?String(idCfPersisteCommun_(o,rs)||'').trim()
+      :String(o&&o.charge_fixe_id||'').trim();
+  }
+  function row_(o,action,cible,motif){
+    return{
+      operation_id:String(o&&o.id||''),
+      date:String(o&&o.date_comptable||o&&o.date||''),
+      montant:Number(o&&o.montant||0),
+      charge_actuelle:cf_(o),
+      action:action,
+      cible:cible||'',
+      motif:motif,
+      libelle:String(o&&o.libelle_bancaire||o&&o.libelle||'')
+    };
+  }
+  const corrections=[],surveillance=[];
+  ops.forEach(function(o){
+    const cf=cf_(o);if(!cf)return;
+    const b=String(o&&o.libelle_bancaire||o&&o.libelle||''),u=b.toUpperCase();
+
+    if(cf===ids.avanssurB && /MDT\/200016366216\/1/.test(u))
+      corrections.push(row_(o,'RELIER',ids.avanssurC,'Avanssur : mandat 200016366216/1 appartient à Assurance C, pas B'));
+
+    if(cf===ids.casden && /FRAIS PRET S0064401451/.test(u))
+      corrections.push(row_(o,'DELIER','',"CASDEN : frais de prêt distinct de l'échéance mensuelle"));
+
+    if(cf===ids.oney){
+      const m=u.match(/LIB\/([A-Z]{2})\b/),sous=m&&m[1]||'';
+      if(sous && sous!=='CA')
+        corrections.push(row_(o,'DELIER','',"Oney : sous-flux "+sous+" distinct de l'échéance CA"));
+    }
+
+    if(cf===ids.carrefour){
+      const m=Math.abs(Number(o&&o.montant||0));
+      const ech=(u.match(/ECH\/(\d{2})\d{4}/)||[])[1]||'';
+      const jour=Number(ech||0);
+      if(!(m>=150&&m<=190&&jour>=1&&jour<=10))
+        corrections.push(row_(o,'DELIER','',"Carrefour Banque : hors échéance mensuelle principale (150-190 €, échéance J01-J10)"));
+    }
+
+    if(cf===ids.ionos){
+      const du=(u.match(/\bDU\s+(\d{2})(\d{2})(\d{2})\b/)||[]);
+      if(du.length){
+        const d=new Date(o&&o.date_comptable||o&&o.date||0);
+        if(!isNaN(d)){
+          const y=2000+Number(du[3]),mo=Number(du[2]);
+          if(y!==d.getFullYear()||mo!==(d.getMonth()+1))
+            surveillance.push(row_(o,'SURVEILLER_DATE_ECO','',"IONOS : date d'achat DU différente du mois de comptabilisation bancaire"));
+        }
+      }
+    }
+  });
+  const out={ok:true,lectureSeule:true,version:'2026-09-24.2',correctionsProposees:corrections.length,surveillanceTemporelle:surveillance.length,corrections:corrections,surveillance:surveillance};
+  console.log('[AUDIT CORRECTIONS METIER CF 20260924] '+JSON.stringify(out));
+  corrections.forEach(function(x,i){console.log('[CF CORRECTION '+String(i+1).padStart(2,'0')+'] '+x.action+' '+x.operation_id+' | '+x.montant+' | '+x.motif+' | '+x.libelle);});
+  surveillance.forEach(function(x,i){console.log('[CF SURVEILLANCE '+String(i+1).padStart(2,'0')+'] '+x.operation_id+' | '+x.montant+' | '+x.motif+' | '+x.libelle);});
+  return out;
+}
