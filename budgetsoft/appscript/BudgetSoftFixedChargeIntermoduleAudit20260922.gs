@@ -463,3 +463,55 @@ function auditerCouvertureLiensChargesFixesIntermodule20260924(nombrePeriodes){
   });
   return out;
 }
+
+
+function auditerPreuvesCarrefourCouvertureCf20260924(){
+  const IDS=[
+    '64229f29-0209-4787-a66c-12f6a2adb7c1',
+    'a0227ea4-076a-444f-ad4e-42a4e96e1801',
+    '89978fd5-a2fb-453c-af87-0a5ec9716c86',
+    'cd565a11-22f5-4a53-8803-2350de689eeb',
+    'a7a79ee6-c95e-4a35-9785-9aeefa3a8783'
+  ];
+  const ops=lireTable_('Operations')||[];
+  const rs=typeof lireRapprochementsChargesFixes==='function'?(lireRapprochementsChargesFixes()||[]):[];
+  const lignes=IDS.map(function(id){
+    const o=ops.find(function(x){return String(x&&x.id||'').trim()===id;})||{};
+    const rap=rs.filter(function(r){return String(r&&r.operation_id||'').trim()===id;}).map(function(r){
+      let valideAnalyse=null,valideCerbere=null;
+      try{if(typeof estRapprochementValideP1Cerbere20260912_==='function')valideAnalyse=!!estRapprochementValideP1Cerbere20260912_(r);}catch(e){}
+      try{if(typeof rapprochementValideCfSnapshotBuild20260914_==='function')valideCerbere=!!rapprochementValideCfSnapshotBuild20260914_(r);}catch(e){}
+      return{
+        id:String(r&&r.id||''),
+        charge_fixe_id:String(r&&r.charge_fixe_id||''),
+        statut:String(r&&r.statut||''),
+        decision:String(r&&r.decision||''),
+        score:r&&r.score,
+        valideAnalyse:valideAnalyse,
+        valideCerbere:valideCerbere
+      };
+    });
+    let persiste='';
+    try{persiste=typeof idCfPersisteCommun_==='function'?String(idCfPersisteCommun_(o,rs)||''):'';}catch(e){}
+    let review='';
+    try{review=typeof chargeFixeLieeOperation20260828_==='function'?String(chargeFixeLieeOperation20260828_(o)||''):'';}catch(e){}
+    return{
+      operation_id:id,
+      charge_fixe_id_operation:String(o&&o.charge_fixe_id||''),
+      commentaire:String(o&&o.commentaire||''),
+      statut_bancaire:String(o&&o.statut_bancaire||''),
+      persisteCommun:persiste,
+      reviewDirect:review,
+      rapprochements:rap
+    };
+  });
+  const out={ok:true,lectureSeule:true,version:'2026-09-24.1',lignes:lignes};
+  console.log('[AUDIT PREUVES CARREFOUR COUVERTURE CF 20260924] '+JSON.stringify(out));
+  lignes.forEach(function(x,i){
+    console.log('[CF PREUVE CARREFOUR '+String(i+1).padStart(2,'0')+'] '+x.operation_id
+      +' | op.cf='+x.charge_fixe_id_operation+' | commun='+x.persisteCommun
+      +' | review='+x.reviewDirect+' | statutBancaire='+x.statut_bancaire
+      +' | rappro='+JSON.stringify(x.rapprochements));
+  });
+  return out;
+}
