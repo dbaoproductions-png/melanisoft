@@ -9,7 +9,7 @@
  *   sont historisés après publication du snapshot global, un point par cycle.
  * - Dette : Crédits est propriétaire. Capital : Patrimoine est propriétaire.
  */
-const BUDGETSOFT_ANALYSIS_SERIES_20260922_VERSION='2026-09-22.3';
+const BUDGETSOFT_ANALYSIS_SERIES_20260922_VERSION='2026-09-24.1';
 const BUDGETSOFT_ANALYSIS_STRUCTURAL_HISTORY_SHEET_20260922='Analyse_HistoriqueStructurel';
 const BUDGETSOFT_ANALYSIS_STRUCTURAL_HISTORY_HEADERS_20260922=[
   'periode','date_point','revision_budgetsoft','famille','sous_poste','montant','source','maj_le'
@@ -176,14 +176,20 @@ function construireSeriesFluxAnalysesBudgetSoft20260922_(periodes,operations,cat
     const idx=(periodes||[]).findIndex(function(p){const a=dateAnalyseSeries20260922_(p.debut),z=dateAnalyseSeries20260922_(p.fin);return a&&z&&d>=a&&d<=z;});
     if(idx>=0)cfVals[cfId][idx]+=Math.abs(m);
   });
-  const cfByName={};Object.keys(cfVals).forEach(function(id){
-    let nom=nomsCf[id]||id;if(Object.prototype.hasOwnProperty.call(cfByName,nom))nom=nom+' · '+String(id).slice(0,6);
-    cfByName[nom]=cfVals[id];
+  const cfParCategorie={};
+  Object.keys(cfVals).forEach(function(id){
+    const c=chargesById[id]||{};
+    const cat=String(c.categorie||'Sans catégorie').trim()||'Sans catégorie';
+    if(!cfParCategorie[cat])cfParCategorie[cat]=(periodes||[]).map(function(){return 0;});
+    (cfVals[id]||[]).forEach(function(v,i){cfParCategorie[cat][i]+=Number(v||0);});
+  });
+  Object.keys(cfParCategorie).forEach(function(cat){
+    cfParCategorie[cat]=cfParCategorie[cat].map(arrAnalyseSeries20260922_);
   });
 
   return{
     revenus:Object.assign({titre:'Revenus',unite:'€',source:'Operations · revenus économiques',doctrine:'Réel économique par cycle ; une ligne par catégorie canonique de revenu.'},seriesDepuisMatriceAnalyse20260922_(periodes,revenuCanon,revenusVals,'Total revenus')),
-    chargesFixes:Object.assign({titre:'Charges fixes',unite:'€',source:'Operations · rapprochements Charges_fixes',doctrine:'Réel bancaire explicitement rattaché aux charges fixes ; une ligne par charge.'},seriesDepuisMatriceAnalyse20260922_(periodes,Object.keys(cfByName).sort(function(a,b){return a.localeCompare(b,'fr');}),cfByName,'Total charges fixes')),
+    chargesFixes:Object.assign({titre:'Charges fixes',unite:'€',source:'Operations · rapprochements Charges_fixes',doctrine:'Réel bancaire explicitement rattaché aux charges fixes ; total + une ligne par catégorie de charge fixe.'},seriesDepuisMatriceAnalyse20260922_(periodes,Object.keys(cfParCategorie).sort(function(a,b){return a.localeCompare(b,'fr');}),cfParCategorie,'Total charges fixes')),
     pilotable:Object.assign({titre:'Dépenses pilotables',unite:'€',source:'OperationsVentilation · P0 Cerbère',doctrine:'Même classification P0 que Cerbère ; CB imputées à la date d’achat, Santé nette, charges fixes exclues.'},seriesDepuisMatriceAnalyse20260922_(periodes,Object.keys(pilotVals).sort(function(a,b){return a.localeCompare(b,'fr');}),pilotVals,'Total pilotable'))
   };
 }
@@ -309,5 +315,23 @@ function auditerImputationSalairesAnalysesBudgetSoft20260922(nombrePeriodes){
     controles:controles
   };
   console.log('[AUDIT IMPUTATION SALAIRES ANALYSES 20260922] '+JSON.stringify(out));
+  return out;
+}
+
+
+function auditerRegroupementCategoriesChargesFixesAnalyse20260924(nombrePeriodes){
+  const nb=[3,6,12].includes(parseInt(nombrePeriodes,10))?parseInt(nombrePeriodes,10):6;
+  const a=chargerAnalysesBudgetairesV23(nb),s=a&&a.seriesCourbes&&a.seriesCourbes.chargesFixes||null;
+  const noms=s&&Array.isArray(s.series)?s.series.map(function(x){return String(x&&x.nom||'');}):[];
+  const attendu=['Abonnements numériques','Animaux','Assurances','Crédits','Crédits revolving','Énergies','Frais bancaires','Impôts','Santé','Télécom / Internet / TV'];
+  const categories=noms.filter(function(x){return x&&x!=='Total charges fixes';});
+  const manquantes=attendu.filter(function(x){return !categories.includes(x);});
+  const out={
+    ok:!!s&&noms[0]==='Total charges fixes'&&manquantes.length===0&&categories.length<=attendu.length+1,
+    lectureSeule:true,version:BUDGETSOFT_ANALYSIS_SERIES_20260922_VERSION,
+    source:a&&a.sourceBudgetSoft||'',revisionBudgetSoft:a&&a.revisionBudgetSoft||'',
+    labels:s&&s.labels||[],series:noms,categories:categories,manquantes:manquantes
+  };
+  console.log('[AUDIT REGROUPEMENT CATEGORIES CF ANALYSE 20260924] '+JSON.stringify(out));
   return out;
 }
