@@ -9,7 +9,7 @@
  *   sont historisés après publication du snapshot global, un point par cycle.
  * - Dette : Crédits est propriétaire. Capital : Patrimoine est propriétaire.
  */
-const BUDGETSOFT_ANALYSIS_SERIES_20260922_VERSION='2026-09-24.1';
+const BUDGETSOFT_ANALYSIS_SERIES_20260922_VERSION='2026-09-24.2';
 const BUDGETSOFT_ANALYSIS_STRUCTURAL_HISTORY_SHEET_20260922='Analyse_HistoriqueStructurel';
 const BUDGETSOFT_ANALYSIS_STRUCTURAL_HISTORY_HEADERS_20260922=[
   'periode','date_point','revision_budgetsoft','famille','sous_poste','montant','source','maj_le'
@@ -130,6 +130,28 @@ function dateImputationSalaireAnalyseSeries20260922_(o){
     :dateAnalyseSeries20260922_(o&&o.date_comptable||o&&o.date);
 }
 
+function dateImputationChargeFixeAnalyse20260924_(o,cfId,chargesById){
+  const c=chargesById&&chargesById[cfId]||{};
+  const nom=String(c&&c.libelle||'').trim().toLowerCase();
+
+  // Doctrine ciblée IONOS : quand le libellé bancaire porte une date économique
+  // explicite "DU JJMMYY", on impute la dépense au mois correspondant.
+  // Les autres charges fixes conservent la date bancaire canonique.
+  if(nom==='ionos sarl'){
+    const texte=String(o&&o.libelle_bancaire||o&&o.libelle||'');
+    const m=texte.match(/\bDU\s+(\d{2})(\d{2})(\d{2})\b/i);
+    if(m){
+      const j=parseInt(m[1],10),mo=parseInt(m[2],10),a=2000+parseInt(m[3],10);
+      const d=new Date(a,mo-1,j,12,0,0,0);
+      if(!isNaN(d)&&d.getFullYear()===a&&d.getMonth()===mo-1&&d.getDate()===j)return d;
+    }
+  }
+
+  return typeof dateOperationCouranteBudgetSoft_==='function'
+    ?dateOperationCouranteBudgetSoft_(o)
+    :dateAnalyseSeries20260922_(o&&o.date_comptable||o&&o.date);
+}
+
 function construireSerieSalairesEconomiqueAnalyse20260922_(periodes,operations){
   const vals=(periodes||[]).map(function(){return 0;});
   const dedup=typeof dedoublonnerOperationsCartesBudgetSoft_==='function'?dedoublonnerOperationsCartesBudgetSoft_(operations||[]):operations||[];
@@ -171,7 +193,7 @@ function construireSeriesFluxAnalysesBudgetSoft20260922_(periodes,operations,cat
     const opId=String(o&&o.id||'');let cfId=String(o&&o.charge_fixe_id||'').trim()||liens[opId]||'';
     if(!cfId&&typeof chargeFixeLieeOperation20260828_==='function')cfId=String(chargeFixeLieeOperation20260828_(o)||'').trim();
     if(!cfId||!cfVals[cfId])return;
-    const d=typeof dateOperationCouranteBudgetSoft_==='function'?dateOperationCouranteBudgetSoft_(o):dateAnalyseSeries20260922_(o&&o.date_comptable||o&&o.date);
+    const d=dateImputationChargeFixeAnalyse20260924_(o,cfId,chargesById);
     if(!d)return;
     const idx=(periodes||[]).findIndex(function(p){const a=dateAnalyseSeries20260922_(p.debut),z=dateAnalyseSeries20260922_(p.fin);return a&&z&&d>=a&&d<=z;});
     if(idx>=0)cfVals[cfId][idx]+=Math.abs(m);
@@ -333,5 +355,47 @@ function auditerRegroupementCategoriesChargesFixesAnalyse20260924(nombrePeriodes
     labels:s&&s.labels||[],series:noms,categories:categories,manquantes:manquantes
   };
   console.log('[AUDIT REGROUPEMENT CATEGORIES CF ANALYSE 20260924] '+JSON.stringify(out));
+  return out;
+}
+
+
+function auditerImputationIonosChargesFixesAnalyse20260924(nombrePeriodes){
+  const nb=[3,6,12].includes(parseInt(nombrePeriodes,10))?parseInt(nombrePeriodes,10):6;
+  const a=chargerAnalysesBudgetairesV23(nb);
+  const periodes=a&&Array.isArray(a.periodes)?a.periodes:[];
+  const charges=lireTable_('Charges_fixes')||[],chargesById={};
+  charges.forEach(function(c){const id=String(c&&c.id||'').trim();if(id)chargesById[id]=c;});
+  const ionos=charges.find(function(c){return String(c&&c.libelle||'').trim().toLowerCase()==='ionos sarl';})||null;
+  const id=String(ionos&&ionos.id||'');
+  const ops=typeof dedoublonnerOperationsCartesBudgetSoft_==='function'
+    ?dedoublonnerOperationsCartesBudgetSoft_(lireTable_('Operations')||[])
+    :(lireTable_('Operations')||[]);
+  const liens=construireLiensChargesFixesAnalyseSeries20260922_(ops);
+  const lignes=ops.filter(function(o){
+    const opId=String(o&&o.id||'').trim();
+    return id&&(String(o&&o.charge_fixe_id||'').trim()===id||String(liens[opId]||'')===id);
+  }).map(function(o){
+    const dBanque=typeof dateOperationCouranteBudgetSoft_==='function'
+      ?dateOperationCouranteBudgetSoft_(o):dateAnalyseSeries20260922_(o&&o.date_comptable||o&&o.date);
+    const dEco=dateImputationChargeFixeAnalyse20260924_(o,id,chargesById);
+    return{
+      operation_id:String(o&&o.id||''),
+      montant:Math.abs(Number(o&&o.montant||0)),
+      dateBanque:dBanque?Utilities.formatDate(dBanque,Session.getScriptTimeZone(),'yyyy-MM-dd'):'',
+      dateEconomique:dEco?Utilities.formatDate(dEco,Session.getScriptTimeZone(),'yyyy-MM-dd'):'',
+      moisEconomique:dEco?Utilities.formatDate(dEco,Session.getScriptTimeZone(),'yyyy-MM'):'',
+      libelle:String(o&&o.libelle_bancaire||o&&o.libelle||'')
+    };
+  });
+  const totaux={};
+  lignes.forEach(function(x){totaux[x.moisEconomique]=arrAnalyseSeries20260922_((totaux[x.moisEconomique]||0)+x.montant);});
+  const courbe=a&&a.seriesCourbes&&a.seriesCourbes.chargesFixes||null;
+  const serieAbos=courbe&&Array.isArray(courbe.series)?courbe.series.find(function(s){return String(s&&s.nom||'')==='Abonnements numériques';}):null;
+  const out={
+    ok:!!id,lectureSeule:true,version:BUDGETSOFT_ANALYSIS_SERIES_20260922_VERSION,
+    charge_fixe_id:id,lignes:lignes,totauxEconomiques:totaux,
+    labels:courbe&&courbe.labels||[],abonnementsNumeriques:serieAbos&&serieAbos.valeurs||[]
+  };
+  console.log('[AUDIT IMPUTATION IONOS CF ANALYSE 20260924] '+JSON.stringify(out));
   return out;
 }
