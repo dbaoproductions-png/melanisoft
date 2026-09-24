@@ -374,3 +374,92 @@ function auditerIdentitesChargesFixesAmbigues20260923(){
   });
   return out;
 }
+
+
+function auditerCouvertureLiensChargesFixesIntermodule20260924(nombrePeriodes){
+  const nb=[3,6,12].includes(parseInt(nombrePeriodes,10))?parseInt(nombrePeriodes,10):6;
+  const operations0=lireTable_('Operations')||[];
+  const operations=typeof dedoublonnerOperationsCartesBudgetSoft_==='function'
+    ?dedoublonnerOperationsCartesBudgetSoft_(operations0):operations0;
+  const rapprochements=typeof lireRapprochementsChargesFixes==='function'?(lireRapprochementsChargesFixes()||[]):[];
+  const charges=lireTable_('Charges_fixes')||[];
+
+  const persist=mapLiensPersistesCfIntermodule20260922_(operations,rapprochements);
+  const review={};
+  operations.forEach(function(o){
+    const id=String(o&&o.id||'').trim(); if(!id)return;
+    try{review[id]=String(chargeFixeLieeOperation20260828_(o)||'').trim();}catch(e){review[id]='';}
+  });
+
+  let analyse={};
+  try{analyse=construireLiensChargesFixesAnalyseSeries20260922_(operations)||{};}catch(e){analyse={};}
+
+  let cerbere={};
+  try{
+    const raps=rapprochements;
+    operations.forEach(function(o){
+      const id=String(o&&o.id||'').trim(); if(!id)return;
+      const direct=String(o&&o.charge_fixe_id||'').trim();
+      if(direct){cerbere[id]=direct;return;}
+      const rap=raps.find(function(r){
+        return String(r&&r.operation_id||'').trim()===id &&
+          String(r&&r.statut||'').trim().toLowerCase()==='validé';
+      });
+      if(rap)cerbere[id]=String(rap.charge_fixe_id||'').trim();
+    });
+  }catch(e){cerbere={};}
+
+  const chargesById={}; charges.forEach(function(x){chargesById[String(x&&x.id||'').trim()]=x;});
+  const rows=[];
+  Object.keys(persist).forEach(function(opId){
+    const p=String(persist[opId]||'').trim();
+    const r=String(review[opId]||'').trim();
+    const a=String(analyse[opId]||'').trim();
+    const ce=String(cerbere[opId]||'').trim();
+    if(r&&a&&ce)return;
+    const o=operations.find(function(x){return String(x&&x.id||'').trim()===opId;})||{};
+    const ch=chargesById[p]||{};
+    rows.push({
+      operation_id:opId,
+      date:String(o&&o.date_comptable||o&&o.date||''),
+      montant:Number(o&&o.montant||0),
+      categorie:String(o&&o.categorie||''),
+      libelle:String(o&&o.libelle_bancaire||o&&o.libelle||''),
+      charge_fixe_id:p,
+      charge_libelle:String(ch&&ch.libelle||''),
+      charge_active:typeof convertirBooleen_==='function'?convertirBooleen_(ch&&ch.actif):!!(ch&&ch.actif),
+      present_review:!!r,
+      present_analyse:!!a,
+      present_cerbere:!!ce,
+      id_review:r,
+      id_analyse:a,
+      id_cerbere:ce,
+      commentaire:String(o&&o.commentaire||''),
+      statut_bancaire:String(o&&o.statut_bancaire||'')
+    });
+  });
+
+  const out={
+    ok:rows.length===0,
+    lectureSeule:true,
+    version:'2026-09-24.1',
+    totalPersistes:Object.keys(persist).length,
+    absentsAuMoinsUnConsommateur:rows.length,
+    absentsReview:rows.filter(function(x){return !x.present_review;}).length,
+    absentsAnalyse:rows.filter(function(x){return !x.present_analyse;}).length,
+    absentsCerbere:rows.filter(function(x){return !x.present_cerbere;}).length,
+    lignes:rows
+  };
+  console.log('[AUDIT COUVERTURE LIENS CF INTERMODULE 20260924] '+JSON.stringify(out));
+  rows.forEach(function(x,i){
+    console.log('[CF COUVERTURE '+String(i+1).padStart(2,'0')+'] '
+      +x.operation_id+' | '+x.date+' | '+x.montant
+      +' | cf='+x.charge_fixe_id+' ('+x.charge_libelle+')'
+      +' | review='+(x.present_review?'1':'0')
+      +' analyse='+(x.present_analyse?'1':'0')
+      +' cerbere='+(x.present_cerbere?'1':'0')
+      +' | actif='+(x.charge_active?'1':'0')
+      +' | '+x.libelle);
+  });
+  return out;
+}
