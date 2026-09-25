@@ -414,3 +414,42 @@ function auditerDoctrinePrevisionIntermodule20260925(){
   };
   console.log('[AUDIT DOCTRINE PREVISION INTERMODULE 20260925] '+JSON.stringify(out));return out;
 }
+
+
+function auditerCasdenEtR0Live20260925(){
+  const charges=typeof lireTable_==='function'?(lireTable_('Charges_fixes')||[]):[];
+  const casden=charges.find(function(x){return /casden/i.test(String(x&&x.libelle||'')+' '+String(x&&x.libelle_bancaire||''));})||null;
+  let ajustements=[];try{ajustements=typeof lireAjustementsChargesFixes==='function'?(lireAjustementsChargesFixes()||[]):[];}catch(e){}
+  const ajCasden=casden?ajustements.filter(function(a){return String(a&&a.charge_fixe_id||'')===String(casden.id||'');}):[];
+  const debut=new Date(2026,8,25,12,0,0,0),fin=new Date(2026,9,27,23,59,59,999);
+  let echeances=[];try{if(casden&&typeof calculerEcheancesChargeFixeAjustees_==='function')echeances=calculerEcheancesChargeFixeAjustees_(casden,debut,fin,fin,ajustements)||[];}catch(e){echeances=[{erreur:String(e&&e.message||e)}];}
+  const r0=typeof chargerCanonRecettesCerbereV1==='function'?chargerCanonRecettesCerbereV1():null;
+  const cer=typeof chargerCerbereCockpit20260902==='function'?chargerCerbereCockpit20260902():null;
+  const p2=cer&&Array.isArray(cer.periodes)?cer.periodes[1]:null,v2=p2&&p2.v37||{},audit2=v2.rt1Audit||{};
+  const projection=typeof construireTrajectoireTresorerieCanoniqueBudgetSoft20260907==='function'?construireTrajectoireTresorerieCanoniqueBudgetSoft20260907('2026-10-27',cer):null;
+  const casdenProj=(projection&&projection.lignes||[]).filter(function(x){return String(x&&x.source||'')==='charge_fixe'&&/casden/i.test(String(x&&x.libelle||''));});
+  const out={
+    ok:true,lectureSeule:true,version:'2026-09-25.1',
+    casden:{
+      charge:casden?{id:String(casden.id||''),libelle:String(casden.libelle||''),montant:Number(casden.montant||0),jour:Number(casden.jour||0)}:null,
+      ajustements:ajCasden,
+      echeancesAjustees:echeances.map(function(e){return{date:e&&e.date?Utilities.formatDate(new Date(e.date),Session.getScriptTimeZone(),'yyyy-MM-dd'):'',montant:Number(e&&e.montant||0),ajustement:String(e&&e.ajustement||''),erreur:e&&e.erreur||''};}),
+      lignesProjectionLive:casdenProj.map(function(x){return{date:jourTresorerieUnifiee20260907_(x.date),montant:Number(x.montantSigne||0),preuve:String(x.preuve||''),ajustementId:String(x.ajustementId||'')};})
+    },
+    recettes:{
+      r0Total:Number(r0&&r0.total||0),
+      r0Postes:(r0&&r0.postes||[]).map(function(x){return{categorie:String(x.categorie||''),montant:Number(x.montant||0),mode:String(x.mode_prevision||'')};}),
+      cerbereP2Rt1:Number(v2.rt1||0),
+      cerbereP2SocleCanon:Number(audit2.socleCanonTerminal3723!=null?audit2.socleCanonTerminal3723:audit2.socleCanonTerminal3716||0)
+    },
+    projectionLive:{
+      ok:!!(projection&&projection.ok!==false),
+      version:projection&&projection.version||'',
+      soldeReel:projection&&projection.soldeReel,
+      soldePrevisionnel:projection&&projection.soldePrevisionnel,
+      cb:(projection&&projection.lignes||[]).filter(function(x){return String(x&&x.source||'')==='debit_cb_estime';}).map(function(x){return{date:jourTresorerieUnifiee20260907_(x.date),montant:Number(x.montantSigne||0),ownerCb:String(x.ownerCb||''),ep:Number(x.ep||0),epConsomme:Number(x.epConsomme||0),epRestant:Number(x.epRestant||0),taux:Number(x.tauxCbPilotablePct||0),etalon:Number(x.calibrationCb||0)};})
+    }
+  };
+  out.ok=!!(casden&&out.casden.echeancesAjustees.every(function(x){return x.date!=='2026-10-04';})&&out.casden.lignesProjectionLive.every(function(x){return x.date!=='2026-10-04';})&&Math.abs(out.recettes.r0Total-5176.19)<.02);
+  console.log('[AUDIT CASDEN R0 LIVE 20260925] '+JSON.stringify(out));return out;
+}
