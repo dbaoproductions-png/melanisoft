@@ -132,6 +132,7 @@ function ecrireSnapshotGlobalBudgetSoft20260906_(etat){
   for(let i=parts.length;i<ancien;i++)props.deleteProperty(BUDGETSOFT_GLOBAL_SNAPSHOT_PREFIX+'PART_'+i);
   props.setProperty(BUDGETSOFT_GLOBAL_SNAPSHOT_PREFIX+'COUNT',String(parts.length));
   props.setProperty(BUDGETSOFT_GLOBAL_SNAPSHOT_PREFIX+'META',JSON.stringify({version:BUDGETSOFT_GLOBAL_SNAPSHOT_VERSION,revisionBudgetSoft:etat.revisionBudgetSoft,genereLe:etat.genereLe,morceaux:parts.length,tailleCompressee:zip.length}));
+  if(typeof invaliderCacheLectureSnapshotGlobalBudgetSoft20260925_==='function')invaliderCacheLectureSnapshotGlobalBudgetSoft20260925_();
 }
 
 function empreinteRevisionGlobaleBudgetSoft20260906_(genereLe,modules){
