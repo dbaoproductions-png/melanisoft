@@ -119,18 +119,40 @@ function operationsFuturesTresorerie_(ops,now,cible,comptes){
 function occurrencesChargesTresorerie_(charges,hard,actions,now,cible,comptes){
   const out=[],hardCf=new Set((hard||[]).map(x=>String(x.charge_fixe_id||'')).filter(Boolean));
   const remplacements=indexActionsChargesTresorerie_(actions,now);
+  let ajustements=[];
+  try{ajustements=typeof lireAjustementsChargesFixes==='function'?lireAjustementsChargesFixes():[];}catch(e){ajustements=[];}
   (charges||[]).forEach(c=>{
     if(!actifTresorerie_(c.actif)||hardCf.has(String(c.id)))return;
     const compte=c.compte||'';if(compte&&!compteDansPerimetreTresorerie_(compte,comptes))return;
     const mod=remplacements[String(c.id)]||null;
     if(mod&&mod.type==='supprimer'&&mod.date&&mod.date<=cible)return;
-    const ds=datesOccurrencesChargeTresorerie_(c,now,cible);
-    ds.forEach(d=>{
-      let montant=Math.abs(Number(c.montant||c.montant_indicatif||0));let lib=c.libelle||c.libelle_bancaire||'Charge fixe';
-      if(mod&&mod.date&&d>=mod.date){if(mod.type==='remplacer'&&Number.isFinite(mod.nouveauMontant)){montant=Math.max(0,mod.nouveauMontant);lib=mod.nouveauLibelle||lib;}if(mod.type==='reduire'&&Number.isFinite(mod.cible))montant=Math.max(0,montant-mod.cible);}
+
+    let occurrences=[];
+    if(typeof calculerEcheancesChargeFixeAjustees_==='function'){
+      try{
+        occurrences=calculerEcheancesChargeFixeAjustees_(c,now,cible,cible,ajustements)
+          .map(e=>({date:new Date(e.date),montant:Math.abs(Number(e.montant||c.montant||c.montant_indicatif||0)),ajustement:String(e.ajustement||'')}));
+      }catch(e){occurrences=[];}
+    }
+    if(!occurrences.length){
+      occurrences=datesOccurrencesChargeTresorerie_(c,now,cible).map(d=>({date:new Date(d),montant:Math.abs(Number(c.montant||c.montant_indicatif||0)),ajustement:''}));
+    }
+
+    occurrences.forEach(e=>{
+      const d=e.date;if(!d||isNaN(d)||d<=now||d>cible)return;
+      let montant=Math.abs(Number(e.montant||0)),lib=c.libelle||c.libelle_bancaire||'Charge fixe';
+      if(mod&&mod.date&&d>=mod.date){
+        if(mod.type==='remplacer'&&Number.isFinite(mod.nouveauMontant)){montant=Math.max(0,mod.nouveauMontant);lib=mod.nouveauLibelle||lib;}
+        if(mod.type==='reduire'&&Number.isFinite(mod.cible))montant=Math.max(0,montant-mod.cible);
+      }
       if(montant<=0)return;
       if(operationCouvrePrevisionTresorerie_(hard,d,-montant,c.libelle_bancaire||c.libelle||''))return;
-      out.push({id:'cf:'+String(c.id)+':'+d.getTime(),source:'charge_fixe',sourceId:c.id||'',date:d.toISOString(),libelle:lib,categorie:c.categorie||'',compte:compte,montantSigne:-arrondiTresorerie_(montant),certitude:'tres_probable',preuve:'Charge fixe récurrente',dateConventionnelle:false});
+      out.push({
+        id:'cf:'+String(c.id)+':'+d.getTime(),source:'charge_fixe',sourceId:c.id||'',date:d.toISOString(),
+        libelle:lib,categorie:c.categorie||'',compte:compte,montantSigne:-arrondiTresorerie_(montant),certitude:'tres_probable',
+        preuve:e.ajustement?'Charge fixe récurrente · ajustement prévisionnel appliqué':'Charge fixe récurrente',
+        dateConventionnelle:false,ajustementId:e.ajustement||''
+      });
     });
   });return out;
 }
