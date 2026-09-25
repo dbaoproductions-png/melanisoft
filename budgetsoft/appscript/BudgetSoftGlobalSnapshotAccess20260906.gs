@@ -1,4 +1,10 @@
-const BUDGETSOFT_GLOBAL_ACCESS_VERSION='2026-09-21.2';
+const BUDGETSOFT_GLOBAL_ACCESS_VERSION='2026-09-25.1';
+let BUDGETSOFT_GLOBAL_ACCESS_EXEC_CACHE_20260925_=null;
+
+function invaliderCacheLectureSnapshotGlobalBudgetSoft20260925_(){
+  BUDGETSOFT_GLOBAL_ACCESS_EXEC_CACHE_20260925_=null;
+}
+
 
 /**
  * Lecture commune du dernier snapshot global publié.
@@ -26,6 +32,15 @@ function lireEtatGlobalBudgetSoftSiDisponible20260906_(){
     const ctx=typeof BUDGETSOFT_READ_CONTEXT_ACTIVE_!=='undefined'?BUDGETSOFT_READ_CONTEXT_ACTIVE_:null;
     const label=ctx&&String(ctx.label||'')||'';
     if(/^budgetsoft-global-snapshot(?:$|-)/.test(label))return null;
+
+    // Anti-régression 2026-09-25 : dans une même exécution Apps Script,
+    // tous les consommateurs partagent exactement le même état global publié.
+    // Cela évite de relire/décompresser les 17 fragments DocumentProperties
+    // pour chaque module demandé (Cerbère lisait le snapshot deux fois).
+    if(BUDGETSOFT_GLOBAL_ACCESS_EXEC_CACHE_20260925_&&BUDGETSOFT_GLOBAL_ACCESS_EXEC_CACHE_20260925_.revisionBudgetSoft){
+      return BUDGETSOFT_GLOBAL_ACCESS_EXEC_CACHE_20260925_;
+    }
+
     if(typeof chargerSnapshotGlobalBudgetSoft20260906!=='function')return null;
     let s=chargerSnapshotGlobalBudgetSoft20260906();
     let e=s&&s.disponible&&s.etat;
@@ -52,6 +67,7 @@ function lireEtatGlobalBudgetSoftSiDisponible20260906_(){
       if(!frais||frais.ok!==true||frais.publie!==true)return null;
       e=frais;
     }
+    BUDGETSOFT_GLOBAL_ACCESS_EXEC_CACHE_20260925_=e;
     return e;
   }catch(err){return null;}
 }
