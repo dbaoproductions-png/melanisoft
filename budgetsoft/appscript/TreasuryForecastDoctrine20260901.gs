@@ -1,4 +1,4 @@
-const TREASURY_FORECAST_DOCTRINE_20260901_VERSION='2026-09-22.1';
+const TREASURY_FORECAST_DOCTRINE_20260901_VERSION='2026-09-25.1';
 
 function chargerSocleTresorerie20260831SansDebitCbLegacy20260910_(dateCible,ctx){
   if(typeof chargerTresoreriePrevisionnelle20260831!=='function')return null;
