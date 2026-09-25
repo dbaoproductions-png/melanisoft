@@ -129,3 +129,68 @@ function auditerConsommateursTreasuryForecast20260909(){
   console.log('[AUDIT consommateurs TreasuryForecast] '+JSON.stringify(out));
   return out;
 }
+
+/**
+ * Audit lecture seule d'une cible de trésorerie unifiée.
+ * Journalise la décomposition complète afin d'expliquer le solde prévisionnel affiché.
+ */
+function auditerProjectionTresorerieCibleBudgetSoft20260925(dateCible){
+  const cible=String(dateCible||'').trim()||'2026-10-27';
+  const r=chargerTresorerieUnifieeBudgetSoft20260907(cible);
+  if(!r||!r.ok){
+    const e={ok:false,lectureSeule:true,version:'2026-09-25.1',dateCible:cible,erreur:r&&r.erreur||'Trésorerie unifiée indisponible'};
+    console.log('[AUDIT PROJECTION TRESORERIE CIBLE 20260925] '+JSON.stringify(e));
+    return e;
+  }
+  const lignes=(r.lignes||[]).map(function(l){
+    return{
+      jour:jourTresorerieUnifiee20260907_(l&&l.date),
+      source:String(l&&l.source||''),
+      sourceId:String(l&&l.sourceId||''),
+      libelle:String(l&&l.libelle||''),
+      categorie:String(l&&l.categorie||''),
+      montant:arrTresorerieUnifiee20260907_(Number(l&&l.montantSigne||0)),
+      certitude:String(l&&l.certitude||''),
+      preuve:String(l&&l.preuve||''),
+      dateConventionnelle:!!(l&&l.dateConventionnelle)
+    };
+  }).filter(function(x){return x.jour&&x.jour>r.dateReference&&x.jour<=cible;});
+  lignes.sort(function(a,b){return a.jour.localeCompare(b.jour)||a.source.localeCompare(b.source)||a.montant-b.montant;});
+  const parSource={};let variation=0;
+  lignes.forEach(function(x){
+    variation+=x.montant;
+    const k=x.source||'sans_source';
+    if(!parSource[k])parSource[k]={nombre:0,net:0,recettes:0,depenses:0};
+    const p=parSource[k];p.nombre++;p.net+=x.montant;
+    if(x.montant>=0)p.recettes+=x.montant;else p.depenses+=Math.abs(x.montant);
+  });
+  Object.keys(parSource).forEach(function(k){
+    const p=parSource[k];
+    p.net=arrTresorerieUnifiee20260907_(p.net);
+    p.recettes=arrTresorerieUnifiee20260907_(p.recettes);
+    p.depenses=arrTresorerieUnifiee20260907_(p.depenses);
+  });
+  variation=arrTresorerieUnifiee20260907_(variation);
+  const soldeReconstitue=arrTresorerieUnifiee20260907_(Number(r.soldeReel||0)+variation);
+  const ecart=arrTresorerieUnifiee20260907_(soldeReconstitue-Number(r.soldePrevisionnel||0));
+  const out={
+    ok:Math.abs(ecart)<=.01,
+    lectureSeule:true,
+    version:'2026-09-25.1',
+    revisionBudgetSoft:r.revisionBudgetSoft||'',
+    proprietaire:r.proprietaireBudgetSoft||'',
+    moteurSousJacent:r.moteurSousJacent||'',
+    dateReference:r.dateReference||'',
+    dateCible:cible,
+    soldeReel:Number(r.soldeReel||0),
+    variationPrevue:variation,
+    soldePrevisionnel:Number(r.soldePrevisionnel||0),
+    soldeReconstitue:soldeReconstitue,
+    ecartReconciliation:ecart,
+    parSource:parSource,
+    decompositionCanonique:resumerContratCanoniqueTresorerieUnifiee20260907_(r.decompositionCanonique),
+    lignes:lignes
+  };
+  console.log('[AUDIT PROJECTION TRESORERIE CIBLE 20260925] '+JSON.stringify(out));
+  return out;
+}
