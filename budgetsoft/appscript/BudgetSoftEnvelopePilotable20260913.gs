@@ -12,7 +12,7 @@
  *
  * Une donnée, un propriétaire, un calcul, plusieurs consommateurs.
  */
-const BUDGETSOFT_EP_20260913_VERSION='2026-09-13.2';
+const BUDGETSOFT_EP_20260913_VERSION='2026-09-25.1';
 const BUDGETSOFT_EP_OWNER_20260913='BudgetSoftEnvelopePilotable20260913';
 
 function arrEpBudgetSoft20260913_(n){return Math.round(Number(n||0)*100)/100;}
@@ -75,11 +75,28 @@ function calculerProfilPaiementEpBudgetSoft20260913_(p,operations,reference){
   return{version:BUDGETSOFT_EP_20260913_VERSION,source:source,fallback95:fallback,echantillon:echantillon,tauxCarte:arrEpBudgetSoft20260913_(tauxCarte*100)/100,tauxCartePct:arrEpBudgetSoft20260913_(tauxCarte*100),fractionCarteVersCycleSuivant:arrEpBudgetSoft20260913_(fractionCarteVersCycleSuivant),tauxDiffere:arrEpBudgetSoft20260913_(tauxDiffere*100)/100,tauxDifferePct:arrEpBudgetSoft20260913_(tauxDiffere*100),prochaineDateDebit:prochaineDebit?isoEpBudgetSoft20260913_(prochaineDebit):'',doctrine:'taux mesuré sur le Réel pilotable ; estimation uniquement sur la part EP non encore consommée'};
 }
 
+const BUDGETSOFT_EP_TAUX_CB_CANONIQUE_20260925=0.90;
+
 function calculerImpactPrevisionnelEpBudgetSoft20260913_(p,operations,reference){
-  const ep=calculerEnvelopePilotableBudgetSoft20260913_(p),resteAEngager=Math.max(0,Number(ep.reste||0)),profil=calculerProfilPaiementEpBudgetSoft20260913_(p,operations,reference),taux=Math.max(0,Math.min(1,Number(profil.tauxDiffere||0)));
-  const differe=arrEpBudgetSoft20260913_(resteAEngager*taux),immediat=arrEpBudgetSoft20260913_(resteAEngager-differe),periode=p&&p.periode||p||{},fin=dateEpBudgetSoft20260913_(periode.fin),ref=dateEpBudgetSoft20260913_(reference)||new Date();
+  const ep=calculerEnvelopePilotableBudgetSoft20260913_(p);
+  const resteAEngager=Math.max(0,Number(ep.reste||0));
+  const profil=calculerProfilPaiementEpBudgetSoft20260913_(p,operations,reference);
+  const taux=BUDGETSOFT_EP_TAUX_CB_CANONIQUE_20260925;
+  const differe=arrEpBudgetSoft20260913_(resteAEngager*taux);
+  const immediat=arrEpBudgetSoft20260913_(resteAEngager-differe);
+  const periode=p&&p.periode||p||{},fin=dateEpBudgetSoft20260913_(periode.fin),ref=dateEpBudgetSoft20260913_(reference)||new Date();
   let debit=null;try{if(typeof prochaineDateDebitCbTresorerie20260901_==='function')debit=prochaineDateDebitCbTresorerie20260901_(ref);}catch(e){}
-  return{ok:true,version:BUDGETSOFT_EP_20260913_VERSION,ep:ep.total,consomme:ep.consomme,resteAEngager:arrEpBudgetSoft20260913_(resteAEngager),immediat:immediat,differe:differe,tauxDifferePct:profil.tauxDifferePct,profil:profil,dateImmediat:fin?isoEpBudgetSoft20260913_(fin):'',dateDiffere:debit?isoEpBudgetSoft20260913_(debit):'',reconciliation:arrEpBudgetSoft20260913_(immediat+differe-resteAEngager),doctrine:'Réel déjà engagé exclu ; seule la part EP non consommée est estimée, une fois, selon son calendrier bancaire.'};
+  return{
+    ok:true,version:'2026-09-25.1',ep:ep.total,consomme:ep.consomme,
+    resteAEngager:arrEpBudgetSoft20260913_(resteAEngager),
+    immediat:immediat,differe:differe,tauxDifferePct:90,
+    tauxObservePct:Number(profil&&profil.tauxCartePct||0),
+    profil:profil,
+    dateImmediat:fin?isoEpBudgetSoft20260913_(fin):'',
+    dateDiffere:debit?isoEpBudgetSoft20260913_(debit):'',
+    reconciliation:arrEpBudgetSoft20260913_(immediat+differe-resteAEngager),
+    doctrine:'EP restant = EP décidé - Réel pilotable. 90 % du reliquat est projeté en CB différée hors charges fixes ; 10 % reste en paiement non différé. Le taux observé reste diagnostic, pas moteur.'
+  };
 }
 
 function etatEnvelopePilotableDepuisCockpitBudgetSoft20260913_(cerbere){
