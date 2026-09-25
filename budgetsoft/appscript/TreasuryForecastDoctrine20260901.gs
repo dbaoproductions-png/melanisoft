@@ -57,15 +57,88 @@ function cerbereProjectionEpTresorerie20260913_(cerberePrecharge){
   }catch(e){c=null;}
   return c;
 }
+const BUDGETSOFT_CB_PREVISION_CALIBRATION_20260925=1950;
+const BUDGETSOFT_CB_PREVISION_CALIBRATION_MOIS_20260925='2026-09';
+
+function totalCbConnuPourDebitTresorerie20260925_(ops,debit){
+  const y=debit.getFullYear(),m=debit.getMonth();
+  return arrondiTresorerie_((ops||[]).reduce((s,o)=>{
+    if(!estOperationCarteTresorerie20260901_(o))return s;
+    if(/\[RECURRENCE:[^\]]+\]/.test(String(o&&o.commentaire||'')))return s;
+    const montant=Number(o&&o.montant||0);if(!(montant<0))return s;
+    const d=typeof dateOpTresorerie_==='function'?dateOpTresorerie_(o):new Date(o&&o.date_comptable||o&&o.date||0);
+    if(!d||isNaN(d)||d.getFullYear()!==y||d.getMonth()!==m)return s;
+    return s+Math.abs(montant);
+  },0));
+}
+
+function cibleCbMensuelleGlissanteTresorerie20260925_(ops,debit){
+  const calibration=new Date(2026,8,1,12,0,0,0),fin=new Date(debit.getFullYear(),debit.getMonth(),1,12,0,0,0);
+  const valeurs=[BUDGETSOFT_CB_PREVISION_CALIBRATION_20260925],historique=[];
+  let d=new Date(calibration.getFullYear(),calibration.getMonth(),1,12,0,0,0),guard=0;
+  while(d<fin&&guard++<24){
+    const prochain=new Date(d.getFullYear(),d.getMonth()+1,1,12,0,0,0);
+    // Septembre 2026 est la période d'étalonnage : sa réalisation ne devient
+    // disponible pour la cible suivante qu'une fois le mois clos.
+    const total=totalCbConnuPourDebitTresorerie20260925_(ops,new Date(d.getFullYear(),d.getMonth()+1,0,12,0,0,0));
+    if(total>0){valeurs.push(total);historique.push({mois:Utilities.formatDate(d,Session.getScriptTimeZone(),'yyyy-MM'),total:total});}
+    d=prochain;
+  }
+  const fenetre=valeurs.slice(-4),cible=arrondiTresorerie_(fenetre.reduce((s,x)=>s+x,0)/Math.max(1,fenetre.length));
+  return{cible:cible,calibration:BUDGETSOFT_CB_PREVISION_CALIBRATION_20260925,fenetre:fenetre,historique:historique};
+}
+
 function projectionEnvelopePilotableTresorerie20260913_(ops,reference,cible,cerberePrecharge){
   const c=cerbereProjectionEpTresorerie20260913_(cerberePrecharge),ps=c&&Array.isArray(c.periodes)?c.periodes:[],p=ps[0]||null;
-  if(!p||typeof calculerImpactPrevisionnelEpBudgetSoft20260913_!=='function')return{immediat:null,debitsCb:[],diagnostic:{version:'2026-09-13.3',ownerEp:false,abandonEstimation:true,raison:'propriétaire EP indisponible — aucune estimation heuristique de remplacement'}};
-  const impact=calculerImpactPrevisionnelEpBudgetSoft20260913_(p,ops,reference),fin=dateCockpit20260902_(p&&p.periode&&p.periode.fin),immediatMontant=Math.max(0,Number(impact.immediat||0));let immediat=null;
-  if(immediatMontant>0&&fin&&fin>reference&&fin<=cible)immediat={id:'ep_immediat_estime:'+p.clePilotage,source:'ep_immediat_estime',sourceId:String(p.clePilotage||''),date:fin.toISOString(),libelle:'Part immédiate estimée de l’EP restant',categorie:'Enveloppe pilotable',compte:'',montantSigne:-arrondiTresorerie_(immediatMontant),certitude:'estime',preuve:'Owner EP · part non CB estimée de l’EP non encore consommée ; Réel déjà engagé exclu',dateConventionnelle:true,ownerEp:BUDGETSOFT_EP_OWNER_20260913};
-  const debitsCb=[];let ref=new Date(reference),garde=0,injecte=false;
-  while(ref<cible&&garde++<12){const debit=prochaineDateDebitCbTresorerie20260901_(ref);if(!debit||isNaN(debit)||debit>cible)break;const queue=estimationQueueCbFinMoisTresorerie20260901_(ops,ref,debit),epPart=!injecte?Math.max(0,Number(impact.differe||0)):0,residuel=arrondiTresorerie_(Math.max(0,epPart+queue));if(residuel>0)debitsCb.push({id:'debit_cb_estime:'+debit.getTime(),source:'debit_cb_estime',sourceId:'cb:'+debit.getFullYear()+'-'+(debit.getMonth()+1),date:debit.toISOString(),libelle:'Complément estimé du débit CB différé',categorie:'Carte à débit différé',compte:'',montantSigne:-residuel,certitude:'estime',preuve:'Owner EP : part CB différée de l’EP restant + estimation marginale 28-fin ; Réel déjà engagé exclu',dateConventionnelle:false,partCerbere:arrondiTresorerie_(epPart),partEp:arrondiTresorerie_(epPart),partFinMois:arrondiTresorerie_(queue),moteurCerbere:String(c&&c.version||''),ownerEp:BUDGETSOFT_EP_OWNER_20260913,tauxDifferePct:Number(impact.tauxDifferePct||0)});injecte=true;ref=new Date(debit.getTime()+1);}
-  return{immediat,debitsCb,diagnostic:{version:'2026-09-13.3',ownerEp:true,proprietaire:BUDGETSOFT_EP_OWNER_20260913,sourceCerbereFinal:!!(c&&c.diagnostic&&c.diagnostic.p1Doctrine20260912),ep:Number(impact.ep||0),consomme:Number(impact.consomme||0),resteAEngager:Number(impact.resteAEngager||0),immediat:Number(impact.immediat||0),differe:Number(impact.differe||0),tauxDifferePct:Number(impact.tauxDifferePct||0),reconciliation:Number(impact.reconciliation||0),profil:impact.profil||null}};
+  let impact=null,immediat=null;
+  if(p&&typeof calculerImpactPrevisionnelEpBudgetSoft20260913_==='function'){
+    impact=calculerImpactPrevisionnelEpBudgetSoft20260913_(p,ops,reference);
+    const fin=dateCockpit20260902_(p&&p.periode&&p.periode.fin),immediatMontant=Math.max(0,Number(impact&&impact.immediat||0));
+    if(immediatMontant>0&&fin&&fin>reference&&fin<=cible)immediat={
+      id:'ep_immediat_estime:'+p.clePilotage,source:'ep_immediat_estime',sourceId:String(p.clePilotage||''),date:fin.toISOString(),
+      libelle:'Part immédiate estimée de l’EP restant',categorie:'Enveloppe pilotable',compte:'',montantSigne:-arrondiTresorerie_(immediatMontant),
+      certitude:'estime',preuve:'Owner EP · part non CB estimée de l’EP non encore consommée ; Réel déjà engagé exclu',
+      dateConventionnelle:true,ownerEp:BUDGETSOFT_EP_OWNER_20260913
+    };
+  }
+
+  // Doctrine bancaire distincte de la présentation/pilotage EP :
+  // le débit CB futur = achats déjà connus + résiduel statistique vers une cible
+  // mensuelle glissante. Les achats connus restent des lignes certaines séparées ;
+  // seule la différence vers la cible est ajoutée ici comme estimation.
+  const debitsCb=[];let ref=new Date(reference),garde=0;
+  while(ref<cible&&garde++<12){
+    const debit=prochaineDateDebitCbTresorerie20260901_(ref);if(!debit||isNaN(debit)||debit>cible)break;
+    const cibleGlissante=cibleCbMensuelleGlissanteTresorerie20260925_(ops,debit);
+    const engage=totalCbConnuPourDebitTresorerie20260925_(ops,debit);
+    const residuel=arrondiTresorerie_(Math.max(0,Number(cibleGlissante.cible||0)-engage));
+    if(residuel>0)debitsCb.push({
+      id:'debit_cb_estime:'+debit.getTime(),source:'debit_cb_estime',sourceId:'cb:'+debit.getFullYear()+'-'+(debit.getMonth()+1),
+      date:debit.toISOString(),libelle:'Résiduel estimé du débit CB différé',categorie:'Carte à débit différé',compte:'',
+      montantSigne:-residuel,certitude:'estime',
+      preuve:'Cible CB mensuelle glissante moins achats différés déjà connus ; étalonnage initial 1 950 €',
+      dateConventionnelle:false,cibleMensuelleCb:cibleGlissante.cible,cbDejaEngage:engage,residuelCb:residuel,
+      calibrationCb:cibleGlissante.calibration,fenetreCb:cibleGlissante.fenetre,historiqueCb:cibleGlissante.historique,
+      partCerbere:0,partEp:0,partFinMois:0,moteurCerbere:String(c&&c.version||''),ownerCb:'cible_cb_glissante_20260925'
+    });
+    ref=new Date(debit.getTime()+1);
+  }
+
+  return{
+    immediat:immediat,debitsCb:debitsCb,
+    diagnostic:{
+      version:'2026-09-25.1',
+      ownerEp:!!(p&&impact),proprietaireEp:typeof BUDGETSOFT_EP_OWNER_20260913!=='undefined'?BUDGETSOFT_EP_OWNER_20260913:'',
+      ownerCb:'cible_cb_glissante_20260925',
+      doctrineCb:'trésorerie bancaire : achats CB connus à leur date de débit + résiduel vers cible glissante ; aucune part EP injectée dans le débit CB',
+      calibrationCb:BUDGETSOFT_CB_PREVISION_CALIBRATION_20260925,
+      ep:Number(impact&&impact.ep||0),consomme:Number(impact&&impact.consomme||0),resteAEngager:Number(impact&&impact.resteAEngager||0),
+      immediat:Number(impact&&impact.immediat||0),differeEpDiagnostic:Number(impact&&impact.differe||0),
+      tauxDifferePct:Number(impact&&impact.tauxDifferePct||0),reconciliation:Number(impact&&impact.reconciliation||0),profil:impact&&impact.profil||null
+    }
+  };
 }
+
 function estimationsDebitsCbDiffereTresorerie20260908_(ops,reference,cible,cerberePrecharge){return projectionEnvelopePilotableTresorerie20260913_(ops,reference,cible,cerberePrecharge).debitsCb;}
 function estimationDebitCbDiffereTresorerie20260901V2_(ops,reference,cible,cerberePrecharge){const xs=estimationsDebitsCbDiffereTresorerie20260908_(ops,reference,cible,cerberePrecharge);return xs.length?xs[0]:null;}
-function recalculerSortieTresorerie20260901_(r,lignes,reference,cible){const variation=arrondiTresorerie_((lignes||[]).reduce((s,x)=>s+Number(x.montantSigne||0),0)),certain=arrondiTresorerie_((lignes||[]).filter(x=>x.certitude==='certain').reduce((s,x)=>s+Number(x.montantSigne||0),0)),tresProbable=arrondiTresorerie_((lignes||[]).filter(x=>['certain','tres_probable'].includes(x.certitude)).reduce((s,x)=>s+Number(x.montantSigne||0),0));r.version=TREASURY_FORECAST_DOCTRINE_20260901_VERSION;r.lignes=lignes;r.variationPrevue=variation;r.soldePrevisionnel=arrondiTresorerie_(Number(r.soldeReel||0)+variation);r.fourchette={certain:arrondiTresorerie_(Number(r.soldeReel||0)+certain),tresProbable:arrondiTresorerie_(Number(r.soldeReel||0)+tresProbable),toutesHypotheses:r.soldePrevisionnel};r.resume=resumeTresorerie20260831_(lignes);r.confiance=confianceTresorerie_(reference,cible,lignes);r.diagnostic20260831=r.diagnostic20260831||{};r.diagnostic20260831.passeTerminalePlanCb=true;r.diagnostic20260831.actionsPlanTresorerie='uniquement impact_confirme + statut Effectif/Effective';r.diagnostic20260831.revenusR0CycleCourant='aucune créance implicite R0 dans le cycle courant ; R0 reprend à partir du cycle suivant';r.diagnostic20260831.debitCbDoctrine='EP restant ventilé une seule fois : immédiat à la frontière + CB différée à la date de débit';r.diagnostic20260831.optimisationCerbereCb='Cerbère préchargé finalisé en cockpit avant lecture EP';r.diagnostic20260831.suppressionCbLegacy20260831='estimation legacy neutralisée sur le chemin canonique';r.diagnostic20260831.reutilisationCerbereSnapshot='snapshot peut fournir une base Cerbère, finalisée avant projection EP';return r;}
+function recalculerSortieTresorerie20260901_(r,lignes,reference,cible){const variation=arrondiTresorerie_((lignes||[]).reduce((s,x)=>s+Number(x.montantSigne||0),0)),certain=arrondiTresorerie_((lignes||[]).filter(x=>x.certitude==='certain').reduce((s,x)=>s+Number(x.montantSigne||0),0)),tresProbable=arrondiTresorerie_((lignes||[]).filter(x=>['certain','tres_probable'].includes(x.certitude)).reduce((s,x)=>s+Number(x.montantSigne||0),0));r.version=TREASURY_FORECAST_DOCTRINE_20260901_VERSION;r.lignes=lignes;r.variationPrevue=variation;r.soldePrevisionnel=arrondiTresorerie_(Number(r.soldeReel||0)+variation);r.fourchette={certain:arrondiTresorerie_(Number(r.soldeReel||0)+certain),tresProbable:arrondiTresorerie_(Number(r.soldeReel||0)+tresProbable),toutesHypotheses:r.soldePrevisionnel};r.resume=resumeTresorerie20260831_(lignes);r.confiance=confianceTresorerie_(reference,cible,lignes);r.diagnostic20260831=r.diagnostic20260831||{};r.diagnostic20260831.passeTerminalePlanCb=true;r.diagnostic20260831.actionsPlanTresorerie='uniquement impact_confirme + statut Effectif/Effective';r.diagnostic20260831.revenusR0CycleCourant='aucune créance implicite R0 dans le cycle courant ; R0 reprend à partir du cycle suivant';r.diagnostic20260831.debitCbDoctrine='CB bancaire séparée de l’EP : achats connus + résiduel vers cible mensuelle glissante, étalonnée à 1 950 € en septembre 2026';r.diagnostic20260831.optimisationCerbereCb='Cerbère préchargé finalisé en cockpit avant lecture EP';r.diagnostic20260831.suppressionCbLegacy20260831='estimation legacy neutralisée sur le chemin canonique';r.diagnostic20260831.reutilisationCerbereSnapshot='snapshot peut fournir une base Cerbère, finalisée avant projection EP';return r;}
