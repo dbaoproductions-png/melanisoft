@@ -351,3 +351,65 @@ function auditerHistoriqueRecettesEtQueueCb20260925(){
   console.log('[AUDIT HISTORIQUE RECETTES ET QUEUE CB 20260925] '+JSON.stringify(out));
   return out;
 }
+
+
+function auditerDoctrinePrevisionIntermodule20260925(){
+  const cible='2026-10-27';
+  const r0=typeof chargerCanonRecettesCerbereV1==='function'?chargerCanonRecettesCerbereV1():null;
+  const t=chargerTresorerieUnifieeBudgetSoft20260907(cible);
+  const cer=typeof chargerCerbereCockpit20260902==='function'?chargerCerbereCockpit20260902():null;
+  const postes=Array.isArray(r0&&r0.postes)?r0.postes:[];
+  const parCat={};postes.forEach(function(x){parCat[String(x&&x.categorie||'')]=x;});
+  const lignes=Array.isArray(t&&t.lignes)?t.lignes:[];
+
+  const casden=lignes.filter(function(x){
+    return String(x&&x.source||'')==='charge_fixe' &&
+      /casden/i.test(String(x&&x.libelle||'')+' '+String(x&&x.categorie||'')) &&
+      jourTresorerieUnifiee20260907_(x&&x.date)==='2026-10-04';
+  });
+
+  const cbEst=lignes.filter(function(x){return String(x&&x.source||'')==='debit_cb_estime';});
+  const cbSept=cbEst.find(function(x){return jourTresorerieUnifiee20260907_(x&&x.date)==='2026-09-30';})||null;
+  const rev=lignes.filter(function(x){return String(x&&x.source||'')==='revenu_recurrent';});
+  const revCats={};rev.forEach(function(x){
+    const cat=String(x&&x.categorie||'');
+    if(!revCats[cat])revCats[cat]={total:0,lignes:[]};
+    revCats[cat].total+=Number(x&&x.montantSigne||0);revCats[cat].lignes.push(x);
+  });
+  Object.keys(revCats).forEach(function(k){revCats[k].total=Math.round(revCats[k].total*100)/100;});
+
+  const p2=cer&&Array.isArray(cer.periodes)?cer.periodes[1]:null,v2=p2&&p2.v37||{},audit2=v2.rt1Audit||{};
+  const socleP2=Number(audit2.socleCanonTerminal3723!=null?audit2.socleCanonTerminal3723:audit2.socleCanonTerminal3716);
+
+  const controles={
+    salaire2567:Math.abs(Number(parCat.Salaires&&parCat.Salaires.montant||0)-2567)<.011,
+    foncier780:Math.abs(Number(parCat['Revenus fonciers']&&parCat['Revenus fonciers'].montant||0)-780)<.011,
+    franceTravailGlissant:String(parCat['France Travail']&&parCat['France Travail'].mode_prevision||'').indexOf('moyenne_glissante')===0,
+    coursGlissant:String(parCat.Cours&&parCat.Cours.mode_prevision||'').indexOf('moyenne_glissante')===0,
+    concertsGlissant:String(parCat.Concerts&&parCat.Concerts.mode_prevision||'').indexOf('moyenne_glissante')===0,
+    casden0410Absent:casden.length===0,
+    cbSepareeEp:!!cbSept&&Number(cbSept.partCerbere||0)===0&&Number(cbSept.partEp||0)===0&&String(cbSept.ownerCb||'')==='cible_cb_glissante_20260925',
+    cbCibleInitiale1950:!!cbSept&&Math.abs(Number(cbSept.cibleMensuelleCb||0)-1950)<.011,
+    coursRapprochementAgrege:!!(revCats.Cours&&revCats.Cours.lignes.some(function(x){return String(x&&x.modeRapprochementReel||'')==='cible_mensuelle_agregee';})),
+    concertsRapprochementAgrege:!!(revCats.Concerts&&revCats.Concerts.lignes.some(function(x){return String(x&&x.modeRapprochementReel||'')==='cible_mensuelle_agregee';})),
+    p2SocleR0Commun:Number.isFinite(socleP2)?Math.abs(socleP2-Number(r0&&r0.total||0))<.011:null,
+    memeRevision:!!(t&&cer&&t.revisionBudgetSoft&&cer.revisionBudgetSoft&&String(t.revisionBudgetSoft)===String(cer.revisionBudgetSoft))
+  };
+  const valeurs={};
+  Object.keys(parCat).forEach(function(k){valeurs[k]={montant:Number(parCat[k].montant||0),mode:String(parCat[k].mode_prevision||''),source:String(parCat[k].source_prevision||'')};});
+  const ok=Object.keys(controles).every(function(k){return controles[k]!==false;});
+  const out={
+    ok:ok,lectureSeule:true,version:'2026-09-25.1',
+    revisionBudgetSoft:String(t&&t.revisionBudgetSoft||''),
+    recettesEffectives:{total:Number(r0&&r0.total||0),postes:valeurs},
+    tresorerie:{soldeReel:t&&t.soldeReel,soldePrevisionnel:t&&t.soldePrevisionnel,recettesProjetees:revCats,casden0410:casden,cbSeptembre:cbSept},
+    cerbere:{version:cer&&cer.version||'',p2Rt1:Number(v2.rt1||0),p2SocleCanon:Number.isFinite(socleP2)?socleP2:null},
+    controles:controles,
+    doctrine:{
+      recettes:'R0 effectif partagé ; courant Cerbère conservateur, futur/statistique bancaire par cible mensuelle et remplacement/consommation par le Réel',
+      cb:'pilotage EP par date d’achat ; trésorerie bancaire par date de débit, avec achats connus + résiduel vers cible CB glissante',
+      chargesFixes:'générateur canonique ajusté partagé, y compris échéances ignorées/reportées'
+    }
+  };
+  console.log('[AUDIT DOCTRINE PREVISION INTERMODULE 20260925] '+JSON.stringify(out));return out;
+}
