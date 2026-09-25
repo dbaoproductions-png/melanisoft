@@ -120,3 +120,91 @@ function auditerContentionSnapshotBudgetSoft20260924(){
   console.log('[AUDIT CONTENTION SNAPSHOT BUDGETSOFT 20260924] '+JSON.stringify(out));
   return out;
 }
+
+
+function auditerLecturesSnapshotPendantCerbere20260925(){
+  const version='2026-09-25.1';
+  const out={ok:true,lectureSeule:true,version:version,compteurs:{},appels:[],resultat:null};
+  const compteurs=out.compteurs;
+  const originaux={};
+
+  function envelopper(nom,fn){
+    if(typeof fn!=='function')return fn;
+    return function(){
+      const t=Date.now();
+      compteurs[nom]=(compteurs[nom]||0)+1;
+      try{return fn.apply(this,arguments);}
+      finally{out.appels.push({nom:nom,ms:Date.now()-t});}
+    };
+  }
+
+  if(typeof chargerSnapshotGlobalBudgetSoft20260906==='function'){
+    originaux.chargerSnapshotGlobalBudgetSoft20260906=chargerSnapshotGlobalBudgetSoft20260906;
+    chargerSnapshotGlobalBudgetSoft20260906=envelopper('chargerSnapshotGlobalBudgetSoft20260906',originaux.chargerSnapshotGlobalBudgetSoft20260906);
+  }
+  if(typeof lireModuleSnapshotGlobalBudgetSoft20260906_==='function'){
+    originaux.lireModuleSnapshotGlobalBudgetSoft20260906_=lireModuleSnapshotGlobalBudgetSoft20260906_;
+    lireModuleSnapshotGlobalBudgetSoft20260906_=envelopper('lireModuleSnapshotGlobalBudgetSoft20260906_',originaux.lireModuleSnapshotGlobalBudgetSoft20260906_);
+  }
+  if(typeof servirCerbereDepuisSnapshotBudgetSoft20260910_==='function'){
+    originaux.servirCerbereDepuisSnapshotBudgetSoft20260910_=servirCerbereDepuisSnapshotBudgetSoft20260910_;
+    servirCerbereDepuisSnapshotBudgetSoft20260910_=envelopper('servirCerbereDepuisSnapshotBudgetSoft20260910_',originaux.servirCerbereDepuisSnapshotBudgetSoft20260910_);
+  }
+  if(typeof chargerCerbereCockpit20260902==='function'){
+    originaux.chargerCerbereCockpit20260902=chargerCerbereCockpit20260902;
+    chargerCerbereCockpit20260902=envelopper('chargerCerbereCockpit20260902',originaux.chargerCerbereCockpit20260902);
+  }
+  if(typeof chargerCerbereV374==='function'){
+    originaux.chargerCerbereV374=chargerCerbereV374;
+    chargerCerbereV374=envelopper('chargerCerbereV374',originaux.chargerCerbereV374);
+  }
+
+  const t0=Date.now();
+  try{
+    let r=null,pointEntree='';
+    if(typeof chargerCerbereDepuisSnapshotBudgetSoft20260910==='function'){
+      pointEntree='chargerCerbereDepuisSnapshotBudgetSoft20260910';
+      r=chargerCerbereDepuisSnapshotBudgetSoft20260910();
+    }else if(typeof chargerCerbereCockpit20260902==='function'){
+      pointEntree='chargerCerbereCockpit20260902';
+      r=chargerCerbereCockpit20260902();
+    }else if(typeof chargerCerbereV374==='function'){
+      pointEntree='chargerCerbereV374';
+      r=chargerCerbereV374();
+    }else{
+      throw new Error('Aucun point d’entrée Cerbère public détecté.');
+    }
+    out.resultat={
+      pointEntree:pointEntree,
+      ok:!!(r&&r.ok!==false),
+      sourceBudgetSoft:String(r&&r.sourceBudgetSoft||''),
+      revisionBudgetSoft:String(r&&r.revisionBudgetSoft||''),
+      version:String(r&&r.version||'')
+    };
+  }catch(e){
+    out.ok=false;
+    out.erreur=String(e&&e.message||e);
+  }finally{
+    if(originaux.chargerSnapshotGlobalBudgetSoft20260906)chargerSnapshotGlobalBudgetSoft20260906=originaux.chargerSnapshotGlobalBudgetSoft20260906;
+    if(originaux.lireModuleSnapshotGlobalBudgetSoft20260906_)lireModuleSnapshotGlobalBudgetSoft20260906_=originaux.lireModuleSnapshotGlobalBudgetSoft20260906_;
+    if(originaux.servirCerbereDepuisSnapshotBudgetSoft20260910_)servirCerbereDepuisSnapshotBudgetSoft20260910_=originaux.servirCerbereDepuisSnapshotBudgetSoft20260910_;
+    if(originaux.chargerCerbereCockpit20260902)chargerCerbereCockpit20260902=originaux.chargerCerbereCockpit20260902;
+    if(originaux.chargerCerbereV374)chargerCerbereV374=originaux.chargerCerbereV374;
+  }
+  out.dureeMs=Date.now()-t0;
+  const parNom={};
+  out.appels.forEach(function(x){
+    if(!parNom[x.nom])parNom[x.nom]={appels:0,dureeMs:0,maxMs:0};
+    parNom[x.nom].appels++;
+    parNom[x.nom].dureeMs+=Number(x.ms||0);
+    parNom[x.nom].maxMs=Math.max(parNom[x.nom].maxMs,Number(x.ms||0));
+  });
+  out.resume=parNom;
+  out.diagnostic={
+    lecturesSnapshotGlobal:Number(compteurs.chargerSnapshotGlobalBudgetSoft20260906||0),
+    lecturesModule:Number(compteurs.lireModuleSnapshotGlobalBudgetSoft20260906_||0),
+    lecturesMultiplesSnapshot:Number(compteurs.chargerSnapshotGlobalBudgetSoft20260906||0)>1
+  };
+  console.log('[AUDIT LECTURES SNAPSHOT PENDANT CERBERE 20260925] '+JSON.stringify(out));
+  return out;
+}
