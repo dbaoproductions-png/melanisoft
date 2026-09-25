@@ -32,29 +32,82 @@ function auditerCycleCbSuivant27102026BudgetSoft20260908(){
   console.log('[AUDIT Cycle CB suivant 27-10 STRICT] '+JSON.stringify(out));return out;
 }
 
-const BUDGETSOFT_CB_MULTICYCLE_GUARD_20260908_VERSION='2026-09-08.2';
+const BUDGETSOFT_CB_MULTICYCLE_GUARD_20260908_VERSION='2026-09-25.1';
 function arrGardeCbMultiCycleBudgetSoft20260908_(n){return Math.round((Number(n)||0)*100)/100;}
 function isoJourGardeCbMultiCycleBudgetSoft20260908_(d){return Utilities.formatDate(new Date(d),Session.getScriptTimeZone(),'yyyy-MM-dd');}
 function finMoisGardeCbMultiCycleBudgetSoft20260908_(d){return new Date(d.getFullYear(),d.getMonth()+1,0,23,59,59,999);}
 
 function verifierGardeCbMultiCycleDepuisProjectionBudgetSoft20260910_(r,dateFinCycleSuivant){
   const erreurs=[];
-  if(typeof prochaineDateDebitCbTresorerie20260901_!=='function')return{ok:false,version:BUDGETSOFT_CB_MULTICYCLE_GUARD_20260908_VERSION,sourceProjection:'precalculee',erreurs:[{code:'CB_DATE_PRIMITIVE_ABSENTE',message:'Primitive de détermination des dates de débit CB absente.'}]};
+  if(typeof prochaineDateDebitCbTresorerie20260901_!=='function')return{ok:false,version:'2026-09-25.1',sourceProjection:'precalculee',erreurs:[{code:'CB_DATE_PRIMITIVE_ABSENTE',message:'Primitive de détermination des dates de débit CB absente.'}]};
   const finCycle=dateFinCycleSuivant instanceof Date?new Date(dateFinCycleSuivant):new Date(dateFinCycleSuivant||new Date());
   const cible=finMoisGardeCbMultiCycleBudgetSoft20260908_(finCycle);
-  if(!r||r.ok===false)return{ok:false,version:BUDGETSOFT_CB_MULTICYCLE_GUARD_20260908_VERSION,sourceProjection:'precalculee',dateCible:cible.toISOString(),erreurs:[{code:'CB_PROJECTION_INVALIDE',message:String(r&&r.erreur||'Projection canonique invalide.')}],projection:r||null};
-  const reference=new Date(r.dateReference||new Date());
-  const publiees=(r.lignes||[]).filter(x=>x.source==='debit_cb_estime');
-  const datesAttendues=[];let ref=new Date(reference),garde=0;
-  while(ref<cible&&garde++<12){const debit=prochaineDateDebitCbTresorerie20260901_(ref);if(!debit||isNaN(debit)||debit>cible)break;const j=isoJourGardeCbMultiCycleBudgetSoft20260908_(debit);if(!datesAttendues.includes(j))datesAttendues.push(j);ref=new Date(debit.getTime()+1);}
-  const parDate={};publiees.forEach(x=>{const j=isoJourGardeCbMultiCycleBudgetSoft20260908_(x.date);(parDate[j]=parDate[j]||[]).push(x);});
-  Object.keys(parDate).forEach(j=>{if(parDate[j].length>1)erreurs.push({code:'CB_DEBIT_DUPLIQUE',message:'Plusieurs compléments CB estimés sont publiés pour la même date bancaire.',date:j,nombre:parDate[j].length});});
-  datesAttendues.forEach(j=>{if((parDate[j]||[]).length===0)erreurs.push({code:'CB_DEBIT_CYCLE_ABSENT',message:'Un débit CB attendu dans l’horizon n’est pas publié.',date:j});});
-  publiees.forEach(x=>{const montant=Math.abs(arrGardeCbMultiCycleBudgetSoft20260908_(x.montantSigne)),partCerbere=Math.max(0,arrGardeCbMultiCycleBudgetSoft20260908_(x.partCerbere)),partFinMois=Math.max(0,arrGardeCbMultiCycleBudgetSoft20260908_(x.partFinMois)),somme=arrGardeCbMultiCycleBudgetSoft20260908_(partCerbere+partFinMois);if(Math.abs(montant-somme)>.01)erreurs.push({code:'CB_DEBIT_FORMULE_DIVERGENTE',message:'Le complément CB publié ne correspond pas à partCerbere + partFinMois.',date:isoJourGardeCbMultiCycleBudgetSoft20260908_(x.date),montantPublie:montant,partCerbere,partFinMois,sommeAttendue:somme});});
-  if(datesAttendues.length>=2&&publiees.length<2)erreurs.push({code:'CB_MULTICYCLE_INCOMPLET',message:'La trajectoire franchit plusieurs débits CB mais moins de deux compléments sont publiés.',datesAttendues:datesAttendues.slice(),nombrePublie:publiees.length});
-  return{ok:erreurs.length===0,version:BUDGETSOFT_CB_MULTICYCLE_GUARD_20260908_VERSION,sourceProjection:'precalculee',sansRecalculMetier:true,dateReference:r.dateReference||'',dateCible:r.dateCible||cible.toISOString(),datesAttendues,publiees:publiees.map(x=>({date:x.date,montant:arrGardeCbMultiCycleBudgetSoft20260908_(x.montantSigne),partCerbere:arrGardeCbMultiCycleBudgetSoft20260908_(x.partCerbere),partFinMois:arrGardeCbMultiCycleBudgetSoft20260908_(x.partFinMois),moteurCerbere:x.moteurCerbere||''})),controles:{nombreCyclesAttendus:datesAttendues.length,nombreCyclesPublies:publiees.length,tousCyclesAttendusPublies:datesAttendues.every(j=>(parDate[j]||[]).length===1),aucunDebitDuplique:Object.keys(parDate).every(j=>parDate[j].length===1),formulesOk:erreurs.filter(e=>e.code==='CB_DEBIT_FORMULE_DIVERGENTE').length===0},erreurs};
-}
+  if(!r||r.ok===false)return{ok:false,version:'2026-09-25.1',sourceProjection:'precalculee',dateCible:cible.toISOString(),erreurs:[{code:'CB_PROJECTION_INVALIDE',message:String(r&&r.erreur||'Projection canonique invalide.')}],projection:r||null};
 
+  const reference=new Date(r.dateReference||new Date());
+  const lignes=Array.isArray(r.lignes)?r.lignes:[];
+  const publiees=lignes.filter(x=>x.source==='debit_cb_estime');
+  const cbCertaines=lignes.filter(x=>x.source==='operation_future'&&typeof estCbTresorerieCanonique20260907_==='function'&&estCbTresorerieCanonique20260907_(x));
+  const diag=r&&r.diagnostic20260831&&r.diagnostic20260831.enveloppePilotable20260913||{};
+  const diagCycles=Array.isArray(diag.cycles)?diag.cycles:[];
+
+  const datesAttendues=[];let ref=new Date(reference),garde=0;
+  while(ref<cible&&garde++<12){
+    const debit=prochaineDateDebitCbTresorerie20260901_(ref);
+    if(!debit||isNaN(debit)||debit>cible)break;
+    const j=isoJourGardeCbMultiCycleBudgetSoft20260908_(debit);
+    if(!datesAttendues.includes(j))datesAttendues.push(j);
+    ref=new Date(debit.getTime()+1);
+  }
+
+  const estParDate={},certainParDate={},diagParDate={};
+  publiees.forEach(x=>{const j=isoJourGardeCbMultiCycleBudgetSoft20260908_(x.date);(estParDate[j]=estParDate[j]||[]).push(x);});
+  cbCertaines.forEach(x=>{const j=isoJourGardeCbMultiCycleBudgetSoft20260908_(x.date);(certainParDate[j]=certainParDate[j]||[]).push(x);});
+  diagCycles.forEach(x=>{const j=String(x&&x.dateDebit||'');if(j)diagParDate[j]=x;});
+
+  Object.keys(estParDate).forEach(j=>{
+    if(estParDate[j].length>1)erreurs.push({code:'CB_DEBIT_DUPLIQUE',message:'Plusieurs compléments CB estimés sont publiés pour la même date bancaire.',date:j,nombre:estParDate[j].length});
+  });
+
+  const couvertures=datesAttendues.map(j=>{
+    const est=estParDate[j]||[],certaines=certainParDate[j]||[],d=diagParDate[j]||null;
+    const residuelAttendu=d?Math.max(0,Number(d.cbEstimeeSurEp||0)):null;
+    const couvert=est.length===1||certaines.length>0||(d&&residuelAttendu<=.01);
+    if(!couvert)erreurs.push({code:'CB_DEBIT_CYCLE_NON_COUVERT',message:'Aucun débit CB certain ni résiduel EP estimé ne couvre cette date bancaire.',date:j,diagnosticCycle:d});
+    if(d&&residuelAttendu>.01&&est.length!==1)erreurs.push({code:'CB_RESIDUEL_EP_ABSENT',message:'Un résiduel CB issu de l’EP est attendu mais aucune ligne estimée unique n’est publiée.',date:j,residuelAttendu:arrGardeCbMultiCycleBudgetSoft20260908_(residuelAttendu)});
+    return{
+      date:j,
+      lignesCertaines:certaines.length,
+      montantCertain:arrGardeCbMultiCycleBudgetSoft20260908_(certaines.reduce((s,x)=>s+Math.abs(Number(x&&x.montantSigne||0)),0)),
+      lignesEstimees:est.length,
+      montantEstime:arrGardeCbMultiCycleBudgetSoft20260908_(est.reduce((s,x)=>s+Math.abs(Number(x&&x.montantSigne||0)),0)),
+      residuelEpAttendu:d?arrGardeCbMultiCycleBudgetSoft20260908_(residuelAttendu):null,
+      couvert:couvert
+    };
+  });
+
+  publiees.forEach(x=>{
+    const montant=Math.abs(arrGardeCbMultiCycleBudgetSoft20260908_(x.montantSigne));
+    const partEp=Math.max(0,arrGardeCbMultiCycleBudgetSoft20260908_(x.partEp!=null?x.partEp:x.partCerbere));
+    if(Math.abs(montant-partEp)>.01)erreurs.push({code:'CB_DEBIT_FORMULE_DIVERGENTE',message:'Le complément CB publié ne correspond pas à la part EP résiduelle.',date:isoJourGardeCbMultiCycleBudgetSoft20260908_(x.date),montantPublie:montant,partEp:partEp});
+  });
+
+  return{
+    ok:erreurs.length===0,version:'2026-09-25.1',sourceProjection:'precalculee',sansRecalculMetier:true,
+    dateReference:r.dateReference||'',dateCible:r.dateCible||cible.toISOString(),datesAttendues:datesAttendues,
+    publiees:publiees.map(x=>({date:x.date,montant:arrGardeCbMultiCycleBudgetSoft20260908_(x.montantSigne),partEp:arrGardeCbMultiCycleBudgetSoft20260908_(x.partEp!=null?x.partEp:x.partCerbere),ownerCb:String(x.ownerCb||''),moteurCerbere:x.moteurCerbere||''})),
+    couvertures:couvertures,
+    controles:{
+      nombreCyclesAttendus:datesAttendues.length,
+      nombreComplementsPublies:publiees.length,
+      tousCyclesCouverts:couvertures.every(x=>x.couvert),
+      aucunDebitDuplique:Object.keys(estParDate).every(j=>estParDate[j].length===1),
+      formulesOk:erreurs.filter(e=>e.code==='CB_DEBIT_FORMULE_DIVERGENTE').length===0
+    },
+    erreurs:erreurs,
+    doctrine:'Chaque date de débit doit être couverte par le Réel CB déjà connu, un résiduel EP à 90 %, ou un diagnostic explicite de résiduel nul. Une ligne estimée n’est pas obligatoire quand l’EP restant est nul.'
+  };
+}
 function auditerGardeCbMultiCycleBudgetSoft20260908(dateFinCycleSuivant){
   if(typeof construireTrajectoireTresorerieCanoniqueBudgetSoft20260907!=='function')return{ok:false,version:BUDGETSOFT_CB_MULTICYCLE_GUARD_20260908_VERSION,erreurs:[{code:'CB_OWNER_ABSENT',message:'Propriétaire canonique de trésorerie absent.'}]};
   const finCycle=dateFinCycleSuivant instanceof Date?new Date(dateFinCycleSuivant):new Date(dateFinCycleSuivant||new Date());
