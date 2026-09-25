@@ -91,3 +91,83 @@ function etatEnvelopePilotableDepuisCockpitBudgetSoft20260913_(cerbere){
 }
 
 function chargerEtatEnvelopePilotableBudgetSoft20260913(){return etatEnvelopePilotableDepuisCockpitBudgetSoft20260913_(chargerCerbereCockpit20260902());}
+
+
+/**
+ * Audit doctrinal CB / pilotable — 2026-09-25.
+ *
+ * Deux ratios distincts sont mesurés :
+ *  A = CB pilotable / dépenses pilotables : ratio utile pour transformer
+ *      un EP restant en prévision de CB différée.
+ *  B = CB pilotable / toutes les CB hors charges fixes : décrit la composition
+ *      des CB, mais ne permet pas à lui seul de prévoir les CB depuis l'EP.
+ */
+function auditerRatioCbPilotableBudgetSoft20260925(){
+  const operations=typeof lireTable_==='function'?(lireTable_('Operations')||[]):[];
+  const ops=typeof dedoublonnerOperationsCartesBudgetSoft_==='function'?dedoublonnerOperationsCartesBudgetSoft_(operations):operations;
+  const charges=typeof lireTable_==='function'?(lireTable_('Charges_fixes')||[]):[];
+  const rapprochements=typeof lireRapprochementsChargesFixes==='function'?(lireRapprochementsChargesFixes()||[]):[];
+  const liensCf=typeof construireLiensChargesFixesCommuns_==='function'?construireLiensChargesFixesCommuns_(ops,charges,rapprochements):{};
+  const cer=typeof chargerCerbereCockpit20260902==='function'?chargerCerbereCockpit20260902():null;
+  const p1=cer&&Array.isArray(cer.periodes)?cer.periodes[0]:null;
+  const env=Array.isArray(p1&&p1.enveloppes)?p1.enveloppes:[];
+  const cats=new Set(env.map(x=>String(x&&x.categorie||'').trim()).filter(Boolean));
+  const periode=p1&&p1.periode||p1||{};
+  const debut=dateEpBudgetSoft20260913_(periode.debut),fin=dateEpBudgetSoft20260913_(periode.fin),ref=new Date();
+
+  function estCb_(o){
+    if(typeof estAchatCbDoubleRole20260905_==='function')return !!estAchatCbDoubleRole20260905_(o);
+    return !!(String(o&&o.carte_fin||'').trim()||String(o&&o.date_achat||'').trim());
+  }
+  function dateAchat_(o){
+    let d=null;
+    if(estCb_(o)&&typeof dateAchatCbDoubleRole20260905_==='function')d=dateAchatCbDoubleRole20260905_(o);
+    if(!d&&typeof dateAchatCockpit20260902_==='function')d=dateAchatCockpit20260902_(o);
+    if(!d)d=dateEpBudgetSoft20260913_(o&&o.date_achat||o&&o.date_comptable||o&&o.date);
+    return d;
+  }
+  function mesurer_(a,z){
+    let pilotableTotal=0,pilotableCb=0,cbHorsCf=0,cbCf=0,nPilotable=0,nPilotableCb=0,nCbHorsCf=0;
+    (ops||[]).forEach(o=>{
+      const m=Number(o&&o.montant||0);if(!(m<0))return;
+      const d=dateAchat_(o);if(!d||d<a||d>z||d>ref)return;
+      const id=String(o&&o.id||'').trim(),estCf=!!String(o&&o.charge_fixe_id||'').trim()||!!(id&&liensCf[id]);
+      const cb=estCb_(o),cat=String(o&&o.categorie||'').trim();
+      const pilotable=cats.has(cat)&&!estCf&&!(typeof estReglementCbTechniqueV377_==='function'&&estReglementCbTechniqueV377_(o));
+      const x=Math.abs(m);
+      if(pilotable){pilotableTotal+=x;nPilotable++;if(cb){pilotableCb+=x;nPilotableCb++;}}
+      if(cb){if(estCf)cbCf+=x;else{cbHorsCf+=x;nCbHorsCf++;}}
+    });
+    const ratioCbDansPilotable=pilotableTotal>0?pilotableCb/pilotableTotal:null;
+    const ratioPilotableDansCb=cbHorsCf>0?pilotableCb/cbHorsCf:null;
+    return{
+      pilotableTotal:arrEpBudgetSoft20260913_(pilotableTotal),
+      pilotableCb:arrEpBudgetSoft20260913_(pilotableCb),
+      cbHorsChargesFixes:arrEpBudgetSoft20260913_(cbHorsCf),
+      cbChargesFixes:arrEpBudgetSoft20260913_(cbCf),
+      nombrePilotable:nPilotable,nombrePilotableCb:nPilotableCb,nombreCbHorsChargesFixes:nCbHorsCf,
+      ratioCbDansPilotablePct:ratioCbDansPilotable===null?null:arrEpBudgetSoft20260913_(ratioCbDansPilotable*100),
+      ratioPilotableDansCbPct:ratioPilotableDansCb===null?null:arrEpBudgetSoft20260913_(ratioPilotableDansCb*100)
+    };
+  }
+
+  const histDeb=new Date(ref);histDeb.setDate(histDeb.getDate()-180);histDeb.setHours(0,0,0,0);
+  const courant=debut&&fin?mesurer_(debut,fin):null,historique180j=mesurer_(histDeb,ref);
+  const utile=historique180j&&historique180j.ratioCbDansPilotablePct;
+  const out={
+    ok:true,lectureSeule:true,version:'2026-09-25.1',
+    periodeCourante:{debut:debut?isoEpBudgetSoft20260913_(debut):'',fin:fin?isoEpBudgetSoft20260913_(fin):'',mesure:courant},
+    historique180j:historique180j,
+    doctrine:{
+      ratioPourPrevoirDepuisEp:'CB pilotable / dépenses pilotables',
+      ratioCompositionCb:'CB pilotable / toutes CB hors charges fixes',
+      precision:'Pour projeter les CB depuis l’EP restant, seul le premier ratio est causalement utilisable dans la formule.'
+    },
+    proposition90:{
+      ratioMesurePct:utile,
+      ecartPoints:utile===null?null:arrEpBudgetSoft20260913_(utile-90),
+      suffisammentProche:utile!==null&&Math.abs(utile-90)<=5
+    }
+  };
+  console.log('[AUDIT RATIO CB PILOTABLE 20260925] '+JSON.stringify(out));return out;
+}
