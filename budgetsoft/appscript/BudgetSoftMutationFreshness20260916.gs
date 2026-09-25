@@ -1,4 +1,4 @@
-const BUDGETSOFT_MUTATION_FRESHNESS_20260916_VERSION='2026-09-22.1';
+const BUDGETSOFT_MUTATION_FRESHNESS_20260916_VERSION='2026-09-25.1';
 const BUDGETSOFT_GLOBAL_DIRTY_AT_20260916='BUDGETSOFT_GLOBAL_SNAPSHOT_DIRTY_LE';
 const BUDGETSOFT_GLOBAL_DIRTY_ORIGIN_20260916='BUDGETSOFT_GLOBAL_SNAPSHOT_DIRTY_ORIGINE';
 const BUDGETSOFT_MUTATION_REBUILD_HANDLER_20260921='reconstruireSnapshotBudgetSoftApresMutation20260921';
@@ -64,6 +64,7 @@ function auditerReconstructionAutomatiqueSnapshotApresMutation20260921(){
 }
 
 function marquerSnapshotGlobalBudgetSoftObsolete20260916_(origine){
+  if(typeof invaliderCacheLectureSnapshotGlobalBudgetSoft20260925_==='function')invaliderCacheLectureSnapshotGlobalBudgetSoft20260925_();
   const p=PropertiesService.getDocumentProperties(),maintenant=new Date().toISOString(),o=String(origine||'mutation');
   p.setProperty(BUDGETSOFT_GLOBAL_DIRTY_AT_20260916,maintenant);
   p.setProperty(BUDGETSOFT_GLOBAL_DIRTY_ORIGIN_20260916,o);
