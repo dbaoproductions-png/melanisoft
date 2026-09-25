@@ -1,4 +1,4 @@
-const BUDGETSOFT_MUTATION_FRESHNESS_20260916_VERSION='2026-09-25.1';
+const BUDGETSOFT_MUTATION_FRESHNESS_20260916_VERSION='2026-09-25.2';
 const BUDGETSOFT_GLOBAL_DIRTY_AT_20260916='BUDGETSOFT_GLOBAL_SNAPSHOT_DIRTY_LE';
 const BUDGETSOFT_GLOBAL_DIRTY_ORIGIN_20260916='BUDGETSOFT_GLOBAL_SNAPSHOT_DIRTY_ORIGINE';
 const BUDGETSOFT_MUTATION_REBUILD_HANDLER_20260921='reconstruireSnapshotBudgetSoftApresMutation20260921';
@@ -101,12 +101,22 @@ function diagnostiquerPeremptionSnapshot20260916_(etat){
  * a changé. Les consommateurs snapshot-first retombent alors sur leur moteur frais.
  */
 function chargerSnapshotGlobalBudgetSoft20260906(){
-  const props=PropertiesService.getDocumentProperties(),rawMeta=props.getProperty(BUDGETSOFT_GLOBAL_SNAPSHOT_PREFIX+'META');
-  if(!rawMeta)return{ok:true,disponible:false,version:BUDGETSOFT_GLOBAL_SNAPSHOT_VERSION};
+  const props=PropertiesService.getDocumentProperties();
   try{
+    // Anti-régression 2026-09-25 : une seule lecture RPC du magasin de propriétés.
+    // L'ancien chargeur faisait META + N lectures PART_n (17 fragments actuellement),
+    // ce qui rendait une simple lecture Cerbère dépendante de dizaines d'allers-retours.
+    const toutes=props.getProperties();
+    const rawMeta=toutes[BUDGETSOFT_GLOBAL_SNAPSHOT_PREFIX+'META']||'';
+    if(!rawMeta)return{ok:true,disponible:false,version:BUDGETSOFT_GLOBAL_SNAPSHOT_VERSION};
     const meta=JSON.parse(rawMeta),n=Number(meta.morceaux||0);if(!n)return{ok:true,disponible:false,corrompu:true,version:BUDGETSOFT_GLOBAL_SNAPSHOT_VERSION};
-    let raw='';for(let i=0;i<n;i++){const part=props.getProperty(BUDGETSOFT_GLOBAL_SNAPSHOT_PREFIX+'PART_'+i);if(part==null)throw new Error('Snapshot incomplet');raw+=part;}
-    const etat=JSON.parse(decoderEtatGlobalBudgetSoft20260906_(raw));
+    const parts=new Array(n);
+    for(let i=0;i<n;i++){
+      const part=toutes[BUDGETSOFT_GLOBAL_SNAPSHOT_PREFIX+'PART_'+i];
+      if(part==null)throw new Error('Snapshot incomplet');
+      parts[i]=part;
+    }
+    const etat=JSON.parse(decoderEtatGlobalBudgetSoft20260906_(parts.join('')));
     const fraicheur=diagnostiquerPeremptionSnapshot20260916_(etat);
     if(fraicheur.perime)return{ok:true,disponible:false,perime:true,version:BUDGETSOFT_GLOBAL_SNAPSHOT_VERSION,revisionBudgetSoft:etat.revisionBudgetSoft||'',genereLe:etat.genereLe||'',fraicheur};
     return{ok:true,disponible:true,perime:false,version:BUDGETSOFT_GLOBAL_SNAPSHOT_VERSION,revisionBudgetSoft:etat.revisionBudgetSoft,genereLe:etat.genereLe,etat,fraicheur};
