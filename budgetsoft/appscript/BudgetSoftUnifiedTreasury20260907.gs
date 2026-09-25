@@ -138,7 +138,7 @@ function auditerProjectionTresorerieCibleBudgetSoft20260925(dateCible){
   const cible=String(dateCible||'').trim()||'2026-10-27';
   const r=chargerTresorerieUnifieeBudgetSoft20260907(cible);
   if(!r||!r.ok){
-    const e={ok:false,lectureSeule:true,version:'2026-09-25.1',dateCible:cible,erreur:r&&r.erreur||'Trésorerie unifiée indisponible'};
+    const e={ok:false,lectureSeule:true,version:'2026-09-25.2',dateCible:cible,erreur:r&&r.erreur||'Trésorerie unifiée indisponible'};
     console.log('[AUDIT PROJECTION TRESORERIE CIBLE 20260925] '+JSON.stringify(e));
     return e;
   }
@@ -388,8 +388,9 @@ function auditerDoctrinePrevisionIntermodule20260925(){
     coursGlissant:String(parCat.Cours&&parCat.Cours.mode_prevision||'').indexOf('moyenne_glissante')===0,
     concertsGlissant:String(parCat.Concerts&&parCat.Concerts.mode_prevision||'').indexOf('moyenne_glissante')===0,
     casden0410Absent:casden.length===0,
-    cbSepareeEp:!!cbSept&&Number(cbSept.partCerbere||0)===0&&Number(cbSept.partEp||0)===0&&String(cbSept.ownerCb||'')==='cible_cb_glissante_20260925',
-    cbCibleInitiale1950:!!cbSept&&Math.abs(Number(cbSept.cibleMensuelleCb||0)-1950)<.011,
+    cbDepuisEpRestant90:!!cbSept&&String(cbSept.ownerCb||'')==='ep_restant_90pct_20260925'&&Math.abs(Number(cbSept.tauxCbPilotablePct||0)-90)<.011,
+    cbPartEpCoherente:!!cbSept&&Math.abs(Number(cbSept.partEp||0)-Number(cbSept.residuelCb||0))<.011,
+    cbEtalon1950DiagnosticSeulement:!!cbSept&&Math.abs(Number(cbSept.calibrationCb||0)-1950)<.011,
     coursRapprochementAgrege:!!(revCats.Cours&&revCats.Cours.lignes.some(function(x){return String(x&&x.modeRapprochementReel||'')==='cible_mensuelle_agregee';})),
     concertsRapprochementAgrege:!!(revCats.Concerts&&revCats.Concerts.lignes.some(function(x){return String(x&&x.modeRapprochementReel||'')==='cible_mensuelle_agregee';})),
     p2SocleR0Commun:Number.isFinite(socleP2)?Math.abs(socleP2-Number(r0&&r0.total||0))<.011:null,
@@ -407,7 +408,7 @@ function auditerDoctrinePrevisionIntermodule20260925(){
     controles:controles,
     doctrine:{
       recettes:'R0 effectif partagé ; courant Cerbère conservateur, futur/statistique bancaire par cible mensuelle et remplacement/consommation par le Réel',
-      cb:'pilotage EP par date d’achat ; trésorerie bancaire par date de débit, avec achats connus + résiduel vers cible CB glissante',
+      cb:'pilotage EP par date d’achat ; trésorerie bancaire par date de débit : achats réels déjà connus + 90 % de l’EP restant ; charges fixes CB séparées ; 1 950 € = étalon de contrôle seulement',
       chargesFixes:'générateur canonique ajusté partagé, y compris échéances ignorées/reportées'
     }
   };
