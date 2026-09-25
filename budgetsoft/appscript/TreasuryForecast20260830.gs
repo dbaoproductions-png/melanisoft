@@ -1,4 +1,4 @@
-const TREASURY_FORECAST_20260830_VERSION='2026-09-21.1';
+const TREASURY_FORECAST_20260830_VERSION='2026-09-25.1';
 
 /**
  * Prévision de trésorerie bancaire commune à Comptes / Opérations / Cerbère.
