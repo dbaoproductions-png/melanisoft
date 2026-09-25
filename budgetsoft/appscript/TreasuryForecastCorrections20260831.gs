@@ -289,6 +289,15 @@ function appliquerSuppressionsTemporairesTresorerie20260831_(lignes,evenements){
 }
 
 function lireCanonRecettesTresorerie20260831_(){
+  // Une seule référence intermodule : le R0 effectif publié par Cerbère.
+  // Les montants glissants (France Travail/Cours/Concerts) et fixes
+  // (Salaire/Foncier) ne sont donc jamais recalculés localement par la trésorerie.
+  try{
+    if(typeof chargerCanonRecettesCerbereV1==='function'){
+      const r=chargerCanonRecettesCerbereV1();
+      if(r&&Array.isArray(r.postes)&&r.postes.length)return r.postes;
+    }
+  }catch(e){}
   const lecteurs=[
     ()=>typeof lireTablePlanCerbere_==='function'?lireTablePlanCerbere_('Cerbere_Recettes_Canon_V1'):null,
     ()=>typeof lireFeuilleDynamiquePlan_==='function'?lireFeuilleDynamiquePlan_('Cerbere_Recettes_Canon_V1'):null,
