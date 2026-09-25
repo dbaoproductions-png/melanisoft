@@ -51,12 +51,72 @@ function chargerCanonCerbereV1() {
   if(lecture)CERBERE_P0_LECTURE_CACHE_20260905_=out;return out;
 }
 
+function normaliserCategorieRecetteGlissante20260925_(s){
+  return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim();
+}
+
+function moyenneRecetteMoisComplets20260925_(operations,categorie,reference,nombreMois){
+  const ref=reference instanceof Date?new Date(reference):new Date(reference||new Date());
+  const n=Math.max(1,Math.min(12,Number(nombreMois||6)));
+  const cible=normaliserCategorieRecetteGlissante20260925_(categorie),mois=[];
+  for(let k=n;k>=1;k--){
+    const d=new Date(ref.getFullYear(),ref.getMonth()-k,1,12,0,0,0);
+    mois.push(Utilities.formatDate(d,Session.getScriptTimeZone(),'yyyy-MM'));
+  }
+  const totaux={};mois.forEach(m=>totaux[m]=0);
+  (operations||[]).forEach(o=>{
+    const montant=Number(o&&o.montant||0);if(!(montant>0))return;
+    const cat=normaliserCategorieRecetteGlissante20260925_(o&&o.categorie||'');
+    if(cat!==cible)return;
+    const d=typeof dateOperationCouranteBudgetSoft_==='function'
+      ?dateOperationCouranteBudgetSoft_(o)
+      :(typeof dateComptableCerbere_==='function'?dateComptableCerbere_(o):new Date(o&&o.date_comptable||o&&o.date||0));
+    if(!d||isNaN(d))return;
+    const mk=Utilities.formatDate(d,Session.getScriptTimeZone(),'yyyy-MM');
+    if(Object.prototype.hasOwnProperty.call(totaux,mk))totaux[mk]+=montant;
+  });
+  const valeurs=mois.map(m=>Number(totaux[m]||0));
+  const moyenne=valeurs.length?valeurs.reduce((s,x)=>s+x,0)/valeurs.length:0;
+  return{montant:Math.round(moyenne*100)/100,mois:mois,totaux:totaux,nombreMois:valeurs.length};
+}
+
+function appliquerDoctrineRecettesEffectives20260925_(postes,operations,reference){
+  const fixes={'salaires':2567,'revenus fonciers':780};
+  const glissantes=new Set(['france travail','cours','concerts']);
+  return (postes||[]).map(p=>{
+    const x=Object.assign({},p),cle=normaliserCategorieRecetteGlissante20260925_(x.categorie);
+    x.montant_reference_persistant=Math.round(Math.abs(Number(x.montant||0))*100)/100;
+    if(Object.prototype.hasOwnProperty.call(fixes,cle)){
+      x.montant=fixes[cle];
+      x.mode_prevision='fixe';
+      x.source_prevision=cle==='salaires'?'montant conventionnel après avancement':'montant canonique validé';
+      return x;
+    }
+    if(glissantes.has(cle)){
+      const h=moyenneRecetteMoisComplets20260925_(operations,x.categorie,reference,6);
+      if(h.montant>0)x.montant=h.montant;
+      x.mode_prevision='moyenne_glissante_6_mois_complets';
+      x.source_prevision='Operations réelles';
+      x.historique_prevision={mois:h.mois,totaux:h.totaux};
+      return x;
+    }
+    x.mode_prevision='canon_persistant';
+    x.source_prevision='Cerbere_Recettes_Canon_V1';
+    return x;
+  });
+}
+
 function chargerCanonRecettesCerbereV1() {
   const lecture=typeof BUDGETSOFT_READ_CONTEXT_ACTIVE_!=='undefined'&&!!BUDGETSOFT_READ_CONTEXT_ACTIVE_;
   if(lecture&&CERBERE_R0_LECTURE_CACHE_20260905_)return CERBERE_R0_LECTURE_CACHE_20260905_;
   const sh=assurerCanonRecettesCerbereV1_(),hs=sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(x=>String(x||'').trim()),rows=sh.getLastRow()>1?sh.getRange(2,1,sh.getLastRow()-1,hs.length).getValues():[];
-  const postes=rows.filter(r=>r.some(v=>v!==''&&v!==null)).map(r=>Object.fromEntries(hs.map((h,i)=>[h,r[i]]))).filter(x=>String(x.actif).toLowerCase()!=='false').map(x=>({categorie:String(x.categorie||'').trim(),montant:Math.max(0,Number(x.montant||0)),nature:String(x.nature||'structurelle'),ordre:Number(x.ordre||99),commentaire:String(x.commentaire||''),montant_precedent:(x.montant_precedent===''||x.montant_precedent==null)?null:Math.max(0,Number(x.montant_precedent||0)),date_effet:normaliserDateCanonRecettes_(x.date_effet)})).filter(x=>x.categorie&&x.montant>0).sort((a,b)=>a.ordre-b.ordre||a.categorie.localeCompare(b.categorie,'fr'));
-  const out={version:CERBERE_RECETTES_CANON_VERSION,principe:'R0 est la référence maître persistante des recettes normales ; le Plan et le réel ne la réécrivent pas. Les changements datés conservent la référence antérieure pour les cycles déjà ouverts.',postes,total:arrondirCerbereV3_(postes.reduce((s,x)=>s+x.montant,0))};
+  const bruts=rows.filter(r=>r.some(v=>v!==''&&v!==null)).map(r=>Object.fromEntries(hs.map((h,i)=>[h,r[i]]))).filter(x=>String(x.actif).toLowerCase()!=='false').map(x=>({categorie:String(x.categorie||'').trim(),montant:Math.max(0,Number(x.montant||0)),nature:String(x.nature||'structurelle'),ordre:Number(x.ordre||99),commentaire:String(x.commentaire||''),montant_precedent:(x.montant_precedent===''||x.montant_precedent==null)?null:Math.max(0,Number(x.montant_precedent||0)),date_effet:normaliserDateCanonRecettes_(x.date_effet)})).filter(x=>x.categorie&&x.montant>0).sort((a,b)=>a.ordre-b.ordre||a.categorie.localeCompare(b.categorie,'fr'));
+  let operations=[];
+  try{
+    operations=typeof lireTableDirecteBudgetSoft20260905_==='function'?lireTableDirecteBudgetSoft20260905_('Operations'):(typeof lireTable_==='function'?lireTable_('Operations'):[]);
+  }catch(e){operations=[];}
+  const postes=appliquerDoctrineRecettesEffectives20260925_(bruts,operations,new Date());
+  const out={version:'2026-09-25.1',versionCanon:CERBERE_RECETTES_CANON_VERSION,principe:'R0 effectif intermodule : salaire 2 567 €, foncier 780 €, France Travail/Cours/Concerts en moyenne glissante sur 6 mois complets ; le réel courant ne réécrit pas la référence.',postes,total:arrondirCerbereV3_(postes.reduce((s,x)=>s+x.montant,0)),doctrineRecettes20260925:true};
   if(lecture)CERBERE_R0_LECTURE_CACHE_20260905_=out;return out;
 }
 
