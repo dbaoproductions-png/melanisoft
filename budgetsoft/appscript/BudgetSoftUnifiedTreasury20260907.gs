@@ -194,3 +194,87 @@ function auditerProjectionTresorerieCibleBudgetSoft20260925(dateCible){
   console.log('[AUDIT PROJECTION TRESORERIE CIBLE 20260925] '+JSON.stringify(out));
   return out;
 }
+
+
+function auditerPostesProjectionTresorerie20260925(dateCible){
+  const cible=String(dateCible||'2026-10-27');
+  const r=chargerTresorerieUnifieeBudgetSoft20260907(cible);
+  if(!r||!r.ok){
+    const e={ok:false,lectureSeule:true,version:'2026-09-25.2',dateCible:cible,erreur:r&&r.erreur||'indisponible'};
+    console.log('[AUDIT POSTES PROJECTION 20260925] '+JSON.stringify(e));
+    return e;
+  }
+
+  const ref=String(r.dateReference||'');
+  const lignes=(r.lignes||[]).filter(function(l){
+    const j=jourTresorerieUnifiee20260907_(l&&l.date);
+    return j&&j>ref&&j<=cible;
+  });
+
+  const cf=lignes.filter(function(l){return String(l&&l.source||'')==='charge_fixe';}).map(function(l){
+    return {
+      date:jourTresorerieUnifiee20260907_(l.date),
+      sourceId:String(l.sourceId||''),
+      libelle:String(l.libelle||''),
+      categorie:String(l.categorie||''),
+      montant:arrTresorerieUnifiee20260907_(Number(l.montantSigne||0)),
+      preuve:String(l.preuve||'')
+    };
+  });
+
+  const cb=lignes.filter(function(l){return String(l&&l.source||'')==='debit_cb_estime';}).map(function(l){
+    return {
+      date:jourTresorerieUnifiee20260907_(l.date),
+      montant:arrTresorerieUnifiee20260907_(Number(l.montantSigne||0)),
+      partCerbere:arrTresorerieUnifiee20260907_(Number(l.partCerbere||0)),
+      partFinMois:arrTresorerieUnifiee20260907_(Number(l.partFinMois||0)),
+      moteurCerbere:String(l.moteurCerbere||''),
+      preuve:String(l.preuve||'')
+    };
+  });
+
+  const rev=lignes.filter(function(l){return String(l&&l.source||'')==='revenu_recurrent';}).map(function(l){
+    return {
+      date:jourTresorerieUnifiee20260907_(l.date),
+      sourceId:String(l.sourceId||''),
+      libelle:String(l.libelle||''),
+      categorie:String(l.categorie||''),
+      montant:arrTresorerieUnifiee20260907_(Number(l.montantSigne||0)),
+      certitude:String(l.certitude||''),
+      preuve:String(l.preuve||'')
+    };
+  });
+
+  const canon=typeof lireCanonRecettesTresorerie20260831_==='function'?lireCanonRecettesTresorerie20260831_():[];
+  const canonResume=(canon||[]).map(function(x){
+    return {
+      categorie:String(x&&x.categorie||''),
+      nature:String(x&&x.nature||''),
+      actif:x&&x.actif,
+      montant:arrTresorerieUnifiee20260907_(Math.abs(Number(x&&x.montant||0))),
+      montantPrecedent:arrTresorerieUnifiee20260907_(Math.abs(Number(x&&x.montant_precedent||0))),
+      dateEffet:String(x&&x.date_effet||'')
+    };
+  });
+
+  const total=function(xs){
+    return arrTresorerieUnifiee20260907_(xs.reduce(function(s,x){return s+Number(x.montant||0);},0));
+  };
+
+  const out={
+    ok:true,
+    lectureSeule:true,
+    version:'2026-09-25.2',
+    revisionBudgetSoft:r.revisionBudgetSoft||'',
+    dateReference:ref,
+    dateCible:cible,
+    soldeReel:r.soldeReel,
+    soldePrevisionnel:r.soldePrevisionnel,
+    chargesFixes:{nombre:cf.length,total:total(cf),casden:cf.filter(function(x){return /casden/i.test(x.libelle+' '+x.categorie);}),lignes:cf},
+    debitCbEstime:{nombre:cb.length,total:total(cb),lignes:cb},
+    recettesRecurrentes:{nombre:rev.length,total:total(rev),lignes:rev},
+    recettesCanon:{nombre:canonResume.length,total:arrTresorerieUnifiee20260907_(canonResume.reduce(function(s,x){return s+Number(x.montant||0);},0)),lignes:canonResume}
+  };
+  console.log('[AUDIT POSTES PROJECTION 20260925] '+JSON.stringify(out));
+  return out;
+}
