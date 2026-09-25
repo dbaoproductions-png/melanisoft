@@ -278,3 +278,76 @@ function auditerPostesProjectionTresorerie20260925(dateCible){
   console.log('[AUDIT POSTES PROJECTION 20260925] '+JSON.stringify(out));
   return out;
 }
+
+
+function auditerHistoriqueRecettesEtQueueCb20260925(){
+  const s=chargerSnapshotGlobalBudgetSoft20260906();
+  const e=s&&s.disponible&&s.etat,m=e&&e.modules||{},p=m.projectionEtendue||{};
+  const ref=new Date(String(p.dateReference||new Date()));
+  const ops=typeof lireTable_==='function'?lireTable_('Operations'):[];
+  const canon=typeof lireCanonRecettesTresorerie20260831_==='function'?lireCanonRecettesTresorerie20260831_():[];
+
+  const mois=[];
+  for(let k=6;k>=1;k--){
+    const d=new Date(ref.getFullYear(),ref.getMonth()-k,1,12,0,0,0);
+    mois.push(Utilities.formatDate(d,Session.getScriptTimeZone(),'yyyy-MM'));
+  }
+
+  const recettesParMois={};
+  mois.forEach(function(x){recettesParMois[x]={total:0,parCategorie:{},lignes:0};});
+  (ops||[]).forEach(function(o){
+    const d=typeof dateOpTresorerie_==='function'?dateOpTresorerie_(o):new Date(o&&o.date_comptable||o&&o.date||0);
+    if(!d||isNaN(d))return;
+    const mk=Utilities.formatDate(d,Session.getScriptTimeZone(),'yyyy-MM');
+    if(!recettesParMois[mk])return;
+    const mt=typeof montantSigneOperationRevenuBudgetSoft20260908_==='function'
+      ?Number(montantSigneOperationRevenuBudgetSoft20260908_(o)||0)
+      :Number(o&&o.montant||0);
+    if(!(mt>0))return;
+    const cat=String(o&&o.categorie||'(sans catégorie)').trim()||'(sans catégorie)';
+    recettesParMois[mk].total+=mt;
+    recettesParMois[mk].parCategorie[cat]=(recettesParMois[mk].parCategorie[cat]||0)+mt;
+    recettesParMois[mk].lignes++;
+  });
+  Object.keys(recettesParMois).forEach(function(k){
+    const x=recettesParMois[k];x.total=Math.round(x.total*100)/100;
+    Object.keys(x.parCategorie).forEach(function(cat){x.parCategorie[cat]=Math.round(x.parCategorie[cat]*100)/100;});
+  });
+
+  const vals=mois.map(function(x){return Number(recettesParMois[x].total||0);});
+  const valsTriees=vals.slice().sort(function(a,b){return a-b;});
+  const moyenne=vals.length?vals.reduce(function(a,b){return a+b;},0)/vals.length:0;
+  const mediane=valsTriees.length?(valsTriees.length%2?valsTriees[(valsTriees.length-1)/2]:(valsTriees[valsTriees.length/2-1]+valsTriees[valsTriees.length/2])/2):0;
+
+  const canonResume=(canon||[]).map(function(x){
+    return {categorie:String(x&&x.categorie||''),nature:String(x&&x.nature||''),actif:x&&x.actif,montant:Math.round(Math.abs(Number(x&&x.montant||0))*100)/100};
+  });
+
+  const queueCb=[];
+  for(let k=1;k<=4;k++){
+    const d0=new Date(ref.getFullYear(),ref.getMonth()-k,1),y=d0.getFullYear(),mo=d0.getMonth();
+    const dernier=new Date(y,mo+1,0).getDate();
+    let total=0,nombre=0;
+    const detail=[];
+    (ops||[]).forEach(function(o){
+      if(typeof estOperationCarteTresorerie20260901_==='function'&&!estOperationCarteTresorerie20260901_(o))return;
+      if(o&&o.charge_fixe_id)return;
+      const mt=Number(o&&o.montant||0);if(!(mt<0))return;
+      const da=typeof dateAchatCarteTresorerie20260901_==='function'?dateAchatCarteTresorerie20260901_(o):new Date(o&&o.date_achat||o&&o.date||0);
+      if(!da||isNaN(da)||da.getFullYear()!==y||da.getMonth()!==mo||da.getDate()<28)return;
+      total+=Math.abs(mt);nombre++;
+      detail.push({date:Utilities.formatDate(da,Session.getScriptTimeZone(),'yyyy-MM-dd'),libelle:String(o&&o.libelle_bancaire||o&&o.libelle||''),montant:Math.round(Math.abs(mt)*100)/100});
+    });
+    queueCb.push({mois:Utilities.formatDate(d0,Session.getScriptTimeZone(),'yyyy-MM'),jours28Fin:dernier-27,nombre:nombre,total:Math.round(total*100)/100,moyenneJour:Math.round((total/Math.max(1,dernier-27))*100)/100,detail:detail});
+  }
+
+  const out={
+    ok:true,lectureSeule:true,version:'2026-09-25.1',
+    revisionBudgetSoft:e&&e.revisionBudgetSoft||'',dateReference:String(p.dateReference||''),
+    recettesHistoriques:{mois:mois,parMois:recettesParMois,moyenne6M:Math.round(moyenne*100)/100,mediane6M:Math.round(mediane*100)/100},
+    recettesCanon:{nombre:canonResume.length,lignes:canonResume},
+    queueCbHistorique4M:queueCb
+  };
+  console.log('[AUDIT HISTORIQUE RECETTES ET QUEUE CB 20260925] '+JSON.stringify(out));
+  return out;
+}
