@@ -127,14 +127,18 @@ function occurrencesChargesTresorerie_(charges,hard,actions,now,cible,comptes){
     const mod=remplacements[String(c.id)]||null;
     if(mod&&mod.type==='supprimer'&&mod.date&&mod.date<=cible)return;
 
-    let occurrences=[];
+    let occurrences=[],canonAjustementsUtilise=false;
     if(typeof calculerEcheancesChargeFixeAjustees_==='function'){
       try{
         occurrences=calculerEcheancesChargeFixeAjustees_(c,now,cible,cible,ajustements)
           .map(e=>({date:new Date(e.date),montant:Math.abs(Number(e.montant||c.montant||c.montant_indicatif||0)),ajustement:String(e.ajustement||'')}));
+        canonAjustementsUtilise=true;
       }catch(e){occurrences=[];}
     }
-    if(!occurrences.length){
+    // Une liste vide du générateur canonique peut être volontaire (ex. échéance
+    // explicitement ignorée). Le fallback historique n'est donc autorisé qu'en
+    // absence/échec du propriétaire canonique, jamais après un résultat vide valide.
+    if(!canonAjustementsUtilise){
       occurrences=datesOccurrencesChargeTresorerie_(c,now,cible).map(d=>({date:new Date(d),montant:Math.abs(Number(c.montant||c.montant_indicatif||0)),ajustement:''}));
     }
 
