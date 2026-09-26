@@ -202,7 +202,14 @@ function corrigerReelPilotableDateAchat20260902_(base){
     // prélèvement manuel, etc.) : imputation à la date bancaire/comptable.
     // Sans ce repli, les mouvements non-CB d'une enveloppe (ex. Épargne) étaient
     // visibles dans reelImpute mais disparaissaient des dérivés reelNet/engagé/reste.
-    const dateAchat=typeof dateAchatCockpit20260902_==='function'?dateAchatCockpit20260902_(o):null;
+    const estCb=typeof estAchatCbDoubleRole20260905_==='function'
+      ?!!estAchatCbDoubleRole20260905_(o)
+      :!!(String(o&&o.carte_fin||'').trim()||String(o&&o.date_achat||'').trim());
+    const dateAchat=estCb
+      ?(typeof dateAchatCbDoubleRole20260905_==='function'
+        ?dateAchatCbDoubleRole20260905_(o)
+        :(typeof dateAchatCockpit20260902_==='function'?dateAchatCockpit20260902_(o):null))
+      :null;
     const d=dateAchat||dateOperationCouranteBudgetSoft_(o);if(!d)return;
     const t=d.getTime();if(!Number.isFinite(t))return;
     const banqueConnue=!!String(o&&o.source_bancaire||'').trim();
