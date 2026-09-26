@@ -104,6 +104,10 @@ function revenusCanoniquesTresorerie20260831_(ops,lignesExistantes,reference,cib
     return Math.max(1,Math.min(28,jours.length?jours[Math.floor(jours.length/2)]:15));
   }
 
+  const finCycleCourant=typeof dateFinCycleCanonBudgetSoft20260906_==='function'
+    ?dateFinCycleCanonBudgetSoft20260906_(reference)
+    :new Date(reference.getDate()<=27?reference.getFullYear():reference.getFullYear(),reference.getDate()<=27?reference.getMonth():reference.getMonth()+1,27,23,59,59,999);
+
   (canon||[]).forEach(c=>{
     if(!actifTresorerie_(c.actif))return;
     const cat=String(c.categorie||'').trim(),cle=norm(cat),baseMont=Math.abs(Number(c.montant||0));
@@ -134,7 +138,7 @@ function revenusCanoniquesTresorerie20260831_(ops,lignesExistantes,reference,cib
         if(moisReference&&d<=reference){
           d=new Date(reference);d.setDate(d.getDate()+1);d.setHours(12,0,0,0);
         }
-        if(d>reference&&d<=cible){
+        if(d>reference&&d<=cible&&d>finCycleCourant){
           const cand={
             id:'revcanon:'+cat+':'+y+'-'+String(m+1).padStart(2,'0'),
             source:'revenu_recurrent',sourceId:'canon:'+cat,date:d.toISOString(),libelle:cat,categorie:cat,
