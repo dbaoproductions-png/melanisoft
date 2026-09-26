@@ -2,7 +2,7 @@
  * Audit maître migration P -> EP — 2026-09-13.
  * Lecture seule. Aucun correctif, aucune écriture métier.
  */
-const BUDGETSOFT_EP_INTERMODULE_AUDIT_20260913_VERSION='2026-09-13.1';
+const BUDGETSOFT_EP_INTERMODULE_AUDIT_20260913_VERSION='2026-09-26.1';
 function arrAuditEp20260913_(n){return Math.round(Number(n||0)*100)/100;}
 function egalAuditEp20260913_(a,b){return Math.abs(arrAuditEp20260913_(a)-arrAuditEp20260913_(b))<=.011;}
 
@@ -28,10 +28,10 @@ function auditerCoeurEpBudgetSoft20260913(){
     pIndependantEp:egalAuditEp20260913_(d.p1,pFormule),
     impactEpReconcilie:!!impact&&egalAuditEp20260913_(Number(impact.immediat||0)+Number(impact.differe||0),impact.resteAEngager),
     c2ReportReconcilie:egalAuditEp20260913_(c2.reportCbCycle,Number(c2.cbDejaEngagee||0)+Number(c2.cbEpEstimee||0)),
-    tresorerieOwnerEp:!!(proj&&proj.ok!==false&&td&&td.ownerEp===true&&td.sourceCerbereFinal===true&&egalAuditEp20260913_(td.reconciliation,0)),
+    tresorerieOwnerEp:!!(proj&&proj.ok!==false&&td&&td.ownerEp===true&&egalAuditEp20260913_(td.ep,ep)&&egalAuditEp20260913_(td.reconciliation,0)&&Number(td.tauxDifferePct||0)===90),
     expressEpOnly:!!(express&&express.ok!==false&&express.referenceEP&&!express.referenceP1&&express.contexteDecision&&!express.contexteFinancier&&egalAuditEp20260913_(express.pilotable&&express.pilotable.allocation,ep)&&egalAuditEp20260913_(express.pilotable&&express.pilotable.reste,epDisponible))
   };
-  const out={ok:Object.keys(checks).every(k=>checks[k]===true),version:BUDGETSOFT_EP_INTERMODULE_AUDIT_20260913_VERSION,sourceCerbere:cer&&cer.sourceBudgetSoft||'',checks,verites:{p1:arrAuditEp20260913_(d.p1),p1Disponible:arrAuditEp20260913_(d.restePilotable),ep1:ep,ep1Disponible:epDisponible,epSource:String(e.source||''),consomme:arrAuditEp20260913_(sommeReel),p0:arrAuditEp20260913_(sommeP0)},impactC2:{connu:arrAuditEp20260913_(c2.cbDejaEngagee),epDiffereEstime:arrAuditEp20260913_(c2.cbEpEstimee),reportTotal:arrAuditEp20260913_(c2.reportCbCycle),p2Avant:arrAuditEp20260913_(c2.p1AvantReportCb),p2Apres:arrAuditEp20260913_(c2.p1Total),tauxDifferePct:Number(impact&&impact.tauxDifferePct||0)},tresorerie:{ok:!!(proj&&proj.ok!==false),version:proj&&proj.version||'',ownerEp:!!td.ownerEp,reconciliation:Number(td.reconciliation||0),sourceCerbereFinal:!!td.sourceCerbereFinal},express:{version:express&&express.version||'',ep:express&&express.pilotable&&express.pilotable.allocation,reste:express&&express.pilotable&&express.pilotable.reste,epOnly:checks.expressEpOnly}};
+  const out={ok:Object.keys(checks).every(k=>checks[k]===true),version:BUDGETSOFT_EP_INTERMODULE_AUDIT_20260913_VERSION,sourceCerbere:cer&&cer.sourceBudgetSoft||'',checks,verites:{p1:arrAuditEp20260913_(d.p1),p1Disponible:arrAuditEp20260913_(d.restePilotable),ep1:ep,ep1Disponible:epDisponible,epSource:String(e.source||''),consomme:arrAuditEp20260913_(sommeReel),p0:arrAuditEp20260913_(sommeP0)},impactC2:{connu:arrAuditEp20260913_(c2.cbDejaEngagee),epDiffereEstime:arrAuditEp20260913_(c2.cbEpEstimee),reportTotal:arrAuditEp20260913_(c2.reportCbCycle),p2Avant:arrAuditEp20260913_(c2.p1AvantReportCb),p2Apres:arrAuditEp20260913_(c2.p1Total),tauxDifferePct:Number(impact&&impact.tauxDifferePct||0)},tresorerie:{ok:!!(proj&&proj.ok!==false),version:proj&&proj.version||'',ownerEp:!!td.ownerEp,ep:Number(td.ep||0),tauxDifferePct:Number(td.tauxDifferePct||0),reconciliation:Number(td.reconciliation||0),cerberePrechargeProjection:!!(proj&&proj.diagnostic20260831&&proj.diagnostic20260831.cerberePrechargeProjection)},express:{version:express&&express.version||'',ep:express&&express.pilotable&&express.pilotable.allocation,reste:express&&express.pilotable&&express.pilotable.reste,epOnly:checks.expressEpOnly}};
   console.log('[AUDIT COEUR EP 20260913] '+JSON.stringify(out));return out;
 }
 
@@ -46,7 +46,7 @@ function auditerMigrationEpIntermoduleBudgetSoft20260913(){
     dashboardCourant:egalAuditEp20260913_(dc.ep,e1.total)&&egalAuditEp20260913_(dc.epDisponible,e1.reste)&&egalAuditEp20260913_(dc.pSoutenable,c1.pSoutenable),
     dashboardSuivant:egalAuditEp20260913_(ds.ep,e2.total)&&egalAuditEp20260913_(ds.pSoutenable,c2.pSoutenable),
     expressDecideSeulement:!!(exp&&exp.ok!==false&&exp.referenceEP&&!exp.referenceP1&&exp.contexteDecision&&!exp.contexteFinancier&&egalAuditEp20260913_(exp.pilotable&&exp.pilotable.allocation,e1.total)&&egalAuditEp20260913_(exp.pilotable&&exp.pilotable.reste,e1.reste)),
-    projectionEp:!!(td&&td.ownerEp===true&&td.sourceCerbereFinal===true&&egalAuditEp20260913_(td.ep,e1.total)&&egalAuditEp20260913_(td.reconciliation,0)),
+    projectionEp:!!(td&&td.ownerEp===true&&egalAuditEp20260913_(td.ep,e1.total)&&egalAuditEp20260913_(td.reconciliation,0)&&Number(td.tauxDifferePct||0)===90),
     c2Report:egalAuditEp20260913_(c2.reportCbCycle,Number(c2.cbDejaEngagee||0)+Number(c2.cbEpEstimee||0)),
     memeRevisionDashboard:String(dash&&dash.revisionBudgetSoft||etat&&etat.revisionBudgetSoft||'')===String(etat&&etat.revisionBudgetSoft||'')||!dash.revisionBudgetSoft,
     aucuneValeurPExpress:!Object.prototype.hasOwnProperty.call(exp||{},'referenceP1')&&!Object.prototype.hasOwnProperty.call(exp||{},'contexteFinancier')
