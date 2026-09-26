@@ -1,4 +1,4 @@
-const BUDGETSOFT_CREDITS_TOTALS_AUDIT_20260926_VERSION='2026-09-26.1';
+const BUDGETSOFT_CREDITS_TOTALS_AUDIT_20260926_VERSION='2026-09-26.2';
 
 function arrCreditsTotals20260926_(n){return Math.round((Number(n)||0)*100)/100;}
 function sommeCreditsTotals20260926_(xs,champ){return arrCreditsTotals20260926_((xs||[]).reduce((s,x)=>s+Math.max(0,Number(x&&x[champ]||0)),0));}
@@ -94,6 +94,11 @@ function auditerTotauxEtDisponiblesCredits20260926(){
     }:null,
     revolving:parCredit,
     journal:{nombreOperationsRevolving:journalRev.length,nombreAvecTraceDisponible:journalRev.filter(x=>x.disponible_apres!==''&&x.disponible_apres!=null).length},
+    verificationActualisation:{
+      prouveeParOperations:journalRev.some(x=>x.disponible_avant!==''&&x.disponible_avant!=null&&x.disponible_apres!==''&&x.disponible_apres!=null),
+      statut:journalRev.some(x=>x.disponible_avant!==''&&x.disponible_avant!=null&&x.disponible_apres!==''&&x.disponible_apres!=null)?'verifiee_sur_operation':'a_confirmer_sur_prochaine_operation_revolving',
+      remarque:'Les opérations historiques antérieures à la version de traçage ne contiennent pas disponible_avant/disponible_apres ; elles ne constituent donc pas une preuve rétroactive de l’actualisation.'
+    },
     controles:controles,
     doctrine:'Chaque remboursement de revolving validé via le rapprochement de sa charge fixe diminue l’encours du capital remboursé et augmente le disponible du même montant, plafonné au plafond de réserve. Le total disponible publié est la somme exacte des disponibles individuels.'
   };
