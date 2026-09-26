@@ -10,7 +10,8 @@ function filtrerRevenusCanonCycleCourantTresorerie20260922_(lignes,reference){
   const ref=reference instanceof Date?new Date(reference):new Date(reference||0);if(isNaN(ref))return(lignes||[]).slice();
   const fin=typeof dateFinCycleCanonBudgetSoft20260906_==='function'
     ?dateFinCycleCanonBudgetSoft20260906_(ref)
-    :new Date(ref.getDate()<=27?ref.getFullYear():ref.getFullYear(),ref.getDate()<=27?ref.getMonth():ref.getMonth()+1,27,23,59,59,999);
+    :new Date(ref.getDate()<=27?ref.getFullYear():ref.getFullYear(),ref.getDate()<=27?ref.getMonth():ref.getMonth()+1,27);
+  fin.setHours(23,59,59,999);
   return(lignes||[]).filter(function(x){
     if(String(x&&x.source||'')!=='revenu_recurrent')return true;
     const d=new Date(x&&x.date||0);if(isNaN(d))return true;
