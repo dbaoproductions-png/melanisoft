@@ -202,7 +202,16 @@ function corrigerReelPilotableDateAchat20260902_(base){
     // prélèvement manuel, etc.) : imputation à la date bancaire/comptable.
     // Sans ce repli, les mouvements non-CB d'une enveloppe (ex. Épargne) étaient
     // visibles dans reelImpute mais disparaissaient des dérivés reelNet/engagé/reste.
-    const d=dateAchatCockpit20260902_(o)||dateOperationCouranteBudgetSoft_(o);if(!d)return;const t=d.getTime();if(!Number.isFinite(t)||t>maintenant)return;
+    const dateAchat=typeof dateAchatCockpit20260902_==='function'?dateAchatCockpit20260902_(o):null;
+    const d=dateAchat||dateOperationCouranteBudgetSoft_(o);if(!d)return;
+    const t=d.getTime();if(!Number.isFinite(t))return;
+    const banqueConnue=!!String(o&&o.source_bancaire||'').trim();
+    // Un achat CB consomme l'EP à sa date d'achat. Pour un mouvement non-CB
+    // déjà importé par la banque (ex. virement d'épargne daté du lendemain),
+    // la date comptable future ne doit pas l'exclure : il est déjà engagé/certain.
+    // Seules les opérations futures non bancaires restent écartées jusqu'à réalisation.
+    if(t>maintenant&&dateAchat)return;
+    if(t>maintenant&&!dateAchat&&!banqueConnue)return;
     for(let i=0;i<cfg.length;i++){const c=cfg[i];if(t>=c.a&&t<=c.z&&c.cats.has(cat)){c.reel[cat]=Number(c.reel[cat]||0)+Math.abs(montant);break;}}
   });
   cfg.forEach(c=>{
