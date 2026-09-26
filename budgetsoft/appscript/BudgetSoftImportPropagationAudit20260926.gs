@@ -1,4 +1,4 @@
-const BUDGETSOFT_IMPORT_PROPAGATION_AUDIT_20260926_VERSION='2026-09-26.1';
+const BUDGETSOFT_IMPORT_PROPAGATION_AUDIT_20260926_VERSION='2026-09-26.2';
 
 function normaliserAuditImport20260926_(v){
   return String(v==null?'':v).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim();
@@ -74,12 +74,12 @@ function auditerPropagationCoursTennisEpargne20260926(){
     epargneTrouvee:!!epargne,
     epargneCategorie:!!(epargne&&String(epargne.categorie||'')==='Épargne'),
     epargneReferentiel:!!(catEpargne&&String(catEpargne.type||'').toLowerCase()==='epargne'),
-    epargneTypeTresorerie:!!(epargne&&['tresorerie_sortie','tresorerie'].includes(String(epargne.type||'').toLowerCase())),
+    epargneTypeTresorerie:!!(epargne&&catEpargne&&String(catEpargne.type||'').toLowerCase()==='epargne'&&Number(epargne.montant||0)<0),
     tennisEvenementTrouve:!!evTennis,
     tennisOccurrenceRapprochee:!!occLiee,
     tennisPrevisionOccurrenceNeutralisee:!!evTennis&&lignesEventTennis.every(x=>Number(x&&x.occurrence||0)!==Number(occLiee&&occLiee.index||0)),
     epargneDansCerbere:!!envEpargne,
-    epargneReelCerbere:!!(envEpargne&&Number(envEpargne.reelImpute!=null?envEpargne.reelImpute:envEpargne.reelNetPrevisionnel||0)>=49.99),
+    epargneReelCerbere:!!(envEpargne&&Number(envEpargne.reelNetPrevisionnel||0)>=49.99&&Number(envEpargne.engageV37||0)>=49.99&&Math.abs(Number(envEpargne.resteV37||0))<.011),
     epargneFutureTresorerie:!!(epargne&&jourAuditImport20260926_(epargne.date_comptable||epargne.date)>jourAuditImport20260926_(new Date())?lignesEpargne.some(x=>Math.abs(Number(x&&x.montantSigne||0)+50)<.011):true),
     chequePasFutureTresorerie:lignesCheque.length===0,
     analysesEpargnePresente:!!serieEpargne,
