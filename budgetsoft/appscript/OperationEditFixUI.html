@@ -21,6 +21,7 @@
       html+=`<optgroup label="${groupes[t]}">`+xs.map(c=>`<option value="${typeof echapperAttribut==='function'?echapperAttribut(c.nom):c.nom}">${typeof echapper==='function'?echapper(c.nom):c.nom}</option>`).join('')+'</optgroup>';
     });
     s.innerHTML=html;s.value=operation?.categorie||'';
+    s.onchange=()=>{const cat=(cats||[]).find(c=>String(c&&c.nom||'')===String(s.value||''));const type=String(cat&&cat.type||'').toLowerCase();if(type==='tresorerie'||type==='epargne'){const t=document.getElementById('operation-type');if(t)t.value=n_(operationEditee_?.montant)<0?'tresorerie_sortie':'tresorerie_entree';}};
   }
   function typeAffiche_(operation,cats){
     const cat=(cats||[]).find(c=>String(c.nom||'')===String(operation?.categorie||''));
