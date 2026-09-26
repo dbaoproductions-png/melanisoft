@@ -7,7 +7,7 @@
   }
   function typeAffichePourOperation_(o){
     if(!o)return 'depense';
-    if(typeCategorie_(o.categorie)==='tresorerie')return Number(o.montant||0)<0?'tresorerie_sortie':'tresorerie_entree';
+    if(['tresorerie','epargne'].includes(typeCategorie_(o.categorie)))return Number(o.montant||0)<0?'tresorerie_sortie':'tresorerie_entree';
     return String(o.type||'').toLowerCase()==='revenu'?'revenu':'depense';
   }
   const ancienOuvrir=window.ouvrirOperation;
@@ -38,8 +38,8 @@
     };
     if(!operation.libelle||!operation.compte){if(typeof afficherErreur==='function')afficherErreur('Le libellé et le compte sont obligatoires.');return;}
     const catType=typeCategorie_(operation.categorie);
-    if(catType!=='tresorerie'){
-      if(typeof afficherErreur==='function')afficherErreur('Pour un mouvement de trésorerie, choisissez une catégorie de type trésorerie.');return;
+    if(!['tresorerie','epargne'].includes(catType)){
+      if(typeof afficherErreur==='function')afficherErreur('Pour un mouvement de trésorerie, choisissez une catégorie de type trésorerie ou épargne.');return;
     }
     document.getElementById('save-operation').disabled=true;
     google.script.run.withSuccessHandler(()=>{document.getElementById('save-operation').disabled=false;if(typeof fermerOperation==='function')fermerOperation();if(typeof charger==='function')charger();if(typeof ouvrirVue==='function')ouvrirVue('operations');}).withFailureHandler(err=>{document.getElementById('save-operation').disabled=false;if(typeof afficherErreur==='function')afficherErreur(err.message||String(err));}).enregistrerOperationManuelle(operation);
