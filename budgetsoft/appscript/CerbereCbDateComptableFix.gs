@@ -201,7 +201,44 @@ function corrigerReelPilotableDateAchat20260902_(base){
     const d=dateAchatCockpit20260902_(o);if(!d)return;const t=d.getTime();if(!Number.isFinite(t)||t>maintenant)return;
     for(let i=0;i<cfg.length;i++){const c=cfg[i];if(t>=c.a&&t<=c.z&&c.cats.has(cat)){c.reel[cat]=Number(c.reel[cat]||0)+Math.abs(montant);break;}}
   });
-  cfg.forEach(c=>c.env.forEach(x=>{const cat=String(x&&x.categorie||'').trim();x.reelNetPrevisionnel=arrCockpit20260902_(Number(c.reel[cat]||0));x.reelPilotableDepuisDebutCycle=x.reelNetPrevisionnel;}));
+  cfg.forEach(c=>{
+    let engagePilotable=0,restePilotable=0,dpt1=0;
+    c.env.forEach(x=>{
+      const cat=String(x&&x.categorie||'').trim();
+      const reel=arrCockpit20260902_(Number(c.reel[cat]||0));
+      const plan=arrCockpit20260902_(Math.max(0,Number(x&&x.planifie||0)));
+      const allocation=Math.max(0,Number(x&&x.prevu||0));
+      const engage=arrCockpit20260902_(reel+plan);
+      const reste=arrCockpit20260902_(allocation-engage);
+      const dpt=arrCockpit20260902_(Math.max(allocation,engage));
+      x.reelNetPrevisionnel=reel;
+      x.reelPilotableDepuisDebutCycle=reel;
+      x.engageV37=engage;
+      x.resteV37=reste;
+      x.dpt1=dpt;
+      engagePilotable+=engage;
+      restePilotable+=reste;
+      dpt1+=dpt;
+    });
+    engagePilotable=arrCockpit20260902_(engagePilotable);
+    restePilotable=arrCockpit20260902_(restePilotable);
+    dpt1=arrCockpit20260902_(dpt1);
+    const v=c.p.v37||(c.p.v37={});
+    v.engagePilotable=engagePilotable;
+    v.disponibleEnveloppes=restePilotable;
+    v.disponibleJusquau27=restePilotable;
+    v.dpt1=dpt1;
+    if(Number.isFinite(Number(v.ss1))&&Number.isFinite(Number(v.rt1))&&Number.isFinite(Number(v.cft1))){
+      v.dt1=arrCockpit20260902_(Number(v.cft1)+dpt1);
+      v.sct1=arrCockpit20260902_(Number(v.ss1)+Number(v.rt1)-v.dt1);
+      v.finProjetee=v.sct1;
+      v.capaciteProjetee=v.sct1;
+      c.p.capaciteTresorerie=v.sct1;
+    }
+    c.p.capacitePilotable=restePilotable;
+    c.p.resteBudgetPilotable=restePilotable;
+    c.p.resteBudgetAlloue=restePilotable;
+  });
 }
 
 
