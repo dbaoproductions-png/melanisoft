@@ -106,7 +106,8 @@ function revenusCanoniquesTresorerie20260831_(ops,lignesExistantes,reference,cib
 
   const finCycleCourant=typeof dateFinCycleCanonBudgetSoft20260906_==='function'
     ?dateFinCycleCanonBudgetSoft20260906_(reference)
-    :new Date(reference.getDate()<=27?reference.getFullYear():reference.getFullYear(),reference.getDate()<=27?reference.getMonth():reference.getMonth()+1,27,23,59,59,999);
+    :new Date(reference.getDate()<=27?reference.getFullYear():reference.getFullYear(),reference.getDate()<=27?reference.getMonth():reference.getMonth()+1,27);
+  finCycleCourant.setHours(23,59,59,999);
 
   (canon||[]).forEach(c=>{
     if(!actifTresorerie_(c.actif))return;
