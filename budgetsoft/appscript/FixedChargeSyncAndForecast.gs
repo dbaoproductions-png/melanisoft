@@ -125,7 +125,8 @@ function calculerEcheancesChargeFixeAjustees_(charge,debut,fin,limite,ajustement
   let ev=base.filter(e=>!moisExclus.has(e.date.getMonth()+1));
   ajustements.forEach(a=>{
     const action=String(a.action||'');if(action==='exclure_mois')return;
-    const cible=String(a.date_cible||'');
+    const cibleBrute=a.date_cible;
+    const cible=cibleBrute?cleDateAjustement_(dateLocaleBudgetSoft_(cibleBrute)):'';
     if(!cible)return;
     const idx=ev.findIndex(e=>cleDateAjustement_(e.date)===cible);
     if(action==='ignorer'){if(idx>=0)ev.splice(idx,1);return;}
