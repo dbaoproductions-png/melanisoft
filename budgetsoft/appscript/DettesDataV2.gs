@@ -51,11 +51,16 @@ function trouverDetteV2_(id){return lireDettesV2_().find(x=>String(x.id)===Strin
 function enregistrerDetteV2(d){
   verifierInitialisation_();d=d||{};const t=assurerTableDettesV2_(),f=t.feuille,hs=t.entetes;
   const nom=String(d.nom||'').trim();if(!nom)throw new Error('Le nom de la dette est obligatoire.');
-  const capital=Math.max(0,convertirNombre_(d.capital_restant||0));
+  const montantInitialSaisi=Math.max(0,convertirNombre_(d.montant_initial||0));
+  let capital=Math.max(0,convertirNombre_(d.capital_restant||0));
+  // À la création, un montant initial positif implique par défaut le même reste à payer.
+  // Une dette neuve à 0 € n'est jamais silencieusement enregistrée comme soldée.
+  if(!String(d.id||'').trim()&&capital<=0&&montantInitialSaisi>0)capital=montantInitialSaisi;
+  if(!String(d.id||'').trim()&&capital<=0)throw new Error('Le reste à payer doit être supérieur à 0 € pour créer une dette active.');
   const objet={
     id:String(d.id||'').trim()||Utilities.getUuid(),source_cle:String(d.source_cle||'').trim(),nom,
     creancier:String(d.creancier||'').trim(),categorie_dette:String(d.categorie_dette||'').trim(),
-    montant_initial:Math.max(0,convertirNombre_(d.montant_initial!=null?d.montant_initial:capital)),capital_restant:capital,
+    montant_initial:Math.max(0,d.montant_initial!=null?montantInitialSaisi:capital),capital_restant:capital,
     mensualite:Math.max(0,convertirNombre_(d.mensualite||0)),taux:Math.max(0,convertirNombre_(d.taux||0)),
     date_echeance:d.date_echeance?new Date(d.date_echeance):'',statut:String(d.statut||(capital>0?'a_payer':'payee')).trim(),
     priorite:String(d.priorite||'non_definie').trim(),commentaire:String(d.commentaire||'').trim(),actif:d.actif===false||String(d.actif).toLowerCase()==='false'?false:true,
