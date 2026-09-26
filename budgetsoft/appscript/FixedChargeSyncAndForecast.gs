@@ -116,6 +116,15 @@ function enregistrerChargeFixeLieeOperation(operationId,charge){
 }
 
 function cleDateAjustement_(d){return Utilities.formatDate(dateLocaleBudgetSoft_(d),Session.getScriptTimeZone(),'yyyy-MM-dd');}
+function cleValeurDateAjustement20260926_(v){
+  if(v instanceof Date)return Utilities.formatDate(v,Session.getScriptTimeZone(),'yyyy-MM-dd');
+  const s=String(v||'').trim();
+  if(/^\d{4}-\d{2}-\d{2}T/.test(s)){
+    const d=new Date(s);
+    if(!isNaN(d))return Utilities.formatDate(d,Session.getScriptTimeZone(),'yyyy-MM-dd');
+  }
+  return s?cleDateAjustement_(dateLocaleBudgetSoft_(s)):'';
+}
 
 function calculerEcheancesChargeFixeAjustees_(charge,debut,fin,limite,ajustementsPrecharges){
   const base=calculerEcheancesJusqua_(charge,debut,fin,limite).map(d=>({date:new Date(d),montant:Math.abs(Number(charge.montant||0)),ajustement:''}));
@@ -125,8 +134,7 @@ function calculerEcheancesChargeFixeAjustees_(charge,debut,fin,limite,ajustement
   let ev=base.filter(e=>!moisExclus.has(e.date.getMonth()+1));
   ajustements.forEach(a=>{
     const action=String(a.action||'');if(action==='exclure_mois')return;
-    const cibleBrute=a.date_cible;
-    const cible=cibleBrute?cleDateAjustement_(dateLocaleBudgetSoft_(cibleBrute)):'';
+    const cible=cleValeurDateAjustement20260926_(a.date_cible);
     if(!cible)return;
     const idx=ev.findIndex(e=>cleDateAjustement_(e.date)===cible);
     if(action==='ignorer'){if(idx>=0)ev.splice(idx,1);return;}
