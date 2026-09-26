@@ -1,4 +1,4 @@
-const BUDGETSOFT_NEW_CF_AUDIT_20260926_VERSION='2026-09-26.1';
+const BUDGETSOFT_NEW_CF_AUDIT_20260926_VERSION='2026-09-26.2';
 const BUDGETSOFT_NEW_CF_AUDIT_ID_20260926='d476505c-189d-48a3-9eb1-51467df7fbc1';
 
 function arrNewCfAudit20260926_(n){return Math.round((Number(n)||0)*100)/100;}
@@ -37,7 +37,7 @@ function objetsPortantIdNewCfAudit20260926_(racine,id){
       sourceId:String(v.sourceId||v.source_id||''),
       charge_fixe_id:String(v.charge_fixe_id||v.chargeFixeId||''),
       date:String(v.date||v.date_prevue||v.dateCible||''),
-      montant:Number(v.montant!=null?v.montant:(v.amount!=null?v.amount:NaN)),
+      montant:Number(v.montantSigne!=null?v.montantSigne:(v.montant!=null?v.montant:(v.amount!=null?v.amount:NaN))),
       source:String(v.source||v.type||''),
       libelle:String(v.libelle||v.label||v.nom||'')
     });
@@ -68,6 +68,13 @@ function auditerPropagationNouvelleChargeCopro20260926(){
   const projection=mods.projectionEtendue||{};
   const projectionRefs=objetsPortantIdNewCfAudit20260926_(projection,id);
   const projectionLignes=projectionRefs.filter(x=>Number.isFinite(x.montant));
+  const projectionEconomiques=[];
+  const vusProjection={};
+  projectionLignes.forEach(x=>{
+    const k=[String(x.id||''),String(x.date||''),String(x.sourceId||''),String(arrNewCfAudit20260926_(x.montant))].join('|');
+    if(vusProjection[k])return;
+    vusProjection[k]=true;projectionEconomiques.push(x);
+  });
 
   const analyses=mods.analyses||{};
   let analyseExacte=null;
@@ -94,10 +101,8 @@ function auditerPropagationNouvelleChargeCopro20260926(){
     cerbereP1SansDoublon:l1.length<=1,
     cerbereP2SansDoublon:l2.length<=1,
     cerberePresentDansAuMoinsUnePeriode:(l1.length+l2.length)>=1,
-    projectionSansDoublonIdParDate:(()=>{
-      const m={};projectionLignes.forEach(x=>{const k=String(x.date||'sans_date');m[k]=(m[k]||0)+1;});
-      return Object.keys(m).every(k=>m[k]<=1);
-    })(),
+    projectionUneSeuleLigneEconomique:projectionEconomiques.length===1,
+    projectionMontantMoins550:projectionEconomiques.length===1&&Math.abs(Number(projectionEconomiques[0].montant||0)+550)<=.01,
     snapshotDisponible:!!(snap&&snap.disponible),
     snapshotFrais:!!(snap&&snap.disponible&&!snap.perime)
   };
@@ -119,8 +124,10 @@ function auditerPropagationNouvelleChargeCopro20260926(){
     tresorerie:{
       referencesParId:projectionRefs,
       lignesMonetairesParId:projectionLignes,
+      lignesEconomiquesUniques:projectionEconomiques,
       nombreReferences:projectionRefs.length,
-      nombreLignesMonetaires:projectionLignes.length
+      nombreLignesMonetaires:projectionLignes.length,
+      nombreLignesEconomiquesUniques:projectionEconomiques.length
     },
     analyses:{
       chargeReelleLiee:opLiees.map(o=>({id:String(o.id||''),date:String(o.date_comptable||o.date||''),montant:Number(o.montant||0),libelle:String(o.libelle_bancaire||o.libelle||'')})),
