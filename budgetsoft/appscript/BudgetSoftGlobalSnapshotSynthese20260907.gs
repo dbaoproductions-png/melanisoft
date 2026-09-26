@@ -164,6 +164,18 @@ function reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(origine){
         if(!brut)throw new Error('Cerbère frais absent pendant la construction synthèse.');
         if(brut.ok===false)throw new Error('Cerbère frais en erreur : '+String(brut.erreur||brut.stage||brut.message||'cause inconnue'));
         if(!Array.isArray(brut.periodes)||brut.periodes.length<2)throw new Error('Cerbère frais incomplet : deux périodes C1/C2 sont requises.');
+
+        // Le compositeur partagé peut porter reelImpute à jour tout en conservant
+        // des dérivés reelNetPrevisionnel / engageV37 / resteV37 calculés avant
+        // les dernières opérations. Rejouer ici le propriétaire du Réel pilotable
+        // garantit que le snapshot publie les mêmes faits que l'onglet Analyses.
+        if(typeof corrigerReelPilotableDateAchat20260902_==='function'){
+          corrigerReelPilotableDateAchat20260902_(brut);
+        }
+        if(typeof enrichirEnvelopePilotableBudgetSoft20260913_==='function'){
+          enrichirEnvelopePilotableBudgetSoft20260913_(brut);
+        }
+
         const normalise=typeof normaliserCerbereCfPourSnapshot20260914_==='function'
           ?normaliserCerbereCfPourSnapshot20260914_(brut,sources)
           :brut;
