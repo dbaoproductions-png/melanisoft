@@ -1,0 +1,116 @@
+<style>
+.bs-ai-report-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+.bs-ai-report-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.bs-ai-report-context{width:100%;min-height:110px;resize:vertical}
+.bs-ai-report-preview{width:100%;min-height:520px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;line-height:1.45;white-space:pre;resize:vertical}
+.bs-ai-report-meta{display:flex;gap:18px;flex-wrap:wrap;color:var(--muted);font-size:12px}
+.bs-ai-report-meta strong{color:var(--ink)}
+</style>
+<script>
+(function(){
+  const STORE_CONTEXT='budgetsoft_ai_report_context_20260926';
+  let rapportCourant=null;
+
+  function installerRapportIa_(){
+    const nav=document.querySelector('.nav'),main=document.querySelector('.main');
+    if(!nav||!main||document.querySelector('.nav-item[data-view="rapport_ia"]'))return;
+    const ref=document.querySelector('.nav-item[data-view="ia"]')||document.querySelector('.nav-item[data-view="analyses"]');
+    const b=document.createElement('button');
+    b.className='nav-item';b.dataset.view='rapport_ia';b.innerHTML='📄 <span>Rapport IA</span>';
+    ref&&ref.parentNode?ref.insertAdjacentElement('afterend',b):nav.appendChild(b);
+
+    const s=document.createElement('section');
+    s.id='rapport_ia';s.className='view';
+    s.innerHTML=`
+      <div class="section-toolbar">
+        <p class="section-intro">Export financier structuré pour interroger une IA avec les données BudgetSoft, les doctrines de calcul et les détails par module.</p>
+        <div class="toolbar-buttons">
+          <button class="primary-button" id="bs-ai-report-generate">Générer le rapport</button>
+          <button class="secondary-button" id="bs-ai-report-copy" disabled>Copier</button>
+          <button class="secondary-button" id="bs-ai-report-download-md" disabled>Télécharger .md</button>
+          <button class="secondary-button" id="bs-ai-report-download-json" disabled>Télécharger .json</button>
+        </div>
+      </div>
+      <div class="bs-ai-report-grid">
+        <article class="card panel">
+          <div class="panel-heading"><div><span class="panel-kicker">Contexte</span><h2>Informations complémentaires pour l’IA</h2></div></div>
+          <p class="helper-text">BudgetSoft ajoute automatiquement les règles de lecture financière. Tu peux compléter ici avec ce que l’IA doit savoir sur le foyer, les objectifs ou contraintes. Ce texte est conservé seulement dans ce navigateur.</p>
+          <textarea id="bs-ai-report-context" class="bs-ai-report-context" placeholder="Ex. : objectif prioritaire : réduire les revolving avant la retraite ; conserver une marge de sécurité ; ne pas supposer de nouveaux revenus sans preuve."></textarea>
+        </article>
+        <article class="card panel">
+          <div class="panel-heading"><div><span class="panel-kicker">Export</span><h2>Rapport BudgetSoft pour IA</h2></div><span class="badge" id="bs-ai-report-status">À générer</span></div>
+          <div class="bs-ai-report-meta" id="bs-ai-report-meta"></div>
+          <textarea id="bs-ai-report-preview" class="bs-ai-report-preview" readonly placeholder="Le rapport Markdown apparaîtra ici."></textarea>
+        </article>
+      </div>`;
+    const generic=document.getElementById('generic-view');
+    if(generic&&generic.parentNode)generic.parentNode.insertBefore(s,generic);else main.appendChild(s);
+
+    const contexte=document.getElementById('bs-ai-report-context');
+    try{contexte.value=localStorage.getItem(STORE_CONTEXT)||'';}catch(e){}
+    contexte.addEventListener('input',()=>{try{localStorage.setItem(STORE_CONTEXT,contexte.value||'');}catch(e){}});
+
+    b.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();ouvrirRapportIa_();},true);
+    document.getElementById('bs-ai-report-generate').addEventListener('click',genererRapportIa_);
+    document.getElementById('bs-ai-report-copy').addEventListener('click',copierRapportIa_);
+    document.getElementById('bs-ai-report-download-md').addEventListener('click',()=>telechargerRapportIa_('md'));
+    document.getElementById('bs-ai-report-download-json').addEventListener('click',()=>telechargerRapportIa_('json'));
+  }
+
+  function ouvrirRapportIa_(){
+    state.currentView='rapport_ia';
+    document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.view==='rapport_ia'));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.getElementById('rapport_ia')?.classList.add('active');
+    const t=document.getElementById('page-title'),e=document.getElementById('page-eyebrow');
+    if(t)t.textContent='Rapport IA';if(e)e.textContent='Export financier contextualisé';
+  }
+
+  function statut_(texte){const x=document.getElementById('bs-ai-report-status');if(x)x.textContent=texte;}
+  function boutons_(actifs){
+    ['bs-ai-report-copy','bs-ai-report-download-md','bs-ai-report-download-json'].forEach(id=>{const b=document.getElementById(id);if(b)b.disabled=!actifs;});
+  }
+
+  function genererRapportIa_(){
+    const b=document.getElementById('bs-ai-report-generate'),ctx=document.getElementById('bs-ai-report-context')?.value||'';
+    b.disabled=true;statut_('Génération…');boutons_(false);
+    google.script.run.withSuccessHandler(r=>{
+      b.disabled=false;rapportCourant=r||null;
+      const p=document.getElementById('bs-ai-report-preview');if(p)p.value=String(r&&r.markdown||'');
+      const m=document.getElementById('bs-ai-report-meta'),s=r&&r.statistiques||{};
+      if(m)m.innerHTML='<span>Révision <strong>'+echapperRapportIa_(r&&r.revisionBudgetSoft||'')+'</strong></span>'
+        +'<span>Markdown <strong>'+Number(s.tailleMarkdown||0).toLocaleString('fr-FR')+' car.</strong></span>'
+        +'<span>JSON <strong>'+Number(s.tailleJson||0).toLocaleString('fr-FR')+' car.</strong></span>'
+        +'<span>Opérations 12 mois <strong>'+Number(s.operations12m||0)+'</strong></span>';
+      statut_('Prêt');boutons_(true);
+    }).withFailureHandler(err=>{
+      b.disabled=false;statut_('Erreur');boutons_(false);
+      if(typeof afficherErreur==='function')afficherErreur(err.message||String(err));
+    }).genererRapportIaBudgetSoft20260926({contexte:ctx});
+  }
+
+  async function copierRapportIa_(){
+    if(!rapportCourant||!rapportCourant.markdown)return;
+    try{await navigator.clipboard.writeText(rapportCourant.markdown);statut_('Copié');}
+    catch(e){
+      const p=document.getElementById('bs-ai-report-preview');p.focus();p.select();
+      try{document.execCommand('copy');statut_('Copié');}catch(_){statut_('Copie impossible');}
+    }
+  }
+
+  function telechargerRapportIa_(format){
+    if(!rapportCourant)return;
+    const texte=format==='json'?rapportCourant.json:rapportCourant.markdown;
+    const mime=format==='json'?'application/json;charset=utf-8':'text/markdown;charset=utf-8';
+    const ext=format==='json'?'json':'md';
+    const date=new Date().toISOString().slice(0,10);
+    const blob=new Blob([texte],{type:mime}),url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download='BudgetSoft_Rapport_IA_'+date+'.'+ext;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
+
+  function echapperRapportIa_(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+  document.addEventListener('DOMContentLoaded',installerRapportIa_);
+})();
+</script>
