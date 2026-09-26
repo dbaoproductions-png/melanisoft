@@ -115,8 +115,8 @@ function contexteAutoRapportIa20260926_(etat,donnees){
     'Ne jamais additionner deux représentations techniques de la même ligne économique (par exemple une ligne de projection et sa copie dans une décomposition canonique).'
   ];
   if(ps.length){
-    lines=ps.slice(0,2).map((p,i)=>'Cycle '+(i+1)+' : '+String(p&&p.periode&&p.periode.debut||'')+' → '+String(p&&p.periode&&p.periode.fin||'')+'.');
-    lignes.push.apply(lignes,lines);
+    const cycles=ps.slice(0,2).map((p,i)=>'Cycle '+(i+1)+' : '+String(p&&p.periode&&p.periode.debut||'')+' → '+String(p&&p.periode&&p.periode.fin||'')+'.');
+    lignes.push.apply(lignes,cycles);
   }
   return lignes;
 }
