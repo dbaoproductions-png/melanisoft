@@ -71,10 +71,13 @@
       if(heading){
         [...heading.children].slice(1).forEach(n=>{n.remove();supprimes++;});
       }
-      const liste=titre==='Crédits amortissables'?panel.querySelector(':scope > #credits-list'):panel.querySelector(':scope > div:not(.panel-heading)');
+      const liste=titre==='Crédits amortissables'
+        ?panel.querySelector(':scope > #credits-list')
+        :panel.querySelector(':scope > div:not(.panel-heading):not(.credit-frame-totals)');
+      const totaux=panel.querySelector(':scope > .credit-frame-totals');
       if(liste)liste.classList.add('credits-list-clean-20260915');
       [...panel.children].forEach(n=>{
-        if(n===heading||n===liste)return;
+        if(n===heading||n===liste||n===totaux)return;
         n.remove();supprimes++;
       });
     });
