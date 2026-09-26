@@ -14,6 +14,7 @@
     const s=document.getElementById('operation-category');if(!s)return;
     const groupes={depense:'Dépenses',revenu:'Revenus',tresorerie:'Mouvements de trésorerie',epargne:'Épargne'};
     let html='<option value="">Sans catégorie</option>';
+    if(!(cats||[]).some(c=>String(c&&c.nom||'').trim()==='Épargne'))html+='<optgroup label="Épargne"><option value="Épargne">Épargne</option></optgroup>';
     Object.keys(groupes).forEach(t=>{
       const xs=(cats||[]).filter(c=>actif_(c.actif)&&String(c.type||'').toLowerCase()===t).sort((a,b)=>String(a.nom||'').localeCompare(String(b.nom||''),'fr'));
       if(!xs.length)return;
@@ -23,7 +24,7 @@
   }
   function typeAffiche_(operation,cats){
     const cat=(cats||[]).find(c=>String(c.nom||'')===String(operation?.categorie||''));
-    if(cat&&String(cat.type||'').toLowerCase()==='tresorerie')return n_(operation?.montant)<0?'tresorerie_sortie':'tresorerie_entree';
+    if(cat&&['tresorerie','epargne'].includes(String(cat.type||'').toLowerCase()))return n_(operation?.montant)<0?'tresorerie_sortie':'tresorerie_entree';
     return String(operation?.type||'').toLowerCase()==='revenu'?'revenu':'depense';
   }
   function jourOperation_(o){const d=new Date(o?.date_comptable||o?.date||o?.date_operation||'');return isNaN(d)?1:d.getDate();}
