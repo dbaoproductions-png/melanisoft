@@ -8,7 +8,8 @@
 #operations-future-panel.hidden{display:none}
 #operations-future-panel>header{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;background:#f8faf9;border-bottom:1px solid #edf1ef}
 #operations-future-panel>header h3{margin:0;font-size:15px}#operations-future-panel>header small{opacity:.62}
-.tf-future-row{display:grid;grid-template-columns:100px minmax(220px,1fr) 150px 130px;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid #edf1ef}.tf-future-row:last-child{border-bottom:0}
+.tf-future-row{display:grid;grid-template-columns:100px minmax(220px,1fr) 150px 130px 92px;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid #edf1ef}.tf-future-row:last-child{border-bottom:0}
+.tf-future-edit{justify-self:end;padding:6px 9px;font-size:11px;white-space:nowrap}.tf-future-edit[hidden]{display:none!important}
 .tf-future-row .tf-lib b,.tf-future-row .tf-lib small{display:block}.tf-future-row .tf-lib small{opacity:.62;margin-top:2px}
 .tf-badge{justify-self:start;font-size:10px;font-weight:700;letter-spacing:.03em;padding:3px 7px;border-radius:999px;background:#edf2ef}.tf-badge.certain{background:#e4f5e8}.tf-badge.tres_probable{background:#edf5e8}.tf-badge.prevu{background:#fff5d9}.tf-badge.estime{background:#f1f1f1}.tf-amount{text-align:right;font-weight:700}.tf-amount.neg{color:#9b3535}
 .tf-ops-toggle.on{background:#e6f1eb!important}
@@ -16,7 +17,7 @@
 #tf-cerbere-card{border:1px solid #dce9e2;background:#f5faf7;border-radius:14px;padding:14px;min-height:92px;display:flex;flex-direction:column;justify-content:center}
 #tf-cerbere-card span,#tf-cerbere-card b,#tf-cerbere-card small{display:block}#tf-cerbere-card b{font-size:21px;margin:4px 0}.tf-cerbere-delta{font-size:11px;opacity:.7}
 @media(max-width:1250px){#comptes .accounts-summary{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
-@media(max-width:850px){#comptes .accounts-summary{grid-template-columns:repeat(2,minmax(0,1fr))!important}.tf-future-row{grid-template-columns:90px 1fr 110px}.tf-future-row .tf-source{display:none}}
+@media(max-width:850px){#comptes .accounts-summary{grid-template-columns:repeat(2,minmax(0,1fr))!important}.tf-future-row{grid-template-columns:90px 1fr 110px 78px}.tf-future-row .tf-source{display:none}.tf-future-edit{padding:5px 7px}}
 </style>
 <script>
 (function(){'use strict';
@@ -62,10 +63,33 @@ function installerOperations(){
  const actions=q('operations-current-actions');if(actions&&!q('tf-ops-toggle')){const b=document.createElement('button');b.id='tf-ops-toggle';b.type='button';b.className='secondary-button tf-ops-toggle';b.textContent='◷ Futures';b.onclick=()=>{const on=b.classList.toggle('on');b.textContent=on?'✓ Futures':'◷ Futures';if(on)chargerFuturesOperations();else q('operations-future-panel')?.classList.add('hidden')};actions.appendChild(b);}
  const panel=q('operations-future-panel');if(!panel){const target=document.querySelector('#operations .operations-page-panel');if(target){const p=document.createElement('section');p.id='operations-future-panel';p.className='hidden';p.innerHTML='<header><div><h3>Opérations futures probables</h3><small>Projection bancaire virtuelle : chaque prévision disparaît lorsqu’elle est remplacée par le Réel</small></div><input type="date" id="tf-ops-date" value="'+plusJ(45)+'"></header><div id="tf-ops-list"></div>';target.parentNode.insertBefore(p,target);q('tf-ops-date').onchange=chargerFuturesOperations;}}
 }
+function boutonEditionFuture_(x){
+ if(String(x&&x.source||'')!=='operation_future'||!String(x&&x.sourceId||'').trim())return '<span></span>';
+ return `<button type="button" class="secondary-button tf-future-edit" data-operation-id="${esc(x.sourceId)}" title="Modifier cette opération réelle">✎ Modifier</button>`;
+}
 function htmlFutures(xs,refining){
- const rows=(xs||[]).filter(x=>x.source!=='pilotable').map(x=>`<div class="tf-future-row"><span>${dateFr(x.date)}${x.dateConventionnelle?' *':''}</span><div class="tf-lib"><b>${esc(x.libelle)}</b><small>${esc(x.categorie||'Sans catégorie')}${x.dateConventionnelle?' · date estimée':''}</small></div><span class="tf-source">${esc(sourceLabel(x.source))}</span><div><span class="tf-badge ${esc(x.certitude)}">${esc(certLabel(x.certitude))}</span><div class="tf-amount ${Number(x.montantSigne)<0?'neg':''}">${Number(x.montantSigne)>0?'+':''}${money(x.montantSigne)}</div></div></div>`).join('');
+ const rows=(xs||[]).filter(x=>x.source!=='pilotable').map(x=>`<div class="tf-future-row"><span>${dateFr(x.date)}${x.dateConventionnelle?' *':''}</span><div class="tf-lib"><b>${esc(x.libelle)}</b><small>${esc(x.categorie||'Sans catégorie')}${x.dateConventionnelle?' · date estimée':''}</small></div><span class="tf-source">${esc(sourceLabel(x.source))}</span><div><span class="tf-badge ${esc(x.certitude)}">${esc(certLabel(x.certitude))}</span><div class="tf-amount ${Number(x.montantSigne)<0?'neg':''}">${Number(x.montantSigne)>0?'+':''}${money(x.montantSigne)}</div></div>${boutonEditionFuture_(x)}</div>`).join('');
  return (rows||'<div class="empty-state">Aucun mouvement futur identifié.</div>')+(refining?'<div class="tf-refining">Affichage des flux explicites terminé · estimation du prochain débit CB en cours…</div>':'');
 }
+function ouvrirEditionFuture_(id){
+ id=String(id||'').trim();if(!id)return;
+ const locale=((window.state&&state.data&&state.data.Operations)||[]).find(o=>String(o&&o.id||'')===id);
+ if(locale&&typeof window.ouvrirOperation==='function'){window.ouvrirOperation(locale);return;}
+ if(locale&&typeof window.modifierOperation==='function'){window.modifierOperation(id);return;}
+ google.script.run.withSuccessHandler(ops=>{
+   const o=(Array.isArray(ops)?ops:[]).find(x=>String(x&&x.id||'')===id);
+   if(!o){if(typeof afficherErreur==='function')afficherErreur('Opération future introuvable.');return;}
+   if(window.state&&state.data)state.data.Operations=Array.isArray(state.data.Operations)?state.data.Operations:[];
+   if(window.state&&state.data&&!state.data.Operations.some(x=>String(x&&x.id||'')===id))state.data.Operations.push(o);
+   if(typeof window.ouvrirOperation==='function')window.ouvrirOperation(o);
+   else if(typeof window.modifierOperation==='function')window.modifierOperation(id);
+ }).withFailureHandler(err=>{if(typeof afficherErreur==='function')afficherErreur(err&&err.message||String(err));}).lireTable('Operations');
+}
+document.addEventListener('click',e=>{
+ const b=e.target.closest?.('.tf-future-edit');if(!b)return;
+ e.preventDefault();e.stopPropagation();ouvrirEditionFuture_(b.dataset.operationId);
+},true);
+
 function chargerFuturesOperations(){
  installerOperations();const panel=q('operations-future-panel'),date=q('tf-ops-date');if(!panel||!date)return;panel.classList.remove('hidden');const z=q('tf-ops-list'),id=++opsReq;z.innerHTML='<div class="empty-state">Calcul des mouvements futurs…</div>';
  google.script.run.withSuccessHandler(r=>{
