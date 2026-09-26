@@ -198,7 +198,11 @@ function corrigerReelPilotableDateAchat20260902_(base){
     const cat=String(o&&o.categorie||'').trim();if(!toutesCats.has(cat))return;
     const id=String(o&&o.id||'').trim();if((id&&liensCf[id])||String(o&&o.charge_fixe_id||'').trim())return;
     if(typeof estReglementCbTechniqueV377_==='function'&&estReglementCbTechniqueV377_(o))return;
-    const d=dateAchatCockpit20260902_(o);if(!d)return;const t=d.getTime();if(!Number.isFinite(t)||t>maintenant)return;
+    // CB pilotable : imputation à la date d'achat. Hors CB (chèque, virement,
+    // prélèvement manuel, etc.) : imputation à la date bancaire/comptable.
+    // Sans ce repli, les mouvements non-CB d'une enveloppe (ex. Épargne) étaient
+    // visibles dans reelImpute mais disparaissaient des dérivés reelNet/engagé/reste.
+    const d=dateAchatCockpit20260902_(o)||dateOperationCouranteBudgetSoft_(o);if(!d)return;const t=d.getTime();if(!Number.isFinite(t)||t>maintenant)return;
     for(let i=0;i<cfg.length;i++){const c=cfg[i];if(t>=c.a&&t<=c.z&&c.cats.has(cat)){c.reel[cat]=Number(c.reel[cat]||0)+Math.abs(montant);break;}}
   });
   cfg.forEach(c=>{
