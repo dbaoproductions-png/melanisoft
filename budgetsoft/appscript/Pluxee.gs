@@ -74,8 +74,8 @@ function importerCollerPluxee(texte){
   if(analyse.ambigues)throw new Error('Import Pluxee bloqué : '+analyse.ambigues+' ligne(s) ambiguë(s).');
   const aAjouter=analyse.details.filter(x=>x.statutImport==='nouvelle').map(x=>x.operation);
   ajouterPluxeeEnLot_(aAjouter);
-  const etat=chargerPluxee();
-  return Object.assign({},analyse,{importees:aAjouter.length,soldeApresImport:etat.solde});
+  const etat=typeof chargerPluxeeSource20260918_==='function'?chargerPluxeeSource20260918_():chargerPluxee();
+  return Object.assign({},analyse,{importees:aAjouter.length,soldeApresImport:etat.solde,etat:etat,snapshotReconstructionPlanifiee:aAjouter.length>0});
 }
 
 function enregistrerPluxeeManuel(donnee){
@@ -85,14 +85,14 @@ function enregistrerPluxeeManuel(donnee){
   const op=normaliserOperationPluxee_({date:donnee.date||new Date(),libelle:donnee.libelle||'',montant:type==='rechargement'?montant:-montant,type:type==='rechargement'?'rechargement':'depense',categorie:donnee.categorie||'',source:'manuel',statut:'valide'});
   const existantes=new Set(lirePluxee_().map(o=>String(o.cle_rapprochement||'')));
   if(existantes.has(op.cle_rapprochement))return{ok:true,doublon:true,operation:op,etat:chargerPluxee()};
-  ajouterPluxeeEnLot_([op]);return{ok:true,doublon:false,operation:op,etat:chargerPluxee()};
+  ajouterPluxeeEnLot_([op]);return{ok:true,doublon:false,operation:op,etat:typeof chargerPluxeeSource20260918_==='function'?chargerPluxeeSource20260918_():chargerPluxee(),snapshotReconstructionPlanifiee:true};
 }
 
 function mettreAJourCategoriePluxee(id,categorie){
   const c=String(categorie||'').trim();if(c&&!['Courses','Restaurants'].includes(c))throw new Error('Pluxee n’accepte que Courses ou Restaurants.');
   const f=SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PLUXEE_SHEET);if(!f||f.getLastRow()<2)throw new Error('Registre Pluxee vide.');
   const ids=f.getRange(2,1,f.getLastRow()-1,1).getValues().flat(),i=ids.findIndex(v=>String(v)===String(id));if(i<0)throw new Error('Opération Pluxee introuvable.');
-  f.getRange(i+2,PLUXEE_HEADERS.indexOf('categorie')+1).setValue(c);if(typeof marquerSnapshotGlobalBudgetSoftObsolete20260916_==='function')marquerSnapshotGlobalBudgetSoftObsolete20260916_('pluxee_categorie');return chargerPluxee();
+  f.getRange(i+2,PLUXEE_HEADERS.indexOf('categorie')+1).setValue(c);if(typeof marquerSnapshotGlobalBudgetSoftObsolete20260916_==='function')marquerSnapshotGlobalBudgetSoftObsolete20260916_('pluxee_categorie');return typeof chargerPluxeeSource20260918_==='function'?chargerPluxeeSource20260918_():chargerPluxee();
 }
 
 function analyserLotPluxeeLegacyBase_(operations,source){
