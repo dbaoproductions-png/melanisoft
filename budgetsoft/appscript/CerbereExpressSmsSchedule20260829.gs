@@ -1,7 +1,7 @@
-const CERBERE_EXPRESS_SMS_SCHEDULE_VERSION='2026-09-09.2';
+const CERBERE_EXPRESS_SMS_SCHEDULE_VERSION='2026-09-27.1';
 const CERBERE_EXPRESS_SMS_SCHEDULE_HANDLER='envoyerSmsCerbereExpressProgramme20260829';
 const CERBERE_EXPRESS_SMS_SCHEDULE_TZ='Europe/Paris';
-const CERBERE_EXPRESS_SHORT_URL_20260909='https://npondo3.s.gy/my-link';
+const CERBERE_EXPRESS_SHORT_URL_20260909='';
 
 /**
  * Override terminal du texte SMS : le lien privé long reste conservé par le moteur
@@ -16,13 +16,16 @@ function genererSmsCerbereExpress20260827(profil){
   const lienLong=preparerLiensPrivesCerbereExpress20260827().liens[profil];
   const meteo=v&&v.meteo||{},consigne=v&&v.consigneSaillante||{};
   const reste=Number(v&&v.pilotable&&v.pilotable.reste||0);
+  // Le raccourcisseur historique peut pointer vers un ancien déploiement.
+  // Le SMS publie donc le lien privé canonique, généré depuis le webapp courant.
+  const lienPublie=lienLong;
   const texte=[
     'Cerbere - '+String(meteo.libelle||'Situation'),
     'Pilotable : '+formaterEurosSmsCerbereExpress20260827_(reste),
     String(consigne.texte||'Cap tenu.'),
-    CERBERE_EXPRESS_SHORT_URL_20260909
+    lienPublie
   ].join('\n');
-  return{ok:true,version:CERBERE_EXPRESS_SMS_SCHEDULE_VERSION,profil,texte,lien:CERBERE_EXPRESS_SHORT_URL_20260909,lienLong,sourceBudgetSoft:String(v&&v.sourceBudgetSoft||''),revisionBudgetSoft:String(v&&v.revisionBudgetSoft||'')};
+  return{ok:true,version:CERBERE_EXPRESS_SMS_SCHEDULE_VERSION,profil,texte,lien:lienPublie,lienLong,sourceBudgetSoft:String(v&&v.sourceBudgetSoft||''),revisionBudgetSoft:String(v&&v.revisionBudgetSoft||'')};
 }
 
 /**
