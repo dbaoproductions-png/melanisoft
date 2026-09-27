@@ -191,7 +191,7 @@ function corrigerReelPilotableDateAchat20260902_(base){
   const ops0=lireDirect('Operations')||[],operations=typeof dedoublonnerOperationsCartesBudgetSoft_==='function'?dedoublonnerOperationsCartesBudgetSoft_(ops0):ops0;
   const charges=lireDirect('Charges_fixes')||[],rapprochements=typeof lireRapprochementsCfDirectBudgetSoft20260905_==='function'?lireRapprochementsCfDirectBudgetSoft20260905_():(typeof lireRapprochementsChargesFixes==='function'?lireRapprochementsChargesFixes():[]);
   const liensCf=typeof construireLiensCfCertainsV377_==='function'?construireLiensCfCertainsV377_(operations,charges,rapprochements):{};
-  const maintenant=Date.now(),cfg=periodes.map(p=>{const env=Array.isArray(p&&p.enveloppes)?p.enveloppes:[],debut=dateCockpit20260902_(p&&p.periode&&p.periode.debut),fin=dateCockpit20260902_(p&&p.periode&&p.periode.fin);return{p,env,cats:new Set(env.map(x=>String(x&&x.categorie||'').trim()).filter(Boolean)),a:debut?debut.getTime():NaN,z:fin?fin.getTime():NaN,reel:{}};});
+  const maintenantDate=new Date(),maintenant=maintenantDate.getTime(),finJourMaintenant=new Date(maintenantDate.getFullYear(),maintenantDate.getMonth(),maintenantDate.getDate(),23,59,59,999).getTime(),cfg=periodes.map(p=>{const env=Array.isArray(p&&p.enveloppes)?p.enveloppes:[],debut=dateCockpit20260902_(p&&p.periode&&p.periode.debut),fin=dateCockpit20260902_(p&&p.periode&&p.periode.fin);return{p,env,cats:new Set(env.map(x=>String(x&&x.categorie||'').trim()).filter(Boolean)),a:debut?debut.getTime():NaN,z:fin?fin.getTime():NaN,reel:{}};});
   const toutesCats=new Set();cfg.forEach(c=>c.cats.forEach(x=>toutesCats.add(x)));
   operations.forEach(o=>{
     const montant=Number(o&&o.montant||0);if(!Number.isFinite(montant)||montant>=0)return;
@@ -217,8 +217,11 @@ function corrigerReelPilotableDateAchat20260902_(base){
     // déjà importé par la banque (ex. virement d'épargne daté du lendemain),
     // la date comptable future ne doit pas l'exclure : il est déjà engagé/certain.
     // Seules les opérations futures non bancaires restent écartées jusqu'à réalisation.
-    if(t>maintenant&&dateAchat)return;
-    if(t>maintenant&&!dateAchat&&!banqueConnue)return;
+    // Le Réel est piloté au jour civil, pas à l'heure. Une opération bancaire
+    // datée d'aujourd'hui doit consommer immédiatement sa molette même si le parseur
+    // lui donne 12:00 et qu'il est encore le matin.
+    if(t>finJourMaintenant&&dateAchat)return;
+    if(t>finJourMaintenant&&!dateAchat&&!banqueConnue)return;
     for(let i=0;i<cfg.length;i++){const c=cfg[i];if(t>=c.a&&t<=c.z&&c.cats.has(cat)){c.reel[cat]=Number(c.reel[cat]||0)+Math.abs(montant);break;}}
   });
   cfg.forEach(c=>{
