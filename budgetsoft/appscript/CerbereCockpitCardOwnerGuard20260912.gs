@@ -67,7 +67,7 @@ function appliquerDoctrineP1ComptableGuideVieCerbere20260912_(base,ajustementsCf
  */
 function appliquerReportCbCycleSuivantLegacyCardOwner20260912_(base){
   const ps=Array.isArray(base&&base.periodes)?base.periodes:[];if(ps.length<2)return base;
-  const calc=calculerReportCbCycleSuivant20260905_(base),reel=Math.max(0,Number(calc.montant||0)),p1=ps[0],p2=ps[1],v=p2.v37||(p2.v37={}),c=v.cockpit20260902||(v.cockpit20260902={}),arr=arrCockpit20260902_;
+  const calc=(typeof calculerReportCbCycleSuivantHorsChargesFixes20260927_==='function'?calculerReportCbCycleSuivantHorsChargesFixes20260927_(base):calculerReportCbCycleSuivant20260905_(base)),reel=Math.max(0,Number(calc.montant||0)),p1=ps[0],p2=ps[1],v=p2.v37||(p2.v37={}),c=v.cockpit20260902||(v.cockpit20260902={}),arr=arrCockpit20260902_;
   let impactEp={differe:0,immediat:0,resteAEngager:0,tauxDifferePct:0,profil:null};
   try{if(typeof calculerImpactPrevisionnelEpBudgetSoft20260913_==='function')impactEp=calculerImpactPrevisionnelEpBudgetSoft20260913_(p1,lireTable_('Operations')||[],new Date())||impactEp;}catch(e){}
   const estime=Math.max(0,Number(impactEp.differe||0)),report=arr(reel+estime);
