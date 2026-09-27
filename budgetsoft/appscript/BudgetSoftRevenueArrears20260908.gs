@@ -95,6 +95,10 @@ function revenusCanoniquesTresorerie20260831_(ops,lignesExistantes,reference,cib
   }
 
   function jourHabituel_(cat,baseMont){
+    const cleCat=norm(cat);
+    // Doctrine 2026-09-27 : Cours et Concerts sont des agrégats mensuels
+    // conventionnels positionnés le 5 du mois inclus dans chaque cycle 28->27.
+    if(cleCat==='cours'||cleCat==='concerts')return 5;
     const hist=(ops||[]).map(o=>({o:o,d:dateOpTresorerie_(o),m:Math.abs(montantSigneOperationRevenuBudgetSoft20260908_(o))}))
       .filter(x=>x.d&&x.d<=reference&&x.d>=new Date(reference.getFullYear(),reference.getMonth()-6,1)
         &&montantSigneOperationRevenuBudgetSoft20260908_(x.o)>0
@@ -136,7 +140,8 @@ function revenusCanoniquesTresorerie20260831_(ops,lignesExistantes,reference,cib
       if(restant>0){
         let d=new Date(y,m,Math.min(jour,new Date(y,m+1,0).getDate()),12,0,0,0);
         const moisReference=y===reference.getFullYear()&&m===reference.getMonth();
-        if(moisReference&&d<=reference){
+        const dateFixeCycle=(cle==='cours'||cle==='concerts');
+        if(moisReference&&d<=reference&&!dateFixeCycle){
           d=new Date(reference);d.setDate(d.getDate()+1);d.setHours(12,0,0,0);
         }
         if(d>reference&&d<=cible&&d>finCycleCourant){
@@ -148,7 +153,9 @@ function revenusCanoniquesTresorerie20260831_(ops,lignesExistantes,reference,cib
             certitude:(c.mode_prevision==='moyenne_glissante_6_mois_complets'||reels.length>=3)?'tres_probable':'prevu',
             preuve:(mode==='occurrence_unique'
               ?'R0 effectif · occurrence mensuelle absente du Réel'
-              :'R0 effectif · cible mensuelle moins encaissements réels déjà constatés'),
+              :(dateFixeCycle
+                ?'R0 effectif · cible mensuelle moins encaissements réels · date conventionnelle fixée au 5 du cycle'
+                :'R0 effectif · cible mensuelle moins encaissements réels déjà constatés')),
             dateConventionnelle:true,
             modeRapprochementReel:mode,
             cibleMensuelle:arrondiTresorerie_(baseMont),
