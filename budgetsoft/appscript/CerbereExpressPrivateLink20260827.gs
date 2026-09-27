@@ -12,10 +12,9 @@ function preparerLiensPrivesCerbereExpress20260827() {
   const configuree = String(props.getProperty(CERBERE_EXPRESS_WEBAPP_URL_PROP) || '').trim();
   const native = String(ScriptApp.getService().getUrl() || '').trim();
   const estExecValide = u => /^https:\/\/script\.google\.com\/macros\/s\/[^/?#]+\/exec(?:[?#].*)?$/i.test(String(u||''));
-  // Préférer l'URL native du déploiement courant : une propriété historique peut
-  // pointer vers un deployment supprimé ou révoqué. La propriété n'est gardée
-  // qu'en secours lorsqu'elle est elle-même une URL /exec valide.
-  const base = estExecValide(native) ? native : (estExecValide(configuree) ? configuree : '');
+  // Préférer l'URL WEB_APP configurée : elle doit pointer vers le déploiement public
+  // accessible sans connexion. L'URL native ScriptApp reste uniquement un secours.
+  const base = estExecValide(configuree) ? configuree : (estExecValide(native) ? native : '');
   if (!base) throw new Error('Aucune URL /exec valide de déploiement web disponible pour Cerbère Express.');
 
   const profils = ['principal', 'conjointe'];
@@ -30,7 +29,7 @@ function preparerLiensPrivesCerbereExpress20260827() {
     liens[profil] = base.replace(/\?.*$/,'') + '?view=cerbere-express&t=' + encodeURIComponent(token);
   });
 
-  const out = {ok:true, version:CERBERE_EXPRESS_PRIVATE_VERSION, liens, urlSource:base===native?'ScriptApp-courant':'propriete-script'};
+  const out = {ok:true, version:CERBERE_EXPRESS_PRIVATE_VERSION, liens, urlSource:base===configuree?'propriete-script':'ScriptApp-secours'};
   console.log(JSON.stringify(out));
   return out;
 }
