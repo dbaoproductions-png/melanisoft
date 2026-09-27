@@ -1,4 +1,4 @@
-const BUDGETSOFT_REVENUE_SUPRADOCTRINE_CANONICAL_20260918_VERSION='2026-09-22.1';
+const BUDGETSOFT_REVENUE_SUPRADOCTRINE_CANONICAL_20260918_VERSION='2026-09-27.1';
 
 function verifierSupradoctrineRecettesBudgetSoft20260912_(etat){
   const erreurs=[],m=etat&&etat.modules||{},dash=m.dashboard||{},ct=dash.courtTerme||{},cer=m.cerbere||{},proj=m.projectionEtendue||{},p=Array.isArray(cer.periodes)?cer.periodes[0]:null,v=p&&p.v37||{},periode=p&&(p.periode||p)||{};
@@ -9,7 +9,7 @@ function verifierSupradoctrineRecettesBudgetSoft20260912_(etat){
   }
   const owner=String(proj&&proj.proprietaireBudgetSoft||proj&&proj.proprietaire||'');
   if(owner&&owner!=='construireTrajectoireTresorerieCanoniqueBudgetSoft20260907')erreurs.push({code:'SUPRA_RECETTES_PROJECTION_OWNER',detail:{proprietaire:owner}});
-  const reference=dateRevenuePublicationFix20260912_(proj.dateReference||ct.dateReference||new Date()),debut=dateRevenuePublicationFix20260912_(periode.debut),fin=dateRevenuePublicationFix20260912_(ct.fin||periode.fin||proj.dateCible);
+  const reference=dateRevenuePublicationFix20260912_(proj.dateReference||ct.dateReference||new Date()),debut=dateRevenuePublicationFix20260912_(periode.debut),fin=dateRevenuePublicationFix20260912_(ct.fin||periode.fin||proj.dateCible),horizonProjection=dateRevenuePublicationFix20260912_(proj.dateCible||ct.fin||periode.fin);
   const lignes=Array.isArray(proj.lignes)?proj.lignes:[];
   const dus=typeof occurrencesRecettesCertainesDuesRevenuePublicationFix20260922_==='function'?occurrencesRecettesCertainesDuesRevenuePublicationFix20260922_(reference,debut,fin):[];
   const totalDu=arrRevenuePublicationFix20260912_(dus.reduce(function(s,o){return s+Math.abs(Number(o&&o.montant||0));},0));
@@ -26,7 +26,11 @@ function verifierSupradoctrineRecettesBudgetSoft20260912_(etat){
     const id=String(o&&o.eventId||o&&o.id||''),idx=Number(o&&o.occurrence||1),montant=Math.abs(Number(o&&o.montant||0));
     const couvert=lignes.some(function(l){
       const d=dateRevenuePublicationFix20260912_(l&&l.date);
-      if(String(l&&l.source||'')!=='evenement'||String(l&&l.sourceId||'')!==id||!d||d<=reference||(!fin?false:d>fin)||Number(l&&l.montantSigne||0)<=0)return false;
+      // Une créance Plan encore due peut franchir la frontière de cycle : si la
+      // date prévue est passée au dernier jour du cycle, la trésorerie la reporte
+      // au premier jour projetable (ex. J+1). La preuve de couverture doit donc
+      // être cherchée jusqu'à l'horizon de projection, pas seulement jusqu'à fin.
+      if(String(l&&l.source||'')!=='evenement'||String(l&&l.sourceId||'')!==id||!d||d<=reference||(!horizonProjection?false:d>horizonProjection)||Number(l&&l.montantSigne||0)<=0)return false;
       if(Number(l&&l.occurrence||0)===idx)return Math.abs(Number(l&&l.montantSigne||0)-montant)<.011;
       return Math.abs(Number(l&&l.montantSigne||0)-montant)<.011;
     });
