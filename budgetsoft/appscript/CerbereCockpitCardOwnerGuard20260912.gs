@@ -67,7 +67,7 @@ function appliquerDoctrineP1ComptableGuideVieCerbere20260912_(base,ajustementsCf
  */
 function appliquerReportCbCycleSuivantLegacyCardOwner20260912_(base){
   const ps=Array.isArray(base&&base.periodes)?base.periodes:[];if(ps.length<2)return base;
-  const calc=(typeof calculerReportCbCycleSuivantHorsChargesFixes20260927_==='function'?calculerReportCbCycleSuivantHorsChargesFixes20260927_(base):calculerReportCbCycleSuivant20260905_(base)),reel=Math.max(0,Number(calc.montant||0)),p1=ps[0],p2=ps[1],v=p2.v37||(p2.v37={}),c=v.cockpit20260902||(v.cockpit20260902={}),arr=arrCockpit20260902_;
+  const calc=calculerReportCbCycleSuivantHorsChargesFixes20260927_(base),reel=Math.max(0,Number(calc.montant||0)),p1=ps[0],p2=ps[1],v=p2.v37||(p2.v37={}),c=v.cockpit20260902||(v.cockpit20260902={}),arr=arrCockpit20260902_;
   let impactEp={differe:0,immediat:0,resteAEngager:0,tauxDifferePct:0,profil:null};
   try{if(typeof calculerImpactPrevisionnelEpBudgetSoft20260913_==='function')impactEp=calculerImpactPrevisionnelEpBudgetSoft20260913_(p1,lireTable_('Operations')||[],new Date())||impactEp;}catch(e){}
   const estime=Math.max(0,Number(impactEp.differe||0)),report=arr(reel+estime);
@@ -92,7 +92,7 @@ function appliquerReportCbCycleSuivantLegacyCardOwner20260912_(base){
   p2.resteBudgetPilotable=c.ret1;
 
   base.diagnostic=base.diagnostic||{};
-  base.diagnostic.p2Doctrine20260913={version:CERBERE_COCKPIT_CARD_OWNER_GUARD_20260912_VERSION,periode:p2&&p2.periode||null,ss2:ss2,rt2:rt2,cft2:cft2,cft2Audit:cfReconstruite,het2:het2,reportCb:report,cbDejaEngagee:arr(reel),cbEpEstimee:arr(estime),p2AvantReport:avant,p2:apres,formule:'SS2 + Rt2 - CFt2 - HEt2 - report CB C1'};
+  base.diagnostic.p2Doctrine20260913={version:CERBERE_COCKPIT_CARD_OWNER_GUARD_20260912_VERSION,periode:p2&&p2.periode||null,ss2:ss2,rt2:rt2,cft2:cft2,cft2Audit:cfReconstruite,het2:het2,reportCb:report,cbDejaEngagee:arr(reel),cbEpEstimee:arr(estime),reportCbVersion:String(calc&&calc.version||''),reportCbExcluesChargesFixes:Number(calc&&calc.excluesChargesFixes||0),reportCbMontantExcluChargesFixes:Number(calc&&calc.montantExcluChargesFixes||0),p2AvantReport:avant,p2:apres,formule:'SS2 + Rt2 - CFt2 - HEt2 - report CB C1'};
   base.diagnostic.cbDoubleRole={version:'2026-09-13.ep-2',montant:report,connu:arr(reel),epDiffereEstime:arr(estime),epImmediatEstime:arr(impactEp.immediat||0),epResteAEngager:arr(impactEp.resteAEngager||0),tauxDifferePct:Number(impactEp.tauxDifferePct||0),nombre:calc.lignes.length,debutFenetre:calc.debutFenetre,dateImpact:calc.dateImpact,selection:calc.diagnostic||{},lignes:calc.lignes.slice(0,50),p2Avant:avant,p2Apres:apres,doctrine:'P2 = SS2 + Rt2 - CFt2 - HEt2 - (CB C1 connues + part différée estimée de l’EP1 non consommé)'};
   if(typeof enrichirEnvelopePilotableBudgetSoft20260913_==='function')enrichirEnvelopePilotableBudgetSoft20260913_(base);
   return base;
