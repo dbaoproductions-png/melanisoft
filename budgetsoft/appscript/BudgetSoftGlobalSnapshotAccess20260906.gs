@@ -44,16 +44,30 @@ function lireEtatGlobalBudgetSoftSiDisponible20260906_(){
     if(typeof chargerSnapshotGlobalBudgetSoft20260906!=='function')return null;
     let s=chargerSnapshotGlobalBudgetSoft20260906();
     let e=s&&s.disponible&&s.etat;
+    const stale=s&&s.perime&&s.etatPerime?s.etatPerime:null;
+    const perimeParMutation=!!(s&&s.perime&&s.fraicheur&&Array.isArray(s.fraicheur.raisons)&&s.fraicheur.raisons.some(function(r){return String(r&&r.code||'')==='MUTATION_APRES_SNAPSHOT';}));
+
+    // Pendant la courte fenêtre entre une mutation et la reconstruction différée,
+    // conserver le dernier état publié plutôt que vider toutes les interfaces.
+    // La mutation a déjà planifié une reconstruction atomique ; ce fallback est
+    // explicitement marqué comme périmé et ne devient jamais une nouvelle révision.
+    if(!e&&stale&&perimeParMutation){
+      e=JSON.parse(JSON.stringify(stale));
+      e.snapshotPerime=true;
+      e.snapshotPerimeOrigine=String(s&&s.fraicheur&&s.fraicheur.dirtyOrigin||'mutation');
+      e.snapshotPerimeDepuis=String(s&&s.fraicheur&&s.fraicheur.dirtyAt||'');
+      BUDGETSOFT_GLOBAL_ACCESS_EXEC_CACHE_20260925_=e;
+      return e;
+    }
 
     // Une interface ne doit jamais fabriquer sa propre vérité métier. En revanche,
     // la porte d'entrée globale peut reconstruire UNE FOIS le snapshot atomique
-    // s'il est absent/invalide : tous les consommateurs liront ensuite la même
-    // révision publiée.
+    // s'il est absent/invalide hors fenêtre de mutation.
     const valide=!!(e&&e.ok===true&&e.publie===true&&e.revisionBudgetSoft);
     if(!valide){
-      if(typeof reconstruireSnapshotGlobalBudgetSoft20260906!=='function')return null;
+      if(typeof reconstruireSnapshotGlobalBudgetSoft20260906!=='function')return stale||null;
       const reconstruit=reconstruireSnapshotGlobalBudgetSoft20260906('snapshot_absent_ou_invalide');
-      if(!reconstruit||reconstruit.ok!==true||reconstruit.publie!==true)return null;
+      if(!reconstruit||reconstruit.ok!==true||reconstruit.publie!==true)return stale||null;
       e=reconstruit;
     }
 
