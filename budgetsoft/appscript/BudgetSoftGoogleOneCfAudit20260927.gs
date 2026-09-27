@@ -111,3 +111,36 @@ function auditerGoogleOneChargesFixes20260927(){
   console.log('[AUDIT GOOGLE ONE CF 20260927] '+JSON.stringify(out));
   return out;
 }
+
+
+function auditerGoogleOneSeptembreOctobre20260927(){
+  const charges=(lireTable_('Charges_fixes')||[]).filter(function(c){
+    return /google\s*one/i.test(String(c&&c.libelle||'')+' '+String(c&&c.libelle_bancaire||''));
+  });
+  const ids=new Set(charges.map(function(c){return String(c&&c.id||'').trim();}));
+  const ops=(lireTable_('Operations')||[]).filter(function(o){
+    const txt=String(o&&o.libelle_bancaire||o&&o.libelle||'');
+    if(!/google\s*one/i.test(txt))return false;
+    const d=new Date(o&&o.date_comptable||o&&o.date||'');
+    return !isNaN(d.getTime())&&d>=new Date(2026,7,1)&&d<=new Date(2026,9,31,23,59,59,999);
+  }).map(function(o){
+    return {
+      id:String(o&&o.id||''),
+      dateComptable:String(o&&o.date_comptable||o&&o.date||''),
+      dateAchat:String(o&&o.date_achat||''),
+      montant:Number(o&&o.montant||0),
+      libelle:String(o&&o.libelle_bancaire||o&&o.libelle||''),
+      charge_fixe_id:String(o&&o.charge_fixe_id||''),
+      chargeConnue:ids.has(String(o&&o.charge_fixe_id||'').trim())
+    };
+  });
+  const out={
+    ok:true,
+    version:BUDGETSOFT_GOOGLE_ONE_CF_AUDIT_20260927_VERSION,
+    lectureSeule:true,
+    charges:charges.map(function(c){return{id:String(c.id||''),montant:Number(c.montant||0),jour_execution:Number(c.jour_execution||0),libelle:String(c.libelle||'')};}),
+    operations:ops
+  };
+  console.log('[AUDIT GOOGLE ONE SEPT-OCT 20260927] '+JSON.stringify(out));
+  return out;
+}
