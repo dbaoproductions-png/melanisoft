@@ -1,4 +1,4 @@
-const BUDGETSOFT_DOCTRINE_CYCLE_AUDIT_20260927_VERSION='2026-09-27.1';
+const BUDGETSOFT_DOCTRINE_CYCLE_AUDIT_20260927_VERSION='2026-09-27.2';
 
 function auditerCoursConcertsEtEpargneCycle20260927(){
   const projection=typeof construireTrajectoireTresorerieCanoniqueBudgetSoft20260907==='function'
@@ -25,16 +25,22 @@ function auditerCoursConcertsEtEpargneCycle20260927(){
   const epargneDansImprevus=lignesImprevus.filter(function(x){
     return /Hernebring Herne|Zz1l93auq6/i.test(String(x&&x.libelle||''))||String(x&&x.categorie||'')==='Épargne';
   });
+  const cer=typeof chargerCerbereCockpit20260902==='function'?chargerCerbereCockpit20260902():null;
+  const p1=cer&&Array.isArray(cer.periodes)?cer.periodes[0]:null;
+  const moletteEpargne=(p1&&Array.isArray(p1.enveloppes)?p1.enveloppes:[]).find(function(x){return String(x&&x.categorie||'')==='Épargne';})||null;
+  const epargneConsommee=moletteEpargne?Number(moletteEpargne.reelNetPrevisionnel!=null?moletteEpargne.reelNetPrevisionnel:moletteEpargne.reelImpute||0):0;
+  const epargneReste=moletteEpargne?Number(moletteEpargne.resteV37!=null?moletteEpargne.resteV37:(Number(moletteEpargne.prevu||0)-epargneConsommee)):null;
 
   const out={
-    ok:revenus.every(function(x){return /-10-05$/.test(x.date);})&&epargne.length>0&&epargne.every(function(x){return x.montant<0&&x.signeTresorerie<0;})&&epargneDansImprevus.length===0,
+    ok:revenus.every(function(x){return /-10-05$/.test(x.date);})&&epargne.length>0&&epargne.every(function(x){return x.montant<0&&x.signeTresorerie<0;})&&epargneDansImprevus.length===0&&Math.abs(epargneConsommee-50)<.011&&Math.abs(Number(epargneReste||0))<.011,
     version:BUDGETSOFT_DOCTRINE_CYCLE_AUDIT_20260927_VERSION,lectureSeule:true,
     revenusCoursConcerts:revenus,
     operationEpargne:epargne,
     epargneDansImprevusCerbere:epargneDansImprevus,
+    moletteEpargne:moletteEpargne?{allocation:Number(moletteEpargne.prevu||0),reel:epargneConsommee,reste:epargneReste}:null,
     doctrine:{
       coursConcerts:'date conventionnelle au 5 du mois inclus dans le cycle 28->27',
-      epargne:'sortie de trésorerie du compte joint ; hors dépense pilotable et hors HEt Cerbère'
+      epargne:'sortie de trésorerie du compte joint ; consomme la molette Épargne ; exclue des HEt/imprévus Cerbère'
     }
   };
   console.log('[AUDIT COURS CONCERTS EPARGNE CYCLE 20260927] '+JSON.stringify(out));
