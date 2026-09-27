@@ -19,12 +19,81 @@ function filtrerRevenusCanonCycleCourantTresorerie20260922_(lignes,reference){
   });
 }
 
+function completerRecettesPlanDuesTresorerie20260927_(lignes,reference,cible){
+  const out=(lignes||[]).slice();
+  if(typeof occurrencesRecettesCertainesDuesRevenuePublicationFix20260922_!=='function')return out;
+  const ref=reference instanceof Date?new Date(reference):new Date(reference||0);
+  const finCible=cible instanceof Date?new Date(cible):new Date(cible||0);
+  if(isNaN(ref)||isNaN(finCible))return out;
+  const finCycle=typeof dateFinCycleCanonBudgetSoft20260906_==='function'
+    ?dateFinCycleCanonBudgetSoft20260906_(ref)
+    :new Date(ref.getFullYear(),ref.getMonth(),27,23,59,59,999);
+  finCycle.setHours(23,59,59,999);
+  const fin=new Date(Math.min(finCycle.getTime(),finCible.getTime()));
+  const debut=new Date(ref.getFullYear(),ref.getMonth(),1,0,0,0,0);
+  const report=typeof dateJourSuivantPlanForecast20260912_==='function'
+    ?dateJourSuivantPlanForecast20260912_(ref)
+    :new Date(ref.getFullYear(),ref.getMonth(),ref.getDate()+1,12,0,0,0);
+  const dus=occurrencesRecettesCertainesDuesRevenuePublicationFix20260922_(ref,debut,fin)||[];
+  dus.forEach(function(o){
+    const id=String(o&&o.eventId||o&&o.id||''),idx=Number(o&&o.occurrence||1),montant=Math.abs(Number(o&&o.montant||0));
+    if(!id||!montant)return;
+    const deja=out.some(function(x){
+      return String(x&&x.source||'')==='evenement'&&String(x&&x.sourceId||'')===id&&
+        (Number(x&&x.occurrence||0)===idx||Math.abs(Number(x&&x.montantSigne||0)-montant)<.011);
+    });
+    if(deja)return;
+    const origine=typeof dateRevenuePublicationFix20260912_==='function'
+      ?dateRevenuePublicationFix20260912_(o&&o.date_effet||o&&o.date_prevue)
+      :new Date(o&&o.date_effet||o&&o.date_prevue||0);
+    let d=origine&&!isNaN(origine)&&origine>ref?new Date(origine):new Date(report);
+    if(d<=ref||d>finCible)return;
+    out.push({
+      id:'event:'+id+':'+idx+(origine&&origine<=ref?':retard':''),
+      source:'evenement',sourceId:id,occurrence:idx,occurrences:Number(o&&o.occurrences||1),
+      date:d.toISOString(),libelle:String(o&&o.libelle||'Événement recette'),
+      categorie:String(o&&o.categorie||''),compte:String(o&&o.compte||''),
+      montantSigne:arrondiTresorerie_(montant),certitude:'tres_probable',
+      preuve:origine&&origine<=ref
+        ?'Occurrence de recette Plan encore due · date prévue '+(typeof isoPlanForecast20260912_==='function'?isoPlanForecast20260912_(origine):String(origine))+' · reportée au premier jour projetable'
+        :'Occurrence future de recette Plan encore due',
+      dateConventionnelle:false,
+      datePrevueOrigine:origine&&typeof isoPlanForecast20260912_==='function'?isoPlanForecast20260912_(origine):'',
+      enRetard:!!(origine&&origine<=ref),
+      ownerRecetteDue:'occurrencesRecettesCertainesDuesRevenuePublicationFix20260922_'
+    });
+  });
+  return out;
+}
+
+function auditerRecettesPlanDuesTresorerie20260927(){
+  const cible='2026-10-27';
+  const t=typeof chargerTresoreriePrevisionnelle20260901==='function'?chargerTresoreriePrevisionnelle20260901(cible):null;
+  const ref=t&&t.dateReference?new Date(t.dateReference):new Date();
+  const fin=typeof dateFinCycleCanonBudgetSoft20260906_==='function'?dateFinCycleCanonBudgetSoft20260906_(ref):new Date(ref.getFullYear(),ref.getMonth(),27,23,59,59,999);
+  const debut=new Date(ref.getFullYear(),ref.getMonth(),1,0,0,0,0);
+  const dus=typeof occurrencesRecettesCertainesDuesRevenuePublicationFix20260922_==='function'
+    ?occurrencesRecettesCertainesDuesRevenuePublicationFix20260922_(ref,debut,fin):[];
+  const lignes=Array.isArray(t&&t.lignes)?t.lignes:[];
+  const controles=(dus||[]).map(function(o){
+    const id=String(o&&o.eventId||o&&o.id||''),idx=Number(o&&o.occurrence||1),montant=Math.abs(Number(o&&o.montant||0));
+    const ll=lignes.filter(function(x){return String(x&&x.source||'')==='evenement'&&String(x&&x.sourceId||'')===id&&Number(x&&x.montantSigne||0)>0;});
+    return{id:id,occurrence:idx,libelle:String(o&&o.libelle||''),montant:montant,couvert:ll.some(function(x){return Math.abs(Number(x&&x.montantSigne||0)-montant)<.011;}),lignes:ll};
+  });
+  const out={ok:!!t&&t.ok!==false&&controles.every(function(x){return x.couvert;}),lectureSeule:true,version:'2026-09-27.1',dateReference:String(t&&t.dateReference||''),controles:controles};
+  console.log('[AUDIT RECETTES PLAN DUES TRESORERIE 20260927] '+JSON.stringify(out));
+  return out;
+}
+
 function chargerTresoreriePrevisionnelle20260901(dateCible,cerberePrecharge,ctx){
   const r=chargerSocleTresorerie20260831SansDebitCbLegacy20260910_(dateCible,ctx);if(!r||!r.ok)return r;
   const reference=new Date(r.dateReference||new Date()),cible=new Date(r.dateCible||new Date()),evenements=lireFeuilleDynamiquePlan_('Plan_Evenements'),actions=lireFeuilleDynamiquePlan_('Plan_Actions'),ops=lireTable_('Operations'),hard=(r.lignes||[]).filter(x=>x.source==='operation_future');
   let lignes=recalerFluxPlanCarteTresorerie20260901_(r.lignes||[],evenements,actions,hard,reference,cible);
   lignes=filtrerRevenusCanonCycleCourantTresorerie20260922_(lignes,reference);
   lignes=filtrerActionsPlanEffectivesTresorerie20260908_(lignes,actions).filter(x=>!['debit_cb_estime','ep_immediat_estime'].includes(String(x&&x.source||'')));
+  // Garde terminale 2026-09-27 : une recette Plan explicitement encore due ne
+  // peut jamais disparaître de la projection au passage d'une journée.
+  lignes=completerRecettesPlanDuesTresorerie20260927_(lignes,reference,cible);
   const projectionEp=projectionEnvelopePilotableTresorerie20260913_(ops,reference,cible,cerberePrecharge);
   if(projectionEp.immediat)lignes.push(projectionEp.immediat);if(projectionEp.debitsCb.length)lignes.push.apply(lignes,projectionEp.debitsCb);
   lignes=dedoublonnerPrevisionsTresorerie20260831_(lignes);lignes.sort((a,b)=>new Date(a.date)-new Date(b.date)||rangCertitudeTresorerie_(a.certitude)-rangCertitudeTresorerie_(b.certitude));
