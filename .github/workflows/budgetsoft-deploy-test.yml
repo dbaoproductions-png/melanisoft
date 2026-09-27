@@ -154,8 +154,9 @@ jobs:
         run: |
           set -euo pipefail
           VERSION_CREATED=0
-          # Apps Script returns HTTP 429 when versions are created too quickly.
-          # Retry with backoff instead of failing after a successful source push.
+          VERSION_LIMIT_REACHED=0
+          # Apps Script returns HTTP 429 both for transient throttling and for the
+          # hard 200-version ceiling. Detect the hard ceiling immediately.
           for ATTEMPT in 1 2 3 4 5 6; do
             HTTP_CODE=$(curl -sS -o /tmp/version-response.json -w '%{http_code}' -X POST \
               -H "Authorization: Bearer $ACCESS_TOKEN" \
@@ -180,6 +181,11 @@ jobs:
           except Exception as e:
               print('Unable to parse versions.create response:',type(e).__name__)
           PY
+            if grep -q "reached the limit of 200 versions" /tmp/version-response.json; then
+              VERSION_LIMIT_REACHED=1
+              echo 'Apps Script project has reached the 200-version ceiling; using HEAD test deployment fallback.'
+              break
+            fi
             if [ "$HTTP_CODE" != "429" ]; then
               exit 1
             fi
@@ -196,15 +202,54 @@ jobs:
               sleep "$SLEEP_SECONDS"
             fi
           done
-          if [ "$VERSION_CREATED" -ne 1 ]; then
+          echo "VERSION_LIMIT_REACHED=$VERSION_LIMIT_REACHED" >> "$GITHUB_ENV"
+          if [ "$VERSION_CREATED" -eq 1 ]; then
+            VERSION_NUMBER=$(python3 -c 'import json; print(json.load(open("/tmp/version-response.json"))["versionNumber"])')
+            echo "VERSION_NUMBER=$VERSION_NUMBER" >> "$GITHUB_ENV"
+            echo "Apps Script immutable version created: $VERSION_NUMBER"
+          elif [ "$VERSION_LIMIT_REACHED" -eq 1 ]; then
+            echo 'No immutable version created; current source is available through the HEAD deployment.'
+          else
             echo 'Apps Script version creation still rate-limited after retries.'
             exit 1
           fi
-          VERSION_NUMBER=$(python3 -c 'import json; print(json.load(open("/tmp/version-response.json"))["versionNumber"])')
-          echo "VERSION_NUMBER=$VERSION_NUMBER" >> "$GITHUB_ENV"
-          echo "Apps Script immutable version created: $VERSION_NUMBER"
+
+      - name: Report HEAD TEST web app
+        if: env.VERSION_LIMIT_REACHED == '1'
+        run: |
+          set -euo pipefail
+          HTTP_CODE=$(curl -sS -o /tmp/head-deployments.json -w '%{http_code}'             -H "Authorization: Bearer $ACCESS_TOKEN"             "https://script.googleapis.com/v1/projects/$SCRIPT_ID/deployments")
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "Apps Script deployments.list failed with HTTP $HTTP_CODE"
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json, sys
+          d=json.load(open('/tmp/head-deployments.json'))
+          heads=[]
+          for x in d.get('deployments',[]):
+              cfg=x.get('deploymentConfig') or {}
+              # HEAD deployment has no immutable version number.
+              if cfg.get('versionNumber') not in (None, 0):
+                  continue
+              for ep in x.get('entryPoints') or []:
+                  if ep.get('entryPointType')!='WEB_APP':
+                      continue
+                  web=ep.get('webApp') or {}
+                  url=web.get('url') or ''
+                  if url:
+                      heads.append((x.get('deploymentId',''),url))
+          if not heads:
+              print('No HEAD WEB_APP entry point was returned by Apps Script.')
+              sys.exit(1)
+          for dep,url in heads:
+              print('HEAD_TEST_DEPLOYMENT_ID='+dep)
+              print('HEAD_TEST_WEB_APP_URL='+url)
+          print('HEAD deployment is synchronized with the current saved TEST source.')
+          PY
 
       - name: Publish TEST web app deployment
+        if: env.VERSION_LIMIT_REACHED != '1'
         run: |
           set -euo pipefail
           HTTP_CODE=$(curl -sS -o /tmp/deployments-response.json -w '%{http_code}' \
