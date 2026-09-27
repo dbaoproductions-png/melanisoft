@@ -1,4 +1,4 @@
-const CERBERE_EXPRESS_PRIVATE_VERSION = '2026-09-13.1';
+const CERBERE_EXPRESS_PRIVATE_VERSION = '2026-09-27.1';
 const CERBERE_EXPRESS_PRIVATE_PROP_PREFIX = 'CERBERE_EXPRESS_TOKEN_';
 const CERBERE_EXPRESS_WEBAPP_URL_PROP = 'CERBERE_EXPRESS_WEBAPP_URL';
 
@@ -10,9 +10,13 @@ const CERBERE_EXPRESS_WEBAPP_URL_PROP = 'CERBERE_EXPRESS_WEBAPP_URL';
 function preparerLiensPrivesCerbereExpress20260827() {
   const props = PropertiesService.getScriptProperties();
   const configuree = String(props.getProperty(CERBERE_EXPRESS_WEBAPP_URL_PROP) || '').trim();
-  const native = ScriptApp.getService().getUrl();
-  const base = configuree || native;
-  if (!base) throw new Error('Aucune URL de déploiement web disponible. Déployez BudgetSoft en application web.');
+  const native = String(ScriptApp.getService().getUrl() || '').trim();
+  const estExecValide = u => /^https:\/\/script\.google\.com\/macros\/s\/[^/?#]+\/exec(?:[?#].*)?$/i.test(String(u||''));
+  // Préférer l'URL native du déploiement courant : une propriété historique peut
+  // pointer vers un deployment supprimé ou révoqué. La propriété n'est gardée
+  // qu'en secours lorsqu'elle est elle-même une URL /exec valide.
+  const base = estExecValide(native) ? native : (estExecValide(configuree) ? configuree : '');
+  if (!base) throw new Error('Aucune URL /exec valide de déploiement web disponible pour Cerbère Express.');
 
   const profils = ['principal', 'conjointe'];
   const liens = {};
@@ -26,7 +30,7 @@ function preparerLiensPrivesCerbereExpress20260827() {
     liens[profil] = base.replace(/\?.*$/,'') + '?view=cerbere-express&t=' + encodeURIComponent(token);
   });
 
-  const out = {ok:true, version:CERBERE_EXPRESS_PRIVATE_VERSION, liens, urlSource:configuree?'propriete-script':'ScriptApp'};
+  const out = {ok:true, version:CERBERE_EXPRESS_PRIVATE_VERSION, liens, urlSource:base===native?'ScriptApp-courant':'propriete-script'};
   console.log(JSON.stringify(out));
   return out;
 }
