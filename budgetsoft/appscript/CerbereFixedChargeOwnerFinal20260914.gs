@@ -64,9 +64,14 @@ function reconstruireChargesFixesReevalueesP1Cerbere20260912_(p,v,ajustementsCfP
 
   if(erreurs.length)return{ok:false,erreur:'échec du générateur canonique sur '+erreurs.length+' charge(s)',erreurs:erreurs,total:Number(v&&v.cft1||0),ownerVersion:CERBERE_FIXED_CHARGE_OWNER_FINAL_20260914_VERSION};
   brut=arrCockpit20260902_(brut);
-  const suspension=arrCockpit20260902_(Math.max(0,Number(v&&v.correctionSuspensions20260903||0)));
-  const total=arrCockpit20260902_(Math.max(0,brut-suspension)),ancien=arrCockpit20260902_(Number(v&&v.cft1||0));
-  return{ok:true,total:total,brutAvantSuspensions:brut,suspensions:suspension,ancienMoteur:ancien,ecartVsAncien:arrCockpit20260902_(total-ancien),lignes:lignes,ownerVersion:CERBERE_FIXED_CHARGE_OWNER_FINAL_20260914_VERSION,doctrine:'Toutes les fréquences proviennent du générateur canonique Charges_fixes ; le Réel explicitement lié remplace les occurrences couvertes ; aucune fréquence non mensuelle ne déclenche de retour à un ancien total.'};
+  /*
+   * Les suspensions sont déjà absorbées par calculerEcheancesChargeFixeAjustees_().
+   * correctionSuspensions20260903 est un reliquat legacy : le retrancher ici
+   * provoquerait une double suspension (CASDEN en septembre/octobre).
+   */
+  const suspensionLegacy=arrCockpit20260902_(Math.max(0,Number(v&&v.correctionSuspensions20260903||0)));
+  const total=brut,ancien=arrCockpit20260902_(Number(v&&v.cft1||0));
+  return{ok:true,total:total,brutAvantSuspensions:brut,suspensions:0,suspensionLegacyIgnoree:suspensionLegacy,ancienMoteur:ancien,ecartVsAncien:arrCockpit20260902_(total-ancien),lignes:lignes,ownerVersion:CERBERE_FIXED_CHARGE_OWNER_FINAL_20260914_VERSION,doctrine:'Toutes les fréquences et suspensions proviennent du générateur canonique Charges_fixes ; le Réel explicitement lié remplace les occurrences couvertes ; aucun second retrait legacy de suspension.'};
 }
 
 function estSnapshotCerbereP1FraisValide20260912_(s){
