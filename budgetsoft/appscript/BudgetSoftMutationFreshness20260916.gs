@@ -118,7 +118,7 @@ function chargerSnapshotGlobalBudgetSoft20260906(){
     }
     const etat=JSON.parse(decoderEtatGlobalBudgetSoft20260906_(parts.join('')));
     const fraicheur=diagnostiquerPeremptionSnapshot20260916_(etat);
-    if(fraicheur.perime)return{ok:true,disponible:false,perime:true,version:BUDGETSOFT_GLOBAL_SNAPSHOT_VERSION,revisionBudgetSoft:etat.revisionBudgetSoft||'',genereLe:etat.genereLe||'',fraicheur};
+    if(fraicheur.perime)return{ok:true,disponible:false,perime:true,version:BUDGETSOFT_GLOBAL_SNAPSHOT_VERSION,revisionBudgetSoft:etat.revisionBudgetSoft||'',genereLe:etat.genereLe||'',fraicheur,etatPerime:etat};
     return{ok:true,disponible:true,perime:false,version:BUDGETSOFT_GLOBAL_SNAPSHOT_VERSION,revisionBudgetSoft:etat.revisionBudgetSoft,genereLe:etat.genereLe,etat,fraicheur};
   }catch(e){return{ok:false,disponible:false,corrompu:true,version:BUDGETSOFT_GLOBAL_SNAPSHOT_VERSION,erreur:String(e&&e.message||e)};}
 }
