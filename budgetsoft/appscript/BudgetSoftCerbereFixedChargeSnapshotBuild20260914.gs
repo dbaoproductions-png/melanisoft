@@ -2,7 +2,7 @@
  * BudgetSoft — normalisation canonique des charges fixes pendant la construction
  * du snapshot global. Aucun recalcul n'est effectué à la lecture de Cerbère.
  */
-const BUDGETSOFT_CERBERE_CF_SNAPSHOT_BUILD_20260914_VERSION='2026-09-14.4';
+const BUDGETSOFT_CERBERE_CF_SNAPSHOT_BUILD_20260914_VERSION='2026-09-27.1';
 
 function actifCfSnapshotBuild20260914_(v){
   const s=String(v==null?'':v).trim().toLowerCase();
@@ -54,8 +54,21 @@ function construireCfCanoniquePourSnapshot20260914_(p,v,sources,ajustementsCfPre
   });
   if(erreurs.length)return{ok:false,erreur:'échec générateur canonique',erreurs:erreurs,total:Number(v&&v.cft1||0),ownerVersion:BUDGETSOFT_CERBERE_CF_SNAPSHOT_BUILD_20260914_VERSION};
   const arr=n=>Math.round((Number(n)||0)*100)/100;
-  brut=arr(brut);const suspension=arr(Math.max(0,Number(v&&v.correctionSuspensions20260903||0))),total=arr(Math.max(0,brut-suspension));
-  return{ok:true,total:total,brutAvantSuspensions:brut,suspensions:suspension,lignes:lignes,ownerVersion:BUDGETSOFT_CERBERE_CF_SNAPSHOT_BUILD_20260914_VERSION,doctrine:'Charges_fixes est propriétaire ; toutes les fréquences passent par le générateur canonique ; le Réel explicitement lié remplace la prévision.'};
+  /*
+   * Depuis le propriétaire canonique des occurrences, les suspensions/report/ignore
+   * sont déjà appliqués par calculerEcheancesChargeFixeAjustees_().
+   * correctionSuspensions20260903 est un résidu legacy du vieux moteur Cerbère :
+   * le retrancher ici une seconde fois double-compte la suspension (CASDEN en 09/10).
+   */
+  brut=arr(brut);
+  const suspensionLegacy=arr(Math.max(0,Number(v&&v.correctionSuspensions20260903||0)));
+  const total=brut;
+  return{
+    ok:true,total:total,brutAvantSuspensions:brut,suspensions:0,
+    suspensionLegacyIgnoree:suspensionLegacy,
+    lignes:lignes,ownerVersion:BUDGETSOFT_CERBERE_CF_SNAPSHOT_BUILD_20260914_VERSION,
+    doctrine:'Charges_fixes est propriétaire ; toutes les fréquences et suspensions passent par le générateur canonique ajusté ; aucun second retrait legacy ; le Réel explicitement lié remplace la prévision.'
+  };
 }
 
 function normaliserCerbereCfPourSnapshot20260914_(base,sources){
