@@ -31,11 +31,11 @@ function auditerGardeRecettesCanoniquesBudgetSoft20260908(projection){
   function err(code,message,detail){erreurs.push({code:code,message:message,detail:detail||null});}
   const p=projection&&typeof projection==='object'?projection:null;
   if(!p||!Array.isArray(p.lignes)){
-    return {ok:false,version:'2026-09-22.1',erreurs:[{code:'PROJECTION_ABSENTE',message:'La trajectoire canonique est absente ou sans lignes.'}],details:[]};
+    return {ok:false,version:'2026-09-28.2',erreurs:[{code:'PROJECTION_ABSENTE',message:'La trajectoire canonique est absente ou sans lignes.'}],details:[]};
   }
   const reference=new Date(p.dateReference||0),cible=new Date(p.dateCible||0);
   if(isNaN(reference)||isNaN(cible)){
-    return {ok:false,version:'2026-09-22.1',erreurs:[{code:'DATES_INVALIDES',message:'Les dates de référence/cible de la trajectoire sont invalides.'}],details:[]};
+    return {ok:false,version:'2026-09-28.2',erreurs:[{code:'DATES_INVALIDES',message:'Les dates de référence/cible de la trajectoire sont invalides.'}],details:[]};
   }
   const finCycle=typeof dateFinCycleCanonBudgetSoft20260906_==='function'
     ?dateFinCycleCanonBudgetSoft20260906_(reference)
@@ -46,7 +46,7 @@ function auditerGardeRecettesCanoniquesBudgetSoft20260908(projection){
     const d=new Date(x&&x.date||0);return !isNaN(d)&&d>reference&&d<=finCycle;
   });
   details.push({type:'R0_cycle_courant',nombre:r0Courant.length,lignes:r0Courant.map(function(x){return{sourceId:x.sourceId,date:x.date,montant:x.montantSigne};})});
-  if(r0Courant.length)err('R0_CYCLE_COURANT_INTERDIT','Le cycle courant contient encore des recettes R0 implicites.',details[details.length-1]);
+
 
   let evs=[];try{evs=lireFeuilleDynamiquePlan_('Plan_Evenements')||[];}catch(e){evs=[];}
   const ouvertes=evs.filter(function(ev){
@@ -70,10 +70,10 @@ function auditerGardeRecettesCanoniquesBudgetSoft20260908(projection){
 
   return {
     ok:erreurs.length===0,
-    version:'2026-09-22.1',
+    version:'2026-09-28.2',
     dateReference:p.dateReference||'',
     dateCible:p.dateCible||'',
-    doctrine:'Cycle courant = aucun complément implicite vers R0 ; seules les recettes Plan ouvertes restent dues. Une date dépassée ne clôt jamais un événement.',
+    doctrine:'Cycle courant : le canon récurrent R0 reste projeté tant qu il n est pas remplacé par le Réel ; les recettes Plan ouvertes restent dues jusqu à preuve de clôture.',
     erreurs:erreurs,
     details:details
   };
