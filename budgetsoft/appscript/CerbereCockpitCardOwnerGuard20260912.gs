@@ -42,9 +42,7 @@ function appliquerDoctrineP1ComptableGuideVieCerbere20260912_(base,ajustementsCf
     if(debut&&typeof soldeHistoriqueCompteCourantCanoniqueBudgetSoft20260928_==='function'){
       const cible=new Date(debut);cible.setDate(cible.getDate()-1);cible.setHours(23,59,59,999);
       const synth=typeof construireSyntheseComptes20260828_==='function'?construireSyntheseComptes20260828_():null;
-      const soldeReel=Number(synth&&synth.synthese&&synth.synthese.disponible);
       const canon=soldeHistoriqueCompteCourantCanoniqueBudgetSoft20260928_(cible,{
-        soldeReel:soldeReel,
         comptes:synth&&synth.comptes||[],
         operations:lireTable_('Operations')||[],
         dateReference:new Date()
