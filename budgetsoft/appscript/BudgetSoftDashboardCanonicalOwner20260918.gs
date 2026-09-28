@@ -1,4 +1,4 @@
-const BUDGETSOFT_DASHBOARD_CANONICAL_OWNER_20260918_VERSION='2026-09-18.1';
+const BUDGETSOFT_DASHBOARD_CANONICAL_OWNER_20260918_VERSION='2026-09-28.3';
 
 function arrDashboardCanonicalOwner20260918_(n){return Math.round(Number(n||0)*100)/100;}
 function jourDashboardCanonicalOwner20260918_(v){
@@ -28,10 +28,27 @@ function composerDashboardSyntheseBudgetSoft20260907_(ctx){
   const p0=ps[0]||null,v0=p0&&p0.v37||{},rt1=Number(v0.rt1);
   if(r.courtTerme&&Number.isFinite(rt1)){
     r.courtTerme.revenusAttendus=arrDashboardCanonicalOwner20260918_(rt1);
+    r.courtTerme.revenusReevaluees=arrDashboardCanonicalOwner20260918_(rt1);
     r.courtTerme.revenusPrevisionnelsRestants=arrDashboardCanonicalOwner20260918_(rt1-Number(r.courtTerme.revenusConstates||0));
     r.provenance=r.provenance||{};
     r.provenance.revenusAttendus='cerbere.periodes[0].v37.rt1';
+    r.provenance.revenusReevaluees='cerbere.periodes[0].v37.rt1';
     r.provenance.revenusPrevisionnels='projectionEtendue canonique ; aucun recalcul local dans Dashboard';
+  }
+  if(r.courtTerme&&p0){
+    const c0=v0.cockpit20260902||{};
+    const ss1=Number(v0.ss1),cf1=Number(v0.cft1);
+    if(Number.isFinite(ss1)){
+      r.courtTerme.soldeInitialReference=arrDashboardCanonicalOwner20260918_(ss1);
+      r.courtTerme.soldeInitialSource=String(v0.ss1Statut||'trésorerie canonique · solde au 27');
+    }
+    if(Number.isFinite(cf1)){
+      r.courtTerme.chargesFixesReevaluees=arrDashboardCanonicalOwner20260918_(cf1);
+      r.courtTerme.chargesFixesReference=arrDashboardCanonicalOwner20260918_(Number(v0.cft1Audit20260912&&v0.cft1Audit20260912.brutAvantSuspensions!=null?v0.cft1Audit20260912.brutAvantSuspensions:cf1));
+    }
+    r.provenance=r.provenance||{};
+    r.provenance.soldeInitialReference='cerbere.periodes[0].v37.ss1 · propriétaire trésorerie canonique au 27';
+    r.provenance.chargesFixesReevaluees='cerbere.periodes[0].v37.cft1';
   }
 
   // EP/P : publication en lecture seule des propriétaires Cerbère.
