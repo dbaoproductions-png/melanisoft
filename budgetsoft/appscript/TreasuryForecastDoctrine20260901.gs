@@ -1,4 +1,4 @@
-const TREASURY_FORECAST_DOCTRINE_20260901_VERSION='2026-09-25.1';
+const TREASURY_FORECAST_DOCTRINE_20260901_VERSION='2026-09-28.2';
 
 function chargerSocleTresorerie20260831SansDebitCbLegacy20260910_(dateCible,ctx){
   if(typeof chargerTresoreriePrevisionnelle20260831!=='function')return null;
@@ -7,16 +7,9 @@ function chargerSocleTresorerie20260831SansDebitCbLegacy20260910_(dateCible,ctx)
   try{estimationDebitCbDiffereTresorerie20260901_=function(){return null;};return chargerTresoreriePrevisionnelle20260831(dateCible,ctx);}finally{estimationDebitCbDiffereTresorerie20260901_=legacy;}
 }
 function filtrerRevenusCanonCycleCourantTresorerie20260922_(lignes,reference){
-  const ref=reference instanceof Date?new Date(reference):new Date(reference||0);if(isNaN(ref))return(lignes||[]).slice();
-  const fin=typeof dateFinCycleCanonBudgetSoft20260906_==='function'
-    ?dateFinCycleCanonBudgetSoft20260906_(ref)
-    :new Date(ref.getDate()<=27?ref.getFullYear():ref.getFullYear(),ref.getDate()<=27?ref.getMonth():ref.getMonth()+1,27);
-  fin.setHours(23,59,59,999);
-  return(lignes||[]).filter(function(x){
-    if(String(x&&x.source||'')!=='revenu_recurrent')return true;
-    const d=new Date(x&&x.date||0);if(isNaN(d))return true;
-    return !(d>ref&&d<=fin);
-  });
+  // Déprécié 2026-09-28 : la projection bancaire doit conserver les R0 du cycle courant.
+  // Leur présence/absence est décidée exclusivement par revenusCanoniquesTresorerie20260831_.
+  return (lignes||[]).slice();
 }
 
 function completerRecettesPlanDuesTresorerie20260927_(lignes,reference,cible){
@@ -275,4 +268,4 @@ function projectionEnvelopePilotableTresorerie20260913_(ops,reference,cible,cerb
 }
 function estimationsDebitsCbDiffereTresorerie20260908_(ops,reference,cible,cerberePrecharge){return projectionEnvelopePilotableTresorerie20260913_(ops,reference,cible,cerberePrecharge).debitsCb;}
 function estimationDebitCbDiffereTresorerie20260901V2_(ops,reference,cible,cerberePrecharge){const xs=estimationsDebitsCbDiffereTresorerie20260908_(ops,reference,cible,cerberePrecharge);return xs.length?xs[0]:null;}
-function recalculerSortieTresorerie20260901_(r,lignes,reference,cible){const variation=arrondiTresorerie_((lignes||[]).reduce((s,x)=>s+Number(x.montantSigne||0),0)),certain=arrondiTresorerie_((lignes||[]).filter(x=>x.certitude==='certain').reduce((s,x)=>s+Number(x.montantSigne||0),0)),tresProbable=arrondiTresorerie_((lignes||[]).filter(x=>['certain','tres_probable'].includes(x.certitude)).reduce((s,x)=>s+Number(x.montantSigne||0),0));r.version=TREASURY_FORECAST_DOCTRINE_20260901_VERSION;r.lignes=lignes;r.variationPrevue=variation;r.soldePrevisionnel=arrondiTresorerie_(Number(r.soldeReel||0)+variation);r.fourchette={certain:arrondiTresorerie_(Number(r.soldeReel||0)+certain),tresProbable:arrondiTresorerie_(Number(r.soldeReel||0)+tresProbable),toutesHypotheses:r.soldePrevisionnel};r.resume=resumeTresorerie20260831_(lignes);r.confiance=confianceTresorerie_(reference,cible,lignes);r.diagnostic20260831=r.diagnostic20260831||{};r.diagnostic20260831.passeTerminalePlanCb=true;r.diagnostic20260831.actionsPlanTresorerie='uniquement impact_confirme + statut Effectif/Effective';r.diagnostic20260831.revenusR0CycleCourant='aucune créance implicite R0 dans le cycle courant ; R0 reprend à partir du cycle suivant';r.diagnostic20260831.debitCbDoctrine='CB bancaire : achats réels déjà connus + 90 % de l’EP restant ; charges fixes CB séparées ; 1 950 € conservé comme étalon statistique uniquement';r.diagnostic20260831.optimisationCerbereCb='Cerbère préchargé finalisé en cockpit avant lecture EP';r.diagnostic20260831.suppressionCbLegacy20260831='estimation legacy neutralisée sur le chemin canonique';r.diagnostic20260831.reutilisationCerbereSnapshot='snapshot peut fournir une base Cerbère, finalisée avant projection EP';return r;}
+function recalculerSortieTresorerie20260901_(r,lignes,reference,cible){const variation=arrondiTresorerie_((lignes||[]).reduce((s,x)=>s+Number(x.montantSigne||0),0)),certain=arrondiTresorerie_((lignes||[]).filter(x=>x.certitude==='certain').reduce((s,x)=>s+Number(x.montantSigne||0),0)),tresProbable=arrondiTresorerie_((lignes||[]).filter(x=>['certain','tres_probable'].includes(x.certitude)).reduce((s,x)=>s+Number(x.montantSigne||0),0));r.version=TREASURY_FORECAST_DOCTRINE_20260901_VERSION;r.lignes=lignes;r.variationPrevue=variation;r.soldePrevisionnel=arrondiTresorerie_(Number(r.soldeReel||0)+variation);r.fourchette={certain:arrondiTresorerie_(Number(r.soldeReel||0)+certain),tresProbable:arrondiTresorerie_(Number(r.soldeReel||0)+tresProbable),toutesHypotheses:r.soldePrevisionnel};r.resume=resumeTresorerie20260831_(lignes);r.confiance=confianceTresorerie_(reference,cible,lignes);r.diagnostic20260831=r.diagnostic20260831||{};r.diagnostic20260831.passeTerminalePlanCb=true;r.diagnostic20260831.actionsPlanTresorerie='uniquement impact_confirme + statut Effectif/Effective';r.diagnostic20260831.revenusR0CycleCourant='R0 du cycle courant conservé ; le Réel remplace ou consomme la prévision selon le propriétaire canonique des recettes';r.diagnostic20260831.debitCbDoctrine='CB bancaire : achats réels déjà connus + 90 % de l’EP restant ; charges fixes CB séparées ; 1 950 € conservé comme étalon statistique uniquement';r.diagnostic20260831.optimisationCerbereCb='Cerbère préchargé finalisé en cockpit avant lecture EP';r.diagnostic20260831.suppressionCbLegacy20260831='estimation legacy neutralisée sur le chemin canonique';r.diagnostic20260831.reutilisationCerbereSnapshot='snapshot peut fournir une base Cerbère, finalisée avant projection EP';return r;}
