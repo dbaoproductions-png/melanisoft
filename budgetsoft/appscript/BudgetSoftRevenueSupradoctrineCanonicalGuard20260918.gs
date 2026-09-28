@@ -1,4 +1,4 @@
-const BUDGETSOFT_REVENUE_SUPRADOCTRINE_CANONICAL_20260918_VERSION='2026-09-27.1';
+const BUDGETSOFT_REVENUE_SUPRADOCTRINE_CANONICAL_20260918_VERSION='2026-09-28.2';
 
 function verifierSupradoctrineRecettesBudgetSoft20260912_(etat){
   const erreurs=[],m=etat&&etat.modules||{},dash=m.dashboard||{},ct=dash.courtTerme||{},cer=m.cerbere||{},proj=m.projectionEtendue||{},p=Array.isArray(cer.periodes)?cer.periodes[0]:null,v=p&&p.v37||{},periode=p&&(p.periode||p)||{};
