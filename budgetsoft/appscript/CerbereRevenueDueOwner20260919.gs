@@ -83,10 +83,15 @@ function enrichirCerbereRecettesCertainesDues20260919_(base){
     if(i===0){
       const reel=revenusConstatesCycleCerbereRevenueDueOwner20260922_(debut,fin);
       const ancienRt1=arrCerbereRevenueDueOwner20260919_(Number(v.rt1||0));
-      v.rt1=arrCerbereRevenueDueOwner20260919_(Number(reel.total||0)+montantDu);
+      // Doctrine 2026-09-28 : cette couche ne possède pas Rt1 et ne doit jamais
+      // effacer le canon récurrent encore attendu. Elle ne fait qu'empêcher qu'un
+      // événement explicitement dû fasse baisser une estimation déjà plus complète.
+      const plancherDu=arrCerbereRevenueDueOwner20260919_(Number(reel.total||0)+montantDu);
+      v.rt1=arrCerbereRevenueDueOwner20260919_(Math.max(ancienRt1,plancherDu));
       v.rt1Audit=v.rt1Audit&&typeof v.rt1Audit==='object'?v.rt1Audit:{};
-      v.rt1Audit.modeCycleCourant='reel_constate_plus_evenements_explicitement_dus';
+      v.rt1Audit.modeCycleCourant='canon_recurrent_conserve_reel_remplace_prevu_evenements_dus_en_plancher';
       v.rt1Audit.ancienRt1=ancienRt1;
+      v.rt1Audit.plancherReelPlusEvenementsDus=plancherDu;
       v.rt1Audit.revenusConstatesCycle=Number(reel.total||0);
       v.rt1Audit.revenusConstatesDetail=reel.detail||{};
       v.rt1Audit.evenementsDus=montantDu;
@@ -94,13 +99,13 @@ function enrichirCerbereRecettesCertainesDues20260919_(base){
         id:String(o&&o.eventId||''),libelle:String(o&&o.libelle||''),occurrence:Number(o&&o.index||1),occurrences:Number(o&&o.total||1),montant:Math.abs(Number(o&&o.montant||0)),
         datePrevue:isoCerbereRevenueDueOwner20260919_(d),statut:String(o&&o.statut||''),enRetard:!!(d&&d<reference)
       };});
-      v.rt1Audit.complementCanonR0Implicite=0;
+      v.rt1Audit.complementCanonR0Implicite=arrCerbereRevenueDueOwner20260919_(Math.max(0,v.rt1-plancherDu));
       const dt1=Number(v.dt1||0);
       v.sct1=arrCerbereRevenueDueOwner20260919_(Number(v.ss1||0)+Number(v.rt1||0)-dt1);
       v.rpt1=v.sct1;v.resteReellementPilotable=v.sct1;v.disponibleJusquau27=v.sct1;
       p.resteReellementPilotable=v.sct1;p.capacitePilotable=v.sct1;p.capaciteTresorerie=v.sct1;
       try{if(typeof enrichirCycleCockpitCerbere20260902_==='function')enrichirCycleCockpitCerbere20260902_(p,i);}catch(e){}
-      diagnostic.push({index:i+1,mode:'cycle_courant',ancienRt1:ancienRt1,revenusConstates:Number(reel.total||0),evenementsDus:montantDu,nouveauRt1:v.rt1,detail:v.rt1Audit.evenementsDusDetail});
+      diagnostic.push({index:i+1,mode:'cycle_courant_canon_conserve',ancienRt1:ancienRt1,revenusConstates:Number(reel.total||0),evenementsDus:montantDu,plancherDu:plancherDu,nouveauRt1:v.rt1,detail:v.rt1Audit.evenementsDusDetail});
       return;
     }
 
@@ -112,7 +117,7 @@ function enrichirCerbereRecettesCertainesDues20260919_(base){
     ok:true,
     version:CERBERE_REVENUE_DUE_OWNER_20260919_VERSION,
     cycles:diagnostic,
-    doctrine:'Cycle courant : Rt1 = Réel constaté + événements de recette explicitement encore dus ; aucun complément automatique vers R0. Cycle futur : R0 reste le canon prévisionnel. Une date Plan dépassée ne clôt jamais un événement ; elle marque son cycle d’origine et l’événement reste dû jusqu’à preuve de clôture.'
+    doctrine:'Cycle courant : Rt1 conserve le canon récurrent réévalué par son propriétaire ; le Réel remplace le prévu lorsqu’il existe. Cette couche ajoute seulement un plancher Réel constaté + événements explicitement dus et ne peut jamais supprimer un revenu récurrent encore attendu. Cycle futur : R0 reste le canon prévisionnel.'
   };
   base.versionRevenueIntermodule=typeof BUDGETSOFT_REVENUE_INTERMODULE_FINAL_20260912_VERSION!=='undefined'
     ?BUDGETSOFT_REVENUE_INTERMODULE_FINAL_20260912_VERSION
