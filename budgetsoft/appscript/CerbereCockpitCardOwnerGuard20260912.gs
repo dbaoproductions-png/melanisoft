@@ -7,7 +7,7 @@
  *
  * Une donnée, un propriétaire, un calcul, plusieurs consommateurs.
  */
-const CERBERE_COCKPIT_CARD_OWNER_GUARD_20260912_VERSION='2026-09-13.3';
+const CERBERE_COCKPIT_CARD_OWNER_GUARD_20260912_VERSION='2026-09-28.4';
 
 /* Compatibilité historique : l'ancien ajustement manuel de P est neutralisé. */
 function lireAjustementP1Cerbere20260903_(cle){return 0;}
@@ -34,7 +34,27 @@ function appliquerDoctrineP1ComptableGuideVieCerbere20260912_(base,ajustementsCf
   const cfReconstruite=reconstruireChargesFixesReevalueesP1Cerbere20260912_(p,v,ajustementsCfPrecharges);
   const cft1=arr(cfReconstruite&&cfReconstruite.ok?cfReconstruite.total:Number(v.cft1||0));
   const het1=arr(Math.max(0,Number(v.het1!=null?v.het1:(v.horsPilotableAControler||0))));
-  const ss1=arr(Number(v.ss1||0));
+  let ss1=arr(Number(v.ss1||0));
+  // SS1 n'appartient pas à Cerbère : c'est le solde bancaire canonique du compte
+  // courant au 27 à 23:59:59, fin du cycle précédent.
+  try{
+    const debut=dateCockpit20260902_(p&&p.periode&&p.periode.debut);
+    if(debut&&typeof soldeHistoriqueCompteCourantCanoniqueBudgetSoft20260928_==='function'){
+      const cible=new Date(debut);cible.setDate(cible.getDate()-1);cible.setHours(23,59,59,999);
+      const synth=typeof construireSyntheseComptes20260828_==='function'?construireSyntheseComptes20260828_():null;
+      const soldeReel=Number(synth&&synth.synthese&&synth.synthese.disponible);
+      const canon=soldeHistoriqueCompteCourantCanoniqueBudgetSoft20260928_(cible,{
+        soldeReel:soldeReel,
+        comptes:synth&&synth.comptes||[],
+        operations:lireTable_('Operations')||[],
+        dateReference:new Date()
+      });
+      if(Number.isFinite(Number(canon))){
+        ss1=arr(Number(canon));v.ss1=ss1;v.soldeOuverture=ss1;
+        v.ss1Statut='solde bancaire canonique au 27 à 23:59:59 · propriétaire trésorerie canonique';
+      }
+    }
+  }catch(e){}
   const herite=calculerCbHeriteesP1Cerbere20260912_(p);
   const avantHeritage=arr(ss1+rt1-cft1-het1);
   const p1=arr(Math.max(0,avantHeritage-Number(herite.montant||0)));
@@ -48,7 +68,7 @@ function appliquerDoctrineP1ComptableGuideVieCerbere20260912_(base,ajustementsCf
   c.margeARepartir=0;c.aRepartirDansPostes=0;c.surplusCapaciteVsAllocation=arr(p1-allocation);
   c.consommePilotable=consomme;c.ret1=resteP1;c.pSoutenable=p1;c.pDisponible=resteP1;c.ecartEpP=ecartEpP1;
   c.detailActualise=Object.assign({},c.detailActualise||{}, {soldeAvantSalaireSS1:ss1,recettesReevaluees:rt1,chargesFixesReevaluees:cft1,chargesFixesAudit:cfReconstruite,horsPilotableEtImprevus:het1,cbHeriteesCycle:arr(herite.montant),cbHeriteesNombre:herite.nombre,cbHeriteesExcluesCf:arr(herite.excluesCf)});
-  c.formuleActualisee='P1 = SS1 avant salaire + Rt1 - CFt1 explicable - HEt1 - CB héritées de M-1 non déjà provisionnées';
+  c.formuleActualisee='P1 = solde bancaire canonique au 27 + Rt1 - CFt1 explicable - HEt1 - CB héritées de M-1 non déjà provisionnées';
   c.formuleVentilation='EP est indépendant de P1 : EP = somme des molettes ; écart de décision = EP - P1.';
   c.datePilotable='dépense pilotable : date d’achat/engagement ; trésorerie : date bancaire ; le règlement CB technique ne recompte jamais la dépense';
   v.ret1=resteP1;v.disponibleEnveloppes=resteP1;v.capaciteAvantPilotable=p1;v.cbHeriteesCycle=arr(herite.montant);
