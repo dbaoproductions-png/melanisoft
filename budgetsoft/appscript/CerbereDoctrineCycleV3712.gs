@@ -132,7 +132,11 @@ function appliquerConventionSalaireV3712_(v,periode,operations,base){
   const debut=jourCivilV3712_(periode&&periode.debut);if(!debut)return;
   const candidats=tableauCerbereV379_(operations).map(o=>({o:o,d:jourCivilV3712_(dateOperationBanqueV377_(o))}))
     .filter(x=>x.d&&Number(x.o&&x.o.montant||0)>0&&normaliserV377_(x.o&&x.o.categorie)==='salaires')
-    .filter(x=>Math.abs((x.d-debut)/86400000)<=1)
+    // Doctrine frontière 2026-09-28 : un salaire crédité le 27 appartient au
+    // solde bancaire de clôture du cycle précédent et ne doit jamais être déplacé
+    // artificiellement au 28. Seuls les salaires réellement crédités le 28/29
+    // peuvent remplacer le R1 du cycle courant.
+    .filter(x=>x.d>=debut&&((x.d-debut)/86400000)<=1)
     .sort((a,b)=>Math.abs(a.d-debut)-Math.abs(b.d-debut));
   if(!candidats.length){
     v.salaireOuverture={trouve:false,dateCerbere:formatJourV3712_(debut),doctrine:'salaire attendu au 28 Cerbère'};
@@ -153,18 +157,14 @@ function appliquerConventionSalaireV3712_(v,periode,operations,base){
   }
   v.rt1=arrV3712_(avantRt-retenuAvant+montant);
 
-  // Si la banque verse le 27, le SS1 reconstitué au 28 contient déjà le salaire.
-  // On le retire pour retrouver le dernier solde de M-1 avant salaire ; le salaire
-  // est alors repris dans Rt1 au 28 conventionnel. Les 28/29 ne nécessitent pas
-  // d'ajustement du SS1 frontière.
-  let ajustementSS1=0;
-  if(x.d<debut){ajustementSS1=-montant;v.ss1=arrV3712_(Number(v.ss1||0)-montant);v.soldeOuverture=v.ss1;}
+  // SS1 est possédé par la trésorerie canonique : cette couche n'y touche jamais.
+  const ajustementSS1=0;
 
-  v.ss1Statut='dernier solde de M−1 avant le salaire d’ouverture · salaire imputé conventionnellement au 28';
+  v.ss1Statut=String(v.ss1Statut||'solde canonique des comptes courants à la clôture du 27');
   v.salaireOuverture={
     trouve:true,montant:arrV3712_(montant),dateBancaire:formatJourV3712_(x.d),dateCerbere:formatJourV3712_(debut),
     operationId:String(x.o&&x.o.id||''),canonRemplace:arrV3712_(retenuAvant),deltaRt1:arrV3712_(montant-retenuAvant),
-    ajustementSS1:arrV3712_(ajustementSS1),doctrine:'date Cerbère fixe au 28 ; seul le montant réel remplace R1'
+    ajustementSS1:arrV3712_(ajustementSS1),doctrine:'salaire réellement crédité le 28/29 : seul le montant réel remplace R1 ; SS1 reste la clôture bancaire du 27'
   };
 }
 
