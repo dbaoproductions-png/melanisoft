@@ -62,7 +62,19 @@ function construireSyntheseComptes20260828_(ctx){
     const montant=type==='depense'?-brutMontant:brutMontant;cumulReel[id]+=montant;
     const jp=jour.split('-').map(Number),d=new Date(jp[0],jp[1]-1,jp[2],12,0,0,0);
     if(!derniereDateReelle[id]||d>derniereDateReelle[id])derniereDateReelle[id]=d;
-    const ref=refs[id];if(ref&&ref.disponible&&jour>ref.jour)cumulApresRef[id]+=montant;
+    const ref=refs[id];
+    if(ref&&ref.disponible){
+      const statutBancaire=String(o&&o.statut_bancaire||'').trim().toLowerCase();
+      const jourMouvement=typeof jourCanonBudgetSoft20260906_==='function'?jourCanonBudgetSoft20260906_(o&&o.date):'';
+      const apresReference=jour>ref.jour;
+      // Un mouvement bancaire encore provisoire peut ne pas être compris dans le
+      // solde de relevé certifié alors que sa date de mouvement appartient déjà au
+      // jour de référence. Dans ce cas, sa date_comptable anticipée ne doit pas le
+      // faire disparaître du solde réel. Exemple : virement Épargne du 27/09,
+      // -50 €, date_comptable 26/09.
+      const provisoireJourReference=/provisoire/.test(statutBancaire)&&!!jourMouvement&&jourMouvement>=ref.jour&&jour<=ref.jour;
+      if(apresReference||provisoireJourReference)cumulApresRef[id]+=montant;
+    }
   });
 
   const lignes=comptes.map(function(c){
