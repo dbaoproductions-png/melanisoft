@@ -1,4 +1,4 @@
-const BUDGETSOFT_REVENUE_ARREARS_20260908_VERSION='2026-09-25.1';
+const BUDGETSOFT_REVENUE_ARREARS_20260908_VERSION='2026-09-28.2';
 
 /**
  * Une recette structurelle échue mais non encaissée reste due dans la trajectoire
@@ -112,6 +112,7 @@ function revenusCanoniquesTresorerie20260831_(ops,lignesExistantes,reference,cib
     ?dateFinCycleCanonBudgetSoft20260906_(reference)
     :new Date(reference.getDate()<=27?reference.getFullYear():reference.getFullYear(),reference.getDate()<=27?reference.getMonth():reference.getMonth()+1,27);
   finCycleCourant.setHours(23,59,59,999);
+  const debutCycleCourant=new Date(finCycleCourant.getFullYear(),finCycleCourant.getMonth()-1,28,0,0,0,0);
 
   (canon||[]).forEach(c=>{
     if(!actifTresorerie_(c.actif))return;
@@ -141,10 +142,14 @@ function revenusCanoniquesTresorerie20260831_(ops,lignesExistantes,reference,cib
         let d=new Date(y,m,Math.min(jour,new Date(y,m+1,0).getDate()),12,0,0,0);
         const moisReference=y===reference.getFullYear()&&m===reference.getMonth();
         const dateFixeCycle=(cle==='cours'||cle==='concerts');
+        // Une occurrence civile antérieure au 28 d'ouverture appartient au cycle précédent.
+        // Exemple au 28/09 : France Travail du 02/09 est ignoré, celui du 02/10 est retenu.
+        if(d<debutCycleCourant){curseur=new Date(y,m+1,1,12,0,0,0);continue;}
         if(moisReference&&d<=reference&&!dateFixeCycle){
           d=new Date(reference);d.setDate(d.getDate()+1);d.setHours(12,0,0,0);
         }
-        if(d>reference&&d<=cible&&d>finCycleCourant){
+        // Les recettes du cycle courant appartiennent à la trajectoire canonique.
+        if(d>reference&&d<=cible){
           const cand={
             id:'revcanon:'+cat+':'+y+'-'+String(m+1).padStart(2,'0'),
             source:'revenu_recurrent',sourceId:'canon:'+cat,date:d.toISOString(),libelle:cat,categorie:cat,
