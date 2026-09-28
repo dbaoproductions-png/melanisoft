@@ -1,4 +1,4 @@
-const BUDGETSOFT_CANONICAL_TREASURY_VERSION='2026-09-21.1';
+const BUDGETSOFT_CANONICAL_TREASURY_VERSION='2026-09-28.2';
 
 function arrTresorerieCanoniqueBudgetSoft20260906_(n){return Math.round(Number(n||0)*100)/100;}
 function finJourTresorerieCanoniqueBudgetSoft20260906_(v){
@@ -10,6 +10,43 @@ function estCompteCourantCanoniqueBudgetSoft20260906_(c){const s=String((c&&c.no
 function estEpargneCanoniqueBudgetSoft20260906_(c){return /livret|epargne|épargne|placement/i.test(String((c&&c.nom||'')+' '+(c&&c.type||'')+' '+(c&&c.nature||'')));}
 function operationReelleCanoniqueBudgetSoft20260906_(o){return !/\[RECURRENCE:[^\]]+\]/.test(String(o&&o.commentaire||''));}
 function montantSigneCanoniqueBudgetSoft20260906_(o){const n=Number(o&&o.montant||0);if(Number.isFinite(n)&&Math.abs(n)>.000001)return n;const a=Math.abs(Number(o&&o.montant||0)),t=String(o&&o.type||'').toLowerCase();if(t==='depense'||t==='tresorerie_sortie')return-a;if(t==='revenu'||t==='tresorerie_entree')return a;return 0;}
+
+/**
+ * Solde bancaire canonique à une date historique du compte courant.
+ * Doctrine : le solde d'un cycle au 27 à minuit est une donnée de trésorerie,
+ * jamais une reconstruction Cerbère. On part du solde réel canonique au jour J
+ * et on neutralise uniquement les mouvements bancaires réels postérieurs à la cible.
+ */
+function soldeHistoriqueCompteCourantCanoniqueBudgetSoft20260928_(dateCible,options){
+  options=options||{};
+  const cible=finJourTresorerieCanoniqueBudgetSoft20260906_(dateCible);
+  const ref=finJourTresorerieCanoniqueBudgetSoft20260906_(options.dateReference||new Date());
+  if(!cible||!ref||cible>ref)return null;
+  let solde=Number(options.soldeReel);
+  let comptes=Array.isArray(options.comptes)?options.comptes:[];
+  if(!Number.isFinite(solde)||!comptes.length){
+    try{
+      const synth=typeof construireSyntheseComptes20260828_==='function'?construireSyntheseComptes20260828_():null;
+      if(!Number.isFinite(solde))solde=Number(synth&&synth.synthese&&synth.synthese.disponible);
+      if(!comptes.length)comptes=Array.isArray(synth&&synth.comptes)?synth.comptes:[];
+    }catch(e){}
+  }
+  if(!Number.isFinite(solde))return null;
+  const courants=(comptes||[]).filter(function(x){return estCompteCourantCanoniqueBudgetSoft20260906_(x);});
+  const cles=new Set();courants.forEach(function(x){cles.add(String(x&&x.id||''));cles.add(String(x&&x.nom||''));});
+  let operations=Array.isArray(options.operations)?options.operations:[];
+  if(!operations.length)try{operations=lireTable_('Operations')||[];}catch(e){operations=[];}
+  if(typeof dedoublonnerOperationsCartesBudgetSoft_==='function')try{operations=dedoublonnerOperationsCartesBudgetSoft_(operations);}catch(e){}
+  let apres=0;
+  operations.forEach(function(o){
+    if(!operationReelleCanoniqueBudgetSoft20260906_(o))return;
+    if(cles.size&&!cles.has(String(o&&o.compte||'')))return;
+    const d=typeof dateComptableCanonBudgetSoft20260906_==='function'?dateComptableCanonBudgetSoft20260906_(o):new Date(o&&o.date_comptable||o&&o.date||0);
+    if(!d||isNaN(d.getTime())||d<=cible||d>ref)return;
+    const m=montantSigneCanoniqueBudgetSoft20260906_(o);if(Number.isFinite(m))apres+=m;
+  });
+  return arrTresorerieCanoniqueBudgetSoft20260906_(solde-apres);
+}
 
 /** Prévision comptable canonique : solde réel + opérations connues par date_comptable. */
 function construireTresorerieComptableCanoniqueBudgetSoft20260906_(sources,comptes,dateCible,dateReference){
