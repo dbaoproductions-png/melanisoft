@@ -1,4 +1,4 @@
-const BUDGETSOFT_CANONICAL_TREASURY_VERSION='2026-09-28.2';
+const BUDGETSOFT_CANONICAL_TREASURY_VERSION='2026-09-28.3';
 
 function arrTresorerieCanoniqueBudgetSoft20260906_(n){return Math.round(Number(n||0)*100)/100;}
 function finJourTresorerieCanoniqueBudgetSoft20260906_(v){
@@ -24,16 +24,20 @@ function soldeHistoriqueCompteCourantCanoniqueBudgetSoft20260928_(dateCible,opti
   if(!cible||!ref||cible>ref)return null;
   let solde=Number(options.soldeReel);
   let comptes=Array.isArray(options.comptes)?options.comptes:[];
-  if(!Number.isFinite(solde)||!comptes.length){
+  if(!comptes.length){
     try{
       const synth=typeof construireSyntheseComptes20260828_==='function'?construireSyntheseComptes20260828_():null;
-      if(!Number.isFinite(solde))solde=Number(synth&&synth.synthese&&synth.synthese.disponible);
-      if(!comptes.length)comptes=Array.isArray(synth&&synth.comptes)?synth.comptes:[];
+      comptes=Array.isArray(synth&&synth.comptes)?synth.comptes:[];
     }catch(e){}
   }
-  if(!Number.isFinite(solde))return null;
   const courants=(comptes||[]).filter(function(x){return estCompteCourantCanoniqueBudgetSoft20260906_(x);});
-  const cles=new Set();courants.forEach(function(x){cles.add(String(x&&x.id||''));cles.add(String(x&&x.nom||''));});
+  const perimetre=courants.length?courants:(comptes||[]).filter(function(x){return !estEpargneCanoniqueBudgetSoft20260906_(x);});
+  // Si le solde n'est pas fourni par le propriétaire de trésorerie, on le recompose
+  // uniquement sur le même périmètre bancaire canonique. Ne jamais reprendre
+  // synthese.disponible ici : ce champ peut aussi contenir des espèces.
+  if(!Number.isFinite(solde))solde=perimetre.reduce(function(s,x){return s+Number(x&&x.soldeReel||0);},0);
+  if(!Number.isFinite(solde))return null;
+  const cles=new Set();perimetre.forEach(function(x){cles.add(String(x&&x.id||''));cles.add(String(x&&x.nom||''));});
   let operations=Array.isArray(options.operations)?options.operations:[];
   if(!operations.length)try{operations=lireTable_('Operations')||[];}catch(e){operations=[];}
   if(typeof dedoublonnerOperationsCartesBudgetSoft_==='function')try{operations=dedoublonnerOperationsCartesBudgetSoft_(operations);}catch(e){}
