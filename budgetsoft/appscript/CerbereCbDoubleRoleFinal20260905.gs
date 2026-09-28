@@ -274,7 +274,7 @@ function appliquerDoctrineP1LegacyCbDoubleRoleFinal20260912_(base){
 function auditerP1DoctrineComptableGuideVie20260912(){
   const c=recalculerCerbereCockpitP1Frais20260912_(),p=c&&Array.isArray(c.periodes)?c.periodes[0]:null,v=p&&p.v37||{},k=v.cockpit20260902||{};
   const cf=v&&v.cft1Audit20260912||k&&k.detailActualise&&k.detailActualise.chargesFixesAudit||null;
-  return{
+  const out={
     ok:!!(c&&c.ok!==false&&p&&k),
     version:CERBERE_CB_DOUBLE_ROLE_FINAL_VERSION,
     source:c&&c.sourceBudgetSoft||'',
@@ -292,4 +292,6 @@ function auditerP1DoctrineComptableGuideVie20260912(){
     formule:k.formuleActualisee||'',
     diagnostic:c&&c.diagnostic&&c.diagnostic.p1Doctrine20260912||null
   };
+  console.log('[AUDIT P1 DOCTRINE COMPTABLE 20260912] '+JSON.stringify(out));
+  return out;
 }
