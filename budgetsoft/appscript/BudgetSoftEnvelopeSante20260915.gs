@@ -5,7 +5,7 @@
  * remboursements en crédit. Seule la consommation de la molette Santé est
  * nette des remboursements réellement encaissés dans le cycle.
  */
-const BUDGETSOFT_ENVELOPPE_SANTE_20260915_VERSION='2026-09-15.1';
+const BUDGETSOFT_ENVELOPPE_SANTE_20260915_VERSION='2026-09-28.1';
 const BUDGETSOFT_ENVELOPPE_SANTE_20260915_OWNER='BudgetSoftEnvelopeSante20260915';
 
 function arrEnveloppeSante20260915_(n){return Math.round((Number(n)||0)*100)/100;}
@@ -15,16 +15,19 @@ function estCategorieSante20260915_(v){
 }
 
 function faitsSantePeriode20260915_(p){
-  const depDirect=Number(p&&p.santeDepenses),rembDirect=Number(p&&p.santeRemboursements);
-  if(Number.isFinite(depDirect)||Number.isFinite(rembDirect)){
-    const dep=Math.max(0,Number.isFinite(depDirect)?depDirect:0),remb=Math.max(0,Number.isFinite(rembDirect)?rembDirect:0);
-    return{depenses:arrEnveloppeSante20260915_(dep),remboursements:arrEnveloppeSante20260915_(remb),source:'periode.santeDepenses/santeRemboursements'};
-  }
+  // Propriétaire pilotable : le roulant impute la dépense au cycle de décision/achat.
+  // Les CB différées achetées au cycle précédent mais débitées dans le cycle courant
+  // sont déjà portées par le report CB hérité et ne doivent pas reconsommer la molette Santé.
   const s=p&&p.roulant&&p.roulant.sante||{};
   const net=Number(s.net),remb=Number(s.remboursements);
   if(Number.isFinite(net)||Number.isFinite(remb)){
     const r=Math.max(0,Number.isFinite(remb)?remb:0),n=Math.max(0,Number.isFinite(net)?net:0);
-    return{depenses:arrEnveloppeSante20260915_(n+r),remboursements:arrEnveloppeSante20260915_(r),source:'roulant.sante (brut reconstitué)'};
+    return{depenses:arrEnveloppeSante20260915_(n+r),remboursements:arrEnveloppeSante20260915_(r),source:'roulant.sante (cycle de décision/achat)'};
+  }
+  const depDirect=Number(p&&p.santeDepenses),rembDirect=Number(p&&p.santeRemboursements);
+  if(Number.isFinite(depDirect)||Number.isFinite(rembDirect)){
+    const dep=Math.max(0,Number.isFinite(depDirect)?depDirect:0),remb2=Math.max(0,Number.isFinite(rembDirect)?rembDirect:0);
+    return{depenses:arrEnveloppeSante20260915_(dep),remboursements:arrEnveloppeSante20260915_(remb2),source:'periode.santeDepenses/santeRemboursements (secours)'};
   }
   return{depenses:0,remboursements:0,source:'aucun fait Santé'};
 }
