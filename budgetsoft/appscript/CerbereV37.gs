@@ -84,18 +84,23 @@ function chargerCerbereLegacyBaseV37(){
     const cft1=arrV37_(Math.max(0,cfTotal-cfAttenduRealise)+cfReelRealise);
     const cfRestantes=i===0?arrV37_(Math.max(0,cfTotal-cfAttenduRealise)):cfTotal;
 
-    /* ========================= SS1 · solde significatif =========================
-     * Tant qu'aucun SS1 validé n'est stocké pour le cycle, on reconstitue un
-     * candidat depuis SHBt1 et les mouvements bancaires réellement présents.
-     * Ce candidat est explicitement marqué « reconstitué » : il ne vaut pas
-     * validation de frontière 27/28.
+    /* ========================= SS1 · solde bancaire de frontière =========================
+     * Doctrine 2026-09-28 : SS1 n'est pas une variable Cerbère à reconstruire.
+     * Pour le cycle courant, il est exactement le solde des comptes courants à la
+     * clôture du jour précédant le cycle (27 à 23:59:59), détenu par le propriétaire
+     * canonique de trésorerie. Cerbère le lit ; il ne le recalcule pas.
      */
     const clePeriode=String(p.clePilotage||pi.debut||'');
-    const propSS1=PropertiesService.getDocumentProperties().getProperty('CERBERE_SS1_'+clePeriode);
     const mouvementBancairePasse=opsPassees.reduce((s,o)=>s+Number(o.montant||0),0);
-    const ss1Valide=propSS1!==null&&propSS1!==''&&Number.isFinite(Number(propSS1));
+    const debutCycleSs1=pi&&pi.debut?new Date(pi.debut):null;
+    const frontiereSs1=debutCycleSs1&&!isNaN(debutCycleSs1.getTime())?new Date(debutCycleSs1):null;
+    if(frontiereSs1){frontiereSs1.setDate(frontiereSs1.getDate()-1);frontiereSs1.setHours(23,59,59,999);}
+    const ss1Canonique=i===0&&frontiereSs1&&typeof soldeHistoriqueCompteCourantCanoniqueBudgetSoft20260928_==='function'
+      ?Number(soldeHistoriqueCompteCourantCanoniqueBudgetSoft20260928_(frontiereSs1,{soldeReel:soldeActuel,operations:operations,dateReference:maintenant}))
+      :null;
+    const ss1Valide=i===0?Number.isFinite(ss1Canonique):Number.isFinite(Number(reportProjete));
     const ss1=i===0
-      ?arrV37_(ss1Valide?Number(propSS1):soldeActuel-mouvementBancairePasse)
+      ?arrV37_(ss1Valide?ss1Canonique:soldeActuel)
       :arrV37_(Number(reportProjete||0));
 
     const cbHeritee=Number(p.roulant&&p.roulant.cbHeritee||0);
@@ -157,7 +162,7 @@ function chargerCerbereLegacyBaseV37(){
     const ecartInitial=arrV37_(pointDepart-p0Total);
 
     p.v37={
-      pointDepart,soldeOuverture:ss1,ss1,ss1Valide,ss1Statut:ss1Valide?'validé':'reconstitué à contrôler',
+      pointDepart,soldeOuverture:ss1,ss1,ss1Valide,ss1Statut:i===0?(ss1Valide?'solde canonique des comptes courants à la clôture du 27':'secours solde bancaire courant · frontière historique indisponible'):'report projeté de la période précédente',
       rt1,cft1,dpt1,dt1,sct1,scPresent,shbt1:i===0?arrV37_(soldeActuel):null,ecartHelloCerbere,
       ecartInitial,margeInitiale,
       recettesCanon:arrV37_(r0Total),recettesR0Restantes:arrV37_(recettesR0Restantes),correctionRecettesReelles:arrV37_(correctionR0),recettesEvenements:arrV37_(ev.recettesFutures),recettesHorsR0Reelles:arrV37_(recettesHorsR0Reelles),
