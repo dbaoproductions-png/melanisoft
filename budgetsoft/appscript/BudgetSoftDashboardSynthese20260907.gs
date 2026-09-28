@@ -1,4 +1,4 @@
-const BUDGETSOFT_DASHBOARD_SYNTHESE_VERSION='2026-09-12.1';
+const BUDGETSOFT_DASHBOARD_SYNTHESE_VERSION='2026-09-28.3';
 
 function arrDashboardSynthese20260907_(n){return Math.round(Number(n||0)*100)/100;}
 function dateDashboardSynthese20260907_(v){const d=v instanceof Date?new Date(v):new Date(v||0);if(isNaN(d))return null;d.setHours(0,0,0,0);return d;}
@@ -29,7 +29,13 @@ function composerDashboardSyntheseSourceBudgetSoft20260907_(ctx){
   const reelle=o=>typeof operationReelleCanoniqueBudgetSoft20260906_==='function'?operationReelleCanoniqueBudgetSoft20260906_(o):!/\[RECURRENCE:[^\]]+\]/.test(String(o&&o.commentaire||''));
   const opValides=ops.filter(o=>reelle(o)&&dansCompte(o)&&dateOp(o));
   function stats(a,b,lim){const x=dateDashboardSynthese20260907_(a),y=dateDashboardSynthese20260907_(lim&&lim<b?lim:b);let rev=0,dep=0,n=0,net=0;opValides.forEach(o=>{const d=dateOp(o);if(d<x||d>y)return;const s=signeDashboardSynthese20260907_(o);net+=s;if(s>0){rev+=s;n++;}else if(s<0){dep+=Math.abs(s);n++;}});return{revenus:arrDashboardSynthese20260907_(rev),depenses:arrDashboardSynthese20260907_(dep),resultat:arrDashboardSynthese20260907_(rev-dep),operations:n,net:arrDashboardSynthese20260907_(net)};}
-  function soldeHistorique(cible){const d=dateDashboardSynthese20260907_(cible);let apres=0;opValides.forEach(o=>{const od=dateOp(o);if(od>d&&od<=reference)apres+=signeDashboardSynthese20260907_(o);});return arrDashboardSynthese20260907_(Number(tres.soldeReel||0)-apres);}
+  function soldeHistorique(cible){
+    if(typeof soldeHistoriqueCompteCourantCanoniqueBudgetSoft20260928_==='function'){
+      const x=soldeHistoriqueCompteCourantCanoniqueBudgetSoft20260928_(cible,{soldeReel:Number(tres.soldeReel||0),comptes:tres.comptes||[],operations:opValides,dateReference:reference});
+      if(Number.isFinite(Number(x)))return arrDashboardSynthese20260907_(x);
+    }
+    const d=dateDashboardSynthese20260907_(cible);let apres=0;opValides.forEach(o=>{const od=dateOp(o);if(od>d&&od<=reference)apres+=signeDashboardSynthese20260907_(o);});return arrDashboardSynthese20260907_(Number(tres.soldeReel||0)-apres);
+  }
   // Solde d'ouverture : avant les opérations du jour de début. Cette convention est
   // nécessaire pour réconcilier un intervalle inclusif [début, fin] avec son net d'opérations.
   function soldeHistoriqueOuverture(cible){const d=dateDashboardSynthese20260907_(cible);let depuis=0;opValides.forEach(o=>{const od=dateOp(o);if(od>=d&&od<=reference)depuis+=signeDashboardSynthese20260907_(o);});return arrDashboardSynthese20260907_(Number(tres.soldeReel||0)-depuis);}
