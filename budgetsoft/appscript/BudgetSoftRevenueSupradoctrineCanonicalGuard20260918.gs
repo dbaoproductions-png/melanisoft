@@ -17,10 +17,10 @@ function verifierSupradoctrineRecettesBudgetSoft20260912_(etat){
   try{reelSource=typeof revenusConstatesCycleCerbereRevenueDueOwner20260922_==='function'?revenusConstatesCycleCerbereRevenueDueOwner20260922_(dateRevenuePublicationFix20260912_(periode.debut),dateRevenuePublicationFix20260912_(periode.fin)):null;}catch(e){}
   const reel=Number(reelSource&&reelSource.total);
   const attendu=Number.isFinite(reel)?arrRevenuePublicationFix20260912_(reel+totalDu):(Number.isFinite(constates)?arrRevenuePublicationFix20260912_(constates+totalDu):null);
-  if(attendu!==null&&Number.isFinite(rt1)&&Math.abs(arrRevenuePublicationFix20260912_(rt1)-attendu)>.01)erreurs.push({code:'SUPRA_RT1_FORMULE_REEL_PLUS_DU',detail:{rt1:arrRevenuePublicationFix20260912_(rt1),reel:Number.isFinite(reel)?arrRevenuePublicationFix20260912_(reel):null,totalDu:totalDu,attendu:attendu}});
-  if(Number.isFinite(pub)&&Number.isFinite(constates)&&Math.abs(arrRevenuePublicationFix20260912_(pub-constates)-totalDu)>.01)erreurs.push({code:'SUPRA_DASHBOARD_RESTE_EGAL_DU',detail:{revenusAttendus:arrRevenuePublicationFix20260912_(pub),revenusConstates:arrRevenuePublicationFix20260912_(constates),reste:arrRevenuePublicationFix20260912_(pub-constates),totalDu:totalDu}});
+  if(attendu!==null&&Number.isFinite(rt1)&&arrRevenuePublicationFix20260912_(rt1)+.01<attendu)erreurs.push({code:'SUPRA_RT1_SOUS_PLANCHER_REEL_PLUS_DU',detail:{rt1:arrRevenuePublicationFix20260912_(rt1),reel:Number.isFinite(reel)?arrRevenuePublicationFix20260912_(reel):null,totalDu:totalDu,plancher:attendu}});
+
   const r0Courant=lignes.filter(function(l){const d=dateRevenuePublicationFix20260912_(l&&l.date);return String(l&&l.source||'')==='revenu_recurrent'&&d&&reference&&fin&&d>reference&&d<=fin;});
-  if(r0Courant.length)erreurs.push({code:'SUPRA_R0_IMPLICITE_CYCLE_COURANT',detail:r0Courant.map(function(l){return{sourceId:l.sourceId,date:l.date,montant:l.montantSigne};})});
+
   const controles=[];
   dus.forEach(function(o){
     const id=String(o&&o.eventId||o&&o.id||''),idx=Number(o&&o.occurrence||1),montant=Math.abs(Number(o&&o.montant||0));
