@@ -80,3 +80,44 @@ function auditerProprietairesTresorerieIntermodules20260928(){
   console.log('[AUDIT PROPRIETAIRES TRESORERIE INTERMODULES 20260928] '+JSON.stringify(out));
   return out;
 }
+
+
+function auditerVirementEpargneSs1BudgetSoft20260928(){
+  const ops=typeof lireTable_==='function'?(lireTable_('Operations')||[]):[];
+  const params=typeof lireTable_==='function'?(lireTable_('Parametres')||[]):[];
+  const comptes=typeof construireSyntheseComptes20260828_==='function'?construireSyntheseComptes20260828_():null;
+  const candidats=ops.filter(function(o){
+    const m=Number(o&&o.montant||0);
+    const txt=String((o&&o.libelle_bancaire||o&&o.libelle||'')+' '+(o&&o.categorie||'')+' '+(o&&o.commentaire||'')).toLowerCase();
+    return Math.abs(m+50)<.011||(/epargne|épargne/.test(txt)&&m<0);
+  }).map(function(o){
+    return {
+      id:String(o&&o.id||''),
+      montant:Number(o&&o.montant||0),
+      type:String(o&&o.type||''),
+      categorie:String(o&&o.categorie||''),
+      compte:String(o&&o.compte||''),
+      date:String(o&&o.date||''),
+      date_comptable:String(o&&o.date_comptable||''),
+      statut_bancaire:String(o&&o.statut_bancaire||''),
+      source_bancaire:String(o&&o.source_bancaire||''),
+      commentaire:String(o&&o.commentaire||''),
+      libelle:String(o&&o.libelle_bancaire||o&&o.libelle||'')
+    };
+  });
+  const refs=params.filter(function(p){
+    const k=String(p&&p.cle||'');
+    return /^solde_releve_|^date_solde_releve_/.test(k);
+  }).map(function(p){return{cle:String(p&&p.cle||''),valeur:p&&p.valeur};});
+  const out={
+    ok:true,
+    lectureSeule:true,
+    version:'2026-09-28.1',
+    doctrine:'Le virement interne vers Epargne reste une sortie du compte courant et doit diminuer le solde bancaire/SS1.',
+    comptes:comptes&&comptes.comptes||[],
+    references:refs,
+    candidats:candidats
+  };
+  console.log('[AUDIT VIREMENT EPARGNE SS1 20260928] '+JSON.stringify(out));
+  return out;
+}
