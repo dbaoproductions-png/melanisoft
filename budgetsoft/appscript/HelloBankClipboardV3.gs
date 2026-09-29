@@ -92,6 +92,44 @@ function analyserCollerHelloBankEnrichiV34(texte,compte){
   return {version:HELLOBANK_CLIPBOARD_V3,lignes:lignes,total:lignes.length,legacy:{total:legacy.total,importables:legacy.importables,doublons:legacy.doublons,avantReleve:legacy.avantReleve}};
 }
 
+function analyserCollerHelloBankRobuste20260929(texte,compte){
+  const normalise=String(texte||'')
+    .replace(/\u00a0/g,' ')
+    .replace(/\u202f/g,' ')
+    .replace(/\t+/g,'\n')
+    .replace(/\r\n?/g,'\n');
+  let legacy=null,erreurLegacy='';
+  try{legacy=analyserCollerHelloBankEnrichiV34(normalise,compte);}catch(e){erreurLegacy=String(e&&e.message||e);}
+  if(legacy&&Array.isArray(legacy.lignes)&&legacy.lignes.length){
+    return Object.assign({},legacy,{version:'2026-09-29.1',parseur:'legacy_normalise_tabs',diagnostic:{erreurLegacy:''}});
+  }
+  let lignesV3=[],erreurV3='';
+  try{lignesV3=hb3Parser_(normalise,compte)||[];}catch(e){erreurV3=String(e&&e.message||e);}
+  if(lignesV3.length){
+    return {
+      version:'2026-09-29.1',
+      parseur:'hb3_fallback',
+      lignes:lignesV3,
+      total:lignesV3.length,
+      diagnostic:{erreurLegacy:erreurLegacy,erreurV3:''}
+    };
+  }
+  return {
+    version:'2026-09-29.1',
+    parseur:'aucun',
+    lignes:[],
+    total:0,
+    diagnostic:{
+      erreurLegacy:erreurLegacy,
+      erreurV3:erreurV3,
+      caracteres:normalise.length,
+      lignes:normalise.split('\n').filter(Boolean).length,
+      contientDebitCredit:/D[ée]bit[ée]e?|Cr[ée]dit[ée]e?/i.test(normalise),
+      contientMontant:/[+\-−]?\s*\d[\d ]*,\d{2}\s*(?:€|EUR)/i.test(normalise)
+    }
+  };
+}
+
 function hb3Identity_(o){
   const amount=centimesBanque_(o.montant),achat=isoJourBanque_(o.date_achat||o.date),carte=String(o.carte_fin||''),march=normaliserTexteBanqueFiable_(o.marchand_normalise||hb3Contrepartie_(o.libelle_bancaire||o.libelle)).replace(/\s/g,'').slice(0,60);
   if(carte)return ['CB',String(o.compte||''),achat,amount,carte,march].join('|');
