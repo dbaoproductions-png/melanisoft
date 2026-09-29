@@ -10,7 +10,7 @@
  *   d'un actif, mouvements d'un compte financier). Sinon la période reste vide.
  * - Dette : Crédits reste propriétaire. Capital : Patrimoine reste propriétaire.
  */
-const BUDGETSOFT_ANALYSIS_SERIES_20260922_VERSION='2026-09-29.1';
+const BUDGETSOFT_ANALYSIS_SERIES_20260922_VERSION='2026-09-29.2';
 const BUDGETSOFT_ANALYSIS_STRUCTURAL_HISTORY_SHEET_20260922='Analyse_HistoriqueStructurel';
 const BUDGETSOFT_ANALYSIS_STRUCTURAL_HISTORY_HEADERS_20260922=[
   'periode','date_point','revision_budgetsoft','famille','sous_poste','montant','source','maj_le'
@@ -356,7 +356,7 @@ function construireSeriesStructurellesAnalysesBudgetSoft20260922_(periodes,credi
   const courant=periodes&&periodes.length?periodes[periodes.length-1]:null,cleCour=clePeriodeAnalyseSeries20260922_(courant);
   const preuves=preuvesStructurellesAnalyse20260929_(periodes,credits||{},patrimoine||{},contexte||{});
 
-  function construire(famille,lignesCourantes,totalNom,titre,source,doctrine){
+  function construire(famille,lignesCourantes,totalNom,titre,source,doctrine,totalCourantProprietaire){
     const noms=new Set(hist.filter(function(x){return String(x&&x.famille||'')===famille;}).map(function(x){return String(x&&x.sous_poste||'');}).filter(Boolean));
     (lignesCourantes||[]).forEach(function(x){noms.add(String(x.nom||''));});
     Object.keys(preuves[famille]||{}).forEach(function(n){noms.add(n);});
@@ -376,17 +376,32 @@ function construireSeriesStructurellesAnalysesBudgetSoft20260922_(periodes,credi
       });
     });
 
-    // 3. Période courante : vérité propriétaire actuelle.
+    // 3. Période courante : le propriétaire courant est autoritaire.
+    // Toute ancienne sous-série absente de ce propriétaire vaut 0 aujourd'hui :
+    // cela empêche une dette soldée ou un actif supprimé de survivre par inertie
+    // dans l'historique du cycle courant.
+    const idxCour=(periodes||[]).findIndex(function(p){return clePeriodeAnalyseSeries20260922_(p)===cleCour;});
+    if(idxCour>=0){
+      Array.from(noms).forEach(function(nom){
+        vals[nom][idxCour]=0;
+        sourcesPreuves[nom][idxCour]='Absent du propriétaire courant · valeur 0';
+      });
+    }
     (lignesCourantes||[]).forEach(function(x){
       const nom=String(x.nom||'');if(!vals[nom])vals[nom]=(periodes||[]).map(function(){return null;});
-      const idx=(periodes||[]).findIndex(function(p){return clePeriodeAnalyseSeries20260922_(p)===cleCour;});
-      if(idx>=0){vals[nom][idx]=Number(x.montant||0);sourcesPreuves[nom][idx]='Valeur propriétaire courante';}
+      if(!sourcesPreuves[nom])sourcesPreuves[nom]=(periodes||[]).map(function(){return null;});
+      if(idxCour>=0){vals[nom][idxCour]=Number(x.montant||0);sourcesPreuves[nom][idxCour]='Valeur propriétaire courante';}
     });
 
     const nomsTries=Array.from(noms).sort(function(a,b){return a.localeCompare(b,'fr');});
     const base=seriesDepuisMatriceAnalyse20260922_(periodes,nomsTries,vals,totalNom);
-    // Un total structurel n'est publié que si TOUTES les composantes sont connues.
+    // Hors période courante, un total structurel n'est publié que si TOUTES les
+    // composantes connues de la série sont prouvées. Pour la période courante,
+    // le total direct du propriétaire métier prévaut sur toute reconstruction.
     base.series[0].valeurs=(periodes||[]).map(function(_,i){
+      if(i===idxCour&&Number.isFinite(Number(totalCourantProprietaire))){
+        return arrAnalyseSeries20260922_(Number(totalCourantProprietaire));
+      }
       const valeurs=nomsTries.map(function(n){return vals[n]&&vals[n][i];});
       if(!valeurs.length||valeurs.some(function(v){return v==null||!Number.isFinite(Number(v));}))return null;
       return arrAnalyseSeries20260922_(valeurs.reduce(function(s,v){return s+Number(v);},0));
@@ -403,8 +418,8 @@ function construireSeriesStructurellesAnalysesBudgetSoft20260922_(periodes,credi
   }
 
   return{
-    dettes:construire('dettes',lignesDettesCourantesAnalyseSeries20260922_(credits),'Dette totale','Dette totale','Crédits / Dettes canoniques','Historique prouvé : relevés/échéanciers exacts et journal d’amortissement ; le total reste vide si une composante n’est pas démontrable.'),
-    capital:construire('capital',lignesCapitalCourantAnalyseSeries20260922_(patrimoine),'Capital total','Capital','Patrimoine · actifs bruts','Historique prouvé : valeurs d’actifs datées et mouvements des comptes financiers ; aucune valeur n’est inventée avant sa première preuve.')
+    dettes:construire('dettes',lignesDettesCourantesAnalyseSeries20260922_(credits),'Dette totale','Dette totale','Crédits / Dettes canoniques','Historique prouvé : relevés/échéanciers exacts et journal d’amortissement ; le total reste vide si une composante n’est pas démontrable.',Number(credits&&credits.endettementTotal)),
+    capital:construire('capital',lignesCapitalCourantAnalyseSeries20260922_(patrimoine),'Capital total','Capital','Patrimoine · actifs bruts','Historique prouvé : valeurs d’actifs datées et mouvements des comptes financiers ; aucune valeur n’est inventée avant sa première preuve.',Number(patrimoine&&patrimoine.totalActifs))
   };
 }
 
@@ -432,11 +447,13 @@ function auditerSeriesAnalysesBudgetSoft20260922(){
 function auditerReconstructionStructurelleAnalysesBudgetSoft20260929(){
   const r=chargerAnalysesBudgetairesV23(6),s=r&&r.seriesCourbes||{};
   function resume(cfg){
-    const total=cfg&&Array.isArray(cfg.series)?cfg.series.find(function(x){return x&&x.total;}):null;
+    const series=cfg&&Array.isArray(cfg.series)?cfg.series:[],total=series.find(function(x){return x&&x.total;}),sous=series.filter(function(x){return x&&!x.total;});
+    const labels=cfg&&cfg.labels||[];
     return{
-      labels:cfg&&cfg.labels||[],
+      labels:labels,
       total:total&&total.valeurs||[],
       pointsTotalConnus:total&&Array.isArray(total.valeurs)?total.valeurs.filter(function(v){return v!=null;}).length:0,
+      manquantesParPeriode:labels.map(function(label,i){return{periode:label,manquantes:sous.filter(function(s){return !s.valeurs||s.valeurs[i]==null;}).map(function(s){return s.nom;})};}),
       historiqueDepuis:cfg&&cfg.historiqueDepuis||'',
       historiquePartiel:!!(cfg&&cfg.historiquePartiel),
       reconstructionStructurelle:!!(cfg&&cfg.reconstructionStructurelle)
