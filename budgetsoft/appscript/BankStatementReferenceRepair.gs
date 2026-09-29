@@ -64,7 +64,7 @@ function certifierSoldeBancaireObserveBudgetSoft20260929(compteId,soldeObserve,d
   const observe=Number(String(soldeObserve).replace(/\s/g,'').replace(',','.'));
   if(!Number.isFinite(observe))throw new Error('Solde bancaire observé invalide.');
 
-  const id=String(compte.id),aujourdhui=typeof jourReferenceCanonBudgetSoft20260906_==='function'
+  const id=String(compte.id),paramsAvant=Object.fromEntries(lireTable_('Parametres').map(function(p){return[String(p.cle),p.valeur];})),aujourdhui=typeof jourReferenceCanonBudgetSoft20260906_==='function'
     ?jourReferenceCanonBudgetSoft20260906_(new Date())
     :Utilities.formatDate(new Date(),Session.getScriptTimeZone(),'yyyy-MM-dd');
   let jourRef=String(dateReference||'').slice(0,10);
@@ -89,22 +89,42 @@ function certifierSoldeBancaireObserveBudgetSoft20260929(compteId,soldeObserve,d
   const ecart=calculeAvant===null?null:Math.round((observe-calculeAvant)*100)/100;
   const horodatage=new Date().toISOString();
 
+  const cleEcartHistorique='solde_releve_ecart_reconciliation_'+id;
+  const cleEcartInitial='solde_releve_ecart_reconciliation_initial_'+id;
+  const cleEcartDernier='solde_releve_ecart_derniere_certification_'+id;
+  const precedentHistorique=Number(String(paramsAvant[cleEcartHistorique]===undefined?'':paramsAvant[cleEcartHistorique]).replace(',','.'));
+  const precedentInitial=Number(String(paramsAvant[cleEcartInitial]===undefined?'':paramsAvant[cleEcartInitial]).replace(',','.'));
+  const ecartNonNul=ecart!==null&&Math.abs(ecart)>=0.005;
+  const historiqueAPreserver=Number.isFinite(precedentInitial)&&Math.abs(precedentInitial)>=0.005
+    ?precedentInitial
+    :(Number.isFinite(precedentHistorique)&&Math.abs(precedentHistorique)>=0.005
+      ?precedentHistorique
+      :(ecartNonNul?ecart:null));
+
   enregistrerParametreBudgetaire_('solde_releve_'+id,Math.round(observe*100)/100);
   enregistrerParametreBudgetaire_('date_solde_releve_'+id,jourRef+'T12:00:00');
   enregistrerParametreBudgetaire_('solde_releve_source_'+id,'Observation bancaire certifiée Hello bank! · '+horodatage);
-  enregistrerParametreBudgetaire_('solde_releve_ecart_reconciliation_'+id,ecart===null?'':ecart);
+  // Doctrine : l'écart historique prouvé ne doit jamais disparaître lors d'une
+  // re-certification idempotente. Le résultat de la dernière certification est
+  // conservé séparément.
+  if(historiqueAPreserver!==null){
+    enregistrerParametreBudgetaire_(cleEcartHistorique,historiqueAPreserver);
+    enregistrerParametreBudgetaire_(cleEcartInitial,historiqueAPreserver);
+  }
+  enregistrerParametreBudgetaire_(cleEcartDernier,ecart===null?'':ecart);
   enregistrerParametreBudgetaire_('solde_releve_observe_le_'+id,horodatage);
 
   if(typeof marquerSnapshotGlobalBudgetSoftObsolete20260916_==='function'){
     marquerSnapshotGlobalBudgetSoftObsolete20260916_('certification_solde_bancaire_observe');
   }
   return{
-    ok:true,version:'2026-09-29.1',
+    ok:true,version:'2026-09-29.2',
     compte:{id:id,nom:String(compte.nom||'')},
     soldeObserve:Math.round(observe*100)/100,
     dateReference:jourRef,
     soldeCalculeAvant:calculeAvant,
     ecartReconciliation:ecart,
+    ecartHistoriqueConserve:historiqueAPreserver,
     source:'observation_bancaire_certifiee',
     doctrine:'Le solde bancaire observé est un ancrage canonique. L écart historique est conservé comme diagnostic et aucune opération manquante n est inventée.'
   };
@@ -114,4 +134,32 @@ function certifierSoldeHelloBankCompteJoint20260929(){
   const r=certifierSoldeBancaireObserveBudgetSoft20260929(null,2860.22,null);
   console.log('[CERTIFICATION SOLDE HELLOBANK 20260929] '+JSON.stringify(r));
   return r;
+}
+
+
+function restaurerTraceEcartReconciliationCompteJoint20260929(){
+  verifierInitialisation_();
+  const comptes=lireTable_('Comptes').filter(function(x){return convertirBooleen_(x.actif);});
+  const compte=comptes.find(estCompteBancaireCourantBudgetSoft_);
+  if(!compte)throw new Error('Compte courant introuvable.');
+  const id=String(compte.id),ecartHistorique=-50;
+  const params=Object.fromEntries(lireTable_('Parametres').map(function(p){return[String(p.cle),p.valeur];}));
+  const solde=Number(String(params['solde_releve_'+id]||'').replace(',','.'));
+  const jour=String(params['date_solde_releve_'+id]||'').slice(0,10);
+  if(Math.abs(solde-2860.22)>.005||jour!=='2026-09-28'){
+    throw new Error('Restauration refusée : la référence bancaire canonique attendue 2860,22 € au 28/09/2026 n est pas active.');
+  }
+  enregistrerParametreBudgetaire_('solde_releve_ecart_reconciliation_'+id,ecartHistorique);
+  enregistrerParametreBudgetaire_('solde_releve_ecart_reconciliation_initial_'+id,ecartHistorique);
+  enregistrerParametreBudgetaire_('solde_releve_ecart_derniere_certification_'+id,0);
+  const out={
+    ok:true,version:'2026-09-29.1',
+    compte:{id:id,nom:String(compte.nom||'')},
+    soldeCanonique:solde,dateReference:jour,
+    ecartHistoriqueRestaure:ecartHistorique,
+    ecartDerniereCertification:0,
+    doctrine:'Restauration de la preuve historique uniquement ; aucun solde et aucune opération ne sont modifiés.'
+  };
+  console.log('[RESTAURATION TRACE ECART RECONCILIATION 20260929] '+JSON.stringify(out));
+  return out;
 }
