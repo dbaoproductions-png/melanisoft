@@ -176,7 +176,8 @@ function importerFluxBancaireControleV2(lignes,compte,decisionsAmbiguites){
     }
     const resolu=appliquerDecisionsAmbiguitesV30_(p,decisionsAmbiguites);
     backup=creerSauvegardeOperationsSecurite_('import flux');
-    const supprimer=new Set(p.absorbees.map(x=>String(x.placeholder.id)).concat(p.orphelines.map(x=>String(x.id))));
+    if(p.orphelines&&p.orphelines.length)throw new Error('Invariant import partiel violé : aucune opération bancaire réelle ne peut être supprimée comme orpheline.');
+    const supprimer=new Set(p.absorbees.map(x=>String(x.placeholder.id)));
     const matchById=new Map(resolu.matches.map(m=>[String(m.o.id),m]));
     const nouveaux=[];let protegeesPdf=0,modifieesExistantes=0,categorisees=0;
     const out=ops.filter(o=>!supprimer.has(String(o.id))).map(o=>{
@@ -189,9 +190,9 @@ function importerFluxBancaireControleV2(lignes,compte,decisionsAmbiguites){
     });
     resolu.nouvelles.forEach(a=>{const now=new Date(),n=a.n;let nouveau=Object.assign({id:Utilities.getUuid(),categorie:'',commentaire:'',cree_le:now,modifie_le:now},n),pc=propositionCategorieFluxV27_(n,ctx);if(pc&&pc.categorie){nouveau.categorie=pc.categorie;categorisees++;}nouveau=enrichirChargeFixeFluxControleV34_(nouveau,charges,rap);nouveau.cle_rapprochement=cleTransactionUnique_(nouveau);out.push(nouveau);nouveaux.push(nouveau.id);});
     const vals=out.map(o=>serialiserOpBancaire_(o,headers));f.clearContents();f.getRange(1,1,1,headers.length).setValues([headers]);if(vals.length)f.getRange(2,1,vals.length,headers.length).setValues(vals);f.setFrozenRows(1);SpreadsheetApp.flush();
-    const apresOps=lireOperationsBancaires_(),apres=checksumOperationsBanque_(apresOps),attendu=avant.nombre-p.absorbees.length-p.orphelines.length+resolu.nouvelles.length;const cles=apresOps.map(o=>String(o.cle_rapprochement||'').trim()).filter(Boolean);
+    const apresOps=lireOperationsBancaires_(),apres=checksumOperationsBanque_(apresOps),attendu=avant.nombre-p.absorbees.length+resolu.nouvelles.length;const cles=apresOps.map(o=>String(o.cle_rapprochement||'').trim()).filter(Boolean);
     if(apres.nombre!==attendu||apres.ids!==apres.nombre||cles.length!==new Set(cles).size){f.clearContents();const bv=backup.getDataRange().getValues();f.getRange(1,1,bv.length,bv[0].length).setValues(bv);SpreadsheetApp.flush();throw new Error('Contrôle après écriture échoué ; restauration automatique effectuée.');}
     if(typeof marquerSnapshotGlobalBudgetSoftObsolete20260916_==='function')marquerSnapshotGlobalBudgetSoftObsolete20260916_('import_flux_bancaire_controle');
-    return{bloque:false,recues:incoming.length,remplacees:modifieesExistantes,existantes:resolu.matches.length,protegeesPdf,creees:resolu.nouvelles.length,categorisees,ambiguesIgnorees:resolu.ignorees.length,ambiguesResolues:p.ambigues.length-resolu.ignorees.length,groupesRapproches:(p.groupesRapproches||[]).length,placeholdersSupprimes:p.absorbees.length,orphelinesSupprimees:p.orphelines.length,controle:ctl,sauvegarde:backup.getName(),totalApres:apres.nombre};
+    return{bloque:false,recues:incoming.length,remplacees:modifieesExistantes,existantes:resolu.matches.length,protegeesPdf,creees:resolu.nouvelles.length,categorisees,ambiguesIgnorees:resolu.ignorees.length,ambiguesResolues:p.ambigues.length-resolu.ignorees.length,groupesRapproches:(p.groupesRapproches||[]).length,placeholdersSupprimes:p.absorbees.length,orphelinesSupprimees:0,controle:ctl,sauvegarde:backup.getName(),totalApres:apres.nombre};
   }finally{lock.releaseLock();}
 }
