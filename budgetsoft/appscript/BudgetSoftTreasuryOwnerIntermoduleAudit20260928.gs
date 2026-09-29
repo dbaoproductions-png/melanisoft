@@ -154,6 +154,7 @@ function auditerReconciliationCompteJointDepuisReference20260929(){
     const lignes=[]; let cumul=0;
     ensemble.forEach(function(brut){
       if(String(brut&&brut.compte||'')!==id)return;
+      if(/\[RECURRENCE:[^\]]+\]/.test(String(brut&&brut.commentaire||'')))return;
       let o=brut;
       if(!(o&&o.date_comptable)&&typeof enrichirDepuisCommentaireBanque_==='function'){
         try{o=enrichirDepuisCommentaireBanque_(brut)||brut;}catch(e){o=brut;}
@@ -186,7 +187,7 @@ function auditerReconciliationCompteJointDepuisReference20260929(){
   const compteSynth=(synth&&Array.isArray(synth.comptes)?synth.comptes:[]).find(function(x){return String(x&&x.id||'')===id;})||null;
   const soldeReconstruit=Math.round((soldeRef+dedup.cumul)*100)/100;
   const out={
-    ok:true,lectureSeule:true,version:'2026-09-29.3',
+    ok:true,lectureSeule:true,version:'2026-09-29.4',
     doctrine:'Le propriétaire des comptes travaille sur les opérations dédupliquées. Tout virement sortant reste une sortie bancaire ; sa catégorie analytique ne neutralise pas son montant.',
     reference:{solde:soldeRef,date:jourRef},
     brut:{nombre:brut.lignes.length,totalMouvements:brut.cumul},
