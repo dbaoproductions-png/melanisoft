@@ -86,11 +86,23 @@ function auditerVirementEpargneSs1BudgetSoft20260928(){
   const ops=typeof lireTable_==='function'?(lireTable_('Operations')||[]):[];
   const params=typeof lireTable_==='function'?(lireTable_('Parametres')||[]):[];
   const comptes=typeof construireSyntheseComptes20260828_==='function'?construireSyntheseComptes20260828_():null;
-  const candidats=ops.filter(function(o){
-    const m=Number(o&&o.montant||0);
-    const txt=String((o&&o.libelle_bancaire||o&&o.libelle||'')+' '+(o&&o.categorie||'')+' '+(o&&o.commentaire||'')).toLowerCase();
-    return Math.abs(m+50)<.011||(/epargne|épargne/.test(txt)&&m<0);
+  const compteJoint=(comptes&&Array.isArray(comptes.comptes)?comptes.comptes:[]).find(function(x){return /compte joint/i.test(String(x&&x.nom||''));})||null;
+  const compteId=String(compteJoint&&compteJoint.id||'');
+  const cibleDebut='2026-09-25',cibleFin='2026-09-29';
+  function jourOp(o){
+    const jc=typeof jourComptableCanonBudgetSoft20260906_==='function'?jourComptableCanonBudgetSoft20260906_(o):'';
+    const jm=typeof jourCanonBudgetSoft20260906_==='function'?jourCanonBudgetSoft20260906_(o&&o.date):'';
+    return {comptable:jc,mouvement:jm};
+  }
+  const lignes=ops.filter(function(o){
+    if(compteId&&String(o&&o.compte||'')!==compteId)return false;
+    const j=jourOp(o),a=j.mouvement||j.comptable;
+    return !!a&&a>=cibleDebut&&a<=cibleFin;
   }).map(function(o){
+    const j=jourOp(o),statut=String(o&&o.statut_bancaire||'').trim().toLowerCase();
+    const refJour='2026-08-15';
+    const apresReference=!!j.comptable&&j.comptable>refJour;
+    const provisoireJourReference=/provisoire/.test(statut)&&!!j.mouvement&&j.mouvement>=refJour&&!!j.comptable&&j.comptable<=refJour;
     return {
       id:String(o&&o.id||''),
       montant:Number(o&&o.montant||0),
@@ -99,25 +111,27 @@ function auditerVirementEpargneSs1BudgetSoft20260928(){
       compte:String(o&&o.compte||''),
       date:String(o&&o.date||''),
       date_comptable:String(o&&o.date_comptable||''),
+      jourMouvement:j.mouvement,
+      jourComptable:j.comptable,
       statut_bancaire:String(o&&o.statut_bancaire||''),
       source_bancaire:String(o&&o.source_bancaire||''),
-      commentaire:String(o&&o.commentaire||''),
-      libelle:String(o&&o.libelle_bancaire||o&&o.libelle||'')
+      libelle:String(o&&o.libelle_bancaire||o&&o.libelle||''),
+      inclusionSelonReference1508:apresReference||provisoireJourReference,
+      motifInclusion:apresReference?'jour_comptable_apres_reference':(provisoireJourReference?'provisoire_jour_mouvement':'exclu')
     };
   });
   const refs=params.filter(function(p){
     const k=String(p&&p.cle||'');
-    return /^solde_releve_|^date_solde_releve_/.test(k);
+    return compteId&&(k==='solde_releve_'+compteId||k==='date_solde_releve_'+compteId||k==='solde_releve_source_'+compteId);
   }).map(function(p){return{cle:String(p&&p.cle||''),valeur:p&&p.valeur};});
   const out={
-    ok:true,
-    lectureSeule:true,
-    version:'2026-09-28.1',
-    doctrine:'Le virement interne vers Epargne reste une sortie du compte courant et doit diminuer le solde bancaire/SS1.',
-    comptes:comptes&&comptes.comptes||[],
+    ok:true,lectureSeule:true,version:'2026-09-29.1',
+    doctrine:'Audit ciblé 25-29/09 du compte joint : le virement vers Epargne doit rester une sortie bancaire du compte courant.',
+    compteJoint:compteJoint,
     references:refs,
-    candidats:candidats
+    fenetre:{debut:cibleDebut,fin:cibleFin},
+    lignes:lignes
   };
-  console.log('[AUDIT VIREMENT EPARGNE SS1 20260928] '+JSON.stringify(out));
+  console.log('[AUDIT VIREMENT EPARGNE SS1 CIBLE 20260929] '+JSON.stringify(out));
   return out;
 }
