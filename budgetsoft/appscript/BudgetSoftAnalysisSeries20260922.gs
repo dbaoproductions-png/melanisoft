@@ -84,13 +84,23 @@ function enregistrerHistoriqueStructurelAnalysesBudgetSoft20260922_(etat){
     const exist=sh.getLastRow()>1?sh.getRange(2,1,sh.getLastRow()-1,h.length).getValues():[];
     const idxPer=h.indexOf('periode'),idxFam=h.indexOf('famille'),idxSous=h.indexOf('sous_poste');
     const map={};exist.forEach(function(r,i){map[String(r[idxPer])+'|'+String(r[idxFam])+'|'+String(r[idxSous])]=i+2;});
-    let ajoutes=0,maj=0;
+    const clesCourantes=new Set(lignes.map(function(o){return o.periode+'|'+o.famille+'|'+o.sous_poste;}));
+    let ajoutes=0,maj=0,zeroises=0;
+    // Une ligne du cycle courant qui n'existe plus chez le propriétaire vaut 0
+    // en fin de cycle ; elle ne doit jamais survivre avec un ancien montant.
+    exist.forEach(function(r,i){
+      const per=String(r[idxPer]||''),fam=String(r[idxFam]||''),sous=String(r[idxSous]||''),key=per+'|'+fam+'|'+sous;
+      if(per!==periode||!['dettes','capital'].includes(fam)||clesCourantes.has(key))return;
+      const o={periode:periode,date_point:datePoint,revision_budgetsoft:revision,famille:fam,sous_poste:sous,montant:0,source:'Propriétaire courant · absent = 0',maj_le:new Date().toISOString()};
+      const row=h.map(function(k){return Object.prototype.hasOwnProperty.call(o,k)?o[k]:'';});
+      sh.getRange(i+2,1,1,h.length).setValues([row]);zeroises++;
+    });
     lignes.forEach(function(o){
       const key=o.periode+'|'+o.famille+'|'+o.sous_poste,row=h.map(function(k){return Object.prototype.hasOwnProperty.call(o,k)?o[k]:'';});
       if(map[key]){sh.getRange(map[key],1,1,h.length).setValues([row]);maj++;}
       else{sh.appendRow(row);ajoutes++;}
     });
-    return{ok:true,version:BUDGETSOFT_ANALYSIS_SERIES_20260922_VERSION,periode:periode,revisionBudgetSoft:revision,ajoutes:ajoutes,misAJour:maj,lignes:lignes.length};
+    return{ok:true,version:BUDGETSOFT_ANALYSIS_SERIES_20260922_VERSION,periode:periode,revisionBudgetSoft:revision,ajoutes:ajoutes,misAJour:maj,zeroises:zeroises,lignes:lignes.length};
   }catch(e){return{ok:false,version:BUDGETSOFT_ANALYSIS_SERIES_20260922_VERSION,erreur:String(e&&e.message||e)};}
 }
 
