@@ -63,13 +63,56 @@
     const b=document.getElementById('hello-bank-analyze'),status=document.getElementById('hello-bank-status'),texte=document.getElementById('hello-bank-text').value,compte=document.getElementById('hello-bank-account').value;
     if(!texte.trim()){status.innerHTML='<span class="warning-text">Collez d’abord les opérations Hello bank!.</span>';return;}
     if(!compte){status.innerHTML='<span class="warning-text">Choisissez le compte bancaire.</span>';return;}
-    b.disabled=true;b.textContent='Analyse en cours…';status.textContent='Analyse du copier-coller en cours…';document.getElementById('hello-bank-results').classList.add('hidden');
-    google.script.run.withSuccessHandler(r=>{b.disabled=false;b.textContent='Analyser';analyseHelloBank=r;status.textContent=(r&&r.total?`${r.total} opération(s) détectée(s).`:'Analyse terminée.');rendreHelloBank_(r||{});}).withFailureHandler(e=>{b.disabled=false;b.textContent='Analyser';const msg=e&&e.message?e.message:String(e||'Erreur inconnue');status.innerHTML='<span class="warning-text"><strong>Échec de l’analyse :</strong> '+echapper(msg)+'</span>';document.getElementById('hello-bank-results').classList.add('hidden');}).analyserCollerHelloBank(texte,compte);
+    b.disabled=true;b.textContent='Analyse en cours…';status.textContent='Analyse du copier-coller en cours…';document.getElementById('hello-bank-results').classList.add('hidden');document.getElementById('hello-bank-confirm').classList.add('hidden');
+    google.script.run.withSuccessHandler(parsed=>{
+      const lignes=(parsed&&parsed.lignes||[]).map(x=>({date:x.date,date_comptable:x.date_comptable,date_achat:x.date_achat||'',libelle:x.libelle,libelle_bancaire:x.libelle_bancaire,marchand_normalise:x.marchand_normalise||'',carte_fin:x.carte_fin||'',montant:Number(x.montant||0),type:x.type,compte,source_bancaire:'flux',statut_bancaire:'provisoire'}));
+      if(!lignes.length){
+        b.disabled=false;b.textContent='Analyser';analyseHelloBank=null;
+        const d=parsed&&parsed.diagnostic||{};
+        status.innerHTML='<span class="warning-text"><strong>0 opération détectée.</strong> Le texte collé n’a pas été reconnu ; aucune simulation ni écriture n’est lancée. '+echapper((d.lignes||0)+' ligne(s) lue(s).')+'</span>';
+        return;
+      }
+      google.script.run.withSuccessHandler(sim=>{
+        b.disabled=false;b.textContent='Analyser';
+        analyseHelloBank={lignes:lignes,compte:compte,simulation:sim,parse:parsed};
+        status.textContent=sim.pret?(sim.recues+' opération(s) détectée(s) · simulation cohérente.'):(sim.recues+' opération(s) détectée(s) · import bloqué : '+(sim.ambigues||0)+' ambiguë(s), '+(sim.rejetes||0)+' rejetée(s).');
+        rendreHelloBank_(analyseHelloBank);
+      }).withFailureHandler(e=>{
+        b.disabled=false;b.textContent='Analyser';analyseHelloBank=null;
+        status.innerHTML='<span class="warning-text"><strong>Échec de la simulation :</strong> '+echapper(e&&e.message?e.message:String(e||'Erreur inconnue'))+'</span>';
+      }).analyserFluxBancaireAvantImportV2(lignes,compte);
+    }).withFailureHandler(e=>{
+      b.disabled=false;b.textContent='Analyser';analyseHelloBank=null;
+      const msg=e&&e.message?e.message:String(e||'Erreur inconnue');
+      status.innerHTML='<span class="warning-text"><strong>Échec de l’analyse :</strong> '+echapper(msg)+'</span>';
+      document.getElementById('hello-bank-results').classList.add('hidden');
+    }).analyserCollerHelloBankCanonique(texte,compte);
   }
-  function rendreHelloBank_(r){const z=document.getElementById('hello-bank-results');z.classList.remove('hidden');document.getElementById('hello-bank-summary').innerHTML=`<div class="import-stat"><span>Détectées</span><strong>${r.total||0}</strong></div><div class="import-stat"><span>À importer</span><strong>${r.importables||0}</strong></div><div class="import-stat"><span>Doublons</span><strong>${r.doublons||0}</strong></div><div class="import-stat"><span>Déjà couvertes</span><strong>${r.avantReleve||0}</strong></div><div class="success-box" style="margin-top:12px">Crédits : <strong>${money.format(r.revenus||0)}</strong> · Débits : <strong>${money.format(r.depenses||0)}</strong> · Net : <strong>${money.format(r.net||0)}</strong>${r.dateDernierReleve?'<br>Dernier relevé connu : '+formaterDate(r.dateDernierReleve):''}</div>`;
-    const lignes=r.lignes||[];document.getElementById('hello-bank-preview').innerHTML=lignes.slice(0,30).map((l,i)=>`<div class="import-row ${l.valide?'':'invalid'}"><span>${formaterDate(l.date)}</span><div><strong>${echapper(l.libelle)}</strong><small>${l.doublon?'Doublon détecté':(l.avantReleve?'Déjà couverte par le dernier relevé':'Prête à importer')}</small></div><span>${money.format(l.type==='depense'?-Math.abs(l.montant):Math.abs(l.montant))}</span><select onchange="window.__helloBankAction(${i},this.value)" ${l.valide?'':'disabled'}><option value="importer" ${l.action==='importer'?'selected':''}>Importer</option><option value="ignorer" ${l.action==='ignorer'?'selected':''}>Ignorer</option></select></div>`).join('')+(lignes.length>30?`<div class="helper-text">${lignes.length-30} autre(s) opération(s) analysée(s).</div>`:'');document.getElementById('hello-bank-confirm').classList.toggle('hidden',!(r.importables>0));}
-  window.__helloBankAction=function(i,a){if(analyseHelloBank&&analyseHelloBank.lignes&&analyseHelloBank.lignes[i])analyseHelloBank.lignes[i].action=a;};
-  function importerHelloBank_(){if(!analyseHelloBank)return;const b=document.getElementById('hello-bank-confirm');b.disabled=true;b.textContent='Import en cours…';google.script.run.withSuccessHandler(r=>{b.disabled=false;b.textContent='Importer';document.getElementById('hello-bank-results').innerHTML=`<div class="success-box"><strong>Import terminé</strong><br>${r.importees||0} opération(s) importée(s), ${r.ignorees||0} ignorée(s).${(r.erreurs||[]).length?'<br>'+echapper(r.erreurs.join(' | ')):''}</div>`;document.getElementById('hello-bank-confirm').classList.add('hidden');setTimeout(()=>{fermerHelloBank_();charger();ouvrirVue('operations');if(typeof chargerDashboardTroisCadres==='function')chargerDashboardTroisCadres();},1200);}).withFailureHandler(e=>{b.disabled=false;b.textContent='Importer';document.getElementById('hello-bank-status').innerHTML='<span class="warning-text">'+echapper(e.message||String(e))+'</span>';}).importerCollerHelloBank(analyseHelloBank.lignes);}
+  function rendreHelloBank_(etat){
+    const sim=etat&&etat.simulation||{},lignes=etat&&etat.lignes||[],z=document.getElementById('hello-bank-results');
+    z.classList.remove('hidden');
+    const ctl=sim.controle||{},net=Number(ctl.credits||0)-Number(ctl.debits||0);
+    document.getElementById('hello-bank-summary').innerHTML='<div class="import-stat"><span>Détectées</span><strong>'+(sim.recues||0)+'</strong></div><div class="import-stat"><span>Nouvelles</span><strong>'+(sim.nouvelles||0)+'</strong></div><div class="import-stat"><span>Existantes</span><strong>'+(sim.existantes||0)+'</strong></div><div class="import-stat"><span>Ambiguës</span><strong>'+(sim.ambigues||0)+'</strong></div><div class="success-box" style="margin-top:12px">Crédits : <strong>'+money.format(ctl.credits||0)+'</strong> · Débits : <strong>'+money.format(ctl.debits||0)+'</strong> · Net : <strong>'+money.format(net)+'</strong></div>';
+    document.getElementById('hello-bank-preview').innerHTML=lignes.slice(0,30).map(l=>'<div class="import-row"><span>'+formaterDate(l.date_comptable||l.date)+'</span><div><strong>'+echapper(l.libelle||l.libelle_bancaire||'Opération')+'</strong><small>'+echapper(l.libelle_bancaire||'')+'</small></div><span>'+money.format(Number(l.montant||0))+'</span></div>').join('')+(lignes.length>30?'<div class="helper-text">'+(lignes.length-30)+' autre(s) opération(s) analysée(s).</div>':'');
+    const confirm=document.getElementById('hello-bank-confirm');
+    confirm.classList.toggle('hidden',sim.pret!==true);
+    if(sim.pret!==true&&Number(sim.ambigues||0)>0){document.getElementById('hello-bank-status').innerHTML+='<br><span class="warning-text">Les ambiguïtés doivent être tranchées dans la simulation détaillée de l’intégrité bancaire.</span>';}
+  }
+  function importerHelloBank_(){
+    if(!analyseHelloBank||!analyseHelloBank.simulation||analyseHelloBank.simulation.pret!==true)return;
+    const b=document.getElementById('hello-bank-confirm'),status=document.getElementById('hello-bank-status');
+    b.disabled=true;b.textContent='Import transactionnel…';
+    google.script.run.withSuccessHandler(r=>{
+      b.disabled=false;b.textContent='Importer';
+      if(r&&r.bloque){status.innerHTML='<span class="warning-text">⛔ '+echapper(r.message||'Import bloqué.')+'</span>';return;}
+      document.getElementById('hello-bank-results').innerHTML='<div class="success-box"><strong>Import terminé</strong><br>'+(r.recues||0)+' reçues · '+(r.existantes||0)+' correspondances · '+(r.creees||0)+' créées · '+(r.placeholdersSupprimes||0)+' prévisions absorbées · sauvegarde '+echapper(r.sauvegarde||'—')+'.</div>';
+      document.getElementById('hello-bank-confirm').classList.add('hidden');
+      setTimeout(()=>{fermerHelloBank_();charger();ouvrirVue('operations');if(typeof chargerDashboardTroisCadres==='function')chargerDashboardTroisCadres();},1200);
+    }).withFailureHandler(e=>{
+      b.disabled=false;b.textContent='Importer';
+      status.innerHTML='<span class="warning-text">'+echapper(e.message||String(e))+'</span>';
+    }).importerFluxBancaireControleV2(analyseHelloBank.lignes,analyseHelloBank.compte,[]);
+  }
   document.addEventListener('DOMContentLoaded',()=>setTimeout(installerImportHelloBank_,100));
 })();
 </script>
