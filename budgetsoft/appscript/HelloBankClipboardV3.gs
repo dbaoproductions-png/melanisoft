@@ -92,41 +92,91 @@ function analyserCollerHelloBankEnrichiV34(texte,compte){
   return {version:HELLOBANK_CLIPBOARD_V3,lignes:lignes,total:lignes.length,legacy:{total:legacy.total,importables:legacy.importables,doublons:legacy.doublons,avantReleve:legacy.avantReleve}};
 }
 
+function hbParserJourPur20260929_(texte,compte){
+  const brut=String(texte||'').replace(/\u00a0/g,' ').replace(/\u202f/g,' ').replace(/\r\n?/g,'\n');
+  const lignes=brut.split(/\n/).map(function(s){return String(s||'').trim();}).filter(Boolean);
+  const mois={janvier:0,fevrier:1,'février':1,mars:2,avril:3,mai:4,juin:5,juillet:6,aout:7,'août':7,septembre:8,octobre:9,novembre:10,decembre:11,'décembre':11};
+  const reJour=/^(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\s+(\d{1,2})\s+([A-Za-zÀ-ÿ]+)$/i;
+  const reCreditee=/^Cr[ée]dit[ée]e?\s+le\s+(\d{2})\/(\d{2})\/(\d{4})$/i;
+  const reDebitee=/^D[ée]bit[ée]e?\s+le\s+(\d{2})\/(\d{2})\/(\d{4})$/i;
+  const reMontant=/^\*{0,2}([+−-])\s*([\d\s]+,\d{2})\s*(?:€|EUR)\*{0,2}$/i;
+  const categoriesTexte=new Set(['Autres dépenses à catégoriser','À catégoriser']);
+  const structure=new Set(['CatégorieLibelléMontantPointage','CatégorieLibelléMontant'].concat(Array.from(categoriesTexte)));
+  const annee=new Date().getFullYear(),out=[];let dateCourante=null;
+  const iso=function(d){return Utilities.formatDate(d,Session.getScriptTimeZone(),'yyyy-MM-dd');};
+  const montant=function(m){const n=Number(String(m[2]).replace(/\s/g,'').replace(',','.'));return m[1]==='+'?n:-n;};
+  function pousser(date,lib,mont,dateComptable,dateAchat){
+    const brutLib=String(lib||'').trim();if(!brutLib)return;
+    const dc=dateComptable||date,da=dateAchat||hb3Achat_(brutLib)||'';
+    const signed=mont>=0?Math.abs(mont):-Math.abs(mont);
+    const cp=hb3Contrepartie_(brutLib),carte=hb3CarteFin_(brutLib);
+    out.push({
+      compte:String(compte||''),
+      date:da?iso(da):iso(date),
+      date_achat:da?iso(da):'',
+      date_comptable:iso(dc),
+      libelle_bancaire:brutLib,
+      libelle:hb3LibelleLisible_(brutLib,cp),
+      marchand_normalise:cp,
+      carte_fin:carte,
+      montant:signed,
+      type:signed<0?'depense':'revenu',
+      source_bancaire:'flux',
+      statut_bancaire:'provisoire'
+    });
+  }
+  for(let i=0;i<lignes.length;i++){
+    const l=lignes[i];let m=l.match(reJour);
+    if(m){const idx=mois[String(m[2]).toLowerCase()];if(idx!==undefined)dateCourante=new Date(annee,idx,Number(m[1]),12);continue;}
+    m=l.match(reCreditee);
+    if(m){
+      const d=new Date(Number(m[3]),Number(m[2])-1,Number(m[1]),12),am=i+1<lignes.length?lignes[i+1].match(reMontant):null;
+      if(i>0&&am){pousser(d,lignes[i-1],montant(am),d,'');i++;}
+      continue;
+    }
+    m=l.match(reDebitee);
+    if(m){
+      const d=new Date(Number(m[3]),Number(m[2])-1,Number(m[1]),12),am=i+1<lignes.length?lignes[i+1].match(reMontant):null;
+      if(i>0&&am){pousser(d,lignes[i-1],montant(am),d,hb3Achat_(lignes[i-1])||'');i++;}
+      continue;
+    }
+    if(structure.has(l))continue;
+    if(dateCourante&&i+2<lignes.length&&categoriesTexte.has(lignes[i+1])){
+      const am=lignes[i+2].match(reMontant);
+      if(am){pousser(dateCourante,l,montant(am),dateCourante,'');i+=2;}
+    }
+  }
+  return out;
+}
+
 function analyserCollerHelloBankRobuste20260929(texte,compte){
   const normalise=String(texte||'')
     .replace(/\u00a0/g,' ')
     .replace(/\u202f/g,' ')
     .replace(/\t+/g,'\n')
     .replace(/\r\n?/g,'\n');
-  let legacy=null,erreurLegacy='';
-  try{legacy=analyserCollerHelloBankEnrichiV34(normalise,compte);}catch(e){erreurLegacy=String(e&&e.message||e);}
-  if(legacy&&Array.isArray(legacy.lignes)&&legacy.lignes.length){
-    return Object.assign({},legacy,{version:'2026-09-29.1',parseur:'legacy_normalise_tabs',diagnostic:{erreurLegacy:''}});
+  const diagnosticBase={
+    caracteres:normalise.length,
+    lignes:normalise.split('\n').filter(Boolean).length,
+    contientDebitCredit:/D[ée]bit[ée]e?|Cr[ée]dit[ée]e?/i.test(normalise),
+    contientMontant:/[+\-−]?\s*\d[\d ]*,\d{2}\s*(?:€|EUR)/i.test(normalise)
+  };
+  let lignesJour=[],erreurJour='';
+  try{lignesJour=hbParserJourPur20260929_(normalise,compte)||[];}catch(e){erreurJour=String(e&&e.message||e);}
+  if(lignesJour.length){
+    return {version:'2026-09-29.2',parseur:'jour_pur',lignes:lignesJour,total:lignesJour.length,diagnostic:Object.assign({},diagnosticBase,{erreurJour:''})};
   }
   let lignesV3=[],erreurV3='';
   try{lignesV3=hb3Parser_(normalise,compte)||[];}catch(e){erreurV3=String(e&&e.message||e);}
   if(lignesV3.length){
-    return {
-      version:'2026-09-29.1',
-      parseur:'hb3_fallback',
-      lignes:lignesV3,
-      total:lignesV3.length,
-      diagnostic:{erreurLegacy:erreurLegacy,erreurV3:''}
-    };
+    return {version:'2026-09-29.2',parseur:'hb3_pur',lignes:lignesV3,total:lignesV3.length,diagnostic:Object.assign({},diagnosticBase,{erreurJour:erreurJour,erreurV3:''})};
   }
   return {
-    version:'2026-09-29.1',
+    version:'2026-09-29.2',
     parseur:'aucun',
     lignes:[],
     total:0,
-    diagnostic:{
-      erreurLegacy:erreurLegacy,
-      erreurV3:erreurV3,
-      caracteres:normalise.length,
-      lignes:normalise.split('\n').filter(Boolean).length,
-      contientDebitCredit:/D[ée]bit[ée]e?|Cr[ée]dit[ée]e?/i.test(normalise),
-      contientMontant:/[+\-−]?\s*\d[\d ]*,\d{2}\s*(?:€|EUR)/i.test(normalise)
-    }
+    diagnostic:Object.assign({},diagnosticBase,{erreurJour:erreurJour,erreurV3:erreurV3})
   };
 }
 
