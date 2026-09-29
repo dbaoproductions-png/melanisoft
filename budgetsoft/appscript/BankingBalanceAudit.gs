@@ -1,4 +1,4 @@
-const BANKING_BALANCE_AUDIT_VERSION='1.0';
+const BANKING_BALANCE_AUDIT_VERSION='2026-09-29.1';
 
 function dateAuditBanque_(v){
   if(!v)return null;
@@ -65,7 +65,12 @@ function auditerSoldesBancairesV1(soldeObserve){
 
   totalLegacy=arrAuditBanque_(totalLegacy);totalComptable=arrAuditBanque_(totalComptable);
   const soldeDashboard=arrAuditBanque_(dashboard&&dashboard.courtTerme?dashboard.courtTerme.soldeBancaire:0);
-  const obs=soldeObserve===undefined||soldeObserve===null||String(soldeObserve).trim()===''?null:Number(String(soldeObserve).replace(',','.'));
+  const cibleObservee=detailComptes.find(function(x){
+    const c=comptes.find(function(y){return String(y.id||'')===String(x.id||'');});
+    if(typeof estCompteBancaireCourantBudgetSoft_==='function')return estCompteBancaireCourantBudgetSoft_(c);
+    return /courant|compte\s*(joint|cheques?)/i.test(String((c&&c.nom||'')+' '+(c&&c.type||'')))&&!/livret|epargne|épargne/i.test(String((c&&c.nom||'')+' '+(c&&c.type||'')));
+  })||null;
+  const obs=soldeObserve===undefined||soldeObserve===null||String(soldeObserve).trim()===''?null:Number(String(soldeObserve).replace(/\s/g,'').replace(',','.'));
   const auditStructure=checksumOperationsBanque_(ops);
   const dashboardSuitLegacy=Math.abs(soldeDashboard-totalLegacy)<0.011;
   const dashboardSuitComptable=Math.abs(soldeDashboard-totalComptable)<0.011;
@@ -84,8 +89,10 @@ function auditerSoldesBancairesV1(soldeObserve){
     soldeReconstitueComptable:totalComptable,
     ecartDateVsComptable:arrAuditBanque_(totalLegacy-totalComptable),
     ecartDashboardVsComptable:arrAuditBanque_(soldeDashboard-totalComptable),
+    compteObserveCible:cibleObservee?{id:cibleObservee.id,nom:cibleObservee.nom}:null,
+    soldeCompteObserveCible:cibleObservee?cibleObservee.soldeComptable:null,
     soldeObserve:Number.isFinite(obs)?arrAuditBanque_(obs):null,
-    ecartObserveVsComptable:Number.isFinite(obs)?arrAuditBanque_(obs-totalComptable):null,
+    ecartObserveVsComptable:Number.isFinite(obs)&&cibleObservee?arrAuditBanque_(obs-cibleObservee.soldeComptable):null,
     manqueDateComptable,
     comptes:detailComptes,
     operationsDifferentes:ecartsOperations.sort((a,b)=>String(a.dateBudget||'').localeCompare(String(b.dateBudget||''))),
