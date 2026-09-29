@@ -17,6 +17,16 @@ function candidatsReferenceReleveCompte_(compteId){
       candidats.push({dateCloture:String(r.fin)+'T12:00:00',soldeCloture:Number(r.cloture),dateOuverture:r.debut?String(r.debut)+'T12:00:00':null,soldeOuverture:Number.isFinite(Number(r.ouverture))?Number(r.ouverture):null,source:'referentiel_certifie_2026'});
     });
   }
+  // Une observation bancaire explicite peut être plus récente qu'un relevé PDF.
+  // Elle devient alors un ancrage canonique, sans fabriquer d'opération manquante.
+  try{
+    const p=Object.fromEntries(lireTable_('Parametres').map(function(x){return[String(x.cle),x.valeur];}));
+    const id=String(compteId||''),source=String(p['solde_releve_source_'+id]||'');
+    const d=p['date_solde_releve_'+id],s=Number(String(p['solde_releve_'+id]||'').replace(',','.'));
+    if(/observation bancaire certifi[ée]e/i.test(source)&&d&&Number.isFinite(s)){
+      candidats.push({dateCloture:d,soldeCloture:s,dateOuverture:null,soldeOuverture:null,source:'observation_bancaire_certifiee'});
+    }
+  }catch(e){}
   return candidats;
 }
 
@@ -41,4 +51,67 @@ function reparerDernierSoldeReleveDepuisHistorique(){
   const comptes=lireTable_('Comptes').filter(c=>convertirBooleen_(c.actif)&&estCompteBancaireCourantBudgetSoft_(c));
   const resultats=comptes.map(c=>synchroniserReferenceReleveCompte_(c.id));
   return{ok:resultats.some(r=>r&&r.ok),resultats};
+}
+
+
+function certifierSoldeBancaireObserveBudgetSoft20260929(compteId,soldeObserve,dateReference){
+  verifierInitialisation_();
+  const comptes=lireTable_('Comptes').filter(function(x){return convertirBooleen_(x.actif);});
+  let compte=null;
+  if(compteId)compte=comptes.find(function(x){return String(x.id||'')===String(compteId)||String(x.nom||'')===String(compteId);});
+  if(!compte)compte=comptes.find(estCompteBancaireCourantBudgetSoft_);
+  if(!compte||!estCompteBancaireCourantBudgetSoft_(compte))throw new Error('Compte courant introuvable.');
+  const observe=Number(String(soldeObserve).replace(/\s/g,'').replace(',','.'));
+  if(!Number.isFinite(observe))throw new Error('Solde bancaire observé invalide.');
+
+  const id=String(compte.id),aujourdhui=typeof jourReferenceCanonBudgetSoft20260906_==='function'
+    ?jourReferenceCanonBudgetSoft20260906_(new Date())
+    :Utilities.formatDate(new Date(),Session.getScriptTimeZone(),'yyyy-MM-dd');
+  let jourRef=String(dateReference||'').slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(jourRef)){
+    const source=lireTable_('Operations');
+    const ops=typeof dedoublonnerOperationsCartesBudgetSoft_==='function'?dedoublonnerOperationsCartesBudgetSoft_(source):source;
+    const jours=ops.filter(function(o){
+      return String(o&&o.compte||'')===id&&!/\[RECURRENCE:[^\]]+\]/.test(String(o&&o.commentaire||''));
+    }).map(function(o){
+      return typeof jourComptableCanonBudgetSoft20260906_==='function'?jourComptableCanonBudgetSoft20260906_(o):'';
+    }).filter(function(j){return !!j&&j<=aujourdhui;}).sort();
+    jourRef=jours.length?jours[jours.length-1]:aujourdhui;
+  }
+  if(jourRef>aujourdhui)throw new Error('La date de référence observée ne peut pas être future.');
+
+  let avant=null;
+  try{
+    const synth=construireSyntheseComptes20260828_();
+    avant=(synth.comptes||[]).find(function(x){return String(x.id||'')===id;})||null;
+  }catch(e){}
+  const calculeAvant=avant&&Number.isFinite(Number(avant.soldeReel))?Number(avant.soldeReel):null;
+  const ecart=calculeAvant===null?null:Math.round((observe-calculeAvant)*100)/100;
+  const horodatage=new Date().toISOString();
+
+  enregistrerParametreBudgetaire_('solde_releve_'+id,Math.round(observe*100)/100);
+  enregistrerParametreBudgetaire_('date_solde_releve_'+id,jourRef+'T12:00:00');
+  enregistrerParametreBudgetaire_('solde_releve_source_'+id,'Observation bancaire certifiée Hello bank! · '+horodatage);
+  enregistrerParametreBudgetaire_('solde_releve_ecart_reconciliation_'+id,ecart===null?'':ecart);
+  enregistrerParametreBudgetaire_('solde_releve_observe_le_'+id,horodatage);
+
+  if(typeof marquerSnapshotGlobalBudgetSoftObsolete20260916_==='function'){
+    marquerSnapshotGlobalBudgetSoftObsolete20260916_('certification_solde_bancaire_observe');
+  }
+  return{
+    ok:true,version:'2026-09-29.1',
+    compte:{id:id,nom:String(compte.nom||'')},
+    soldeObserve:Math.round(observe*100)/100,
+    dateReference:jourRef,
+    soldeCalculeAvant:calculeAvant,
+    ecartReconciliation:ecart,
+    source:'observation_bancaire_certifiee',
+    doctrine:'Le solde bancaire observé est un ancrage canonique. L écart historique est conservé comme diagnostic et aucune opération manquante n est inventée.'
+  };
+}
+
+function certifierSoldeHelloBankCompteJoint20260929(){
+  const r=certifierSoldeBancaireObserveBudgetSoft20260929(null,2860.22,null);
+  console.log('[CERTIFICATION SOLDE HELLOBANK 20260929] '+JSON.stringify(r));
+  return r;
 }
