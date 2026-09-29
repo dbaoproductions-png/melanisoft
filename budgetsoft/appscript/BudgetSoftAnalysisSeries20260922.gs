@@ -70,8 +70,7 @@ function lignesCapitalCourantAnalyseSeries20260922_(patrimoine){
 
 function enregistrerHistoriqueStructurelAnalysesBudgetSoft20260922_(etat){
   try{
-    etat=etat||((typeof lireEtatGlobalBudgetSoftSiDisponible20260906_==='function')?lireEtatGlobalBudgetSoftSiDisponible20260906_():null);
-    if(!etat||!etat.modules)return{ok:false,ignore:true,raison:'snapshot global indisponible'};
+    if(!etat||!etat.modules)return{ok:false,ignore:true,raison:'état publié non fourni à l’historisation'};
     const analyses=etat.modules.analyses||{},variante=analyses.variantes&&(analyses.variantes['6']||analyses.variantes['3']||analyses.variantes['12']);
     const courante=variante&&variante.courante||null,periode=clePeriodeAnalyseSeries20260922_(courante);
     if(!periode)return{ok:false,ignore:true,raison:'période Analyses courante absente'};
