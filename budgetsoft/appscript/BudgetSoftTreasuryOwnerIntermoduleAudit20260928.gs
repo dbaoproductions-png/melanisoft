@@ -135,3 +135,61 @@ function auditerVirementEpargneSs1BudgetSoft20260928(){
   console.log('[AUDIT VIREMENT EPARGNE SS1 CIBLE 20260929] '+JSON.stringify(out));
   return out;
 }
+
+
+function auditerReconciliationCompteJointDepuisReference20260929(){
+  const ops=typeof lireTable_==='function'?(lireTable_('Operations')||[]):[];
+  const params=typeof lireTable_==='function'?(lireTable_('Parametres')||[]):[];
+  const comptesBruts=typeof lireTable_==='function'?(lireTable_('Comptes')||[]):[];
+  const compte=comptesBruts.find(function(x){return /compte joint/i.test(String(x&&x.nom||''));})||null;
+  const id=String(compte&&compte.id||'');
+  const soldeRef=Number((params.find(function(p){return String(p&&p.cle||'')==='solde_releve_'+id;})||{}).valeur);
+  const dateRefBrute=(params.find(function(p){return String(p&&p.cle||'')==='date_solde_releve_'+id;})||{}).valeur;
+  const jourRef=typeof jourCanonBudgetSoft20260906_==='function'?jourCanonBudgetSoft20260906_(dateRefBrute):'';
+  const lignes=[];
+  let cumul=0;
+  ops.forEach(function(brut){
+    if(String(brut&&brut.compte||'')!==id)return;
+    let o=brut;
+    if(!(o&&o.date_comptable)&&typeof enrichirDepuisCommentaireBanque_==='function'){
+      try{o=enrichirDepuisCommentaireBanque_(brut)||brut;}catch(e){o=brut;}
+    }
+    const jour=typeof jourComptableCanonBudgetSoft20260906_==='function'?jourComptableCanonBudgetSoft20260906_(o):'';
+    if(!jour||!jourRef||jour<=jourRef)return;
+    const type=String(o&&o.type||'').toLowerCase();
+    if(type!=='revenu'&&type!=='depense')return;
+    const brutMontant=Math.abs(Number(o&&o.montant||0));
+    if(!Number.isFinite(brutMontant)||brutMontant<=0)return;
+    const montant=type==='depense'?-brutMontant:brutMontant;
+    cumul+=montant;
+    lignes.push({
+      id:String(o&&o.id||''),
+      jour:jour,
+      date:String(o&&o.date||''),
+      date_comptable:String(o&&o.date_comptable||''),
+      type:type,
+      categorie:String(o&&o.categorie||''),
+      montant:Math.round(montant*100)/100,
+      cumul:Math.round(cumul*100)/100,
+      soldeReconstruit:Math.round((soldeRef+cumul)*100)/100,
+      libelle:String(o&&o.libelle_bancaire||o&&o.libelle||'')
+    });
+  });
+  lignes.sort(function(a,b){return String(a.jour).localeCompare(String(b.jour))||String(a.id).localeCompare(String(b.id));});
+  cumul=0;
+  lignes.forEach(function(x){cumul+=Number(x.montant||0);x.cumul=Math.round(cumul*100)/100;x.soldeReconstruit=Math.round((soldeRef+cumul)*100)/100;});
+  const synth=typeof construireSyntheseComptes20260828_==='function'?construireSyntheseComptes20260828_():null;
+  const compteSynth=(synth&&Array.isArray(synth.comptes)?synth.comptes:[]).find(function(x){return String(x&&x.id||'')===id;})||null;
+  const out={
+    ok:true,lectureSeule:true,version:'2026-09-29.1',
+    doctrine:'Réconciliation exacte du compte joint depuis le solde de relevé certifié. Tous les virements sortants restent des sorties de trésorerie ; leur catégorie analytique ne neutralise jamais leur signe bancaire.',
+    reference:{solde:soldeRef,date:jourRef},
+    totalMouvements:Math.round(cumul*100)/100,
+    soldeReconstruit:Math.round((soldeRef+cumul)*100)/100,
+    soldeSynthese:compteSynth&&Number(compteSynth.soldeReel),
+    ecart:compteSynth?Math.round((Number(compteSynth.soldeReel)-Number(soldeRef+cumul))*100)/100:null,
+    lignes:lignes
+  };
+  console.log('[AUDIT RECONCILIATION COMPTE JOINT 20260929] '+JSON.stringify(out));
+  return out;
+}
