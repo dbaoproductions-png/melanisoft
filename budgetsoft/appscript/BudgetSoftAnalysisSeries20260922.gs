@@ -5,11 +5,12 @@
  * - Revenus / Charges fixes / Pilotable : historique reconstruit exclusivement
  *   depuis le Réel Operations, sur les périodes canoniques d'Analyses.
  * - Pilotable : même classification P0 et même ventilation que Cerbère.
- * - Dettes / Capital : aucune rétroprojection fictive. Les points structurels
- *   sont historisés après publication du snapshot global, un point par cycle.
- * - Dette : Crédits est propriétaire. Capital : Patrimoine est propriétaire.
+ * - Dettes / Capital : reconstruction historique uniquement lorsqu'une preuve
+ *   existe (relevé/échéancier exact, journal d'amortissement, date de valeur
+ *   d'un actif, mouvements d'un compte financier). Sinon la période reste vide.
+ * - Dette : Crédits reste propriétaire. Capital : Patrimoine reste propriétaire.
  */
-const BUDGETSOFT_ANALYSIS_SERIES_20260922_VERSION='2026-09-24.2';
+const BUDGETSOFT_ANALYSIS_SERIES_20260922_VERSION='2026-09-29.1';
 const BUDGETSOFT_ANALYSIS_STRUCTURAL_HISTORY_SHEET_20260922='Analyse_HistoriqueStructurel';
 const BUDGETSOFT_ANALYSIS_STRUCTURAL_HISTORY_HEADERS_20260922=[
   'periode','date_point','revision_budgetsoft','famille','sous_poste','montant','source','maj_le'
@@ -216,40 +217,206 @@ function construireSeriesFluxAnalysesBudgetSoft20260922_(periodes,operations,cat
   };
 }
 
-function construireSeriesStructurellesAnalysesBudgetSoft20260922_(periodes,credits,patrimoine,historique){
+
+function finPeriodeStructurelleAnalyse20260929_(p){
+  const d=dateAnalyseSeries20260922_(p&&p.fin);if(!d)return null;
+  d.setHours(23,59,59,999);return d;
+}
+function jourStructurelAnalyse20260929_(v){
+  const d=dateAnalyseSeries20260922_(v);return d?Utilities.formatDate(d,Session.getScriptTimeZone(),'yyyy-MM-dd'):'';
+}
+function lireJournalAmortissementsAnalyseSeries20260929_(){
+  try{
+    const sh=SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Amortissements_credits');
+    if(!sh||sh.getLastRow()<2)return[];
+    const h=sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(function(x){return String(x||'').trim();});
+    return sh.getRange(2,1,sh.getLastRow()-1,h.length).getValues().filter(function(r){return r.some(function(v){return v!==''&&v!==null;});}).map(function(r){
+      const o={};h.forEach(function(k,i){if(k)o[k]=r[i] instanceof Date?r[i].toISOString():r[i];});return o;
+    });
+  }catch(e){return[];}
+}
+function referencesExactesCreditAnalyse20260929_(credit){
+  const refs=[];
+  function ajouter(x,source){
+    if(!x)return;const d=dateAnalyseSeries20260922_(x.date),m=Number(x.capital);
+    if(d&&Number.isFinite(m)&&m>=0)refs.push({date:d,capital:arrAnalyseSeries20260922_(m),source:String(source||x.source||'reference_exacte')});
+  }
+  try{if(typeof estCreditCasdenEcheancier20260915_==='function'&&estCreditCasdenEcheancier20260915_(credit))ajouter({date:'2026-08-04',capital:40562.30},'échéancier exact CASDEN · référence 04/08/2026');}catch(e){}
+  try{if(typeof estCreditAccessio20260915_==='function'&&estCreditAccessio20260915_(credit))ajouter({date:'2026-09-04',capital:776.53},'relevé exact Accessio · après échéance 04/09/2026');}catch(e){}
+  try{if(typeof referenceReleveCarrefourPass20260915_==='function')ajouter(referenceReleveCarrefourPass20260915_(credit),'relevé exact Carrefour PASS');}catch(e){}
+  try{if(typeof referenceReleveFloa20260916_==='function')ajouter(referenceReleveFloa20260916_(credit),'relevé exact FLOA');}catch(e){}
+  try{if(typeof referenceReleveOney20260916_==='function')ajouter(referenceReleveOney20260916_(credit),'relevé exact Oney');}catch(e){}
+  try{if(typeof referenceSiteCofidis20260915_==='function')ajouter(referenceSiteCofidis20260915_(credit),'référence exacte espace Cofidis');}catch(e){}
+  return refs.sort(function(a,b){return a.date-b.date;});
+}
+function capitalCreditHistoriqueAnalyse20260929_(credit,cible,journal){
+  if(!credit||!cible)return null;
+  const id=String(credit.id||''),nom=String(credit.nom||''),type=String(credit.type_credit||'amortissable').toLowerCase();
+  const rows=(journal||[]).filter(function(x){
+    if(String(x&&x.statut||'').toLowerCase()!=='applique')return false;
+    return (id&&String(x&&x.credit_id||'')===id)||(!id&&nom&&String(x&&x.credit_nom||'')===nom);
+  }).map(function(x){
+    const d=dateAnalyseSeries20260922_(x&&x.date_operation),avant=Number(x&&x.capital_avant),apres=Number(x&&x.capital_apres);
+    return d&&Number.isFinite(avant)&&Number.isFinite(apres)?{date:d,avant:avant,apres:apres,source:'journal amortissement · '+String(x&&x.methode||'')}:null;
+  }).filter(Boolean).sort(function(a,b){return a.date-b.date;});
+
+  const observations=referencesExactesCreditAnalyse20260929_(credit).slice();
+  rows.forEach(function(x){if(x.date<=cible)observations.push({date:x.date,capital:x.apres,source:x.source});});
+  observations.sort(function(a,b){return a.date-b.date;});
+  const avant=observations.filter(function(x){return x.date<=cible;}).slice(-1)[0];
+  if(avant)return{montant:arrAnalyseSeries20260922_(avant.capital),source:avant.source,date:jourStructurelAnalyse20260929_(avant.date)};
+
+  // Pour un amortissable, le capital juste avant la première échéance journalisée
+  // dans les 15 jours suivant la clôture est une preuve du CRD à cette clôture :
+  // aucun nouveau tirage n'est possible entre les deux dates.
+  if(type==='amortissable'){
+    const apres=rows.find(function(x){return x.date>cible&&(x.date-cible)<=15*86400000;});
+    if(apres)return{montant:arrAnalyseSeries20260922_(apres.avant),source:apres.source+' · capital avant échéance',date:jourStructurelAnalyse20260929_(apres.date)};
+  }
+  return null;
+}
+function dateSourceDetteAnalyse20260929_(dette){
+  const txt=String(dette&&dette.commentaire||'');
+  const m=txt.match(/(?:communiqu[ée]e?|constat[ée]e?|saisi[ée]e?|au)\D{0,18}(\d{1,2})\/(\d{1,2})\/(20\d{2})/i)||txt.match(/\b(\d{1,2})\/(\d{1,2})\/(20\d{2})\b/);
+  if(!m)return null;
+  const d=new Date(Number(m[3]),Number(m[2])-1,Number(m[1]),12);return isNaN(d)?null:d;
+}
+function idsDetteAnalyse20260929_(dette){
+  return String(dette&&dette.operations_rapprochees||'').split(/[,\s;]+/).map(function(x){return x.trim();}).filter(Boolean);
+}
+function capitalDetteHorsCreditHistoriqueAnalyse20260929_(dette,cible,operations){
+  const source=dateSourceDetteAnalyse20260929_(dette);if(!source||!cible||cible<source)return null;
+  const initial=Math.max(0,Number(dette&&dette.montant_initial||0)),courant=Math.max(0,Number(dette&&dette.capital_restant||0));
+  if(!Number.isFinite(initial))return null;
+  const ids=new Set(idsDetteAnalyse20260929_(dette)),ops=(operations||[]).filter(function(o){return ids.has(String(o&&o.id||''));});
+  const regleTotal=ops.reduce(function(s,o){return s+Math.abs(Number(o&&o.montant||0));},0);
+  // Si le reste courant ne se réconcilie pas avec les règlements tracés, il y a
+  // eu une correction manuelle non historisée : on refuse toute rétroprojection.
+  if(Math.abs(Math.max(0,initial-regleTotal)-courant)>.011)return null;
+  const regleAvant=ops.filter(function(o){
+    const d=dateAnalyseSeries20260922_(o&&o.date_comptable||o&&o.date||o&&o.date_operation);return d&&d<=cible;
+  }).reduce(function(s,o){return s+Math.abs(Number(o&&o.montant||0));},0);
+  return{montant:arrAnalyseSeries20260922_(Math.max(0,initial-regleAvant)),source:'Dette · montant initial + règlements rapprochés',date:jourStructurelAnalyse20260929_(source)};
+}
+function valeurActifHistoriqueAnalyse20260929_(actif,cible){
+  const d=dateAnalyseSeries20260922_(actif&&actif.date_valeur),v=Number(actif&&actif.valeur);
+  if(!d||!cible||d>cible||!Number.isFinite(v)||v<0)return null;
+  return{montant:arrAnalyseSeries20260922_(v),source:'Actifs · dernière valeur datée connue',date:jourStructurelAnalyse20260929_(d)};
+}
+function soldeFinancierHistoriqueAnalyse20260929_(ligne,cible,operations){
+  if(!ligne||!cible)return null;
+  const courant=Number(ligne.solde);if(!Number.isFinite(courant))return null;
+  const cles=new Set([String(ligne.id||''),String(ligne.nom||'')].filter(Boolean));
+  let apres=0;
+  (operations||[]).forEach(function(o){
+    if(!cles.has(String(o&&o.compte||'')))return;
+    const d=dateAnalyseSeries20260922_(o&&o.date_comptable||o&&o.date);if(!d||d<=cible)return;
+    const m=Number(o&&o.montant||0);if(Number.isFinite(m))apres+=m;
+  });
+  return{montant:arrAnalyseSeries20260922_(courant-apres),source:'Comptes · solde courant neutralisé des mouvements postérieurs',date:jourStructurelAnalyse20260929_(cible)};
+}
+function preuvesStructurellesAnalyse20260929_(periodes,credits,patrimoine,contexte){
+  contexte=contexte||{};
+  const journal=Array.isArray(contexte.journalAmortissements)?contexte.journalAmortissements:[],
+        operations=Array.isArray(contexte.operations)?contexte.operations:[],
+        dette={},capital={};
+
+  function assurer(map,nom){if(!map[nom])map[nom]=(periodes||[]).map(function(){return null;});return map[nom];}
+  (credits&&credits.amortissables||[]).forEach(function(x){
+    const nom='Crédit · '+String(x&&x.nom||'Amortissable'),vals=assurer(dette,nom);
+    (periodes||[]).forEach(function(p,i){const z=finPeriodeStructurelleAnalyse20260929_(p),r=capitalCreditHistoriqueAnalyse20260929_(x,z,journal);if(r)vals[i]=r;});
+  });
+  (credits&&credits.renouvelables||[]).forEach(function(x){
+    const nom='Revolving · '+String(x&&x.nom||'Renouvelable'),vals=assurer(dette,nom);
+    (periodes||[]).forEach(function(p,i){const z=finPeriodeStructurelleAnalyse20260929_(p),r=capitalCreditHistoriqueAnalyse20260929_(x,z,journal);if(r)vals[i]=r;});
+  });
+  (credits&&credits.dettes||credits&&credits.dettesActives||[]).forEach(function(x){
+    const nom='Dette · '+String(x&&x.nom||'Hors crédit'),vals=assurer(dette,nom);
+    (periodes||[]).forEach(function(p,i){const z=finPeriodeStructurelleAnalyse20260929_(p),r=capitalDetteHorsCreditHistoriqueAnalyse20260929_(x,z,operations);if(r)vals[i]=r;});
+  });
+
+  (patrimoine&&patrimoine.actifs||[]).forEach(function(x){
+    const nom='Actif · '+String(x&&x.nom||x&&x.type||'Patrimoine'),vals=assurer(capital,nom);
+    (periodes||[]).forEach(function(p,i){const z=finPeriodeStructurelleAnalyse20260929_(p),r=valeurActifHistoriqueAnalyse20260929_(x,z);if(r)vals[i]=r;});
+  });
+  (patrimoine&&patrimoine.livrets||[]).forEach(function(x){
+    const nom='Livret · '+String(x&&x.nom||'Épargne'),vals=assurer(capital,nom);
+    (periodes||[]).forEach(function(p,i){const z=finPeriodeStructurelleAnalyse20260929_(p),r=soldeFinancierHistoriqueAnalyse20260929_(x,z,operations);if(r)vals[i]=r;});
+  });
+  (patrimoine&&patrimoine.placements||[]).forEach(function(x){
+    const nom='Placement · '+String(x&&x.nom||'Placement'),vals=assurer(capital,nom);
+    (periodes||[]).forEach(function(p,i){const z=finPeriodeStructurelleAnalyse20260929_(p),r=soldeFinancierHistoriqueAnalyse20260929_(x,z,operations);if(r)vals[i]=r;});
+  });
+  return{dettes:dette,capital:capital};
+}
+
+function construireSeriesStructurellesAnalysesBudgetSoft20260922_(periodes,credits,patrimoine,historique,contexte){
   const cleSet=new Set((periodes||[]).map(clePeriodeAnalyseSeries20260922_));
   const hist=(historique||[]).filter(function(x){return cleSet.has(String(x&&x.periode||''));});
   const courant=periodes&&periodes.length?periodes[periodes.length-1]:null,cleCour=clePeriodeAnalyseSeries20260922_(courant);
+  const preuves=preuvesStructurellesAnalyse20260929_(periodes,credits||{},patrimoine||{},contexte||{});
 
   function construire(famille,lignesCourantes,totalNom,titre,source,doctrine){
     const noms=new Set(hist.filter(function(x){return String(x&&x.famille||'')===famille;}).map(function(x){return String(x&&x.sous_poste||'');}).filter(Boolean));
     (lignesCourantes||[]).forEach(function(x){noms.add(String(x.nom||''));});
-    const vals={};Array.from(noms).forEach(function(nom){vals[nom]=(periodes||[]).map(function(){return null;});});
+    Object.keys(preuves[famille]||{}).forEach(function(n){noms.add(n);});
+    const vals={},sourcesPreuves={};Array.from(noms).forEach(function(nom){vals[nom]=(periodes||[]).map(function(){return null;});sourcesPreuves[nom]=(periodes||[]).map(function(){return null;});});
+
+    // 1. Historique explicitement enregistré : priorité absolue.
     hist.filter(function(x){return String(x&&x.famille||'')===famille;}).forEach(function(x){
       const nom=String(x&&x.sous_poste||''),idx=(periodes||[]).findIndex(function(p){return clePeriodeAnalyseSeries20260922_(p)===String(x&&x.periode||'');});
-      if(idx>=0&&vals[nom])vals[nom][idx]=Number(x&&x.montant||0);
+      if(idx>=0&&vals[nom]){vals[nom][idx]=Number(x&&x.montant||0);sourcesPreuves[nom][idx]='Historique structurel enregistré';}
     });
-    (lignesCourantes||[]).forEach(function(x){const nom=String(x.nom||'');if(!vals[nom])vals[nom]=(periodes||[]).map(function(){return null;});const idx=(periodes||[]).findIndex(function(p){return clePeriodeAnalyseSeries20260922_(p)===cleCour;});if(idx>=0)vals[nom][idx]=Number(x.montant||0);});
-    const base=seriesDepuisMatriceAnalyse20260922_(periodes,Array.from(noms).sort(function(a,b){return a.localeCompare(b,'fr');}),vals,totalNom);
-    base.series[0].valeurs=(periodes||[]).map(function(_,i){const presents=base.series.slice(1).map(function(s){return s.valeurs[i];}).filter(function(v){return v!=null;});return presents.length?arrAnalyseSeries20260922_(presents.reduce(function(s,v){return s+Number(v||0);},0)):null;});
-    return Object.assign({titre:titre,unite:'€',source:source,doctrine:doctrine,historiqueDepuis:hist.length?String(hist.map(function(x){return x.date_point||'';}).sort()[0]||''):'',historiquePartiel:true},base);
+
+    // 2. Reconstruction prouvée : uniquement pour les cases encore vides.
+    Object.keys(preuves[famille]||{}).forEach(function(nom){
+      if(!vals[nom])vals[nom]=(periodes||[]).map(function(){return null;});
+      (preuves[famille][nom]||[]).forEach(function(p,i){
+        if(vals[nom][i]==null&&p&&Number.isFinite(Number(p.montant))){vals[nom][i]=Number(p.montant);sourcesPreuves[nom][i]=String(p.source||'preuve structurelle');}
+      });
+    });
+
+    // 3. Période courante : vérité propriétaire actuelle.
+    (lignesCourantes||[]).forEach(function(x){
+      const nom=String(x.nom||'');if(!vals[nom])vals[nom]=(periodes||[]).map(function(){return null;});
+      const idx=(periodes||[]).findIndex(function(p){return clePeriodeAnalyseSeries20260922_(p)===cleCour;});
+      if(idx>=0){vals[nom][idx]=Number(x.montant||0);sourcesPreuves[nom][idx]='Valeur propriétaire courante';}
+    });
+
+    const nomsTries=Array.from(noms).sort(function(a,b){return a.localeCompare(b,'fr');});
+    const base=seriesDepuisMatriceAnalyse20260922_(periodes,nomsTries,vals,totalNom);
+    // Un total structurel n'est publié que si TOUTES les composantes sont connues.
+    base.series[0].valeurs=(periodes||[]).map(function(_,i){
+      const valeurs=nomsTries.map(function(n){return vals[n]&&vals[n][i];});
+      if(!valeurs.length||valeurs.some(function(v){return v==null||!Number.isFinite(Number(v));}))return null;
+      return arrAnalyseSeries20260922_(valeurs.reduce(function(s,v){return s+Number(v);},0));
+    });
+    const totalVals=base.series[0].valeurs,idxPremier=totalVals.findIndex(function(v){return v!=null;});
+    const partiel=totalVals.some(function(v){return v==null;});
+    return Object.assign({
+      titre:titre,unite:'€',source:source,doctrine:doctrine,
+      historiqueDepuis:idxPremier>=0?String((periodes[idxPremier]&&periodes[idxPremier].fin)||''):'',
+      historiquePartiel:partiel,
+      reconstructionStructurelle:true,
+      preuves:sourcesPreuves
+    },base);
   }
 
   return{
-    dettes:construire('dettes',lignesDettesCourantesAnalyseSeries20260922_(credits),'Dette totale','Dette totale','Crédits / Dettes canoniques','Historique structurel enregistré à chaque cycle ; aucune rétroprojection antérieure au premier point fiable.'),
-    capital:construire('capital',lignesCapitalCourantAnalyseSeries20260922_(patrimoine),'Capital total','Capital','Patrimoine · actifs bruts','Actifs patrimoniaux + livrets + placements ; aucune valeur historique inventée avant son premier point enregistré.')
+    dettes:construire('dettes',lignesDettesCourantesAnalyseSeries20260922_(credits),'Dette totale','Dette totale','Crédits / Dettes canoniques','Historique prouvé : relevés/échéanciers exacts et journal d’amortissement ; le total reste vide si une composante n’est pas démontrable.'),
+    capital:construire('capital',lignesCapitalCourantAnalyseSeries20260922_(patrimoine),'Capital total','Capital','Patrimoine · actifs bruts','Historique prouvé : valeurs d’actifs datées et mouvements des comptes financiers ; aucune valeur n’est inventée avant sa première preuve.')
   };
 }
 
 function construireSeriesAnalysesBudgetSoft20260922_(periodes,contexte){
   contexte=contexte||{};
   const flux=construireSeriesFluxAnalysesBudgetSoft20260922_(periodes,contexte.operations||[],contexte.categories||[],contexte.charges||[]);
-  const struct=construireSeriesStructurellesAnalysesBudgetSoft20260922_(periodes,contexte.credits||{},contexte.patrimoine||{},contexte.historique||[]);
+  const struct=construireSeriesStructurellesAnalysesBudgetSoft20260922_(periodes,contexte.credits||{},contexte.patrimoine||{},contexte.historique||[],contexte);
   return{
     ok:true,version:BUDGETSOFT_ANALYSIS_SERIES_20260922_VERSION,
     revenus:flux.revenus,chargesFixes:flux.chargesFixes,pilotable:flux.pilotable,
     dettes:struct.dettes,capital:struct.capital,
-    doctrine:'Flux historiques depuis Operations ; structurel historisé sans rétroprojection fictive.'
+    doctrine:'Flux historiques depuis Operations ; Dette/Capital reconstruits uniquement à partir de preuves structurelles datées.'
   };
 }
 
@@ -259,6 +426,24 @@ function auditerSeriesAnalysesBudgetSoft20260922(){
   const controles=familles.map(function(k){const x=s&&s[k];return{code:'SERIE_'+k.toUpperCase(),ok:!!(x&&Array.isArray(x.labels)&&Array.isArray(x.series)&&x.series.length>=1),labels:x&&x.labels&&x.labels.length||0,series:x&&x.series&&x.series.length||0};});
   const out={ok:!!s&&controles.every(function(x){return x.ok;}),version:BUDGETSOFT_ANALYSIS_SERIES_20260922_VERSION,source:r&&r.sourceBudgetSoft||'',revisionBudgetSoft:r&&r.revisionBudgetSoft||'',controles:controles};
   console.log('[AUDIT SERIES ANALYSES 20260922] '+JSON.stringify(out));return out;
+}
+
+
+function auditerReconstructionStructurelleAnalysesBudgetSoft20260929(){
+  const r=chargerAnalysesBudgetairesV23(6),s=r&&r.seriesCourbes||{};
+  function resume(cfg){
+    const total=cfg&&Array.isArray(cfg.series)?cfg.series.find(function(x){return x&&x.total;}):null;
+    return{
+      labels:cfg&&cfg.labels||[],
+      total:total&&total.valeurs||[],
+      pointsTotalConnus:total&&Array.isArray(total.valeurs)?total.valeurs.filter(function(v){return v!=null;}).length:0,
+      historiqueDepuis:cfg&&cfg.historiqueDepuis||'',
+      historiquePartiel:!!(cfg&&cfg.historiquePartiel),
+      reconstructionStructurelle:!!(cfg&&cfg.reconstructionStructurelle)
+    };
+  }
+  const out={ok:!!(s&&s.dettes&&s.capital),lectureSeule:true,version:BUDGETSOFT_ANALYSIS_SERIES_20260922_VERSION,revisionBudgetSoft:r&&r.revisionBudgetSoft||'',dettes:resume(s.dettes),capital:resume(s.capital)};
+  console.log('[AUDIT RECONSTRUCTION STRUCTURELLE ANALYSES 20260929] '+JSON.stringify(out));return out;
 }
 
 
