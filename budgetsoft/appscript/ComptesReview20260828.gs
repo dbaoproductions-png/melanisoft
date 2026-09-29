@@ -1,4 +1,4 @@
-const COMPTES_REVIEW_20260828_VERSION='2026-09-21.1';
+const COMPTES_REVIEW_20260828_VERSION='2026-09-29.1';
 
 /**
  * Lecture prioritaire de la révision globale : l'ouverture de Comptes ne doit plus
@@ -41,13 +41,13 @@ function construireSyntheseComptes20260828_(ctx){
   const refs={},cumulReel={},cumulApresRef={},derniereDateReelle={};
 
   comptes.forEach(function(c){
-    const id=String(c.id),valeur=parametres['solde_releve_'+id],dateBrute=parametres['date_solde_releve_'+id];
+    const id=String(c.id),valeur=parametres['solde_releve_'+id],dateBrute=parametres['date_solde_releve_'+id],sourceBrute=String(parametres['solde_releve_source_'+id]||'');
     const base=valeur===undefined||valeur===''?null:Number(String(valeur).replace(',','.'));
     const jourRef=typeof jourCanonBudgetSoft20260906_==='function'?jourCanonBudgetSoft20260906_(dateBrute):null;
     const disponible=Number.isFinite(base)&&!!jourRef&&jourRef<=jourAuj;
     const p=jourRef?jourRef.split('-').map(Number):null;
     const dateCanon=p?new Date(p[0],p[1]-1,p[2],12,0,0,0):null;
-    refs[id]={disponible,solde:Number.isFinite(base)?base:null,jour:jourRef||'',date:disponible?dateCanon:null,future:Number.isFinite(base)&&!!jourRef&&jourRef>jourAuj,dateInvalide:Number.isFinite(base)&&!jourRef,dateBrute:dateBrute||''};
+    refs[id]={disponible,solde:Number.isFinite(base)?base:null,jour:jourRef||'',date:disponible?dateCanon:null,future:Number.isFinite(base)&&!!jourRef&&jourRef>jourAuj,dateInvalide:Number.isFinite(base)&&!jourRef,dateBrute:dateBrute||'',source:sourceBrute,observationCertifiee:/observation bancaire certifi[ée]e/i.test(sourceBrute)};
     cumulReel[id]=0;cumulApresRef[id]=0;derniereDateReelle[id]=null;
   });
 
@@ -72,7 +72,7 @@ function construireSyntheseComptes20260828_(ctx){
       // jour de référence. Dans ce cas, sa date_comptable anticipée ne doit pas le
       // faire disparaître du solde réel. Exemple : virement Épargne du 27/09,
       // -50 €, date_comptable 26/09.
-      const provisoireJourReference=/provisoire/.test(statutBancaire)&&!!jourMouvement&&jourMouvement>=ref.jour&&jour<=ref.jour;
+      const provisoireJourReference=!ref.observationCertifiee&&/provisoire/.test(statutBancaire)&&!!jourMouvement&&jourMouvement>=ref.jour&&jour<=ref.jour;
       if(apresReference||provisoireJourReference)cumulApresRef[id]+=montant;
     }
   });
@@ -82,7 +82,7 @@ function construireSyntheseComptes20260828_(ctx){
     const solde=ref&&ref.disponible?arrondirComptes20260828_(ref.solde+cumulApresRef[id]):arrondirComptes20260828_(Number(c.solde_initial||0)+cumulReel[id]);
     let dateSolde=ref&&ref.disponible?ref.date:derniereDateReelle[id];
     if(derniereDateReelle[id]&&ref&&ref.disponible&&derniereDateReelle[id]>ref.date)dateSolde=derniereDateReelle[id];
-    const sourceSolde=ref&&ref.disponible?'releve_certifie':'solde_initial';
+    const sourceSolde=ref&&ref.disponible?(ref.observationCertifiee?'observation_bancaire_certifiee':'releve_certifie'):'solde_initial';
     const dateSoldeIso=dateSolde?Utilities.formatDate(dateSolde,Session.getScriptTimeZone(),'yyyy-MM-dd'):'';
     if(sourceSolde==='releve_certifie'&&(!dateSoldeIso||dateSoldeIso>jourAuj))throw new Error('Référence bancaire invalide pour '+String(c.nom||id)+' : '+String(dateSoldeIso||ref&&ref.dateBrute||'sans date'));
     return {id:c.id,nom:c.nom,type:c.type,actif:c.actif,soldeReel:solde,dateSolde:dateSoldeIso,sourceSolde,referenceFutureIgnoree:!!(ref&&ref.future),referenceDateInvalideIgnoree:!!(ref&&ref.dateInvalide),dateReferenceIgnoree:ref&&(ref.future||ref.dateInvalide)?String(ref.dateBrute||''):''};
