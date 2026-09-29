@@ -1,4 +1,4 @@
-const BUDGETSOFT_ANALYSES_SNAPSHOT_20260912_VERSION='2026-09-22.1';
+const BUDGETSOFT_ANALYSES_SNAPSHOT_20260912_VERSION='2026-09-29.1';
 
 function normaliserNombrePeriodesAnalysesSnapshot20260912_(nombrePeriodes){
   const n=parseInt(nombrePeriodes,10);
@@ -11,7 +11,8 @@ function construireModuleAnalysesSnapshotBudgetSoft20260912_(){
     operations:lireTable_('Operations')||[],
     categories:lireTable_('Categories')||[],
     charges:lireTable_('Charges_fixes')||[],
-    historique:typeof lireHistoriqueStructurelAnalyses20260922_==='function'?lireHistoriqueStructurelAnalyses20260922_():[]
+    historique:typeof lireHistoriqueStructurelAnalyses20260922_==='function'?lireHistoriqueStructurelAnalyses20260922_():[],
+    journalAmortissements:typeof lireJournalAmortissementsAnalyseSeries20260929_==='function'?lireJournalAmortissementsAnalyseSeries20260929_():[]
   };
   try{contexteSeries.credits=typeof construireCreditsEtDettesV2_==='function'?construireCreditsEtDettesV2_():{};}catch(e){contexteSeries.credits={};}
   try{contexteSeries.patrimoine=typeof construirePatrimoineLegacySource20260921_==='function'?construirePatrimoineLegacySource20260921_():{};}catch(e){contexteSeries.patrimoine={};}
@@ -33,7 +34,7 @@ function construireModuleAnalysesSnapshotBudgetSoft20260912_(){
     variantes:variantes,
     periodesDisponibles:[3,6,12],
     performance:{dureeMs:Date.now()-t0,variantesMs:performances},
-    doctrine:'Le snapshot global transporte les sorties 3/6/12 du moteur Analyses autoritaire et les séries multi-postes ; aucun calcul n’est refait dans l’UI.'
+    doctrine:'Le snapshot global transporte les sorties 3/6/12 du moteur Analyses autoritaire ; Dette/Capital utilisent uniquement des preuves historiques datées et aucun calcul n’est refait dans l’UI.'
   };
 }
 
