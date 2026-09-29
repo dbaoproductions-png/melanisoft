@@ -5,13 +5,19 @@ function ecartTreasuryOwnerAudit20260928_(a,b){return arrTreasuryOwnerAudit20260
 
 function auditerProprietairesTresorerieIntermodules20260928(){
   const t0=Date.now();
-  if(typeof chargerSnapshotGlobalBudgetSoft20260906!=='function'){
-    throw new Error('Snapshot global BudgetSoft indisponible.');
+  // Un audit doit lire la révision réellement persistée, sans passer par la
+  // couche d'accès des interfaces qui peut masquer un snapshot déclaré périmé
+  // ou déclencher une reconstruction de fraîcheur. Ici : zéro recalcul métier.
+  const chargeurStockage=typeof chargerSnapshotGlobalLegacyBudgetSoft20260906_==='function'
+    ?chargerSnapshotGlobalLegacyBudgetSoft20260906_
+    :null;
+  if(!chargeurStockage){
+    throw new Error('Chargeur de stockage du snapshot global BudgetSoft indisponible.');
   }
-  const charge=chargerSnapshotGlobalBudgetSoft20260906();
+  const charge=chargeurStockage();
   const etat=charge&&charge.disponible&&charge.etat||null;
-  if(!etat||etat.ok!==true){
-    throw new Error('Aucune révision globale BudgetSoft publiée et valide à auditer.');
+  if(!etat||etat.ok!==true||etat.publie!==true||!etat.revisionBudgetSoft){
+    throw new Error('Aucune révision globale BudgetSoft persistée, publiée et valide à auditer.');
   }
   const modules=etat.modules||{};
   const cerbere=modules.cerbere||null;
@@ -76,12 +82,12 @@ function auditerProprietairesTresorerieIntermodules20260928(){
   const out={
     ok:ok,
     lectureSeule:true,
-    version:'2026-09-29.2',
+    version:'2026-09-29.3',
     revisionBudgetSoft:String(etat.revisionBudgetSoft||''),
     dureeMs:Date.now()-t0,
     doctrine:'Audit sans recalcul métier : une seule révision globale publiée est lue ; SS1 est recomposé depuis le solde bancaire canonique de cette révision et les opérations réelles jusqu à sa date de référence.',
     proprietaires:{
-      snapshot:'chargerSnapshotGlobalBudgetSoft20260906',
+      snapshot:'chargerSnapshotGlobalLegacyBudgetSoft20260906_ (lecture stockage uniquement)',
       ss1:'soldeHistoriqueCompteCourantCanoniqueBudgetSoft20260928_',
       trajectoire:'modules.projectionEtendue du snapshot',
       recettes:'modules.cerbere.periodes[0].v37.rt1',
