@@ -1,12 +1,24 @@
-const BUDGETSOFT_TREASURY_OWNER_INTERMODULE_AUDIT_20260928_VERSION='2026-09-28.1';
+const BUDGETSOFT_TREASURY_OWNER_INTERMODULE_AUDIT_20260928_VERSION='2026-09-29.2';
 
 function arrTreasuryOwnerAudit20260928_(n){return Math.round(Number(n||0)*100)/100;}
 function ecartTreasuryOwnerAudit20260928_(a,b){return arrTreasuryOwnerAudit20260928_(Number(a||0)-Number(b||0));}
 
 function auditerProprietairesTresorerieIntermodules20260928(){
-  const cerbere=typeof chargerCerbereCockpit20260902==='function'
-    ?chargerCerbereCockpit20260902()
-    :(typeof chargerCerbereV374==='function'?chargerCerbereV374():null);
+  const t0=Date.now();
+  if(typeof chargerSnapshotGlobalBudgetSoft20260906!=='function'){
+    throw new Error('Snapshot global BudgetSoft indisponible.');
+  }
+  const charge=chargerSnapshotGlobalBudgetSoft20260906();
+  const etat=charge&&charge.disponible&&charge.etat||null;
+  if(!etat||etat.ok!==true){
+    throw new Error('Aucune révision globale BudgetSoft publiée et valide à auditer.');
+  }
+  const modules=etat.modules||{};
+  const cerbere=modules.cerbere||null;
+  const dashboard=modules.dashboard||null;
+  const projection=modules.projectionEtendue||null;
+  const comptes=modules.comptes||null;
+
   const p0=cerbere&&Array.isArray(cerbere.periodes)?cerbere.periodes[0]:null;
   const v0=p0&&p0.v37||{};
   const periode=p0&&p0.periode||p0||{};
@@ -14,21 +26,34 @@ function auditerProprietairesTresorerieIntermodules20260928(){
   const frontiere=debut&&!isNaN(debut.getTime())?new Date(debut):null;
   if(frontiere){frontiere.setDate(frontiere.getDate()-1);frontiere.setHours(23,59,59,999);}
 
-  const ss1Canonique=frontiere&&typeof soldeHistoriqueCompteCourantCanoniqueBudgetSoft20260928_==='function'
-    ?Number(soldeHistoriqueCompteCourantCanoniqueBudgetSoft20260928_(frontiere))
+  const lignesComptes=Array.isArray(comptes&&comptes.comptes)?comptes.comptes:[];
+  const compteCourant=lignesComptes.find(function(x){
+    if(typeof estCompteCourantCanoniqueBudgetSoft20260906_==='function'){
+      return estCompteCourantCanoniqueBudgetSoft20260906_(x);
+    }
+    const t=String((x&&x.nom||'')+' '+(x&&x.type||'')).toLowerCase();
+    return /courant|compte\s*(joint|cheques?)/.test(t)&&!/livret|epargne|épargne/.test(t);
+  })||null;
+  const soldeReelCompte=compteCourant&&Number(compteCourant.soldeReel);
+  const dateReferenceCompte=compteCourant&&compteCourant.dateSolde||'';
+
+  let operations=[];
+  try{operations=typeof lireTable_==='function'?(lireTable_('Operations')||[]):[];}catch(e){operations=[];}
+  const ss1Canonique=frontiere&&compteCourant&&typeof soldeHistoriqueCompteCourantCanoniqueBudgetSoft20260928_==='function'
+    ?Number(soldeHistoriqueCompteCourantCanoniqueBudgetSoft20260928_(frontiere,{
+      soldeReel:soldeReelCompte,
+      comptes:[compteCourant],
+      operations:operations,
+      dateReference:dateReferenceCompte||new Date()
+    }))
     :NaN;
   const ss1=Number(v0&&v0.ss1);
 
-  const dashboard=typeof chargerDashboardSyntheseBudgetSoft20260907==='function'
-    ?chargerDashboardSyntheseBudgetSoft20260907():null;
   const d0=dashboard&&dashboard.courtTerme||{};
   const dashboardSs1=Number(d0.soldeInitialReference);
   const dashboardRt1=Number(d0.revenusAttendus);
   const rt1=Number(v0&&v0.rt1);
 
-  const cible=periode&&periode.fin?periode.fin:null;
-  const projection=cible&&typeof construireTrajectoireTresorerieCanoniqueBudgetSoft20260907==='function'
-    ?construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(cible):null;
   const lignes=Array.isArray(projection&&projection.lignes)?projection.lignes:[];
   const revenusRecurrents=lignes.filter(function(x){
     return String(x&&x.source||'')==='revenu_recurrent'&&Number(x&&x.montantSigne||0)>0;
@@ -37,6 +62,7 @@ function auditerProprietairesTresorerieIntermodules20260928(){
   const ajustementSalaire=Number(salaire&&salaire.ajustementSS1||0);
 
   const controles={
+    snapshotUniqueValide:!!(etat&&etat.ok===true&&etat.revisionBudgetSoft),
     ss1CanoniqueDisponible:Number.isFinite(ss1Canonique),
     ss1CerbereEgalCanon:Number.isFinite(ss1Canonique)&&Number.isFinite(ss1)&&Math.abs(ss1-ss1Canonique)<.011,
     dashboardLitSs1Cerbere:Number.isFinite(dashboardSs1)&&Number.isFinite(ss1)&&Math.abs(dashboardSs1-ss1)<.011,
@@ -50,15 +76,24 @@ function auditerProprietairesTresorerieIntermodules20260928(){
   const out={
     ok:ok,
     lectureSeule:true,
-    version:BUDGETSOFT_TREASURY_OWNER_INTERMODULE_AUDIT_20260928_VERSION,
-    doctrine:'Une seule vérité : SS1 = clôture bancaire réelle du 27 ; Dashboard lit Cerbère ; soldes futurs lisent la trajectoire canonique ; aucun filtre local ne supprime les revenus récurrents du cycle.',
+    version:'2026-09-29.2',
+    revisionBudgetSoft:String(etat.revisionBudgetSoft||''),
+    dureeMs:Date.now()-t0,
+    doctrine:'Audit sans recalcul métier : une seule révision globale publiée est lue ; SS1 est recomposé depuis le solde bancaire canonique de cette révision et les opérations réelles jusqu à sa date de référence.',
     proprietaires:{
+      snapshot:'chargerSnapshotGlobalBudgetSoft20260906',
       ss1:'soldeHistoriqueCompteCourantCanoniqueBudgetSoft20260928_',
-      trajectoire:'construireTrajectoireTresorerieCanoniqueBudgetSoft20260907',
-      recettes:'cerbere.periodes[0].v37.rt1',
-      dashboard:'consommateur uniquement'
+      trajectoire:'modules.projectionEtendue du snapshot',
+      recettes:'modules.cerbere.periodes[0].v37.rt1',
+      dashboard:'modules.dashboard, consommateur uniquement'
     },
     frontiere:frontiere?Utilities.formatDate(frontiere,Session.getScriptTimeZone(),'yyyy-MM-dd'):'',
+    referenceBancaire:{
+      compte:compteCourant?String(compteCourant.nom||''):'',
+      soldeReel:arrTreasuryOwnerAudit20260928_(soldeReelCompte),
+      dateReference:String(dateReferenceCompte||''),
+      source:String(compteCourant&&compteCourant.sourceSolde||'')
+    },
     valeurs:{
       ss1Canonique:arrTreasuryOwnerAudit20260928_(ss1Canonique),
       ss1Cerbere:arrTreasuryOwnerAudit20260928_(ss1),
@@ -77,7 +112,7 @@ function auditerProprietairesTresorerieIntermodules20260928(){
       projection:String(projection&&projection.version||'')
     }
   };
-  console.log('[AUDIT PROPRIETAIRES TRESORERIE INTERMODULES 20260928] '+JSON.stringify(out));
+  console.log('[AUDIT PROPRIETAIRES TRESORERIE INTERMODULES 20260929 SNAPSHOT UNIQUE] '+JSON.stringify(out));
   return out;
 }
 
