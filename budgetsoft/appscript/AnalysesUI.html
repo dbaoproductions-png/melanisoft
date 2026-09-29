@@ -172,7 +172,7 @@ function legendeCourbeAnalyse(cfg,key){
 function blocCourbeAnalyse(cfg,key){
   if(!cfg)return '<section class="analysis-block"><div class="empty-state">Série indisponible.</div></section>';
   const connus=(cfg.series||[]).flatMap(s=>(s.valeurs||[]).filter(v=>v!=null)).length;
-  const noteStructure=cfg.historiquePartiel?'<p class="curve-history-note">Historique structurel : les périodes antérieures au premier point fiable restent volontairement vides.</p>':'';
+  const noteStructure=cfg.historiquePartiel?'<p class="curve-history-note">Historique structurel : une période vide signifie qu’aucune valeur suffisamment prouvée n’est disponible ; elle n’est jamais interprétée comme 0 €.</p>':'';
   return '<section class="analysis-block curve-analysis-block"><div class="curve-heading"><div><h3>'+echapper(cfg.titre||'Courbe')+'</h3><small>'+echapper(cfg.source||'')+'</small></div><span>'+((cfg.labels||[]).length)+' période(s)</span></div>'+
     (connus?svgCourbeMultiAnalyse(cfg,key):'<div class="empty-state">Aucun point disponible.</div>')+
     legendeCourbeAnalyse(cfg,key)+noteStructure+
