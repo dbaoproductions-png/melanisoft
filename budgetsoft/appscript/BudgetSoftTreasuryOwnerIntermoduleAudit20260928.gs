@@ -200,3 +200,65 @@ function auditerReconciliationCompteJointDepuisReference20260929(){
   console.log('[AUDIT RECONCILIATION COMPTE JOINT DEDUP 20260929] '+JSON.stringify(out));
   return out;
 }
+
+
+function auditerEcart50CompteJoint20260929(){
+  const opsSource=typeof lireTable_==='function'?(lireTable_('Operations')||[]):[];
+  const ops=typeof dedoublonnerOperationsCartesBudgetSoft_==='function'
+    ?dedoublonnerOperationsCartesBudgetSoft_(opsSource)
+    :opsSource;
+  const params=typeof lireTable_==='function'?(lireTable_('Parametres')||[]):[];
+  const comptes=typeof lireTable_==='function'?(lireTable_('Comptes')||[]):[];
+  const compte=comptes.find(function(x){return /compte joint/i.test(String(x&&x.nom||''));})||null;
+  const id=String(compte&&compte.id||'');
+  const dateRefBrute=(params.find(function(p){return String(p&&p.cle||'')==='date_solde_releve_'+id;})||{}).valeur;
+  const jourRef=typeof jourCanonBudgetSoft20260906_==='function'?jourCanonBudgetSoft20260906_(dateRefBrute):'';
+  const jourAuj=typeof jourReferenceCanonBudgetSoft20260906_==='function'
+    ?jourReferenceCanonBudgetSoft20260906_(new Date())
+    :Utilities.formatDate(new Date(),Session.getScriptTimeZone(),'yyyy-MM-dd');
+
+  const lignes=[];
+  ops.forEach(function(brut){
+    if(String(brut&&brut.compte||'')!==id)return;
+    if(/\[RECURRENCE:[^\]]+\]/.test(String(brut&&brut.commentaire||'')))return;
+    let o=brut;
+    if(!(o&&o.date_comptable)&&typeof enrichirDepuisCommentaireBanque_==='function'){
+      try{o=enrichirDepuisCommentaireBanque_(brut)||brut;}catch(e){o=brut;}
+    }
+    const jour=typeof jourComptableCanonBudgetSoft20260906_==='function'?jourComptableCanonBudgetSoft20260906_(o):'';
+    if(!jour||!jourRef||jour<=jourRef||jour>jourAuj)return;
+    const type=String(o&&o.type||'').toLowerCase();
+    if(type!=='revenu'&&type!=='depense')return;
+    const brutMontant=Math.abs(Number(o&&o.montant||0));
+    if(!Number.isFinite(brutMontant)||brutMontant<=0)return;
+    const signe=type==='depense'?-brutMontant:brutMontant;
+    const txt=String((o&&o.libelle_bancaire||o&&o.libelle||'')+' '+(o&&o.categorie||'')).toLowerCase();
+    if(Math.abs(brutMontant-50)<.011||/virement|virt |vir /.test(txt)){
+      lignes.push({
+        id:String(o&&o.id||''),
+        jour:jour,
+        type:type,
+        categorie:String(o&&o.categorie||''),
+        montant:Math.round(signe*100)/100,
+        source_bancaire:String(o&&o.source_bancaire||''),
+        statut_bancaire:String(o&&o.statut_bancaire||''),
+        libelle:String(o&&o.libelle_bancaire||o&&o.libelle||'')
+      });
+    }
+  });
+  const plus50=lignes.filter(function(x){return Math.abs(Number(x.montant)-50)<.011;});
+  const moins50=lignes.filter(function(x){return Math.abs(Number(x.montant)+50)<.011;});
+  const virementsSortants=lignes.filter(function(x){return Number(x.montant)<0&&/virement|virt |vir /i.test(String(x.libelle||''));});
+  const virementsEntrants=lignes.filter(function(x){return Number(x.montant)>0&&/virement|virt |vir /i.test(String(x.libelle||''));});
+  const out={
+    ok:true,lectureSeule:true,version:'2026-09-29.1',
+    doctrine:'Recherche ciblée de l écart résiduel de 50 euros après réconciliation exacte du compte joint.',
+    fenetre:{apres:jourRef,jusqua:jourAuj},
+    plus50:plus50,
+    moins50:moins50,
+    virementsSortants:virementsSortants,
+    virementsEntrants:virementsEntrants
+  };
+  console.log('[AUDIT ECART 50 COMPTE JOINT 20260929] '+JSON.stringify(out));
+  return out;
+}
