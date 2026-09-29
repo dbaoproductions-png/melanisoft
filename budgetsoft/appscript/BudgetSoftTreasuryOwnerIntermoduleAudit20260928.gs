@@ -159,7 +159,8 @@ function auditerReconciliationCompteJointDepuisReference20260929(){
         try{o=enrichirDepuisCommentaireBanque_(brut)||brut;}catch(e){o=brut;}
       }
       const jour=typeof jourComptableCanonBudgetSoft20260906_==='function'?jourComptableCanonBudgetSoft20260906_(o):'';
-      if(!jour||!jourRef||jour<=jourRef)return;
+      const jourAuj=typeof jourReferenceCanonBudgetSoft20260906_==='function'?jourReferenceCanonBudgetSoft20260906_(new Date()):Utilities.formatDate(new Date(),Session.getScriptTimeZone(),'yyyy-MM-dd');
+      if(!jour||!jourRef||jour<=jourRef||jour>jourAuj)return;
       const type=String(o&&o.type||'').toLowerCase();
       if(type!=='revenu'&&type!=='depense')return;
       const brutMontant=Math.abs(Number(o&&o.montant||0));
@@ -185,7 +186,7 @@ function auditerReconciliationCompteJointDepuisReference20260929(){
   const compteSynth=(synth&&Array.isArray(synth.comptes)?synth.comptes:[]).find(function(x){return String(x&&x.id||'')===id;})||null;
   const soldeReconstruit=Math.round((soldeRef+dedup.cumul)*100)/100;
   const out={
-    ok:true,lectureSeule:true,version:'2026-09-29.2',
+    ok:true,lectureSeule:true,version:'2026-09-29.3',
     doctrine:'Le propriétaire des comptes travaille sur les opérations dédupliquées. Tout virement sortant reste une sortie bancaire ; sa catégorie analytique ne neutralise pas son montant.',
     reference:{solde:soldeRef,date:jourRef},
     brut:{nombre:brut.lignes.length,totalMouvements:brut.cumul},
