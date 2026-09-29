@@ -180,6 +180,15 @@ function analyserCollerHelloBankRobuste20260929(texte,compte){
   };
 }
 
+/**
+ * Point d'entrée public canonique du copier-coller Hello bank!.
+ * Contrat : parsing pur du texte, aucune lecture/écriture du classeur.
+ * Les anciens noms datés restent des adaptateurs de compatibilité.
+ */
+function analyserCollerHelloBankCanonique(texte,compte){
+  return analyserCollerHelloBankRobuste20260929(texte,compte);
+}
+
 function hb3Identity_(o){
   const amount=centimesBanque_(o.montant),achat=isoJourBanque_(o.date_achat||o.date),carte=String(o.carte_fin||''),march=normaliserTexteBanqueFiable_(o.marchand_normalise||hb3Contrepartie_(o.libelle_bancaire||o.libelle)).replace(/\s/g,'').slice(0,60);
   if(carte)return ['CB',String(o.compte||''),achat,amount,carte,march].join('|');
