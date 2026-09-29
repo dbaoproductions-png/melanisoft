@@ -12,9 +12,7 @@ function reconstruireSnapshotGlobalAvecHistoriqueAnalyses20260922_(origine){
   const r=reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(String(origine||'standard_synthese'));
   if(r&&r.ok===true&&r.publie===true&&typeof enregistrerHistoriqueStructurelAnalysesBudgetSoft20260922_==='function'){
     try{
-      const s=typeof chargerSnapshotGlobalBudgetSoft20260906==='function'?chargerSnapshotGlobalBudgetSoft20260906():null;
-      const etat=s&&s.disponible&&s.etat?s.etat:null;
-      r.historisationAnalyses=enregistrerHistoriqueStructurelAnalysesBudgetSoft20260922_(etat);
+      r.historisationAnalyses=enregistrerHistoriqueStructurelAnalysesBudgetSoft20260922_(r);
     }catch(e){r.historisationAnalyses={ok:false,erreur:String(e&&e.message||e)};}
   }
   return r;
