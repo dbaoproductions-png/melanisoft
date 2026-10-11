@@ -52,7 +52,7 @@ function construireSyntheseComptes20260828_(ctx){
   });
 
   operations.forEach(function(brut){
-    if(/\[RECURRENCE:[^\]]+\]/.test(String(brut&&brut.commentaire||'')))return;
+    if(typeof operationReelleCanoniqueBudgetSoft20260906_==='function'&&!operationReelleCanoniqueBudgetSoft20260906_(brut))return;
     let o=brut;if(!(o&&o.date_comptable)&&typeof enrichirDepuisCommentaireBanque_==='function'){try{o=enrichirDepuisCommentaireBanque_(brut)||brut;}catch(e){o=brut;}}
     const jour=typeof jourComptableCanonBudgetSoft20260906_==='function'?jourComptableCanonBudgetSoft20260906_(o):null;
     if(!jour||jour>jourAuj)return;
