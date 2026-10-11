@@ -8,7 +8,17 @@ function finJourTresorerieCanoniqueBudgetSoft20260906_(v){
 }
 function estCompteCourantCanoniqueBudgetSoft20260906_(c){const s=String((c&&c.nom||'')+' '+(c&&c.type||'')+' '+(c&&c.nature||'')).toLowerCase();return /courant|compte\s*(joint|ch[eè]ques?)/.test(s)&&!/livret|epargne|épargne|placement/.test(s);}
 function estEpargneCanoniqueBudgetSoft20260906_(c){return /livret|epargne|épargne|placement/i.test(String((c&&c.nom||'')+' '+(c&&c.type||'')+' '+(c&&c.nature||'')));}
-function operationReelleCanoniqueBudgetSoft20260906_(o){return !/\[RECURRENCE:[^\]]+\]/.test(String(o&&o.commentaire||''));}
+/**
+ * Une recurrence est une prevision UNIQUEMENT tant qu'aucune provenance
+ * bancaire reelle ne l'atteste. Un rapprochement peut conserver un marqueur
+ * [RECURRENCE:...] sur une operation importee : celle-ci reste du Reel.
+ * On ne se base pas sur la seule presence d'une categorie ou charge_fixe_id.
+ */
+function operationReelleCanoniqueBudgetSoft20260906_(o){
+  const source=String(o&&o.source_bancaire||'').trim().toLowerCase();
+  if(source==='flux'||source==='pdf')return true;
+  return !/\[RECURRENCE:[^\]]+\]/.test(String(o&&o.commentaire||''));
+}
 function montantSigneCanoniqueBudgetSoft20260906_(o){const n=Number(o&&o.montant||0);if(Number.isFinite(n)&&Math.abs(n)>.000001)return n;const a=Math.abs(Number(o&&o.montant||0)),t=String(o&&o.type||'').toLowerCase();if(t==='depense'||t==='tresorerie_sortie')return-a;if(t==='revenu'||t==='tresorerie_entree')return a;return 0;}
 
 /**
