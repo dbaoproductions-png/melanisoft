@@ -55,6 +55,32 @@ function composerDashboardSyntheseSourceBudgetSoft20260907_(ctx){
   const joursRestants=Math.max(0,ecartJoursDashboardSynthese20260907_(reference,cc.fin)),duree=Math.max(1,ecartJoursDashboardSynthese20260907_(cc.debut,cc.fin));
   const courant={libelle:libelleCycleDashboardSynthese20260907_(cc.fin),debut:isoDashboardSynthese20260907_(cc.debut),fin:isoDashboardSynthese20260907_(cc.fin),dateReference:isoDashboardSynthese20260907_(reference),joursRestants,duree,progression:joursRestants+'/'+duree,soldeBancaire:Number(tres.soldeReel||0),soldeMiCycle:soldeProjection(milieuCourant),soldeFinCycle:soldeProjection(cc.fin),revenusConstates:stCourant.revenus,revenusAttendus:arrDashboardSynthese20260907_(stCourant.revenus+futurCourant.revenus),depensesConstatees:stCourant.depenses,depensesAttendues:arrDashboardSynthese20260907_(stCourant.depenses+futurCourant.depenses),cbDifferees:cbCourant,nombreCb:cbEngagees.length,prelevements:sommeAbs(prelevements),nombrePrelevements:prelevements.length,chargesFixes:sommeAbs(chargesRestantes),nombreCharges:chargesRestantes.length,pilotableDisponible:pilotableCourant,pilotableParJour:pilotableCourant==null?null:arrDashboardSynthese20260907_(joursRestants?pilotableCourant/joursRestants:pilotableCourant),resultat:stCourant.resultat};
 
+  // Detail de traçabilite : construit avec EXACTEMENT les operations deja retenues
+  // pour les constats et les lignes de la meme projection, sans nouvelle lecture.
+  // Les totaux restent la propriete de leurs moteurs respectifs.
+  function ligneReelleDetail(o){
+    const montant=signeDashboardSynthese20260907_(o);
+    return {id:String(o.id||''),date:isoDashboardSynthese20260907_(dateOp(o)),
+      libelle:String(o.libelle||o.libelle_bancaire||'Operation'),categorie:String(o.categorie||''),
+      montant:arrDashboardSynthese20260907_(montant),statut:'constate',source:String(o.source_bancaire||'reel')};
+  }
+  function ligneProjeteeDetail(l){
+    return {id:String(l.id||l.sourceId||''),date:isoDashboardSynthese20260907_(dateDashboardSynthese20260907_(l.date)),
+      libelle:String(l.libelle||l.nom||l.source||'Operation attendue'),categorie:String(l.categorie||''),
+      montant:arrDashboardSynthese20260907_(l.montantSigne),statut:'attendu',source:String(l.source||'projection'),
+      certitude:String(l.certitude||'')};
+  }
+  const reellesCycle=opValides.filter(o=>{const d=dateOp(o);return d>=cc.debut&&d<=cc.fin&&d<=reference;});
+  const futuresCycle=futurCourant.lignes.map(ligneProjeteeDetail);
+  courant.detailsCartes={
+    recettes:{constatees:reellesCycle.filter(o=>signeDashboardSynthese20260907_(o)>0).map(ligneReelleDetail),
+      attendues:futuresCycle.filter(o=>o.montant>0)},
+    depenses:{constatees:reellesCycle.filter(o=>signeDashboardSynthese20260907_(o)<0).map(ligneReelleDetail),
+      attendues:futuresCycle.filter(o=>o.montant<0)},
+    prelevements:futuresCycle.filter(o=>o.montant<0&&o.source==='charge_fixe'),
+    chargesFixes:futuresCycle.filter(o=>o.montant<0&&o.source==='charge_fixe')
+  };
+
   // Cycle suivant : seules les valeurs possédées par Cerbère/Cerbère Express sont publiées.
   // L'ancienne projection étendue ne doit pas produire de faux soldes futurs en l'absence
   // d'un propriétaire de trésorerie couvrant correctement les revenus réguliers du cycle.
