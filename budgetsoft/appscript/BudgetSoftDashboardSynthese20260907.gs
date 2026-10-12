@@ -77,7 +77,11 @@ function composerDashboardSyntheseSourceBudgetSoft20260907_(ctx){
       attendues:futuresCycle.filter(o=>o.montant>0)},
     depenses:{constatees:reellesCycle.filter(o=>signeDashboardSynthese20260907_(o)<0).map(ligneReelleDetail),
       attendues:futuresCycle.filter(o=>o.montant<0)},
-    prelevements:futuresCycle.filter(o=>o.montant<0&&o.source==='charge_fixe'),
+    // Les prelevements sont les debits bancaires dates dans le futur, pas
+    // les charges fixes projetees : les deux familles ne se substituent pas.
+    prelevements:prelevements.map(function(o){
+      const l=ligneReelleDetail(o);l.statut='bancaire_futur';l.source='operation_bancaire_future';return l;
+    }),
     chargesFixes:futuresCycle.filter(o=>o.montant<0&&o.source==='charge_fixe')
   };
 
