@@ -27,7 +27,16 @@ function clePluxee_(iso,lib,m,type){
  */
 function analyserLotPluxee_(operations,source){
   const exist=lirePluxee_();
-  const cles=new Set(exist.map(o=>clePluxee_(o.date,o.libelle,o.montant,o.type)));
+  // Les dates relues par serialiserValeur_ peuvent etre UTC, alors que la
+  // cle persistante est construite dans le fuseau de l'application.
+  // Comparer d'abord la cle bancaire persistante, sans reinterpreter l'heure.
+  const cles=new Set();
+  exist.forEach(function(o){
+    const persistante=String(o&&o.cle_rapprochement||'').trim();
+    if(persistante)cles.add(persistante);
+    // Repli pour les anciennes lignes dont la cle etait absente.
+    if(!persistante)cles.add(clePluxee_(o.date,o.libelle,o.montant,o.type));
+  });
   const details=[];
   let nouvelles=0,existantes=0,refusees=0,ambigues=0;
   const contexte=typeof contexteCategorisationPluxee_==='function'?contexteCategorisationPluxee_():null;
