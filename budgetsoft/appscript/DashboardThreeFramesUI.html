@@ -5,9 +5,66 @@
   function dfr(v){return v?new Date(String(v).length===10?v+'T12:00:00':v).toLocaleDateString('fr-FR'):'—';}
   function structure(){const d=document.getElementById('dashboard');if(d)d.innerHTML='<div id="dashboard-three-frames" style="display:grid;gap:16px"><article class="card panel" id="dash-current">Chargement…</article><article class="card panel" id="dash-forecast">Chargement…</article><article class="card panel" id="dash-previous">Chargement…</article></div>';}
   function carte(t,v,s,fort){return `<div style="padding:14px 16px;border:1px solid var(--line);border-radius:14px;min-width:0"><span style="display:block;color:var(--muted);font-size:12px">${ech(t)}</span><strong style="display:block;font-size:${fort?'30':'23'}px;margin:7px 0 4px;overflow-wrap:anywhere">${v}</strong><small style="color:var(--muted)">${ech(s||'')}</small></div>`;}
+  let dernierDashboard=null;
+  function carteDetail(t,v,s,fort,cle){
+    return '<button type="button" data-bs-detail="'+ech(cle)+'" aria-haspopup="dialog" title="Afficher le détail : '+ech(t)+'" style="display:block;width:100%;text-align:left;background:transparent;color:inherit;font:inherit;cursor:pointer;padding:0;border:0;border-radius:14px">'+carte(t,v,s,fort)+'</button>';
+  }
+  function sommeDetail(lignes){return Math.round((lignes||[]).reduce((s,x)=>s+Number(x.montant||0),0)*100)/100;}
+  function tableauDetail(lignes){
+    if(!lignes||!lignes.length)return '<p style="color:var(--muted)">Aucune ligne dans cette rubrique.</p>';
+    const lignesTriees=lignes.slice().sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))||String(a.libelle||'').localeCompare(String(b.libelle||'')));
+    return '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr><th scope="col" style="text-align:left;padding:10px 6px">Date</th><th scope="col" style="text-align:left;padding:10px 6px">Libellé</th><th scope="col" style="text-align:left;padding:10px 6px">Catégorie / source</th><th scope="col" style="text-align:right;padding:10px 6px">Montant</th></tr></thead><tbody>'+
+      lignesTriees.map(x=>'<tr style="border-top:1px solid var(--line)"><td style="padding:9px 6px;white-space:nowrap">'+ech(dfr(x.date))+'</td><td style="padding:9px 6px">'+ech(x.libelle||'—')+'</td><td style="padding:9px 6px;color:var(--muted)">'+ech(x.categorie||x.source||'—')+'</td><td style="padding:9px 6px;text-align:right;white-space:nowrap">'+fmt(Math.abs(Number(x.montant||0)))+'</td></tr>').join('')+
+      '</tbody></table></div>';
+  }
+  function groupeDetail(t,lignes){
+    return '<h3 style="font-size:16px;margin:20px 0 8px">'+ech(t)+' · '+(lignes||[]).length+' ligne(s) · '+fmt(Math.abs(sommeDetail(lignes)))+'</h3>'+tableauDetail(lignes);
+  }
+  function fermerDetail(){
+    const x=document.getElementById('bs-dashboard-detail-dialog');if(x)x.remove();
+    if(window.bsDashboardDetailDeclencheur&&window.bsDashboardDetailDeclencheur.isConnected)window.bsDashboardDetailDeclencheur.focus();
+  }
+  function ouvrirDetail(cle,declencheur){
+    const c=dernierDashboard&&dernierDashboard.courtTerme||{},d=c.detailsCartes||{};
+    if(!d[cle])return;
+    window.bsDashboardDetailDeclencheur=declencheur;fermerDetail();
+    let titre='',html='',attendu=0,ventile=0;
+    if(cle==='recettes'||cle==='depenses'){
+      const v=d[cle]||{},reelles=v.constatees||[],futures=v.attendues||[];
+      const brutReel=Math.abs(sommeDetail(reelles)),brutFutur=Math.abs(sommeDetail(futures));
+      titre=cle==='recettes'?'Recettes reçues et attendues':'Dépenses constatées et attendues';
+      attendu=Number(c[cle==='recettes'?'revenusAttendus':'depensesAttendues']||0);
+      ventile=Math.round((brutReel+brutFutur)*100)/100;
+      html='<p style="margin:8px 0">Constaté : <strong>'+fmt(cle==='recettes'?c.revenusConstates:c.depensesConstatees)+'</strong> · Attendu sur le cycle : <strong>'+fmt(attendu)+'</strong></p>'+
+        groupeDetail(cle==='recettes'?'Déjà reçues':'Déjà débitées',reelles)+
+        groupeDetail(cle==='recettes'?'Encore attendues':'Encore attendues',futures);
+    }else{
+      const lignes=d[cle]||[];
+      titre=cle==='prelevements'?'Prélèvements bancaires à venir':'Charges fixes restantes';
+      attendu=Number(c[cle==='prelevements'?'prelevements':'chargesFixes']||0);
+      ventile=Math.abs(sommeDetail(lignes));
+      html=groupeDetail('Échéances prévues',lignes);
+    }
+    const delta=Math.round((attendu-ventile)*100)/100;
+    html='<p style="margin:0;color:var(--muted)">Du '+ech(dfr(c.debut))+' au '+ech(dfr(c.fin))+' · situation au '+ech(dfr(c.dateReference))+'</p>'+html+
+      '<p style="margin:18px 0 0;padding:12px;border-top:1px solid var(--line)"><strong>Total affiché sur la carte : '+fmt(attendu)+'</strong><span style="display:block;margin-top:6px">Somme des lignes présentées : '+fmt(ventile)+'</span>'+
+      (Math.abs(delta)>.01?'<span style="display:block;margin-top:6px;color:var(--muted)">Écart de '+fmt(delta)+' : le total de la carte provient de son moteur canonique et ne correspond pas entièrement aux lignes détaillées disponibles.</span>':'<span style="display:block;margin-top:6px">Rapprochement : 0,00 € d’écart.</span>')+'</p>';
+    const couche=document.createElement('div');couche.id='bs-dashboard-detail-dialog';
+    couche.style.cssText='position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.58);display:flex;align-items:center;justify-content:center;padding:16px';
+    couche.innerHTML='<section role="dialog" aria-modal="true" aria-labelledby="bs-detail-heading" tabindex="-1" style="width:min(900px,100%);max-height:90vh;overflow:auto;background:var(--surface,#fff);color:var(--text,#222);border-radius:16px;padding:24px;box-shadow:0 18px 60px rgba(0,0,0,.3)">'+
+      '<div style="display:flex;gap:12px;align-items:start;justify-content:space-between"><h2 id="bs-detail-heading" style="margin:0;font-size:22px">'+ech(titre)+'</h2><button type="button" data-bs-close-detail aria-label="Fermer" style="padding:6px 12px;cursor:pointer">Fermer ×</button></div>'+html+'</section>';
+    document.body.appendChild(couche);
+    couche.querySelector('[data-bs-close-detail]').addEventListener('click',fermerDetail);
+    couche.addEventListener('click',e=>{if(e.target===couche)fermerDetail();});
+    const focusables=()=>Array.from(couche.querySelectorAll('button,[href],[tabindex]:not([tabindex="-1"])')).filter(x=>!x.disabled);
+    couche.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();fermerDetail();}if(e.key==='Tab'){const f=focusables();if(!f.length)return;const first=f[0],last=f[f.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}});
+    couche.querySelector('[data-bs-close-detail]').focus();
+  }
+  document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-bs-detail]');if(b)ouvrirDetail(b.getAttribute('data-bs-detail'),b);});
   function grille(x,n){return `<div style="display:grid;grid-template-columns:repeat(${n},minmax(0,1fr));gap:12px;margin-top:14px">${x}</div>`;}
   function ratio(a,b){return `${fmt(a)} / ${fmt(b)}`;}
   function render(d){
+    dernierDashboard=d;
     const c=d&&d.courtTerme||{},s=d&&d.cycleSuivant||{},p=d&&d.cyclePrecedent||{},a=document.getElementById('dash-current'),b=document.getElementById('dash-forecast'),z=document.getElementById('dash-previous');
     if(a)a.innerHTML=`<div class="panel-heading"><div><span class="panel-kicker">Priorité</span><h2>Chiffres clés de ${ech((c.libelle||'').replace(/\s+\d{4}$/,''))}</h2></div><span class="badge" style="font-size:20px;font-weight:800;padding:8px 13px">${ech(c.joursRestants==null?'—':c.joursRestants+' jours restants')}</span></div><div class="helper-text">${ech(c.libelle||'Cycle')} · ${dfr(c.debut)} → ${dfr(c.fin)} · données au ${dfr(c.dateReference)}</div>`+
     `<div class="helper-text" style="margin-top:12px;font-weight:700">DÉCISION DE PILOTAGE</div>${grille(
@@ -22,12 +79,12 @@
       carte('Solde bancaire réel',fmt(c.soldeBancaire),'Valeur comptable canonique')+
       carte('Solde prévisionnel à mi-cycle',fmt(c.soldeMiCycle),'Projection au milieu du cycle')+
       carte('Solde prévisionnel au dernier jour',fmt(c.soldeFinCycle),'Projection au '+dfr(c.fin))+
-      carte('Recettes au jour J / attendues',ratio(c.revenusConstates,c.revenusAttendus),'Constaté / projection du cycle')+
-      carte('Dépenses au jour J / attendues',ratio(c.depensesConstatees,c.depensesAttendues),'Constaté / projection du cycle'),5)+
+      carteDetail('Recettes au jour J / attendues',ratio(c.revenusConstates,c.revenusAttendus),'Constaté / projection du cycle',false,'recettes')+
+      carteDetail('Dépenses au jour J / attendues',ratio(c.depensesConstatees,c.depensesAttendues),'Constaté / projection du cycle',false,'depenses'),5)+
     grille(
       carte('CB différées engagées',fmt(c.cbDifferees),c.nombreCb==null?'Source Cerbère':(c.nombreCb||0)+' opération(s)')+
-      carte('Prélèvements bancaires à venir',fmt(c.prelevements),(c.nombrePrelevements||0)+' opération(s)')+
-      carte('Charges fixes restantes',fmt(c.chargesFixes),(c.nombreCharges||0)+' charge(s)'),3)+
+      carteDetail('Prélèvements bancaires à venir',fmt(c.prelevements),(c.nombrePrelevements||0)+' opération(s)',false,'prelevements')+
+      carteDetail('Charges fixes restantes',fmt(c.chargesFixes),(c.nombreCharges||0)+' charge(s)',false,'chargesFixes'),3)+
     grille(carte('Résultat constaté du cycle',fmt(c.resultat),'Recettes - dépenses bancaires réelles'),1);
     const noteProjection=s.sourceProjection==='tresorerie_unifiee_snapshot'?'Projection canonique intermodule':'Projection de trésorerie';
     if(b)b.innerHTML=`<div class="panel-heading"><div><span class="panel-kicker">Anticipation</span><h2>Cycle suivant · ${ech(s.libelle||'')}</h2></div><span class="badge">Prévision</span></div><div class="helper-text">${dfr(s.debut)} → ${dfr(s.fin)} · la décision EP1 est déjà répercutée dans la trajectoire bancaire et P2</div>`+
