@@ -81,6 +81,30 @@ function calculerAmortissementRattrapage20260916_(credit,operation){
   return calculerAmortissementCredit20260915_(credit,operation);
 }
 
+/**
+ * Des charges historiques Cofidis peuvent pointer vers le pret amortissable
+ * alors que le flux de 33,60 EUR appartient a Accessio (et inversement).
+ * On utilise d'abord le montant de l'operation bancaire, uniquement lorsque
+ * la famille Cofidis est identifiee et que le montant designe un seul pret.
+ * Aucun fallback montant seul entre creanciers differents.
+ */
+function trouverCreditRattrapageCofidis20261012_(rapprochement,credits){
+  const charge=rapprochement&&rapprochement.charge||{};
+  const operation=rapprochement&&rapprochement.operation||{};
+  const txt=texteCreditAmort20260915_([charge.libelle,charge.libelle_bancaire,charge.commentaire,
+    operation.libelle,operation.libelle_bancaire].join(' '));
+  if(!txt.includes('COFIDIS')&&!txt.includes('ACCESSIO'))return trouverCreditPourChargeFixe20260915_(charge,credits);
+  const montant=Math.abs(Number(operation.montant||0));
+  const famille=(credits||[]).filter(c=>/COFIDIS|ACCESSIO/.test(texteCreditAmort20260915_(c.nom)));
+  const compatibles=famille.filter(c=>Math.abs(Math.abs(Number(c.mensualite||0))-montant)<=.02);
+  if(compatibles.length===1)return{ok:true,credit:compatibles[0],score:110,source:'operation_cofidis_montant_unique'};
+  // Ambiguite : ne jamais forcer une attribution sur une simple ressemblance.
+  if(compatibles.length>1)return{ok:false,raison:'cofidis_montant_ambigu',candidats:compatibles.map(c=>({id:c.id,nom:c.nom}))};
+  // Si le montant ne correspond a AUCUN pret Cofidis, interdire l'attribution
+  // issue de la seule marque du libelle (risque de capital indu).
+  return{ok:false,raison:'cofidis_montant_sans_credit_compatible',candidats:[]};
+}
+
 function simulerRattrapageAmortissementsCredits20260915(){
   verifierInitialisation_();
   const credits=typeof lireCreditsEtendusV2_==='function'?lireCreditsEtendusV2_():[],rappros=rapprochementsCreditsValidesRattrapage20260915_(),lignes=[];
@@ -95,7 +119,7 @@ function simulerRattrapageAmortissementsCredits20260915(){
     }
     const virtuel=Object.assign({},credit),operations=[],exclues=[];
     if(confiance==='haute'&&capitalReferenceEffectif!=null)virtuel.capital_restant=capitalReferenceEffectif;
-    const candidates=rappros.filter(r=>{const liaison=trouverCreditPourChargeFixe20260915_(r.charge,credits);return liaison.ok&&String(liaison.credit.id)===String(credit.id)&&refDate&&r.date>refDate;});
+    const candidates=rappros.filter(r=>{const liaison=trouverCreditRattrapageCofidis20261012_(r,credits);return liaison.ok&&String(liaison.credit.id)===String(credit.id)&&refDate&&r.date>refDate;});
     candidates.forEach(r=>{
       if(operationSurDateSuspendueCreditRattrapage20260915_(credit,r.date)){exclues.push({operation_id:String(r.operation.id||''),date:r.date.toISOString(),montant:Math.abs(Number(r.operation.montant||0)),raison:'date_suspendue_ou_reportee'});return;}
       if(!montantCompatibleEcheanceCreditRattrapage20260915_(credit,r.operation)){exclues.push({operation_id:String(r.operation.id||''),date:r.date.toISOString(),montant:Math.abs(Number(r.operation.montant||0)),raison:'montant_incompatible_avec_mensualite'});return;}
