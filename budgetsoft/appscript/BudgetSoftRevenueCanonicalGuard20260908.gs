@@ -52,6 +52,14 @@ function auditerGardeRecettesCanoniquesBudgetSoft20260908(projection){
   const ouvertes=evs.filter(function(ev){
     if(String(ev&&ev.type||'').trim().toLowerCase()!=='recette')return false;
     if(typeof evenementClosProuveRevenuePublicationFix20260912_==='function'&&evenementClosProuveRevenuePublicationFix20260912_(ev))return false;
+    // Les rapprochements par occurrence font foi, même si le statut global
+    // de l'événement Plan n'a pas été actualisé. Conserver les occurrences
+    // encore dues dans la garde : ne jamais clore un événement partiel.
+    if(typeof occurrencesEvenementEtatBudgetSoft20260922_==='function'){
+      let occurrences=[];
+      try{occurrences=occurrencesEvenementEtatBudgetSoft20260922_(ev)||[];}catch(e){}
+      if(occurrences.length&&occurrences.every(function(o){return o&&o.rapprochee===true;}))return false;
+    }
     const cert=String(ev&&ev.certitude||'certaine').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
     if(['incertaine','incertain','hypothetique'].includes(cert))return false;
     let d=null;try{const dr=datePlanTresorerie_(ev,reference,false);d=dr&&dr.date?new Date(dr.date):null;}catch(e){}
