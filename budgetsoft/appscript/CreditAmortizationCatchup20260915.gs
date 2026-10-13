@@ -108,6 +108,7 @@ function trouverCreditRattrapageCofidis20261012_(rapprochement,credits){
 function simulerRattrapageAmortissementsCredits20260915(){
   verifierInitialisation_();
   const credits=typeof lireCreditsEtendusV2_==='function'?lireCreditsEtendusV2_():[],rappros=rapprochementsCreditsValidesRattrapage20260915_(),lignes=[];
+  const dateReferenceExecution=Utilities.formatDate(new Date(),Session.getScriptTimeZone(),'yyyy-MM-dd');
   credits.forEach(credit=>{
     const refDate=dateReferenceCreditRattrapage20260915_(credit),refCapital=capitalReferenceCreditRattrapage20260915_(credit),sourceReference=sourceReferenceCreditRattrapage20260915_(credit),capitalActuel=Math.round(Math.max(0,Number(credit.capital_restant||0))*100)/100,refApresJournal=capitalReferenceApresJournalCredit20260916_(credit.id,refDate,refCapital),capitalReferenceEffectif=refApresJournal.capital;
     let confiance='insuffisante',raison='date_reference_absente',resynchronisationSource=false,ajustementDirectSource=0;
@@ -121,6 +122,10 @@ function simulerRattrapageAmortissementsCredits20260915(){
     if(confiance==='haute'&&capitalReferenceEffectif!=null)virtuel.capital_restant=capitalReferenceEffectif;
     const candidates=rappros.filter(r=>{const liaison=trouverCreditRattrapageCofidis20261012_(r,credits);return liaison.ok&&String(liaison.credit.id)===String(credit.id)&&refDate&&r.date>refDate;});
     candidates.forEach(r=>{
+      // Une opération importée dans le futur ne représente pas un capital déjà amorti.
+      // Comparaison en date civile du script, indépendamment du fuseau UTC du flux.
+      const jourOperation=Utilities.formatDate(r.date,Session.getScriptTimeZone(),'yyyy-MM-dd');
+      if(jourOperation>dateReferenceExecution){exclues.push({operation_id:String(r.operation.id||''),date:r.date.toISOString(),montant:Math.abs(Number(r.operation.montant||0)),raison:'operation_bancaire_future_non_debitee'});return;}
       if(operationSurDateSuspendueCreditRattrapage20260915_(credit,r.date)){exclues.push({operation_id:String(r.operation.id||''),date:r.date.toISOString(),montant:Math.abs(Number(r.operation.montant||0)),raison:'date_suspendue_ou_reportee'});return;}
       if(!montantCompatibleEcheanceCreditRattrapage20260915_(credit,r.operation)){exclues.push({operation_id:String(r.operation.id||''),date:r.date.toISOString(),montant:Math.abs(Number(r.operation.montant||0)),raison:'montant_incompatible_avec_mensualite'});return;}
       const avant=Math.round(Math.max(0,Number(virtuel.capital_restant||0))*100)/100,calc=calculerAmortissementRattrapage20260916_(virtuel,r.operation),documentee=methodeDocumenteeRattrapage20260915_(calc.methode);virtuel.capital_restant=calc.capitalApres;
