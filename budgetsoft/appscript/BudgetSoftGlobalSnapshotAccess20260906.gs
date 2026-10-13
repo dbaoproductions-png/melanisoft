@@ -60,26 +60,23 @@ function lireEtatGlobalBudgetSoftSiDisponible20260906_(){
       return e;
     }
 
-    // Une interface ne doit jamais fabriquer sa propre vérité métier. En revanche,
-    // la porte d'entrée globale peut reconstruire UNE FOIS le snapshot atomique
-    // s'il est absent/invalide hors fenêtre de mutation.
+    // Lecture passive : un écran ne doit jamais déclencher une reconstruction
+    // de plusieurs minutes. L'actualisation planifiée / explicite conserve
+    // exclusivement la responsabilité de produire la nouvelle révision.
+    // Un ancien snapshot reste consultable, mais TOUJOURS marqué périmé.
     const valide=!!(e&&e.ok===true&&e.publie===true&&e.revisionBudgetSoft);
     if(!valide){
-      if(typeof reconstruireSnapshotGlobalBudgetSoft20260906!=='function')return stale||null;
-      const reconstruit=reconstruireSnapshotGlobalBudgetSoft20260906('snapshot_absent_ou_invalide');
-      if(!reconstruit||reconstruit.ok!==true||reconstruit.publie!==true)return stale||null;
-      e=reconstruit;
+      if(!stale)return null;
+      e=JSON.parse(JSON.stringify(stale));
+      e.snapshotPerime=true;
+      e.snapshotPerimeOrigine='snapshot_indisponible';
+      e.snapshotPerimeDepuis=String(e.genereLe||'');
     }
-
-    // Garde de fraîcheur journalière : à minuit, une révision de la veille ne
-    // peut plus être servie comme vérité courante. On reconstruit une fois le
-    // snapshot atomique afin que dateReference, réel et projections basculent
-    // ensemble sur le nouveau jour.
     if(!snapshotGlobalDuJourBudgetSoft20260921_(e)){
-      if(typeof reconstruireSnapshotGlobalBudgetSoft20260906!=='function')return null;
-      const frais=reconstruireSnapshotGlobalBudgetSoft20260906('fraicheur_journaliere');
-      if(!frais||frais.ok!==true||frais.publie!==true)return null;
-      e=frais;
+      e=JSON.parse(JSON.stringify(e));
+      e.snapshotPerime=true;
+      e.snapshotPerimeOrigine='fraicheur_journaliere';
+      e.snapshotPerimeDepuis=String(e.genereLe||'');
     }
     BUDGETSOFT_GLOBAL_ACCESS_EXEC_CACHE_20260925_=e;
     return e;
@@ -93,7 +90,8 @@ function lireModuleSnapshotGlobalBudgetSoft20260906_(nom){
   const r=JSON.parse(JSON.stringify(module));
   r.revisionBudgetSoft=e.revisionBudgetSoft;
   r.genereLeBudgetSoft=e.genereLe||'';
-  r.sourceBudgetSoft='snapshot_global';
+  r.sourceBudgetSoft=e.snapshotPerime?'snapshot_global_perime':'snapshot_global';
+  if(e.snapshotPerime){r.snapshotPerime=true;r.snapshotPerimeOrigine=e.snapshotPerimeOrigine||'fraicheur';r.snapshotPerimeDepuis=e.snapshotPerimeDepuis||e.genereLe||'';}
   return r;
 }
 
