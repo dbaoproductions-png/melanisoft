@@ -105,14 +105,11 @@ function composerDashboardSyntheseBudgetSoft20260907_(ctx){
       cible.sourceProjection='tresorerie_unifiee_contexte';
     }
     if(avecPrelevements){
-      const ref=String(cible.dateReference||jourDashboardCanonicalOwner20260918_(proj.dateReference));
-      const xs=(Array.isArray(proj.lignes)?proj.lignes:[]).filter(function(l){
-        const j=jourDashboardCanonicalOwner20260918_(l&&l.date),m=Number(l&&l.montantSigne);
-        return String(l&&l.source||'')==='charge_fixe'&&j&&(!ref||j>ref)&&j<=String(cible.fin||'')&&Number.isFinite(m)&&m<0;
-      });
-      cible.prelevements=arrDashboardCanonicalOwner20260918_(xs.reduce(function(s,l){return s+Math.abs(Number(l.montantSigne||0));},0));
-      cible.nombrePrelevements=xs.length;
-      cible.sourcePrelevements='projectionEtendue · charges fixes futures';
+      // Le total des prélèvements appartient au propriétaire bancaire du Dashboard
+      // (même liste d'opérations que detailsCartes.prelevements).
+      // Les lignes source=charge_fixe de la projection sont déjà représentées
+      // séparément par chargesFixes : ne pas substituer leurs montants ici.
+      cible.sourcePrelevements='Operations · débits bancaires futurs hors CB';
     }
   };
   appliquerProjection(r.courtTerme||{},true);
