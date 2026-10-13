@@ -85,7 +85,10 @@ function diagnostiquerPeremptionSnapshot20260916_(etat){
   if(planDernier&&(!genereLe||planDernier>genereLe))raisons.push({code:'PLAN_MODIFIE_APRES_SNAPSHOT',planDernier,genereLe,origine:planOrigine});
   const projectionDate=String(etat&&etat.modules&&etat.modules.projectionEtendue&&etat.modules.projectionEtendue.dateReference||'');
   const aujourdHui=typeof jourReferenceCanonBudgetSoft20260906_==='function'?jourReferenceCanonBudgetSoft20260906_(new Date()):Utilities.formatDate(new Date(),Session.getScriptTimeZone(),'yyyy-MM-dd');
-  if(projectionDate&&aujourdHui&&projectionDate!==aujourdHui)raisons.push({code:'DATE_REFERENCE_CHANGEE',projectionDate:projectionDate,aujourdHui:aujourdHui});
+  // dateReference peut contenir un horodatage ISO UTC de fin de journée ;
+  // la fraîcheur est une règle de jour civil local, pas de comparaison de chaînes.
+  const jourProjection=projectionDate?Utilities.formatDate(new Date(projectionDate),Session.getScriptTimeZone(),'yyyy-MM-dd'):'';
+  if(projectionDate&&(!jourProjection||jourProjection!==aujourdHui))raisons.push({code:'DATE_REFERENCE_CHANGEE',projectionDate:projectionDate,jourProjection:jourProjection,aujourdHui:aujourdHui});
   const constructeurPublie=String(etat&&etat.versionConstructeur||'');
   const constructeurCourant=String(typeof BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION!=='undefined'?BUDGETSOFT_GLOBAL_SYNTHESE_20260907_VERSION:'');
   if(constructeurCourant&&constructeurPublie!==constructeurCourant)raisons.push({code:'VERSION_CONSTRUCTEUR_INCOMPATIBLE',constructeurPublie:constructeurPublie||'(absent)',constructeurCourant});
