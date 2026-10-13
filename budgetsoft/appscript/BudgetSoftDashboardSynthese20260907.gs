@@ -77,13 +77,33 @@ function composerDashboardSyntheseSourceBudgetSoft20260907_(ctx){
       attendues:futuresCycle.filter(o=>o.montant>0)},
     depenses:{constatees:reellesCycle.filter(o=>signeDashboardSynthese20260907_(o)<0).map(ligneReelleDetail),
       attendues:futuresCycle.filter(o=>o.montant<0)},
-    // Les prelevements sont les debits bancaires dates dans le futur, pas
-    // les charges fixes projetees : les deux familles ne se substituent pas.
-    prelevements:prelevements.map(function(o){
-      const l=ligneReelleDetail(o);l.statut='bancaire_futur';l.source='operation_bancaire_future';return l;
-    }),
+    // Échéances à venir : charges fixes prévues ET débits futurs déjà
+    // annoncés par la banque. Les deux sources sont complémentaires ; une
+    // charge fixe couverte par un débit bancaire ne doit figurer qu'une fois.
+    prelevements:[],
+
     chargesFixes:futuresCycle.filter(o=>o.montant<0&&o.source==='charge_fixe')
   };
+  const echeancesBanque=prelevements.map(function(o){
+    const l=ligneReelleDetail(o);
+    l.statut='bancaire_futur';l.source='operation_bancaire_future';
+    return l;
+  });
+  const echeancesFixes=courant.detailsCartes.chargesFixes.slice();
+  // Les charges déjà rapprochées au flux futur doivent être remplacées par
+  // ce flux : jamais deux lignes pour la même échéance.
+  const idsChargesCouvertes=new Set(prelevements.map(function(o){
+    return String(o.charge_fixe_id||'');
+  }).filter(Boolean));
+  const fixesNonCouvertes=echeancesFixes.filter(function(l){
+    const sourceId=String(l.id||'').match(/^cf:([^:]+):/);
+    return !sourceId||!idsChargesCouvertes.has(sourceId[1]);
+  });
+  const echeances=fixesNonCouvertes.concat(echeancesBanque);
+  echeances.sort(function(a,b){return String(a.date).localeCompare(String(b.date))||String(a.libelle).localeCompare(String(b.libelle));});
+  courant.detailsCartes.prelevements=echeances;
+  courant.prelevements=arrDashboardSynthese20260907_(echeances.reduce(function(t,l){return t+Math.abs(Number(l.montant||0));},0));
+  courant.nombrePrelevements=echeances.length;
 
   // Cycle suivant : seules les valeurs possédées par Cerbère/Cerbère Express sont publiées.
   // L'ancienne projection étendue ne doit pas produire de faux soldes futurs en l'absence
