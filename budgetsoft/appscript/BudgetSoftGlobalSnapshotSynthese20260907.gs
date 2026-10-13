@@ -102,9 +102,10 @@ function reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(origine){
   try{
     const construire=function(){
       const genereLe=new Date().toISOString(),modules={},erreurs=[];
-      function prendre(nom,fn){const t=Date.now();try{const v=fn();modules[nom]=v;perf[nom]=Date.now()-t;return v;}catch(e){perf[nom]=Date.now()-t;const x={module:nom,erreur:String(e&&e.message||e)};erreurs.push(x);modules[nom]={ok:false,erreur:x.erreur};return modules[nom];}}
+      function prendre(nom,fn){const t=Date.now();console.log('[SNAPSHOT ETAPE DEBUT] '+JSON.stringify({module:nom,elapsedMs:t-t0}));try{const v=fn();modules[nom]=v;perf[nom]=Date.now()-t;console.log('[SNAPSHOT ETAPE FIN] '+JSON.stringify({module:nom,dureeMs:perf[nom],elapsedMs:Date.now()-t0,ok:!(v&&v.ok===false)}));return v;}catch(e){perf[nom]=Date.now()-t;const x={module:nom,erreur:String(e&&e.message||e)};console.log('[SNAPSHOT ETAPE ERREUR] '+JSON.stringify({module:nom,dureeMs:perf[nom],erreur:x.erreur}));erreurs.push(x);modules[nom]={ok:false,erreur:x.erreur};return modules[nom];}}
+      console.log('[SNAPSHOT RECONSTRUCTION DEBUT] '+JSON.stringify({origine:String(origine||''),horodatage:genereLe}));
       const tSources=Date.now();let sources;
-      try{sources=chargerToutesLesDonnees();perf.sources=Date.now()-tSources;}
+      try{sources=chargerToutesLesDonnees();perf.sources=Date.now()-tSources;console.log('[SNAPSHOT SOURCES FIN] '+JSON.stringify({dureeMs:perf.sources}));}
       catch(e){perf.sources=Date.now()-tSources;const x={module:'sources',erreur:String(e&&e.message||e)};erreurs.push(x);sources={};}
       modules.sourceMeta={version:sources&&sources.meta&&sources.meta.version||'',tables:{}};
       Object.keys(sources||{}).forEach(k=>{if(Array.isArray(sources[k]))modules.sourceMeta.tables[k]=sources[k].length;});
