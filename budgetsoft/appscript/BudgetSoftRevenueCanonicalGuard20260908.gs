@@ -48,33 +48,30 @@ function auditerGardeRecettesCanoniquesBudgetSoft20260908(projection){
   details.push({type:'R0_cycle_courant',nombre:r0Courant.length,lignes:r0Courant.map(function(x){return{sourceId:x.sourceId,date:x.date,montant:x.montantSigne};})});
 
 
-  let evs=[];try{evs=lireFeuilleDynamiquePlan_('Plan_Evenements')||[];}catch(e){evs=[];}
-  const ouvertes=evs.filter(function(ev){
-    if(String(ev&&ev.type||'').trim().toLowerCase()!=='recette')return false;
-    if(typeof evenementClosProuveRevenuePublicationFix20260912_==='function'&&evenementClosProuveRevenuePublicationFix20260912_(ev))return false;
-    // Les rapprochements par occurrence font foi, même si le statut global
-    // de l'événement Plan n'a pas été actualisé. Conserver les occurrences
-    // encore dues dans la garde : ne jamais clore un événement partiel.
-    if(typeof occurrencesEvenementEtatBudgetSoft20260922_==='function'){
-      let occurrences=[];
-      try{occurrences=occurrencesEvenementEtatBudgetSoft20260922_(ev)||[];}catch(e){}
-      if(occurrences.length&&occurrences.every(function(o){return o&&o.rapprochee===true;}))return false;
-    }
-    const cert=String(ev&&ev.certitude||'certaine').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-    if(['incertaine','incertain','hypothetique'].includes(cert))return false;
-    let d=null;try{const dr=datePlanTresorerie_(ev,reference,false);d=dr&&dr.date?new Date(dr.date):null;}catch(e){}
-    if(!d||isNaN(d))d=new Date(ev&&ev.date_effet||ev&&ev.date_prevue||0);
-    return !isNaN(d)&&d<=finCycle;
-  });
-  ouvertes.forEach(function(ev){
-    const id=String(ev&&ev.id||''),trouve=(p.lignes||[]).some(function(x){
-      const d=new Date(x&&x.date||0);
-      return String(x&&x.source||'')==='evenement'&&String(x&&x.sourceId||'')===id&&!isNaN(d)&&d>reference&&d<=cible&&Number(x&&x.montantSigne||0)>0;
+  // Une seule vérité pour les occurrences Plan encore dues :
+  // même propriétaire que la projection et la supradoctrine des recettes.
+  // Ne pas recréer ici un test divergent sur le statut global de l'événement.
+  const dues=typeof occurrencesRecettesCertainesDuesRevenuePublicationFix20260922_==='function'
+    ?occurrencesRecettesCertainesDuesRevenuePublicationFix20260922_(reference,null,finCycle)
+    :null;
+  if(!Array.isArray(dues)){
+    err('PROPRIETAIRE_RECETTES_DUES_ABSENT','La liste canonique des recettes Plan dues est indisponible.');
+  }else{
+    dues.forEach(function(occ){
+      const id=String(occ&&occ.eventId||occ&&occ.id||'');
+      const index=Number(occ&&occ.occurrence||1);
+      const montant=Math.abs(Number(occ&&occ.montant||0));
+      const trouve=(p.lignes||[]).some(function(x){
+        const d=new Date(x&&x.date||0);
+        if(String(x&&x.source||'')!=='evenement'||String(x&&x.sourceId||'')!==id||isNaN(d)||d<=reference||d>cible||Number(x&&x.montantSigne||0)<=0)return false;
+        if(Number(x&&x.occurrence||1)!==index)return false;
+        return Math.abs(Number(x.montantSigne||0)-montant)<0.011;
+      });
+      const detail={id:id,occurrence:index,libelle:String(occ&&occ.libelle||''),montant:montant,datePrevue:String(occ&&occ.date_prevue||''),presenteProjection:trouve};
+      details.push(detail);
+      if(!trouve)err('EVENEMENT_RECETTE_DU_ABSENT','Une occurrence de recette Plan encore due a disparu de la projection.',detail);
     });
-    const detail={id:id,libelle:String(ev&&ev.libelle||''),montant:Math.abs(Number(ev&&ev.montant||0)),datePrevue:String(ev&&ev.date_effet||ev&&ev.date_prevue||''),presenteProjection:trouve};
-    details.push(detail);
-    if(!trouve)err('EVENEMENT_RECETTE_DU_ABSENT','Une recette Plan encore due a disparu de la projection.',detail);
-  });
+  }
 
   return {
     ok:erreurs.length===0,
