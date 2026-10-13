@@ -23,6 +23,8 @@ function auditerEcheancesCreditsBancaires20261013(){
         sourceRapprochement:String(r.source||''),chargeFixeId:String((r.charge||{}).id||'')};
     });
     const sim=parId.get(id)||{};
+    const debutReference=String(sim.date_reference||'');
+    const rapprochementsDepuisReference=rapprochementsCredit.filter(o=>!debutReference||o.date>debutReference);
     const operationsSim=(sim.operations||[]).map(o=>({
       operationId:String(o.operation_id||''),date:jour(new Date(o.date)),
       futur:jour(new Date(o.date))>reference,capitalEstime:Number(o.part_capital||0),
@@ -32,17 +34,19 @@ function auditerEcheancesCreditsBancaires20261013(){
       prochaineEcheanceEnregistree:c.prochaine_echeance?jour(new Date(c.prochaine_echeance)):'',
       capitalEnregistre:Number(c.capital_restant||0),
       capitalSimule:sim.capital_simule_apres!=null?Number(sim.capital_simule_apres):null,
-      rapprochements:rapprochementsCredit,
+      dateReferenceCapital:debutReference,
+      nombreRapprochementsHistoriques:rapprochementsCredit.length-rapprochementsDepuisReference.length,
+      rapprochements:rapprochementsDepuisReference,
       operationsRetenuesSimulation:operationsSim,
       futuresDansSimulation:operationsSim.filter(o=>o.futur),
-      ecarts:rapprochementsCredit.filter(o=>o.statutDate==='passee_ou_du_jour'&&!operationsSim.some(x=>x.operationId===o.operationId)),
+      ecarts:rapprochementsDepuisReference.filter(o=>o.statutDate==='passee_ou_du_jour'&&!operationsSim.some(x=>x.operationId===o.operationId)),
       operationsExclues:sim.exclues||[],confiance:String(sim.confiance||'')};
   });
-  const out={ok:true,lectureSeule:true,version:'2026-10-13.1',dateReference:reference,
+  const out={ok:true,lectureSeule:true,version:'2026-10-13.2',dateReference:reference,
     nombreCredits:lignes.length,
     nombreFuturesDansSimulation:lignes.reduce((a,l)=>a+l.futuresDansSimulation.length,0),
     nombreRapprochementsPassesNonRetenus:lignes.reduce((a,l)=>a+l.ecarts.length,0),
     lignes};
-  console.log('[AUDIT ECHEANCES CREDITS BANCAIRES 20261013] '+JSON.stringify(out));
+  console.log('[AUDIT ECHEANCES CREDITS BANCAIRES 20261013] '+JSON.stringify({...out,lignes:lignes.map(l=>({nom:l.nom,dateReferenceCapital:l.dateReferenceCapital,prochaineEcheanceEnregistree:l.prochaineEcheanceEnregistree,nombreRapprochementsHistoriques:l.nombreRapprochementsHistoriques,rapprochements:l.rapprochements,operationsRetenuesSimulation:l.operationsRetenuesSimulation,operationsExclues:l.operationsExclues,ecarts:l.ecarts}))}));
   return out;
 }
