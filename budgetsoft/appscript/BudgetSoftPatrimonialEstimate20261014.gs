@@ -55,3 +55,15 @@ function auditerSituationPatrimonialeEstimeeBudgetSoft20261014(){
   console.log('[AUDIT SITUATION PATRIMONIALE ESTIMEE 20261014] '+JSON.stringify(r));
   return r;
 }
+
+function chargerSituationPatrimonialeEstimeeBudgetSoft20261014(){
+  const e=typeof lireEtatGlobalBudgetSoftSiDisponible20260906_==='function'?lireEtatGlobalBudgetSoftSiDisponible20260906_():null;
+  const m=e&&e.modules&&e.modules.situationPatrimonialeEstimee;
+  if(!m||m.ok!==true)return {ok:false,erreur:'Situation patrimoniale estimee indisponible dans le snapshot global.'};
+  return {ok:true,revisionBudgetSoft:String(e.revisionBudgetSoft||''),
+    dateReference:m.dateReference,totalActifs:m.totalActifs,
+    capitalCreditsEstime:m.capitalCreditsEstime,
+    dettesHorsCredit:m.dettesHorsCredit,
+    endettementTotalEstime:m.endettementTotalEstime,
+    patrimoineNetEstime:m.patrimoineNetEstime};
+}
