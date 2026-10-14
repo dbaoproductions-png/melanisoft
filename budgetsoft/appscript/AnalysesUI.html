@@ -22,6 +22,25 @@ function afficherModuleAnalyses(){
   document.getElementById('analyses-period-count').addEventListener('change',e=>{analysesUI.nombrePeriodes=Number(e.target.value)||6;chargerAnalysesUI();});
   zone.querySelectorAll('[data-analysis-view]').forEach(b=>b.addEventListener('click',()=>{analysesUI.vue=b.dataset.analysisView;zone.querySelectorAll('[data-analysis-view]').forEach(x=>x.classList.toggle('active',x===b));rendreAnalyses();}));
   installerStylesAnalyses();
+  // Indicateurs patrimoniaux contemporains : ne pas extrapoler un historique
+  // d'amortissement qui n'existe pas encore dans les donnees.
+  const panneau=document.createElement('article');
+  panneau.id='analyses-patrimoine-estime';
+  panneau.className='card panel';
+  panneau.innerHTML='<div class="panel-heading"><div><span class="panel-kicker">Patrimoine</span><h2>Situation estimée actuelle</h2></div></div><p class="helper-text">Lecture de la situation patrimoniale commune en cours…</p>';
+  zone.appendChild(panneau);
+  google.script.run.withSuccessHandler(function(p){
+    const x=document.getElementById('analyses-patrimoine-estime');if(!x)return;
+    if(!p||!p.ok){x.querySelector('.helper-text').textContent='Situation patrimoniale indisponible dans le snapshot.';return;}
+    const euro=v=>typeof money!=='undefined'?money.format(Number(v||0)):Number(v||0).toFixed(2)+' €';
+    x.innerHTML='<div class="panel-heading"><div><span class="panel-kicker">Patrimoine</span><h2>Situation estimée actuelle</h2></div></div>'+
+      '<div class="cards"><article class="card metric-card"><span>Endettement total estimé</span><strong>'+euro(p.endettementTotalEstime)+'</strong><small>Crédits + dettes hors crédit</small></article>'+
+      '<article class="card metric-card"><span>Patrimoine net estimé</span><strong>'+euro(p.patrimoineNetEstime)+'</strong><small>Actifs − passifs estimés</small></article></div>'+
+      '<p class="helper-text">Situation au '+String(p.dateReference||'')+' · révision '+String(p.revisionBudgetSoft||'')+'. Courbe rétrospective à construire à partir d’un historique fiable des dettes.</p>';
+  }).withFailureHandler(function(err){
+    const x=document.getElementById('analyses-patrimoine-estime');
+    if(x)x.querySelector('.helper-text').textContent='Lecture patrimoniale impossible : '+String(err&&err.message||err);
+  }).chargerSituationPatrimonialeEstimeeBudgetSoft20261014();
   chargerAnalysesUI();
 }
 
