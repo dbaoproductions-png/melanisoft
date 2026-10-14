@@ -213,6 +213,21 @@ function reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(origine){
       const dashboard=prendre('dashboard',()=>composerDashboardSyntheseBudgetSoft20260907_({sources:sources,comptes:comptes,credits:credits,tresorerieComptable:tresorerieComptable,projectionEtendue:projectionEtendue,cerbere:cerbere,cerbereExpress:cerbereExpress}));
       const analyses=prendre('analyses',()=>typeof construireModuleAnalysesSnapshotBudgetSoft20260912_==='function'?construireModuleAnalysesSnapshotBudgetSoft20260912_():null);
       if(analyses&&typeof analyses==='object')analyses.revisionBudgetSoft='';
+      // Vue patrimoniale estimee unique, reutilisee par les trois onglets.
+      // Les champs canoniques historiques demeurent inchanges jusqu'a validation.
+      const situationPatrimonialeEstimee=prendre('situationPatrimonialeEstimee',()=>{
+        const simulation=simulerRattrapageAmortissementsCredits20260915();
+        return construireSituationPatrimonialeEstimeeBudgetSoft20261014_(credits,patrimoine,simulation);
+      });
+      if(situationPatrimonialeEstimee&&situationPatrimonialeEstimee.ok===true){
+        const vue={version:situationPatrimonialeEstimee.version,
+          endettementTotalEstime:situationPatrimonialeEstimee.endettementTotalEstime,
+          capitalCreditsEstime:situationPatrimonialeEstimee.capitalCreditsEstime,
+          dettesHorsCredit:situationPatrimonialeEstimee.dettesHorsCredit,
+          patrimoineNetEstime:situationPatrimonialeEstimee.patrimoineNetEstime};
+        [credits,patrimoine,analyses].forEach(m=>{if(m&&typeof m==='object')m.situationPatrimonialeEstimee=vue;});
+      }
+
       const conseiller=prendre('conseiller',()=>{
         if(typeof construireConseillerFinancierSource20260921_!=='function')return{ok:false,erreur:'Constructeur Conseiller snapshot absent.'};
         const analyse6=analyses&&analyses.variantes&&analyses.variantes['6']||null;
