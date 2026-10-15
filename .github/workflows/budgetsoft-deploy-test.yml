@@ -2,6 +2,12 @@ name: BudgetSoft - Deploy TEST
 
 on:
   workflow_dispatch:
+    inputs:
+      publish_version:
+        description: 'Create an immutable Apps Script version and publish the TEST web app (requires free version slot and deployment permissions)'
+        type: boolean
+        required: false
+        default: false
   push:
     branches:
       - budgetsoft-import-lab
@@ -24,10 +30,10 @@ jobs:
       SCRIPT_ID: 1tvGARYmwH11M0XfsoRKmtLoETCL6_8fmXD16iU39oGWgHHULGiYbDT-n
 
     steps:
-      - name: Checkout BudgetSoft import lab
+      - name: Checkout selected branch
         uses: actions/checkout@v7
         with:
-          ref: budgetsoft-import-lab
+          ref: ${{ github.ref_name }}
 
       - name: Validate browser-only OAuth secrets
         env:
@@ -97,6 +103,7 @@ jobs:
           fi
           ACCESS_TOKEN=$(python3 -c 'import json; print(json.load(open("/tmp/oauth-response.json")).get("access_token", ""))')
           test -n "$ACCESS_TOKEN" || { echo 'Google returned HTTP success but no access token'; exit 1; }
+          echo "::add-mask::$ACCESS_TOKEN"
           echo "ACCESS_TOKEN=$ACCESS_TOKEN" >> "$GITHUB_ENV"
           echo 'Google OAuth access token obtained successfully.'
 
@@ -151,6 +158,7 @@ jobs:
           PY
 
       - name: Create Apps Script version
+        if: ${{ inputs.publish_version == true }}
         run: |
           set -euo pipefail
           VERSION_CREATED=0
@@ -215,7 +223,7 @@ jobs:
           fi
 
       - name: Report HEAD TEST web app
-        if: env.VERSION_LIMIT_REACHED == '1'
+        if: ${{ inputs.publish_version == true && env.VERSION_LIMIT_REACHED == '1' }}
         run: |
           set -euo pipefail
           HTTP_CODE=$(curl -sS -o /tmp/head-deployments.json -w '%{http_code}'             -H "Authorization: Bearer $ACCESS_TOKEN"             "https://script.googleapis.com/v1/projects/$SCRIPT_ID/deployments")
@@ -249,7 +257,7 @@ jobs:
           PY
 
       - name: Publish TEST web app deployment
-        if: env.VERSION_LIMIT_REACHED != '1'
+        if: ${{ inputs.publish_version == true && env.VERSION_LIMIT_REACHED != '1' }}
         run: |
           set -euo pipefail
           HTTP_CODE=$(curl -sS -o /tmp/deployments-response.json -w '%{http_code}' \
@@ -308,3 +316,9 @@ jobs:
             echo "No mutable TEST WEB_APP deployment was updated."
             exit 1
           fi
+
+      - name: Confirm TEST source synchronization
+        if: ${{ inputs.publish_version != true }}
+        run: |
+          echo 'TEST source synchronized and verified; no immutable Apps Script version or versioned web app deployment was requested.'
+          echo 'Use the Apps Script editor or an existing HEAD (/dev) web app to test the saved source.'
