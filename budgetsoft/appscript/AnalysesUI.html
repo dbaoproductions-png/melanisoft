@@ -288,12 +288,36 @@ function rendreAnalyseCourbes(d,zone){
       el.querySelector('.helper-text').textContent='Situation patrimoniale estimée indisponible dans le snapshot.';return;
     }
     const euro=v=>typeof money!=='undefined'?money.format(Number(v||0)):Number(v||0).toFixed(2)+' €';
+    // Le graphe est alimenté séparément par une reconstitution prudente.
+    // Sa dernière valeur reste ancrée au snapshot patrimonial unique.
     el.innerHTML='<div class="panel-heading"><div><span class="panel-kicker">Endettement</span><h2>Dette totale estimée</h2></div></div>'+
       '<div class="cards"><article class="card metric-card"><span>Endettement total estimé</span><strong>'+euro(p.endettementTotalEstime)+'</strong><small>Crédits + dettes hors crédit</small></article>'+
       '<article class="card metric-card"><span>Capital des crédits estimé</span><strong>'+euro(p.capitalCreditsEstime)+'</strong></article>'+
       '<article class="card metric-card"><span>Dettes hors crédit</span><strong>'+euro(p.dettesHorsCredit)+'</strong></article></div>'+
       '<p class="helper-text">Situation au '+String(p.dateReference||'')+' · Révision '+String(p.revisionBudgetSoft||'')+
-      '. L’historique mensuel de la dette estimée n’est pas encore reconstitué de façon suffisamment fiable : aucune courbe fictive n’est tracée.</p>';
+      '. Reconstitution disponible uniquement pour les mois documentés.</p><div id="analyses-credit-debt-history"></div>';
+    google.script.run.withSuccessHandler(function(h){
+      const cible=document.getElementById('analyses-credit-debt-history');
+      if(!cible)return;
+      if(!h||!h.ok){cible.textContent='Courbe indisponible : '+String(h&&h.erreur||'historique insuffisant');return;}
+      const xs=(h.valeurs||[]).filter(v=>v.creditEstime!=null);
+      if(xs.length<2){cible.textContent='Un seul point crédit est prouvé à cette date. La courbe apparaîtra avec des références historiques supplémentaires.';return;}
+      const largeur=720,haut=230,pad=42,max=Math.max(...xs.map(x=>x.creditEstime)),min=Math.min(...xs.map(x=>x.creditEstime));
+      const marge=Math.max(150,(max-min)*.18),bas=Math.max(0,min-marge),sommet=max+marge;
+      const x=i=>pad+(largeur-2*pad)*i/Math.max(1,xs.length-1);
+      const y=v=>haut-pad-(v-bas)/(sommet-bas)*(haut-2*pad);
+      const pts=xs.map((v,i)=>x(i)+','+y(v.creditEstime)).join(' ');
+      const entier=v=>Number(v).toLocaleString('fr-FR',{maximumFractionDigits:0});
+      const lignes=xs.map((v,i)=>'<circle cx="'+x(i)+'" cy="'+y(v.creditEstime)+'" r="5" fill="#267d67"><title>'+v.date+' : '+v.creditEstime.toFixed(2)+' €</title></circle><text x="'+x(i)+'" y="'+(haut-13)+'" text-anchor="middle" font-size="12" fill="currentColor">'+v.mois+'</text><text x="'+x(i)+'" y="'+(y(v.creditEstime)-12)+'" text-anchor="middle" font-size="11" fill="currentColor">'+entier(v.creditEstime)+' €</text>').join('');
+      cible.innerHTML='<h3 style="margin:18px 0 8px">Évolution du capital des crédits estimé</h3>'+
+        '<svg viewBox="0 0 '+largeur+' '+haut+'" role="img" aria-label="Évolution mensuelle estimée du capital des crédits" style="width:100%;max-height:270px">'+
+        '<line x1="'+pad+'" x2="'+(largeur-pad)+'" y1="'+(haut-pad)+'" y2="'+(haut-pad)+'" stroke="currentColor" opacity=".25"/>'+
+        '<polyline points="'+pts+'" fill="none" stroke="#267d67" stroke-width="3"/>'+lignes+'</svg>'+
+        '<p class="helper-text">Dette totale estimée actuelle : '+euro(h.detteActuelle)+'. La courbe porte uniquement sur le capital des crédits : les dettes hors crédit n’ont pas encore d’historique suffisamment complet pour une série totale. '+String(h.avertissement||'')+'</p>';
+    }).withFailureHandler(function(err){
+      const cible=document.getElementById('analyses-credit-debt-history');
+      if(cible)cible.textContent='Courbe indisponible : '+String(err&&err.message||err);
+    }).chargerCourbeDetteEstimeeBudgetSoft20261015();
   }).withFailureHandler(function(err){
     const el=document.getElementById('analyses-dette-estimee-actuelle');
     if(el)el.querySelector('.helper-text').textContent='Erreur de lecture : '+String(err&&err.message||err);
