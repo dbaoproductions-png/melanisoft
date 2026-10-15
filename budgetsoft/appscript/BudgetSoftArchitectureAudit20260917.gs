@@ -169,25 +169,16 @@ function auditerSupervisionIntermoduleBudgetSoft20260921(){
   const cbDashboard=Number(m.dashboard&&m.dashboard.cycleSuivant&&m.dashboard.cycleSuivant.cbDejaEngagee);
   const cbCerbere=Number(c1&&c1.cbDejaEngagee);
   const cbBrut=Number(projCb&&Math.abs(Number(projCb.montant||0)));
-  let cbExclusions=null,cbErreur='';
-  try{
-    const base=chargerCerbereCockpitBaseRapide20260903_();
-    const filtre=calculerReportCbCycleSuivantHorsChargesFixes20260927_(base);
-    cbExclusions={brut:Number(calculerReportCbCycleSuivant20260905_(base).montant),
-      net:Number(filtre.montant),exclu:Number(filtre.montantExcluChargesFixes),
-      nombre:Number(filtre.excluesChargesFixes||0)};
-  }catch(err){cbErreur=String(err&&err.message||err);}
+  // Comparer uniquement les perimetres identiques en supervision rapide.
+  // Le rapprochement detaille des CF CB conserve son audit dedie.
   const cent=n=>Math.round(Number(n)*100);
-  const cbOk=!!(cbExclusions&&[cbDashboard,cbCerbere,cbBrut,cbExclusions.brut,cbExclusions.net,cbExclusions.exclu].every(Number.isFinite)
+  const cbOk=[cbDashboard,cbCerbere,cbBrut].every(Number.isFinite)
     &&cent(cbDashboard)===cent(cbCerbere)
-    &&cent(cbCerbere)===cent(cbExclusions.net)
-    &&cent(cbBrut)===cent(cbExclusions.brut)
-    &&cent(cbBrut)===cent(cbExclusions.net)+cent(cbExclusions.exclu));
+    &&cent(cbBrut)>=cent(cbCerbere);
   const cbEngagee={ok:cbOk,ecart:Math.round((cbBrut-cbCerbere)*100)/100,
     valeurs:{dashboard:cbDashboard,cerbere:cbCerbere,projection:cbBrut},
-    exclusionChargesFixes:cbExclusions,erreur:cbErreur,
-    methode:'report CB net + charges fixes CB exclues = debit CB bancaire brut'};
-
+    verificationCF:'audit dedie auditerReportCbHorsChargesFixes20260927 requis pour justifier la difference',
+    comparaison:'dashboard et cerbere meme perimetre ; projection brute'};
   const doctrineCb=typeof auditerDoctrineImputationCbPilotableBudgetSoft20260921==='function'
     ?auditerDoctrineImputationCbPilotableBudgetSoft20260921()
     :{ok:false,erreur:'Garde doctrine CB pilotable absente'};
