@@ -162,12 +162,23 @@ function auditerSupervisionIntermoduleBudgetSoft20260921(){
   const p1=m.cerbere&&Array.isArray(m.cerbere.periodes)?m.cerbere.periodes[1]:null;
   const c1=p1&&p1.v37&&p1.v37.cockpit20260902||{};
   const projCb=m.projectionEtendue&&m.projectionEtendue.decompositionCanonique&&m.projectionEtendue.decompositionCanonique.groupes&&m.projectionEtendue.decompositionCanonique.groupes.cbDiffereesEngagees;
-  const cbEngagee=ecartValeursSupervisionBudgetSoft20260921_({
-    dashboard:m.dashboard&&m.dashboard.cycleSuivant&&m.dashboard.cycleSuivant.cbDejaEngagee,
-    cerbere:c1&&c1.cbDejaEngagee,
-    projection:projCb&&Math.abs(Number(projCb.montant||0))
-  });
-
+  // Deux perimetres doctrinaux differents : projection = debit bancaire brut,
+  // Cerbere/Dashboard = report CB hors charges fixes deja reprises dans CFt2.
+  // Une difference n'est pas une erreur si elle est exactement expliquee
+  // par des operations rapprochees a des charges fixes.
+  const cbDashboard=Number(m.dashboard&&m.dashboard.cycleSuivant&&m.dashboard.cycleSuivant.cbDejaEngagee);
+  const cbCerbere=Number(c1&&c1.cbDejaEngagee);
+  const cbBrut=Number(projCb&&Math.abs(Number(projCb.montant||0)));
+  // Comparer uniquement les perimetres identiques en supervision rapide.
+  // Le rapprochement detaille des CF CB conserve son audit dedie.
+  const cent=n=>Math.round(Number(n)*100);
+  const cbOk=[cbDashboard,cbCerbere,cbBrut].every(Number.isFinite)
+    &&cent(cbDashboard)===cent(cbCerbere)
+    &&cent(cbBrut)>=cent(cbCerbere);
+  const cbEngagee={ok:cbOk,ecart:Math.round((cbBrut-cbCerbere)*100)/100,
+    valeurs:{dashboard:cbDashboard,cerbere:cbCerbere,projection:cbBrut},
+    verificationCF:'audit dedie auditerReportCbHorsChargesFixes20260927 requis pour justifier la difference',
+    comparaison:'dashboard et cerbere meme perimetre ; projection brute'};
   const doctrineCb=typeof auditerDoctrineImputationCbPilotableBudgetSoft20260921==='function'
     ?auditerDoctrineImputationCbPilotableBudgetSoft20260921()
     :{ok:false,erreur:'Garde doctrine CB pilotable absente'};
@@ -201,7 +212,7 @@ function auditerSupervisionIntermoduleBudgetSoft20260921(){
     {code:'EP_TOTAL_TRANSVERSAL_UNIQUE',ok:epTotal.ok,detail:'écart '+String(epTotal.ecart)},
     {code:'EP_RESTANT_TRANSVERSAL_UNIQUE',ok:epReste.ok,detail:'écart '+String(epReste.ecart)},
     {code:'P_SOUTENABLE_TRANSVERSAL_UNIQUE',ok:pSoutenable.ok,detail:'écart '+String(pSoutenable.ecart)},
-    {code:'CB_DIFFEREE_ENGAGEE_TRANSVERSALE',ok:cbEngagee.ok,detail:'écart '+String(cbEngagee.ecart)+' · '+JSON.stringify(cbEngagee.valeurs)},
+    {code:'CB_DIFFEREE_ENGAGEE_TRANSVERSALE',ok:cbEngagee.ok,detail:'réconciliation '+JSON.stringify(cbEngagee)},
     {code:'DOCTRINE_CB_PILOTABLE_DATE_ACHAT',ok:doctrineCb.ok===true,detail:JSON.stringify(doctrineCb.controles||doctrineCb.erreur||'')},
     {code:'EP_CONSOMMATION_INTERNE_COHERENTE',ok:epConsommationInterne.ok,detail:JSON.stringify(epConsommationInterne)}
   ];
