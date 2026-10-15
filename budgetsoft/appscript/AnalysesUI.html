@@ -268,16 +268,36 @@ function afficherProjectionCourbeDettes20261012_(d,zone){
 function rendreAnalyseCourbes(d,zone){
   const s=d&&d.seriesCourbes;
   if(!s||s.ok===false){zone.innerHTML='<div class="empty-state">Les séries de courbes ne sont pas encore disponibles dans ce snapshot.</div>';return;}
+  // Les series dettes historiques provenaient des capitaux de reference,
+  // et non de la vue patrimoniale estimee commune. Ne pas les afficher sous
+  // une etiquette laissant supposer une evolution fiable du total estime.
   const blocs=[
     ['revenus',s.revenus],
     ['charges-fixes',s.chargesFixes],
     ['pilotable',s.pilotable],
-    ['dettes',s.dettes],
     ['capital',s.capital]
   ];
-  zone.innerHTML='<div class="analysis-curves">'+blocs.map(x=>blocCourbeAnalyse(x[1],x[0])).join('')+'<section class="analysis-block" id="analysis-credit-projection" aria-live="polite"></section></div>';
+  zone.innerHTML='<div class="analysis-curves">'+
+    '<section class="card panel" id="analyses-dette-estimee-actuelle"><div class="panel-heading"><div><span class="panel-kicker">Endettement</span><h2>Dette totale estimée</h2></div></div><p class="helper-text">Lecture de la situation patrimoniale commune…</p></section>'+
+    blocs.map(x=>blocCourbeAnalyse(x[1],x[0])).join('')+'</div>';
   initialiserCourbesAnalyse(zone);
-  afficherProjectionCourbeDettes20261012_(d,zone);
+  google.script.run.withSuccessHandler(function(p){
+    const el=document.getElementById('analyses-dette-estimee-actuelle');
+    if(!el)return;
+    if(!p||p.ok!==true){
+      el.querySelector('.helper-text').textContent='Situation patrimoniale estimée indisponible dans le snapshot.';return;
+    }
+    const euro=v=>typeof money!=='undefined'?money.format(Number(v||0)):Number(v||0).toFixed(2)+' €';
+    el.innerHTML='<div class="panel-heading"><div><span class="panel-kicker">Endettement</span><h2>Dette totale estimée</h2></div></div>'+
+      '<div class="cards"><article class="card metric-card"><span>Endettement total estimé</span><strong>'+euro(p.endettementTotalEstime)+'</strong><small>Crédits + dettes hors crédit</small></article>'+
+      '<article class="card metric-card"><span>Capital des crédits estimé</span><strong>'+euro(p.capitalCreditsEstime)+'</strong></article>'+
+      '<article class="card metric-card"><span>Dettes hors crédit</span><strong>'+euro(p.dettesHorsCredit)+'</strong></article></div>'+
+      '<p class="helper-text">Situation au '+String(p.dateReference||'')+' · Révision '+String(p.revisionBudgetSoft||'')+
+      '. L’historique mensuel de la dette estimée n’est pas encore reconstitué de façon suffisamment fiable : aucune courbe fictive n’est tracée.</p>';
+  }).withFailureHandler(function(err){
+    const el=document.getElementById('analyses-dette-estimee-actuelle');
+    if(el)el.querySelector('.helper-text').textContent='Erreur de lecture : '+String(err&&err.message||err);
+  }).chargerSituationPatrimonialeEstimeeBudgetSoft20261014();
 }
 
 function barresSimplesAnalyse(lignes){
