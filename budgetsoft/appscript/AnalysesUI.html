@@ -207,64 +207,6 @@ function initialiserCourbesAnalyse(zone){
   });
 }
 
-/*
- * Projection courante des remboursements depuis le moteur Credits.
- * Une estimation a la date actuelle n'est JAMAIS projetee retrospectivement
- * sur les periodes precedentes.
- */
-function enrichirCourbeDettesProjectionCredits20261012_(d,p){
-  if(!p||p.ok!==true||!d||!d.seriesCourbes||!d.seriesCourbes.dettes)return null;
-  const original=d.seriesCourbes.dettes;
-  const total=(original.series||[]).find(x=>x.total);
-  if(!total||!Array.isArray(total.valeurs)||!total.valeurs.length)return null;
-  const n=total.valeurs.length,i=n-1;
-  const montantConfirme=Number(total.valeurs[i]);
-  if(total.valeurs[i]==null||!Number.isFinite(montantConfirme))return null;
-  const reduction=Number(p.reduction);
-  if(!Number.isFinite(reduction)||reduction<0)return null;
-  // S'assurer que le capital Credits affiche et le propriétaire du snapshot
-  // parlent de la meme valeur avant d'ajouter une courbe.
-  const creditsCourant=Number(p.capitalConfirme);
-  const dettesHorsCredit=montantConfirme-creditsCourant;
-  if(!Number.isFinite(creditsCourant)||dettesHorsCredit<-.02)return null;
-  const estimate= Math.round((montantConfirme-reduction)*100)/100;
-  const valeurs=Array(n).fill(null);
-  valeurs[i]=estimate;
-  return {
-    titre:'Dette totale : référence et estimation actuelle',unite:'€',
-    source:'Crédits (snapshot) + amortissements non journalisés simulés · lecture seule',
-    doctrine:'La dette totale officielle reste inchangée. Seul le dernier point estimé est calculé ; aucun historique estimatif n’est inventé.',
-    labels:(original.labels||[]).slice(),
-    series:[
-      {id:'total_confirme',nom:'Endettement enregistré',total:true,valeurs:total.valeurs.slice()},
-      {id:'total_estime_actuel',nom:'Endettement estimé aujourd’hui (point isolé)',valeurs:valeurs}
-    ],
-    historiquePartiel:true
-  };
-}
-function afficherProjectionCourbeDettes20261012_(d,zone){
-  const e=zone.querySelector('#analysis-credit-projection');
-  if(!e)return;
-  e.innerHTML='<p class="helper-text">Calcul du capital actualisé estimé…</p>';
-  google.script.run.withSuccessHandler(p=>{
-    if(!e.isConnected)return;
-    const cfg=enrichirCourbeDettesProjectionCredits20261012_(d,p);
-    if(!cfg){
-      e.innerHTML='<p class="helper-text">Comparaison indisponible : le solde de référence et la projection des crédits ne peuvent pas être rapprochés avec certitude.</p>';return;
-    }
-    const total=Number(cfg.series[0].valeurs[cfg.series[0].valeurs.length-1]);
-    const est=Number(cfg.series[1].valeurs[cfg.series[1].valeurs.length-1]);
-    e.innerHTML='<div class="credit-analysis-comparison">'+
-      '<div><span>Dette totale enregistrée</span><strong>'+money.format(total)+'</strong></div>'+
-      '<div><span>Dette totale actualisée estimée</span><strong>'+money.format(est)+'</strong></div>'+
-      '<div><span>Remboursements en attente de consolidation</span><strong>'+money.format(Number(p.reduction))+'</strong></div></div>'+
-      '<p class="helper-text">Le capital des crédits est estimé à '+money.format(p.capitalEstime)+' contre '+money.format(p.capitalConfirme)+' enregistré. '+p.operationsDocumentees+' ventilation(s) documentée(s), '+p.operationsEstimees+' estimée(s). Les autres dettes ne changent pas.</p>'+
-      blocCourbeAnalyse(cfg,'dettes-projection');
-    initialiserCourbesAnalyse(e);
-  }).withFailureHandler(err=>{
-    if(e.isConnected)e.innerHTML='<p class="helper-text">Projection indisponible : '+echapper(err&&err.message||String(err))+'</p>';
-  }).chargerProjectionEndettementCredits20261012();
-}
 function rendreAnalyseCourbes(d,zone){
   const s=d&&d.seriesCourbes;
   if(!s||s.ok===false){zone.innerHTML='<div class="empty-state">Les séries de courbes ne sont pas encore disponibles dans ce snapshot.</div>';return;}
