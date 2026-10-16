@@ -32,6 +32,13 @@ function jourCanonBudgetSoft20260906_(v){
   if(v==null||v==='')return null;
   if(v instanceof Date&&!isNaN(v.getTime()))return Utilities.formatDate(v,Session.getScriptTimeZone(),'yyyy-MM-dd');
   const s=String(v).trim();
+  // An ISO instant with an explicit zone must be interpreted in the script
+  // timezone; extracting its UTC day loses 22:00Z -> midnight in France.
+  // Bare calendar dates and unzoned local timestamps retain their entered day.
+  if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})$/i.test(s)){
+    const instant=new Date(s);
+    return isNaN(instant.getTime())?null:Utilities.formatDate(instant,Session.getScriptTimeZone(),'yyyy-MM-dd');
+  }
   const m=s.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|[T\s])/);
   if(m)return m[1]+'-'+m[2]+'-'+m[3];
   const f=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
