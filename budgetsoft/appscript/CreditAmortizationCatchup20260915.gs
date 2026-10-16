@@ -50,24 +50,25 @@ function montantCompatibleEcheanceCreditRattrapage20260915_(credit,operation){
 }
 function methodeDocumenteeRattrapage20260915_(methode){return /^(echeancier_exact_|releve_exact_|ventilation_explicite_commentaire_datee|contrat_COFIDIS_)/.test(String(methode||''));}
 
-function journalAppliqueDepuisReferenceCredit20260916_(creditId,refDate){
-  if(!refDate||typeof lireJournalAmortissementsCredits20260915_!=='function')return[];
-  return (lireJournalAmortissementsCredits20260915_()||[]).filter(x=>{
+function journalAppliqueDepuisReferenceCredit20260916_(creditId,refDate,journalPartage){
+  if(!refDate||(!Array.isArray(journalPartage)&&typeof lireJournalAmortissementsCredits20260915_!=='function'))return[];
+  const journal=Array.isArray(journalPartage)?journalPartage:(lireJournalAmortissementsCredits20260915_()||[]);
+  return journal.filter(x=>{
     if(String(x.credit_id||'')!==String(creditId||'')||String(x.statut||'')!=='applique')return false;
     if(String(x.operation_id||'').indexOf('SOURCE|')===0)return false;
     const d=new Date(x.date_operation||0);return !isNaN(d)&&d>refDate;
   }).sort((a,b)=>new Date(a.date_operation)-new Date(b.date_operation));
 }
 
-function capitalReferenceApresJournalCredit20260916_(creditId,refDate,refCapital){
+function capitalReferenceApresJournalCredit20260916_(creditId,refDate,refCapital,journalPartage){
   if(refCapital==null)return{capital:null,operations:[]};
-  const ops=journalAppliqueDepuisReferenceCredit20260916_(creditId,refDate),capital=Math.round((Number(refCapital)-ops.reduce((s,x)=>s+Number(x.part_capital||0),0))*100)/100;
+  const ops=journalAppliqueDepuisReferenceCredit20260916_(creditId,refDate,journalPartage),capital=Math.round((Number(refCapital)-ops.reduce((s,x)=>s+Number(x.part_capital||0),0))*100)/100;
   return{capital,operations:ops};
 }
 
-function rapprochementsCreditsValidesRattrapage20260915_(){
+function rapprochementsCreditsValidesRattrapage20260915_(journalPartage){
   const ops=lireTable_('Operations'),opsParId=new Map(ops.map(o=>[String(o.id||''),o])),charges=lireTable_('Charges_fixes'),chargesParId=new Map(charges.map(c=>[String(c.id||''),c]));
-  const journal=typeof lireJournalAmortissementsCredits20260915_==='function'?lireJournalAmortissementsCredits20260915_():[],deja=new Set(journal.filter(x=>String(x.statut)==='applique').map(x=>String(x.operation_id||''))),vus=new Set(),out=[];
+  const journal=Array.isArray(journalPartage)?journalPartage:(typeof lireJournalAmortissementsCredits20260915_==='function'?lireJournalAmortissementsCredits20260915_():[]),deja=new Set(journal.filter(x=>String(x.statut)==='applique').map(x=>String(x.operation_id||''))),vus=new Set(),out=[];
   const pousser=(chargeId,operationId,source)=>{const cid=String(chargeId||''),oid=String(operationId||'');if(!cid||!oid||vus.has(oid)||deja.has(oid))return;const charge=chargesParId.get(cid),operation=opsParId.get(oid);if(!charge||!operation)return;const d=new Date(operation.date_comptable||operation.date||operation.date_operation||0);if(isNaN(d))return;vus.add(oid);out.push({charge,operation,date:d,source});};
   if(typeof lireRapprochementsChargesFixes==='function')(lireRapprochementsChargesFixes()||[]).filter(r=>['validé','valide'].includes(String(r.statut||'').toLowerCase())).forEach(r=>pousser(r.charge_fixe_id,r.operation_id,'Rapprochements_charges_fixes'));
   ops.forEach(o=>{const cid=String(o.charge_fixe_id||'').trim();if(cid)pousser(cid,o.id,'Operations.charge_fixe_id');});return out.sort((a,b)=>a.date-b.date);
@@ -107,10 +108,12 @@ function trouverCreditRattrapageCofidis20261012_(rapprochement,credits){
 
 function simulerRattrapageAmortissementsCredits20260915(){
   verifierInitialisation_();
-  const credits=typeof lireCreditsEtendusV2_==='function'?lireCreditsEtendusV2_():[],rappros=rapprochementsCreditsValidesRattrapage20260915_(),lignes=[];
+  // Lecture partagee uniquement pour cette execution : pas de cache global ni modification du journal.
+  const journal=typeof lireJournalAmortissementsCredits20260915_==='function'?lireJournalAmortissementsCredits20260915_():[];
+  const credits=typeof lireCreditsEtendusV2_==='function'?lireCreditsEtendusV2_():[],rappros=rapprochementsCreditsValidesRattrapage20260915_(journal),lignes=[];
   const dateReferenceExecution=Utilities.formatDate(new Date(),Session.getScriptTimeZone(),'yyyy-MM-dd');
   credits.forEach(credit=>{
-    const refDate=dateReferenceCreditRattrapage20260915_(credit),refCapital=capitalReferenceCreditRattrapage20260915_(credit),sourceReference=sourceReferenceCreditRattrapage20260915_(credit),capitalActuel=Math.round(Math.max(0,Number(credit.capital_restant||0))*100)/100,refApresJournal=capitalReferenceApresJournalCredit20260916_(credit.id,refDate,refCapital),capitalReferenceEffectif=refApresJournal.capital;
+    const refDate=dateReferenceCreditRattrapage20260915_(credit),refCapital=capitalReferenceCreditRattrapage20260915_(credit),sourceReference=sourceReferenceCreditRattrapage20260915_(credit),capitalActuel=Math.round(Math.max(0,Number(credit.capital_restant||0))*100)/100,refApresJournal=capitalReferenceApresJournalCredit20260916_(credit.id,refDate,refCapital,journal),capitalReferenceEffectif=refApresJournal.capital;
     let confiance='insuffisante',raison='date_reference_absente',resynchronisationSource=false,ajustementDirectSource=0;
     if(refDate){
       if(refCapital==null){confiance='moyenne';raison='date_reference_trouvee_sans_capital_reference_dans_commentaire';}
