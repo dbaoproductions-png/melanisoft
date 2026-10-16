@@ -17,7 +17,7 @@ function auditerImpactDatesISOCanonBudgetSoft20261016(){
     if(v==null||v==='')return null;
     if(v instanceof Date)return isNaN(v.getTime())?null:Utilities.formatDate(v,tz,'yyyy-MM-dd');
     const texte=String(v).trim();
-    if(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d+)?)?(?:Z|[+-]\\d{2}:?\\d{2})$/i.test(texte)){
+    if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})$/i.test(texte)){
       const d=new Date(texte);
       return isNaN(d.getTime())?null:Utilities.formatDate(d,tz,'yyyy-MM-dd');
     }
