@@ -16,7 +16,7 @@ function auditerDgfipOctobreConcis20261017(){
   const snap=chargerSnapshotGlobalLegacyBudgetSoft20260906_(),etat=snap&&snap.etat||{},m=etat.modules||{};
   const d=m.dashboard&&m.dashboard.courtTerme||{},pre=d.detailsCartes&&d.detailsCartes.prelevements||[];
   const annonces=pre.filter(x=>montants.some(n=>Math.abs(Math.abs(Number(x.montant||0))-n)<.01)&&
-    /d[\s.\-]*g[\s.\-]*f[\s.\-]*i[\s.\-]*p|imp[oô]t|impo\b/i.test(String(x.libelle||''))))
+    /d[\s.\-]*g[\s.\-]*f[\s.\-]*i[\s.\-]*p|imp[oô]t|impo\b/i.test(String(x.libelle||'')))
     .map(x=>({id:String(x.id||''),montant:Number(x.montant||0),date:String(x.date||''),
       libelle:String(x.libelle||'').slice(0,100)}));
   const out={ok:true,lectureSeule:true,revision:String(etat.revisionBudgetSoft||''),
