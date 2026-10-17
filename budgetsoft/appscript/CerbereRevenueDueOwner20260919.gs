@@ -82,14 +82,39 @@ function enrichirCerbereRecettesCertainesDues20260919_(base){
 
     if(i===0){
       const reel=revenusConstatesCycleCerbereRevenueDueOwner20260922_(debut,fin);
-      const ancienRt1=arrCerbereRevenueDueOwner20260919_(Number(v.rt1||0));
+      const auditPrecedent=v.rt1Audit&&v.rt1Audit.lissageConcertsARE20261017||null;
+      // Lors d'un nouvel appel sur le meme objet, restaurer le Rt1 brut
+      // avant de calculer une seule compensation (idempotence).
+      const brutEntree=arrCerbereRevenueDueOwner20260919_(Number(v.rt1||0));
+      const ancienRt1=auditPrecedent&&Number.isFinite(Number(auditPrecedent.rt1AvantLissage))
+        ?arrCerbereRevenueDueOwner20260919_(Number(auditPrecedent.rt1AvantLissage))
+        :brutEntree;
       // Doctrine 2026-09-28 : cette couche ne possède pas Rt1 et ne doit jamais
       // effacer le canon récurrent encore attendu. Elle ne fait qu'empêcher qu'un
       // événement explicitement dû fasse baisser une estimation déjà plus complète.
       const plancherDu=arrCerbereRevenueDueOwner20260919_(Number(reel.total||0)+montantDu);
-      v.rt1=arrCerbereRevenueDueOwner20260919_(Math.max(ancienRt1,plancherDu));
+      // Parametres de lissage economique Annex 10 : R0 ARE inclut deja
+      // deux cachets pour 300 EUR. Aucun retrait supplementaire a R0.
+      const postes=v.rt1Audit&&v.rt1Audit.canonEffectifParCategorie||{};
+      const concerts=postes.Concerts,franceTravail=postes['France Travail'];
+      const c=Number(concerts&&concerts.retenu),ft=Number(franceTravail&&franceTravail.retenu);
+      let diminutionEffective=0,detailLissage={applique:false,motif:'canon_categorie_indisponible'};
+      if(Number.isFinite(c)&&Number.isFinite(ft)&&ft>=0){
+        const delta=arrCerbereRevenueDueOwner20260919_((c-300)/150*74.46);
+        const ftCorrige=arrCerbereRevenueDueOwner20260919_(Math.max(0,ft-delta));
+        diminutionEffective=arrCerbereRevenueDueOwner20260919_(ft-ftCorrige);
+        detailLissage={applique:true,referenceConcerts:300,recetteParCachet:150,compensationParCachet:74.46,
+          concertsRetenus:arrCerbereRevenueDueOwner20260919_(c),franceTravailAvant:arrCerbereRevenueDueOwner20260919_(ft),
+          franceTravailLisse:ftCorrige,compensationTheorique:delta,compensationAppliquee:diminutionEffective,
+          rt1AvantLissage:ancienRt1};
+      }
+      const apresCompensation=arrCerbereRevenueDueOwner20260919_(ancienRt1-diminutionEffective);
+      v.rt1=arrCerbereRevenueDueOwner20260919_(Math.max(apresCompensation,plancherDu));
+      detailLissage.rt1Publie=v.rt1;
+      detailLissage.ecretementParPlancher=arrCerbereRevenueDueOwner20260919_(v.rt1-apresCompensation);
       v.rt1Audit=v.rt1Audit&&typeof v.rt1Audit==='object'?v.rt1Audit:{};
       v.rt1Audit.modeCycleCourant='canon_recurrent_conserve_reel_remplace_prevu_evenements_dus_en_plancher';
+      v.rt1Audit.lissageConcertsARE20261017=detailLissage;
       v.rt1Audit.ancienRt1=ancienRt1;
       v.rt1Audit.plancherReelPlusEvenementsDus=plancherDu;
       v.rt1Audit.revenusConstatesCycle=Number(reel.total||0);
