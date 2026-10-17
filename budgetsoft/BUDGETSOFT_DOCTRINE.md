@@ -163,3 +163,23 @@ La chaîne Cerbère doit conserver simultanément :
 - l'identité `SCt1 = SS1 + Rt1 − CFt1 − DPt1 − HEt1` ;
 - l'égalité mathématique initiale entre trajectoire et `À rééquilibrer` lorsque `DPt1 = max(P1, engagé)` ;
 - l'absence de double comptage des CF, Actions, Événements et opérations CB.
+
+### 9.7 Lissage économique Concerts / France Travail — intermittence (règle de pilotage)
+
+Cette règle décrit une **estimation budgétaire**, non un calcul réglementaire des droits à l'ARE. Elle corrige la dépendance économique entre les cachets d'artiste (annexe 10) et les allocations France Travail, sans imposer un rattachement au mois civil du travail ni à la date du versement : le modèle Rt1 vise un **lissage sur les cycles 28→27**.
+
+- **R0 demeure une référence stable et non réécrite automatiquement.** Dans le paramétrage de référence convenu, les **300 € de Concerts** correspondent à **deux cachets de 150 €**. La référence France Travail **1 202,85 €** est **déjà nette de l'effet estimé de ces deux cachets** : il ne faut jamais lui retrancher à nouveau 148,92 €.
+- Paramètres initiaux explicites et révisables : **150 € de recettes par cachet estimé**, **12 heures par cachet**, **47,73 € d'allocation journalière brute de référence**, **74,46 € de compensation budgétaire par cachet estimé** (valeur conventionnelle arrondie, dérivée de 12/10 × 1,3 × 47,73). Il ne s'agit ni d'un taux légal fixe ni d'une garantie sur l'ARE effectivement versée. Un calcul officiel éventuel relève de France Travail, notamment pour les arrondis, franchises et plafonds.
+- **Le propriétaire de Rt1 dans Cerbère** utilise le montant de Concerts **effectivement retenu pour Rt1** (réel connu ou référence maintenue), sans confondre montants de concerts, nombre réel de cachets ni dates de paiement. Il calcule le delta :
+
+  `deltaConcerts = concertsRetenusRt1 - 300`
+
+  `compensationSupplementaire = deltaConcerts / 150 × 74,46`
+
+  `franceTravailLisse = max(0, franceTravailRetenuAvantLissage - compensationSupplementaire)`
+
+  Le signe est conservé : des concerts supérieurs à la référence réduisent la prévision d'ARE, des concerts inférieurs peuvent l'augmenter. Les fractions de cachet servent au lissage, sans prétendre compter des contrats. **L'ajustement porte sur la prévision France Travail, pas sur le montant bancaire réel de ses versements.** Les autres catégories ne sont pas affectées.
+- **Règle de plancher du réel :** la valeur Rt1 publiée ne peut pas devenir inférieure aux recettes réelles du cycle reconnues par Cerbère ni à son éventuel plancher d'événements certains encore dus. Ne pas déduire une compensation deux fois, y compris si la recette France Travail a déjà été encaissée. Distinguer clairement, dans le diagnostic, l'ajustement théorique, son écrêtement et le montant effectivement appliqué.
+- **Ordre de calcul :** partir des valeurs de référence et du Réel selon la doctrine existante ; appliquer une seule fois l'ajustement Concerts/France Travail au sein du **propriétaire Rt1 de Cerbère**, avant publication et après les rapprochements nécessaires ; puis appliquer les planchers de recettes réelles et d'événements certains. **Ne pas créer de seconde formule** dans Dashboard, Comptes, Trésorerie ou les snapshots : ces modules consomment Rt1 publié avec la même révision.
+- **Exemple indicatif octobre 2026 :** Concerts retenus 698,28 €, écart avec 300 € = 398,28 €, compensation estimée ≈ **197,71 €** (montant conventionnel par cachet 74,46 €). Rt1 brut 5 612,66 € → **5 414,95 €** *avant contrôle des planchers, des montants déjà constatés et de toute autre règle canonique* ; cet exemple ne constitue ni une donnée bancaire ni une prévision certaine de versement.
+- **Validation obligatoire avant activation :** simulation en lecture seule, tests au seuil de référence (300 €), au-dessus et en dessous, limitation à zéro de la composante ARE, plafonnement au réel, absence de double comptage, stabilité de R0 et des opérations, cohérence Cerbère / Dashboard / Trésorerie / snapshots, puis validation explicite en TEST. Aucun ajustement rétroactif des snapshots historiques.

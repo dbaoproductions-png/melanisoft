@@ -343,3 +343,9 @@ Politique cible :
 7. une évolution de code ou de doctrine ne réécrit jamais le passé : elle crée de nouvelles révisions comparables aux anciennes.
 
 Ainsi, le module Analyse doit pouvoir distinguer une **évolution réelle de la situation** d'une **évolution du moteur de calcul ou de la doctrine**.
+
+## 21. Dépendance économique Concerts / France Travail dans Rt1
+
+La doctrine détaillée est définie au § 9.7 de `BUDGETSOFT_DOCTRINE.md`. **R0 n'est pas modifié automatiquement** : la référence France Travail (1 202,85 €) comprend déjà l'effet de deux cachets estimés, représentés par 300 € de Concerts. Cerbère est le **propriétaire unique** de l'ajustement de Rt1 selon l'écart entre les concerts retenus et la référence 300 €, avec une compensation indicative de 74,46 € par cachet de 150 €. La compensation est un **lissage économique**, non un recalcul juridique de l'ARE ni une modification des encaissements.
+
+Le Rt1 corrigé respecte le plancher des recettes réellement constatées et des événements certains encore dus ; la composante France Travail prévisionnelle est bornée à zéro. Dashboard, Comptes, Trésorerie et snapshots consomment la même valeur Rt1 publiée, sans seconde logique concurrente. La mise en œuvre nécessite des simulations et audits de non-régression en TEST avant toute activation ; aucun snapshot historique ne doit être réécrit.
