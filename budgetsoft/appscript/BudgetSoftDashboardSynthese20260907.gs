@@ -105,6 +105,35 @@ function composerDashboardSyntheseSourceBudgetSoft20260907_(ctx){
   courant.prelevements=arrDashboardSynthese20260907_(echeances.reduce(function(t,l){return t+Math.abs(Number(l.montant||0));},0));
   courant.nombrePrelevements=echeances.length;
 
+  // Provision de pilotage uniquement : copro avec echeance bancaire non confirmee.
+  // CFT1 possede deja cette depense. Ne jamais toucher a la trajectoire, au reel
+  // ou retrancher de nouveau cette provision de la capacite de Cerbere.
+  (function ajouterProvisionCoproEnAttente20261018_(){
+    const id='d476505c-189d-48a3-9eb1-51467df7fbc1';
+    const debutCycle=isoDashboardSynthese20260907_(cc.debut);
+    const finCycle=isoDashboardSynthese20260907_(cc.fin);
+    // Garde transitoire : ne pas etendre a des cycles non audites.
+    if(debutCycle!=='2026-09-28'||finCycle!=='2026-10-27')return;
+    const audit=cer&&cer.diagnostic&&cer.diagnostic.p1Doctrine20260912||{};
+    const lignes=audit.cft1Audit&&audit.cft1Audit.lignes||[];
+    const ligne=lignes.find(x=>String(x&&x.id||'')===id);
+    if(!ligne||Number(ligne.occurrences)!==1||Math.abs(Number(ligne.retenu||0)-550)>.01||
+      ligne.reel!=null&&Math.abs(Number(ligne.reel||0))>.01)return;
+    const existeProjectionCycle=futurCourant.lignes.some(x=>
+      String(x&&x.sourceId||'')===id||String(x&&x.id||'').indexOf('cf:'+id+':')===0);
+    const dejaReel=reellesCycle.some(o=>String(o&&o.charge_fixe_id||'')===id);
+    const dejaFuture=prelevements.some(o=>String(o&&o.charge_fixe_id||'')===id);
+    if(existeProjectionCycle||dejaReel||dejaFuture)return;
+    const ligneProvision={id:'provision-copro-20261018:'+id,date:'',
+      libelle:String(ligne.libelle||'Charges de copropriete pour deux appartements'),
+      categorie:'Logements',montant:-550,statut:'provision_en_attente',
+      source:'provision_economique_cerbere',certitude:'date_bancaire_a_confirmer'};
+    courant.depensesAttendues=arrDashboardSynthese20260907_(courant.depensesAttendues+550);
+    courant.detailsCartes.depenses.attendues.push(ligneProvision);
+    courant.provisionChargesNonDatees20261018={montant:550,chargeFixeId:id,
+      dansCft1:true,dateBancaireConnue:false,source:'cerbere.cft1Audit'};
+  })();
+
   // Cycle suivant : seules les valeurs possédées par Cerbère/Cerbère Express sont publiées.
   // L'ancienne projection étendue ne doit pas produire de faux soldes futurs en l'absence
   // d'un propriétaire de trésorerie couvrant correctement les revenus réguliers du cycle.
