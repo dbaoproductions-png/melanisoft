@@ -113,21 +113,31 @@ function composerDashboardSyntheseSourceBudgetSoft20260907_(ctx){
     const debutCycle=isoDashboardSynthese20260907_(cc.debut);
     const finCycle=isoDashboardSynthese20260907_(cc.fin);
     // Garde transitoire : ne pas etendre a des cycles non audites.
-    if(debutCycle!=='2026-09-28'||finCycle!=='2026-10-27')return;
+    courant.auditProvisionCopro20261018={version:'2026-10-18.2',debutCycle:debutCycle,finCycle:finCycle,stade:'controle_dates'};
+    if(debutCycle!=='2026-09-28'||finCycle!=='2026-10-27'){courant.auditProvisionCopro20261018.motif='cycle_incompatible';return;}
     const audit=cer&&cer.diagnostic&&cer.diagnostic.p1Doctrine20260912||{};
     const lignes=audit.cft1Audit&&audit.cft1Audit.lignes||[];
     const ligne=lignes.find(x=>String(x&&x.id||'')===id);
+    courant.auditProvisionCopro20261018.stade='controle_cerbere';
+    courant.auditProvisionCopro20261018.ligneTrouvee=!!ligne;
+    courant.auditProvisionCopro20261018.occurrences=ligne?Number(ligne.occurrences):null;
+    courant.auditProvisionCopro20261018.retenu=ligne?Number(ligne.retenu):null;
+    courant.auditProvisionCopro20261018.reel=ligne?ligne.reel:null;
     if(!ligne||Number(ligne.occurrences)!==1||Math.abs(Number(ligne.retenu||0)-550)>.01||
-      ligne.reel!=null&&Math.abs(Number(ligne.reel||0))>.01)return;
+      ligne.reel!=null&&Math.abs(Number(ligne.reel||0))>.01){courant.auditProvisionCopro20261018.motif='garde_cerbere';return;}
     const existeProjectionCycle=futurCourant.lignes.some(x=>
       String(x&&x.sourceId||'')===id||String(x&&x.id||'').indexOf('cf:'+id+':')===0);
     const dejaReel=reellesCycle.some(o=>String(o&&o.charge_fixe_id||'')===id);
     const dejaFuture=prelevements.some(o=>String(o&&o.charge_fixe_id||'')===id);
-    if(existeProjectionCycle||dejaReel||dejaFuture)return;
+    courant.auditProvisionCopro20261018.projectionDansCycle=existeProjectionCycle;
+    courant.auditProvisionCopro20261018.dejaReel=dejaReel;
+    courant.auditProvisionCopro20261018.dejaFuture=dejaFuture;
+    if(existeProjectionCycle||dejaReel||dejaFuture){courant.auditProvisionCopro20261018.motif='deja_couvert';return;}
     const ligneProvision={id:'provision-copro-20261018:'+id,date:'',
       libelle:String(ligne.libelle||'Charges de copropriete pour deux appartements'),
       categorie:'Logements',montant:-550,statut:'provision_en_attente',
       source:'provision_economique_cerbere',certitude:'date_bancaire_a_confirmer'};
+    courant.auditProvisionCopro20261018.motif='provision_appliquee';
     courant.depensesAttendues=arrDashboardSynthese20260907_(courant.depensesAttendues+550);
     courant.detailsCartes.depenses.attendues.push(ligneProvision);
     courant.provisionChargesNonDatees20261018={montant:550,chargeFixeId:id,
