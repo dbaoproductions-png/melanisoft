@@ -70,6 +70,6 @@ function auditerRegistreReelCfBudgetSoft20261020(){
  const r=construireRegistreOccurrencesCfBudgetSoft20261020_({reference:'2026-10-20',occurrences:lignes,confirmations:[],paiements:[]});
  const out={ok:r.ok,lectureSeule:true,version:r.version,perimetre:'copro prospective uniquement',
   lignes:r.lignes.map(x=>({origine:x.origine,montant:x.montant,statut:x.statutRegistre,reportable:x.provisionReportable})),
-  bilan:r.bilan,limite:'La provision economique du cycle du 28/09 au 27/10 est deja portee par Cerbere; ce test ne la recree pas et ne deduit aucun arriere.';
+  bilan:r.bilan,limite:'La provision economique du cycle du 28/09 au 27/10 est deja portee par Cerbere; ce test ne la recree pas et ne deduit aucun arriere.'};
  console.log('[AUDIT REGISTRE REEL CF] '+JSON.stringify(out));return out;
 }
