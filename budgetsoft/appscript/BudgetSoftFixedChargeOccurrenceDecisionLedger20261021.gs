@@ -10,6 +10,14 @@ const BUDGETSOFT_CF_OCCURRENCE_DECISIONS_20261021_HEADERS=[
  'reference_preuve','commentaire','actif','cree_le','modifie_le'
 ];
 
+/** Normalisation stable : Sheets peut restituer une cellule ISO comme Date. */
+function dateOrigineDecisionCfBudgetSoft20261021_(valeur){
+ if(valeur instanceof Date&&!isNaN(valeur.getTime()))
+  return Utilities.formatDate(valeur,Session.getScriptTimeZone(),'yyyy-MM-dd');
+ const texte=String(valeur==null?'':valeur).trim();
+ return /^\d{4}-\d{2}-\d{2}(?:$|T)/.test(texte)?texte.slice(0,10):texte;
+}
+
 /** Lecture pure : ne cree jamais d'onglet si absent. */
 function lireDecisionsOccurrencesCfBudgetSoft20261021_(){
  const ss=SpreadsheetApp.getActiveSpreadsheet();
@@ -18,14 +26,14 @@ function lireDecisionsOccurrencesCfBudgetSoft20261021_(){
  const values=f.getDataRange().getValues(),headers=values.shift().map(x=>String(x||'').trim());
  return values.filter(row=>row.some(v=>v!==''&&v!==null)).map(row=>{
   const x={};BUDGETSOFT_CF_OCCURRENCE_DECISIONS_20261021_HEADERS.forEach(k=>{
-   const i=headers.indexOf(k);x[k]=i>=0?row[i]:null;
+   const i=headers.indexOf(k);x[k]=i>=0?(k==='date_origine'?dateOrigineDecisionCfBudgetSoft20261021_(row[i]):row[i]):null;
   });return x;
  });
 }
 
 /** Validation de forme : aucune ecriture et aucun rapprochement automatique. */
 function validerDecisionOccurrenceCfBudgetSoft20261021_(x){
- x=x||{};const id=String(x.charge_fixe_id||'').trim(),date=String(x.date_origine||'').slice(0,10);
+ x=x||{};const id=String(x.charge_fixe_id||'').trim(),date=dateOrigineDecisionCfBudgetSoft20261021_(x.date_origine);
  const decision=String(x.decision||'').trim(),reference=String(x.reference_preuve||'').trim();
  const valide=/^\d{4}-\d{2}-\d{2}$/.test(date);
  const mont=Number(x.montant);
