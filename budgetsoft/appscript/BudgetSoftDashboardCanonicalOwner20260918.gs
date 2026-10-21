@@ -133,5 +133,17 @@ function composerDashboardSyntheseBudgetSoft20260907_(ctx){
         publicationFinanciereActive:false};
     }
   }
+  // C2 : vue economique separee, sans ecriture sur les montants canoniques.
+  if(typeof calculerVueEconomiqueCoproC2BudgetSoft20261021_==='function'){
+    try{
+      r.vueEconomiqueCoproC2BudgetSoft20261021=calculerVueEconomiqueCoproC2BudgetSoft20261021_({
+        dashboard:r,lignesProjection:Array.isArray(proj.lignes)?proj.lignes:[],
+        decisions:lireDecisionsOccurrencesCfBudgetSoft20261021_()
+      });
+    }catch(erreur){
+      r.vueEconomiqueCoproC2BudgetSoft20261021={ok:false,applicable:false,
+        erreur:String(erreur&&erreur.message||erreur),impactFinancierCanonique:0};
+    }
+  }
   return r;
 }
