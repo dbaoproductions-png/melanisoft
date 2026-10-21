@@ -33,7 +33,7 @@ function validerDecisionOccurrenceCfBudgetSoft20261021_(x){
  if(!id)errors.push('charge_fixe_id_manquant');
  if(!valide||!Number.isFinite(Date.parse(date+'T12:00:00'))||
   new Date(date+'T12:00:00').toISOString().slice(0,10)!==date)errors.push('date_origine_invalide');
- if(!['impaye_confirme','annulee','paiement_confirme'].includes(decision))errors.push('decision_invalide');
+ if(!['impaye_confirme','annulee','paiement_confirme','en_attente_prelevement'].includes(decision))errors.push('decision_invalide');
  if(!reference)errors.push('reference_preuve_manquante');
  if(decision==='paiement_confirme'&&!String(x.operation_id||'').trim())errors.push('operation_id_manquant');
  if(decision==='paiement_confirme'&&(!Number.isFinite(mont)||mont<=0))errors.push('montant_paiement_invalide');
@@ -45,7 +45,7 @@ function validerDecisionOccurrenceCfBudgetSoft20261021_(x){
  * Une ligne 'paiement_confirme' est une decision documentee, pas une operation creee.
  */
 function projeterDecisionsOccurrencesCfBudgetSoft20261021_(lignes){
- const confirmations=[],paiements=[],anomalies=[],cles=new Set();
+ const confirmations=[],paiements=[],attentes=[],anomalies=[],cles=new Set();
  (lignes||[]).forEach((x,i)=>{
   if(x.actif===false||String(x.actif||'').toLowerCase()==='false')return;
   const v=validerDecisionOccurrenceCfBudgetSoft20261021_(x);
@@ -53,11 +53,12 @@ function projeterDecisionsOccurrencesCfBudgetSoft20261021_(lignes){
   const cle=v.chargeId+'|'+v.origine+'|'+v.decision+'|'+v.operationId;
   if(cles.has(cle)){anomalies.push({ligne:i+2,motifs:['decision_dupliquee']});return;}
   cles.add(cle);
+  if(v.decision==='en_attente_prelevement')attentes.push({chargeId:v.chargeId,origine:v.origine,montant:v.montant,reference:v.preuve,statut:'en_attente_prelevement'});
   if(v.decision==='impaye_confirme')confirmations.push({chargeId:v.chargeId,origine:v.origine,statut:'impaye_confirme',reference:v.preuve});
   if(v.decision==='paiement_confirme')paiements.push({chargeId:v.chargeId,origine:v.origine,statut:'valide',operationId:v.operationId,montant:v.montant});
   if(v.decision==='annulee')anomalies.push({ligne:i+2,motifs:['annulation_a_raccorder_a_l_occurrence_source']});
  });
- return{ok:anomalies.length===0,lectureSeule:true,confirmations,paiements,anomalies};
+ return{ok:anomalies.length===0,lectureSeule:true,confirmations,paiements,attentes,anomalies};
 }
 function testerRegistreDecisionsCfBudgetSoft20261021(){
  const base={charge_fixe_id:'COPRO',date_origine:'2026-10-15',reference_preuve:'attestation utilisateur'};
