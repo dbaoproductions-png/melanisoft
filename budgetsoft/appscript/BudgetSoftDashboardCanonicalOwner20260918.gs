@@ -145,5 +145,23 @@ function composerDashboardSyntheseBudgetSoft20260907_(ctx){
         erreur:String(erreur&&erreur.message||erreur),impactFinancierCanonique:0};
     }
   }
+  // Affichage principal de pilotage C2 : total economique explicite,
+  // distinct de depensesPrevisionnelles (proprietaire tresorerie canonique).
+  // Aucun autre agregat, solde ou capacite n'est touche.
+  if(r.cycleSuivant){
+    const v=r.vueEconomiqueCoproC2BudgetSoft20261021||{};
+    const c=r.cycleSuivant;
+    const autorise=v.ok===true&&v.applicable===true&&
+      Number(v.totalCoproDistinctes)===1100&&
+      Number(v.reportEconomique)===550&&
+      Number(v.impactFinancierCanonique)===0&&
+      Number(c.depensesPrevisionnelles)===Number(v.depensesPrevisionnellesCanoniques);
+    c.depensesAttenduesEconomiques=autorise?Number(v.depensesEconomiquesAvecReport):null;
+    c.reportProvisionsAttenteEconomique=autorise?550:0;
+    c.depensesAttenduesEconomiquesSource=autorise?
+      'vueEconomiqueCoproC2BudgetSoft20261021 · total de pilotage, hors tresorerie':
+      'non_publie_garde_copro';
+    c.depensesAttenduesEconomiquesPubliees=autorise;
+  }
   return r;
 }
