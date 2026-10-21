@@ -21,7 +21,7 @@ function enregistrerAttenteCoproControleeBudgetSoft20261021(){
   !ligne||Number(ligne.retenu)!==550||ligne.reel!=null)
   throw Error('Garde de provision canonique non satisfaite : aucune ecriture.');
  const existants=lireDecisionsOccurrencesCfBudgetSoft20261021_();
- if(existants.some(x=>String(x.charge_fixe_id||'')===id&&String(x.date_origine||'').slice(0,10)==='2026-09-28'&&String(x.actif||'').toLowerCase()!=='false'))
+ if(existants.some(x=>String(x.charge_fixe_id||'')===id&&dateOrigineDecisionCfBudgetSoft20261021_(x.date_origine)==='2026-09-28'&&String(x.actif||'').toLowerCase()!=='false'))
   throw Error('Decision de cette provision deja presente : aucune ecriture.');
  const operationLiee=(lireTable_('Operations')||[]).some(o=>String(o.charge_fixe_id||'')===id&&
   Number(o.montant||0)<0&&String(o.date_comptable||o.date||'').slice(0,10)>='2026-09-28'&&
@@ -44,7 +44,7 @@ function enregistrerAttenteCoproControleeBudgetSoft20261021(){
 function auditerAttenteCoproPersistanteBudgetSoft20261021(){
  const id='d476505c-189d-48a3-9eb1-51467df7fbc1';
  const x=lireDecisionsOccurrencesCfBudgetSoft20261021_().filter(o=>
-  String(o.charge_fixe_id||'')===id&&String(o.date_origine||'').slice(0,10)==='2026-09-28');
+  String(o.charge_fixe_id||'')===id&&dateOrigineDecisionCfBudgetSoft20261021_(o.date_origine)==='2026-09-28');
  const proj=projeterDecisionsOccurrencesCfBudgetSoft20261021_(x);
  const r={ok:proj.ok&&proj.attentes.length===1&&x.length===1,lectureSeule:true,
   decisions:x.length,attentes:proj.attentes.length,confirmationsImpayees:proj.confirmations.length,
