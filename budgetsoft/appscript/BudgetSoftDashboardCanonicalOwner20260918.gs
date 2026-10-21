@@ -121,5 +121,17 @@ function composerDashboardSyntheseBudgetSoft20260907_(ctx){
   r.provenance.soldesPrevisionnels='ctx.projectionEtendue canonique · même révision';
   r.versionEp=typeof BUDGETSOFT_EP_20260913_VERSION!=='undefined'?BUDGETSOFT_EP_20260913_VERSION:'';
   r.versionDashboardCanonicalOwner=BUDGETSOFT_DASHBOARD_CANONICAL_OWNER_20260918_VERSION;
+  // Publication informative des decisions persistantes ; aucun impact chiffre.
+  if(typeof enrichirDashboardAttentesPersistantesCf20261021_==='function'&&
+     typeof lireDecisionsOccurrencesCfBudgetSoft20261021_==='function'){
+    try{
+      enrichirDashboardAttentesPersistantesCf20261021_(r,lireDecisionsOccurrencesCfBudgetSoft20261021_());
+    }catch(erreur){
+      r.suiviAttentesChargesFixes20261021={ok:false,lectureSeule:true,
+        erreur:String(erreur&&erreur.message||erreur),
+        montantAAjouterDepensesAttendues:0,impactCft1:0,impactTresorerie:0,
+        publicationFinanciereActive:false};
+    }
+  }
   return r;
 }
