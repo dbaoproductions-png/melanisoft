@@ -199,6 +199,72 @@ function reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(origine){
             }
           }
         }
+        // Pont de bascule strict : report de l'echeance du cycle clos le 27/10,
+        // depuis le dernier snapshot VALIDE, jamais depuis une valeur codee en dur.
+        // Une double preuve (garde precedente ET ligne canonique precedente)
+        // est requise. La garde CB et le contrat de tresorerie sont rejoues.
+        if(typeof verifierGardeCbMultiCycleDepuisProjectionBudgetSoft20260910_==='function'&&
+           typeof chargerSnapshotGlobalLegacyBudgetSoft20260906_==='function'&&
+           typeof recalculerSortieTresorerie20260901_==='function'&&
+           typeof decomposerTrajectoireTresorerieCanoniqueBudgetSoft20260907_==='function'){
+          const avant=verifierGardeCbMultiCycleDepuisProjectionBudgetSoft20260910_(projectionCalculUnique,finSuivant);
+          const queueSeulement=avant.ok===false&&
+            (avant.erreurs||[]).length===1&&
+            avant.erreurs[0].code==='CB_DEBIT_CYCLE_NON_COUVERT'&&
+            avant.erreurs[0].date==='2026-10-31'&&
+            String(projectionCalculUnique.dateReference||'').slice(0,10)==='2026-10-28';
+          if(queueSeulement){
+            const dernier=chargerSnapshotGlobalLegacyBudgetSoft20260906_();
+            const ancien=dernier&&dernier.disponible&&dernier.etat&&dernier.etat.ok===true?dernier.etat:null;
+            const modulesAnciens=ancien&&ancien.modules||{};
+            const gardeAncienne=modulesAnciens.gardeCbMultiCycle||{};
+            const ancienneTrajectoire=modulesAnciens.projectionEtendue||{};
+            const jourCb=l=>Utilities.formatDate(new Date(l.date),Session.getScriptTimeZone(),'yyyy-MM-dd');
+            const preuves=(gardeAncienne.publiees||[]).filter(l=>jourCb(l)==='2026-10-31');
+            const anciennesLignes=(ancienneTrajectoire.lignes||[]).filter(l=>
+              l.source==='debit_cb_estime'&&jourCb(l)==='2026-10-31');
+            const aucuneLigne=(projectionCalculUnique.lignes||[]).every(l=>jourCb(l)!=='2026-10-31'||l.source!=='debit_cb_estime');
+            const preuveValide=!!(ancien&&gardeAncienne.ok===true&&ancienneTrajectoire.ok===true&&
+              String(ancienneTrajectoire.dateReference||'').slice(0,10)==='2026-10-27'&&
+              preuves.length===1&&anciennesLignes.length===1&&aucuneLigne&&
+              Number(anciennesLignes[0].montantSigne)<0&&
+              Math.abs(Number(anciennesLignes[0].montantSigne)-Number(preuves[0].montant))<.01&&
+              Math.abs(Number(anciennesLignes[0].partEp)-Number(preuves[0].partEp))<.01&&
+              String(anciennesLignes[0].ownerCb||'')===String(preuves[0].ownerCb||''));
+            let gardeCandidate=null,contrat=null;
+            if(preuveValide){
+              const lignes=(projectionCalculUnique.lignes||[]).slice();
+              lignes.push(Object.assign({},anciennesLignes[0]));
+              lignes.sort((a,b)=>new Date(a.date)-new Date(b.date));
+              const candidate=Object.assign({},projectionCalculUnique,{lignes:lignes});
+              const reference=new Date(projectionCalculUnique.dateReference);
+              const cible=new Date(projectionCalculUnique.dateCible);
+              recalculerSortieTresorerie20260901_(candidate,lignes,reference,cible);
+              contrat=decomposerTrajectoireTresorerieCanoniqueBudgetSoft20260907_(candidate);
+              candidate.decompositionCanonique=contrat;
+              gardeCandidate=contrat&&contrat.ok===true?
+                verifierGardeCbMultiCycleDepuisProjectionBudgetSoft20260910_(candidate,finSuivant):null;
+              if(contrat&&contrat.ok===true&&gardeCandidate&&gardeCandidate.ok===true){
+                candidate.auditReportCbCycleClos20261028={actif:true,
+                  sourceRevision:String(ancien.revisionBudgetSoft||''),
+                  dateDebit:'2026-10-31',
+                  montant:Number(anciennesLignes[0].montantSigne),
+                  gardePrecedenteOk:true,gardeCandidateOk:true,
+                  sansOperationBancaireCreee:true};
+                projectionCalculUnique=candidate;
+              }
+            }
+            console.log('[DIAG REPORT CB CYCLE CLOS] '+JSON.stringify({
+              derniereRevision:String(ancien&&ancien.revisionBudgetSoft||''),
+              ancienneReference:String(ancienneTrajectoire.dateReference||''),
+              preuvesGarde:preuves.length,preuvesLignes:anciennesLignes.length,
+              absenceDoublon:aucuneLigne,preuveValide:preuveValide,
+              contratOk:contrat&&contrat.ok===true,
+              gardeCandidateOk:gardeCandidate&&gardeCandidate.ok===true,
+              reporte:!!projectionCalculUnique.auditReportCbCycleClos20261028
+            }));
+          }
+        }
         return sousVueTrajectoireTresorerieCanoniqueBudgetSoft20260910_(projectionCalculUnique,cibleSuivante);
       });
       if(!projectionEtendue||projectionEtendue.ok===false)erreurs.push({module:'projectionEtendue',erreur:String(projectionEtendue&&projectionEtendue.erreur||'Projection canonique invalide'),diagnostic:projectionEtendue&&projectionEtendue.decompositionCanonique||null});
