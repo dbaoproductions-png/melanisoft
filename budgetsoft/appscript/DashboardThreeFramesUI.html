@@ -97,7 +97,13 @@
       carte('Solde prévisionnel à mi-cycle',fmt(s.soldeMiCycle),noteProjection)+
       carte('Solde prévisionnel au dernier jour',fmt(s.soldeFinCycle),noteProjection)+
       carte('Recettes prévisionnelles',fmt(s.revenusPrevisionnels),noteProjection)+
-      carte('Dépenses prévisionnelles',fmt(s.depensesPrevisionnelles),noteProjection)+
+      carte('Dépenses prévisionnelles bancaires',fmt(s.depensesPrevisionnelles),noteProjection)+
+      (s.depensesAttenduesEconomiquesPubliees===true&&
+       Number.isFinite(Number(s.depensesAttenduesEconomiques))&&
+       Number(s.reportProvisionsAttenteEconomique)>0?
+       carte('Dépenses économiques avec report',fmt(s.depensesAttenduesEconomiques),
+         'Inclut '+fmt(s.reportProvisionsAttenteEconomique)+' de copropriété en attente · hors trajectoire bancaire',true):
+       '')+
       carte('CB déjà engagées C1→C2',fmt(s.cbDejaEngagee),'Réel connu')+
       carte('Part différée estimée de l’EP1',fmt(s.cbEpEstimee),'Estimation sur EP1 restant')+
       carte('Impact CB total sur C2',fmt(s.reportCbCycle),'Connu + estimation EP'),4);
