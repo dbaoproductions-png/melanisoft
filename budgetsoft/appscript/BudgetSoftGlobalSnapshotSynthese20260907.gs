@@ -225,7 +225,8 @@ function reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(origine){
               l.source==='debit_cb_estime'&&jourCb(l)==='2026-10-31');
             const aucuneLigne=(projectionCalculUnique.lignes||[]).every(l=>jourCb(l)!=='2026-10-31'||l.source!=='debit_cb_estime');
             const preuveValide=!!(ancien&&gardeAncienne.ok===true&&ancienneTrajectoire.ok===true&&
-              String(ancienneTrajectoire.dateReference||'').slice(0,10)==='2026-10-27'&&
+              ['2026-10-27','2026-10-28'].includes(String(ancienneTrajectoire.dateReference||'').slice(0,10))&&
+              String(anciennesLignes[0]&&anciennesLignes[0].id||'').includes('2026-09-28__2026-10-27')&&
               preuves.length===1&&anciennesLignes.length===1&&aucuneLigne&&
               Number(anciennesLignes[0].montantSigne)<0&&
               Math.abs(Number(anciennesLignes[0].montantSigne)-Number(preuves[0].montant))<.01&&
