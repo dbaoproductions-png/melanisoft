@@ -171,6 +171,11 @@ function reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(origine){
             const lignesOctobre=(autonome&&autonome.lignes||[]).filter(l=>
               l.source==='debit_cb_estime'&&
               Utilities.formatDate(new Date(l.date),Session.getScriptTimeZone(),'yyyy-MM-dd')==='2026-10-31');
+            console.log('[DIAG CYCLES EP SNAPSHOT] '+JSON.stringify({
+              partage:(projectionCalculUnique.diagnostic20260831&&projectionCalculUnique.diagnostic20260831.enveloppePilotable20260913||{}).cycles||[],
+              autonome:(autonome&&autonome.diagnostic20260831&&autonome.diagnostic20260831.enveloppePilotable20260913||{}).cycles||[],
+              basePeriodes:(cerbereBase&&cerbereBase.periodes||[]).map(p=>({cle:p.clePilotage,fin:p.periode&&p.periode.fin}))
+            }));
             console.log('[DIAG REPLI CB OCTOBRE SNAPSHOT] '+JSON.stringify({
               phase:'validation_autonome',
               projectionOk:!!(autonome&&autonome.ok===true),
