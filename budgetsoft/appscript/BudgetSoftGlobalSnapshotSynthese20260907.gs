@@ -159,7 +159,13 @@ function reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(origine){
             repliEligible:uniquementQueueOctobre
           }));
           if(uniquementQueueOctobre){
-            const autonome=construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(cibleCalculUnique);
+            // Reutiliser le meme contexte bancaire canonique que la projection
+            // partagee. Sans cela, le repli lit un solde reel nul dans le
+            // contexte de reconstruction (alors que le compte vaut 160,47 EUR).
+            const autonome=construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(
+              cibleCalculUnique,null,
+              {comptes:comptes,tresorerieComptable:tresorerieComptable,pluxee:pluxee}
+            );
             const gardeAutonome=autonome&&autonome.ok===true?
               verifierGardeCbMultiCycleDepuisProjectionBudgetSoft20260910_(autonome,finSuivant):null;
             const lignesOctobre=(autonome&&autonome.lignes||[]).filter(l=>
