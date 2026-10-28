@@ -140,6 +140,36 @@ function reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(origine){
         if(typeof sousVueTrajectoireTresorerieCanoniqueBudgetSoft20260910_!=='function')return{ok:false,erreur:'Sous-vue canonique anti-régression absente.'};
         projectionCalculUnique=construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(cibleCalculUnique,cerbereBase&&cerbereBase.ok!==false?cerbereBase:null,{comptes:comptes,tresorerieComptable:tresorerieComptable,pluxee:pluxee});
         if(!projectionCalculUnique||projectionCalculUnique.ok===false)return projectionCalculUnique;
+        // Repli documentaire : le 28/10, la base Cerbere partagee peut omettre
+        // le cycle termine le 27/10 alors que son debit CB reste du le 31/10.
+        // Ne jamais forcer la garde a vert ou inventer un residuel nul.
+        // La seule alternative admise est un second calcul par le MEME
+        // proprietaire canonique, puis validation stricte de sa couverture CB.
+        if(typeof verifierGardeCbMultiCycleDepuisProjectionBudgetSoft20260910_==='function'){
+          const gardePartagee=verifierGardeCbMultiCycleDepuisProjectionBudgetSoft20260910_(projectionCalculUnique,finSuivant);
+          const uniquementQueueOctobre=!gardePartagee.ok&&
+            Array.isArray(gardePartagee.erreurs)&&gardePartagee.erreurs.length>0&&
+            gardePartagee.erreurs.every(e=>e.code==='CB_DEBIT_CYCLE_NON_COUVERT'&&e.date==='2026-10-31')&&
+            String(projectionCalculUnique.dateReference||'').slice(0,10)==='2026-10-28';
+          if(uniquementQueueOctobre){
+            const autonome=construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(cibleCalculUnique);
+            const gardeAutonome=autonome&&autonome.ok===true?
+              verifierGardeCbMultiCycleDepuisProjectionBudgetSoft20260910_(autonome,finSuivant):null;
+            const lignesOctobre=(autonome&&autonome.lignes||[]).filter(l=>
+              l.source==='debit_cb_estime'&&
+              Utilities.formatDate(new Date(l.date),Session.getScriptTimeZone(),'yyyy-MM-dd')==='2026-10-31');
+            if(gardeAutonome&&gardeAutonome.ok===true&&lignesOctobre.length===1&&
+              Number(lignesOctobre[0].montantSigne)<0&&
+              String(autonome.dateReference||'')===String(projectionCalculUnique.dateReference||'')&&
+              Number(autonome.soldeReel)===Number(projectionCalculUnique.soldeReel)){
+              projectionCalculUnique=autonome;
+              projectionCalculUnique.auditRepliCbOctobre20261028={
+                actif:true,raison:'cycle_precedent_absent_cerbere_partage',
+                dateDebit:'2026-10-31',montant:Number(lignesOctobre[0].montantSigne),
+                gardeAutonomeOk:true,sansModificationBancaire:true};
+            }
+          }
+        }
         return sousVueTrajectoireTresorerieCanoniqueBudgetSoft20260910_(projectionCalculUnique,cibleSuivante);
       });
       if(!projectionEtendue||projectionEtendue.ok===false)erreurs.push({module:'projectionEtendue',erreur:String(projectionEtendue&&projectionEtendue.erreur||'Projection canonique invalide'),diagnostic:projectionEtendue&&projectionEtendue.decompositionCanonique||null});
