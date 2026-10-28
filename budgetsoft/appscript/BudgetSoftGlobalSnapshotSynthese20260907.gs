@@ -151,6 +151,13 @@ function reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(origine){
             Array.isArray(gardePartagee.erreurs)&&gardePartagee.erreurs.length>0&&
             gardePartagee.erreurs.every(e=>e.code==='CB_DEBIT_CYCLE_NON_COUVERT'&&e.date==='2026-10-31')&&
             String(projectionCalculUnique.dateReference||'').slice(0,10)==='2026-10-28';
+          console.log('[DIAG REPLI CB OCTOBRE SNAPSHOT] '+JSON.stringify({
+            phase:'garde_partagee',
+            dateReference:String(projectionCalculUnique.dateReference||''),
+            gardeOk:gardePartagee.ok===true,
+            erreurs:(gardePartagee.erreurs||[]).map(e=>({code:e.code,date:e.date})),
+            repliEligible:uniquementQueueOctobre
+          }));
           if(uniquementQueueOctobre){
             const autonome=construireTrajectoireTresorerieCanoniqueBudgetSoft20260907(cibleCalculUnique);
             const gardeAutonome=autonome&&autonome.ok===true?
@@ -158,6 +165,17 @@ function reconstruireSnapshotGlobalSyntheseBudgetSoft20260907(origine){
             const lignesOctobre=(autonome&&autonome.lignes||[]).filter(l=>
               l.source==='debit_cb_estime'&&
               Utilities.formatDate(new Date(l.date),Session.getScriptTimeZone(),'yyyy-MM-dd')==='2026-10-31');
+            console.log('[DIAG REPLI CB OCTOBRE SNAPSHOT] '+JSON.stringify({
+              phase:'validation_autonome',
+              projectionOk:!!(autonome&&autonome.ok===true),
+              gardeOk:!!(gardeAutonome&&gardeAutonome.ok===true),
+              erreurs:(gardeAutonome&&gardeAutonome.erreurs||[]).map(e=>({code:e.code,date:e.date})),
+              lignesOctobre:lignesOctobre.map(x=>({id:String(x.id||''),montant:Number(x.montantSigne)})),
+              referenceAutonome:String(autonome&&autonome.dateReference||''),
+              referencePartagee:String(projectionCalculUnique.dateReference||''),
+              soldeAutonome:Number(autonome&&autonome.soldeReel),
+              soldePartage:Number(projectionCalculUnique.soldeReel)
+            }));
             if(gardeAutonome&&gardeAutonome.ok===true&&lignesOctobre.length===1&&
               Number(lignesOctobre[0].montantSigne)<0&&
               String(autonome.dateReference||'')===String(projectionCalculUnique.dateReference||'')&&
