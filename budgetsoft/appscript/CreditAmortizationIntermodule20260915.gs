@@ -72,6 +72,18 @@ function prochaineEcheanceApresPaiement20260915_(credit,dateOperation){if(!credi
 
 function calculerAmortissementCredit20260915_(credit,operation){
   const capital=Math.max(0,Number(credit&&credit.capital_restant||0)),montant=Math.abs(Number(operation&&operation.montant||0));
+  // Echeancier officiel du classeur privé : prioritaire sur les intérêts simulés.
+  const doc=typeof ventilationEcheancierDocumente20261104_==='function'?ventilationEcheancierDocumente20261104_(credit,operation):null;
+  if(doc){
+    if(doc.conflit)return{montant:arrCreditAmort20260915_(montant),partCapital:0,partInterets:0,partAssurance:0,
+      capitalAvant:arrCreditAmort20260915_(capital),capitalApres:arrCreditAmort20260915_(capital),
+      methode:'conflit_echeancier_documente_'+String(doc.raison||'')};
+    const partCapital=Math.min(capital,Math.max(0,Number(doc.partCapital||0)));
+    return{montant:arrCreditAmort20260915_(montant),partCapital:arrCreditAmort20260915_(partCapital),
+      partInterets:arrCreditAmort20260915_(doc.partInterets),partAssurance:arrCreditAmort20260915_(doc.partAssurance),
+      capitalAvant:arrCreditAmort20260915_(capital),capitalApres:arrCreditAmort20260915_(capital-partCapital),
+      capitalApresTheorique:arrCreditAmort20260915_(doc.capitalApresTheorique),methode:doc.methode};
+  }
   const exactCasden=typeof ventilationEcheancierCasden20260915_==='function'?ventilationEcheancierCasden20260915_(credit,operation):null;if(exactCasden){const partCapital=Math.min(capital,Math.max(0,exactCasden.partCapital));return{montant:arrCreditAmort20260915_(montant),partCapital:arrCreditAmort20260915_(partCapital),partInterets:arrCreditAmort20260915_(exactCasden.partInterets),partAssurance:arrCreditAmort20260915_(exactCasden.partAssurance),capitalAvant:arrCreditAmort20260915_(capital),capitalApres:arrCreditAmort20260915_(capital-partCapital),capitalApresTheorique:arrCreditAmort20260915_(exactCasden.capitalApresTheorique),methode:exactCasden.methode};}
   const exactAccessio=typeof ventilationEcheancierAccessio20260915_==='function'?ventilationEcheancierAccessio20260915_(credit,operation):null;if(exactAccessio){const partCapital=Math.min(capital,Math.max(0,exactAccessio.partCapital));return{montant:arrCreditAmort20260915_(montant),partCapital:arrCreditAmort20260915_(partCapital),partInterets:arrCreditAmort20260915_(exactAccessio.partInterets),partAssurance:arrCreditAmort20260915_(exactAccessio.partAssurance),capitalAvant:arrCreditAmort20260915_(capital),capitalApres:arrCreditAmort20260915_(capital-partCapital),capitalApresTheorique:arrCreditAmort20260915_(exactAccessio.capitalApresTheorique),methode:exactAccessio.methode};}
   const exactCarrefour=typeof ventilationReleveCarrefourPass20260915_==='function'?ventilationReleveCarrefourPass20260915_(credit,operation):null;if(exactCarrefour){const partCapital=Math.min(capital,Math.max(0,exactCarrefour.partCapital));return{montant:arrCreditAmort20260915_(montant),partCapital:arrCreditAmort20260915_(partCapital),partInterets:arrCreditAmort20260915_(exactCarrefour.partInterets),partAssurance:arrCreditAmort20260915_(exactCarrefour.partAssurance),capitalAvant:arrCreditAmort20260915_(capital),capitalApres:arrCreditAmort20260915_(capital-partCapital),capitalApresTheorique:arrCreditAmort20260915_(exactCarrefour.capitalApresTheorique),methode:exactCarrefour.methode};}
