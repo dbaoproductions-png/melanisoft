@@ -40,10 +40,23 @@ function trouverCreditPourChargeFixe20260915_(charge,credits){
   return{ok:true,credit:candidats[0].credit,score:candidats[0].score};
 }
 
-function tauxMensuelCredit20260915_(credit){
+function tauxMensuelCredit20260915_(credit,operation){
+  const type=String(credit&&credit.type_credit||'amortissable').toLowerCase();
+  const nominal=Number(credit&&credit.taux_nominal||0);
+  if(type!=='revolving'&&nominal>0){
+    const annuel=nominal/100;
+    return{tauxMensuel:annuel/12,methode:'TNA_documentaire/12',tauxAnnuel:annuel};
+  }
   const commentaire=String(credit&&credit.commentaire||''),mTna=commentaire.match(/(?:TNA|TAUX\s+NOMINAL)[^0-9]{0,12}(\d+(?:[,.]\d+)?)\s*%/i);
-  if(mTna){const annuel=nombreCreditAmort20260915_(mTna[1])/100;return{tauxMensuel:annuel/12,methode:'TNA/12',tauxAnnuel:annuel};}
-  const annuel=Math.max(0,Number(credit&&credit.taux||0))/100;
+  if(type!=='revolving'&&mTna){const annuel=nombreCreditAmort20260915_(mTna[1])/100;return{tauxMensuel:annuel/12,methode:'TNA/12',tauxAnnuel:annuel};}
+  let taux=Math.max(0,Number(credit&&credit.taux||0));
+  const dateEffet=String(credit&&credit.date_effet_taux_programme||'').slice(0,10);
+  const dateOp=operation&&dateOperationCredit20260915_(operation);
+  const dateOperation=dateOp?Utilities.formatDate(dateOp,Session.getScriptTimeZone(),'yyyy-MM-dd'):'';
+  if(type==='revolving'&&dateOperation&&dateEffet&&dateOperation>=dateEffet&&Number(credit.taux_programme)>0){
+    taux=Number(credit.taux_programme);
+  }
+  const annuel=taux/100;
   return{tauxMensuel:annuel>0?Math.pow(1+annuel,1/12)-1:0,methode:'TAEG_effectif_mensualise',tauxAnnuel:annuel};
 }
 
@@ -89,7 +102,7 @@ function calculerAmortissementCredit20260915_(credit,operation){
   const exactCarrefour=typeof ventilationReleveCarrefourPass20260915_==='function'?ventilationReleveCarrefourPass20260915_(credit,operation):null;if(exactCarrefour){const partCapital=Math.min(capital,Math.max(0,exactCarrefour.partCapital));return{montant:arrCreditAmort20260915_(montant),partCapital:arrCreditAmort20260915_(partCapital),partInterets:arrCreditAmort20260915_(exactCarrefour.partInterets),partAssurance:arrCreditAmort20260915_(exactCarrefour.partAssurance),capitalAvant:arrCreditAmort20260915_(capital),capitalApres:arrCreditAmort20260915_(capital-partCapital),capitalApresTheorique:arrCreditAmort20260915_(exactCarrefour.capitalApresTheorique),methode:exactCarrefour.methode};}
   const contratCofidis=typeof ventilationContratCofidis20260915_==='function'?ventilationContratCofidis20260915_(credit,operation):null;if(contratCofidis){const partCapital=Math.min(capital,Math.max(0,contratCofidis.partCapital));return{montant:arrCreditAmort20260915_(montant),partCapital:arrCreditAmort20260915_(partCapital),partInterets:arrCreditAmort20260915_(contratCofidis.partInterets),partAssurance:arrCreditAmort20260915_(contratCofidis.partAssurance),capitalAvant:arrCreditAmort20260915_(capital),capitalApres:arrCreditAmort20260915_(capital-partCapital),capitalApresTheorique:arrCreditAmort20260915_(contratCofidis.capitalApresTheorique),methode:contratCofidis.methode};}
   const explicite=ventilationExpliciteCredit20260915_(credit,montant,operation);if(explicite){const partCapital=Math.min(capital,Math.max(0,explicite.partCapital));return{montant:arrCreditAmort20260915_(montant),partCapital:arrCreditAmort20260915_(partCapital),partInterets:arrCreditAmort20260915_(explicite.partInterets),partAssurance:arrCreditAmort20260915_(explicite.partAssurance),capitalAvant:arrCreditAmort20260915_(capital),capitalApres:arrCreditAmort20260915_(capital-partCapital),methode:explicite.methode};}
-  const assurance=Math.min(montant,Math.max(0,Number(credit&&credit.assurance_mensuelle||0))),tx=tauxMensuelCredit20260915_(credit),interets=Math.min(Math.max(0,montant-assurance),arrCreditAmort20260915_(capital*tx.tauxMensuel)),partCapital=Math.min(capital,Math.max(0,arrCreditAmort20260915_(montant-assurance-interets)));
+  const assurance=Math.min(montant,Math.max(0,Number(credit&&credit.assurance_mensuelle||0))),tx=tauxMensuelCredit20260915_(credit,operation),interets=Math.min(Math.max(0,montant-assurance),arrCreditAmort20260915_(capital*tx.tauxMensuel)),partCapital=Math.min(capital,Math.max(0,arrCreditAmort20260915_(montant-assurance-interets)));
   return{montant:arrCreditAmort20260915_(montant),partCapital,partInterets:arrCreditAmort20260915_(interets),partAssurance:arrCreditAmort20260915_(assurance),capitalAvant:arrCreditAmort20260915_(capital),capitalApres:arrCreditAmort20260915_(capital-partCapital),methode:tx.methode};
 }
 
