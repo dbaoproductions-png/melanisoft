@@ -105,8 +105,11 @@ function auditerImportCreditsDocumentes20261104(json){
   verifierInitialisation_();
   const doc=lireDocumentCredits20261104_(json),credits=lireCreditsEtendusV2_();
   const lignes=correspondancesDocumentCredits20261104_(doc,credits),erreurs=lignes.filter(x=>x.erreur);
+  const nombreEcheances=lignesEcheancierDocumente20261104_(doc,lignes).length;
+  const calendrierExiste=!!SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CREDIT_DOC_SCHEDULE_SHEET_20261104);
   const totalActuel=arrDocumentCredit20261104_(lignes.reduce((s,x)=>s+Number(x.solde_actuel||0),0));
-  return {ok:erreurs.length===0,lectureSeule:true,version:CREDIT_DOCUMENT_IMPORT_20261104_VERSION,
+  return {ok:erreurs.length===0&&(!calendrierExiste||lignes.every(x=>x.etat==='deja_documente')),lectureSeule:true,version:CREDIT_DOCUMENT_IMPORT_20261104_VERSION,
+    nombreEcheances,calendrierExiste,
     date:'2026-11-04',nombreCredits:lignes.length,creditsEnConflit:erreurs.length,
     sommeActuelle:totalActuel,sommeDocumentee:Number(doc.total_documented_balances_eur),
     mensualitesDocumentees:Number(doc.total_corrected_monthly_payment_eur),
@@ -167,6 +170,7 @@ function appliquerImportCreditsDocumentes20261104(json,empreintePrevue){
     sauvegarde.setName(CREDIT_DOCUMENT_IMPORT_20261104_BACKUP);
     sauvegarde.hideSheet();
     assurerColonnesDocumentCredits20261104_();
+    const nombreEcheances=enregistrerEcheanciersDocumentes20261104_(doc,audit.lignes);
     const credits=lireCreditsEtendusV2_(),modifies=[];
     for(const ligne of audit.lignes){
       const d=doc.credits.find(x=>cleDocumentCredit20261104_(x.credit_name)===ligne.cle);
@@ -176,7 +180,7 @@ function appliquerImportCreditsDocumentes20261104(json,empreintePrevue){
       modifies.push({credit:d.credit_name,solde:Number(d.balance_documented_eur),date:d.balance_reference_date});
     }
     result={ok:true,applique:true,version:CREDIT_DOCUMENT_IMPORT_20261104_VERSION,
-      sauvegarde:CREDIT_DOCUMENT_IMPORT_20261104_BACKUP,modifies,total:Number(doc.total_documented_balances_eur)};
+      sauvegarde:CREDIT_DOCUMENT_IMPORT_20261104_BACKUP,nombreEcheances,modifies,total:Number(doc.total_documented_balances_eur)};
   }finally{lock.releaseLock();}
   if(result&&result.applique&&typeof reconstruireSnapshotGlobalSyntheseBudgetSoft20260907==='function'){
     try{const s=reconstruireSnapshotGlobalSyntheseBudgetSoft20260907('import_credits_documentes_20261104');
