@@ -88,9 +88,16 @@ function correspondancesDocumentCredits20261104_(doc,credits){
     const suffixe=numeroDoc.slice(-4);
     const numeroCompatible=!!(c&&suffixe&&numeroActuel.endsWith(suffixe));
     const typeCompatible=!!(c&&String(c.type_credit||typeAttendu).toLowerCase()===typeAttendu);
-    const etat=c?(Math.abs(actuel-cible)<.01?'deja_documente':(Math.abs(actuel-ancien)<.01?'pret':'conflit_solde')):'introuvable';
+    const dejaMarque=!!(c&&String(c.source_reference_documentaire||'')==='import_doc_20261104'&&
+      String(c.date_reference_documentaire||'').slice(0,10)===d.balance_reference_date);
+    const etat=c?(Math.abs(actuel-cible)<.01?(dejaMarque?'deja_documente':'pret_meta'):(Math.abs(actuel-ancien)<.01?'pret':'conflit_solde')):'introuvable';
+    // Un report d'août signalé sur Créatis invaliderait l'usage mécanique du
+    // calendrier de mai 2025. Aucune correction silencieuse dans ce cas.
+    const reportCreatis=!!(c&&cle==='CREATIS'&&
+      /(?:report|suspend)[^.;]{0,100}(?:31\/08\/2026|ao[uû]t\s*2026)|(?:31\/08\/2026|ao[uû]t\s*2026)[^.;]{0,100}(?:report|suspend)/i
+      .test(String(c.commentaire||'')));
     const nouvellesOps=c?journalDepuisReferenceDocument20261104_(c.id,d.balance_reference_date):[];
-    const erreur=!c?'credit_introuvable_ou_ambigu':(!numeroCompatible?'numero_contrat_incompatible':(!typeCompatible?'type_incompatible':(nouvellesOps.length?'journal_apres_reference':(etat==='conflit_solde'?'solde_inattendu':''))));
+    const erreur=!c?'credit_introuvable_ou_ambigu':(!numeroCompatible?'numero_contrat_incompatible':(!typeCompatible?'type_incompatible':(nouvellesOps.length?'journal_apres_reference':(reportCreatis?'report_creatis_aout_2026_a_verifier':(etat==='conflit_solde'?'solde_inattendu':'')))));
     return {cle,credit:d.credit_name,credit_id:c?String(c.id):'',etat,erreur,numero_compatible:numeroCompatible,
       solde_actuel:actuel,solde_attendu_avant:ancien,solde_documente:cible,date_reference:d.balance_reference_date,
       mensualite:Number(d.next_payment_eur),prochaine_echeance:d.next_payment_date,operations_journal_apres_reference:nouvellesOps.length};
