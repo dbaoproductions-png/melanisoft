@@ -17,8 +17,8 @@ th:nth-child(n+2),td:nth-child(n+2){text-align:right}
 </style></head>
 <body>
 <h1>Import contrôlé des 7 crédits BudgetSoft</h1>
-<p class="muted">Ouvrez le fichier JSON de consolidation du 4 novembre, collez son contenu ci-dessous et lancez <b>Analyser</b>. Aucune donnée n'est écrite avant confirmation. Le dépôt de code ne contient pas les montants des contrats.</p>
-<textarea id="payload" placeholder='Collez ici le contenu du fichier BudgetSoft_credits_reference_2026-11-04.json' spellcheck="false"></textarea>
+<p class="muted">Ouvrez le fichier JSON « 6 validés — Créatis en attente », collez son contenu ci-dessous et lancez <b>Analyser</b>. Aucune donnée n'est écrite avant confirmation. Le dépôt de code ne contient pas les montants des contrats.</p>
+<textarea id="payload" placeholder='Collez ici le JSON BudgetSoft_credits_reference_2026-11-04_6_valides_creatis_en_attente.json' spellcheck="false"></textarea>
 <div class="actions">
   <button class="secondary" id="audit">1 · Analyser (lecture seule)</button>
   <button id="apply" disabled>2 · Appliquer les corrections</button>
@@ -38,10 +38,10 @@ th:nth-child(n+2),td:nth-child(n+2){text-align:right}
     rows.textContent='';
     (a.lignes||[]).forEach(function(l){var tr=document.createElement('tr');
       cellule(tr,l.credit);cellule(tr,euro(l.solde_actuel));cellule(tr,euro(l.solde_documente));
-      cellule(tr,l.erreur?'BLOQUÉ : '+l.erreur:(l.etat==='deja_documente'?'Déjà conforme':'Prêt'));
+      cellule(tr,l.erreur?'BLOQUÉ : '+l.erreur:(l.en_attente?'Échéancier révisé attendu — capital inchangé':(l.etat==='deja_documente'?'Déjà conforme':'Prêt')));
       rows.appendChild(tr);
     });
-    if(a.ok){empreinte=a.empreinte;applyBtn.disabled=false;message('Audit conforme : '+a.nombreCredits+' crédits, total documenté '+euro(a.sommeDocumentee)+'. Vous pouvez appliquer.', 'ok');}
+    if(a.ok){empreinte=a.empreinte;applyBtn.disabled=false;message('Audit conforme : '+a.nombreCreditsImportables+' crédits importables, '+a.nombreCreditsEnAttente+' en attente. Total validé hors Créatis : '+euro(a.sommeDocumentee)+'. Vous pouvez appliquer.', 'ok');}
     else{empreinte='';applyBtn.disabled=true;message('Audit bloqué sur '+a.creditsEnConflit+' crédit(s). Aucune modification effectuée.','error');}
   }
   payload.addEventListener('input',function(){empreinte='';applyBtn.disabled=true;message('Document modifié : relancez l’analyse.');});
@@ -54,7 +54,7 @@ th:nth-child(n+2),td:nth-child(n+2){text-align:right}
       .auditerImportCreditsDocumentes20261104(payload.value);
   });
   applyBtn.addEventListener('click',function(){
-    if(!empreinte||!confirm('Confirmer la mise à jour des sept références dans la feuille Credits ? Une sauvegarde sera créée.'))return;
+    if(!empreinte||!confirm('Confirmer la mise à jour des six crédits documentés ? Créatis conservera son capital actuel et sera marqué en attente d’un échéancier révisé. Une sauvegarde sera créée.'))return;
     applyBtn.disabled=true;auditBtn.disabled=true;message('Application et reconstruction du snapshot…');
     google.script.run.withSuccessHandler(function(r){
       auditBtn.disabled=false;message(r.applique?'Corrections enregistrées. Sauvegarde : '+r.sauvegarde+'. Snapshot : '+(r.snapshot&&r.snapshot.ok?'reconstruit':'à reconstruire'):'Références déjà conformes.', 'ok');
