@@ -10,7 +10,7 @@ const CREDIT_DOCUMENT_IMPORT_20261104_BACKUP = 'Backup_Credits_20261104';
 const CREDIT_DOCUMENT_IMPORT_20261104_COLUMNS = [
   'date_reference_documentaire','capital_reference_documentaire',
   'source_reference_documentaire','taux_nominal','libelle_taux',
-  'date_dernier_paiement_confirme'
+  'date_dernier_paiement_confirme','taux_programme','date_effet_taux_programme'
 ];
 
 function cleDocumentCredit20261104_(nom) {
@@ -138,6 +138,8 @@ function creditDepuisDocument20261104_(c,d){
     taux:Math.round(Number(d.taeg_or_teg_annual_rate||0)*10000)/100,
     taux_nominal:d.nominal_annual_rate==null?'':Math.round(Number(d.nominal_annual_rate)*10000)/100,
     libelle_taux:labelTaux,type_credit:renouvelable?'revolving':'amortissable',
+    taux_programme:d.rate_change?Math.round(Number(d.rate_change.taeg_annual_rate||0)*10000)/100:'',
+    date_effet_taux_programme:d.rate_change?dateDocumentCredit20261104_(d.rate_change.effective_date,'date de changement de taux'):'',
     echeances_restantes:mensualites,cout_restant:cout,
     cout_restant_precision:renouvelable?'Indicatif : échéances restantes du dernier relevé, sans nouvelle utilisation ni évolution de taux.':'Somme des échéances futures du tableau officiel moins le capital documenté.',
     assurance_mensuelle:Number(vent.insurance_eur||(!renouvelable&&d.credit_name==='Cofidis personnel'?21:0)),
