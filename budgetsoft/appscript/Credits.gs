@@ -14,6 +14,12 @@ function enrichirCredit_(c){
   x.capital_restant=Math.max(0,Number(x.capital_restant||0));
   x.mensualite=Math.max(0,Number(x.mensualite||0));
   x.taux=Math.max(0,Number(x.taux||0));
+  // Affichage à taux courant : le taux annoncé pour une date future ne
+  // devient actif qu'à partir du jour d'effet, sans modifier la source.
+  const dateEffet=String(x.date_effet_taux_programme||'').slice(0,10);
+  const aujourdHui=Utilities.formatDate(new Date(),Session.getScriptTimeZone(),'yyyy-MM-dd');
+  if(/^20\d{2}-\d{2}-\d{2}$/.test(dateEffet)&&aujourdHui>=dateEffet&&Number(x.taux_programme)>0)
+    x.taux=Number(x.taux_programme);
   x.echeances_restantes=Math.max(0,parseInt(x.echeances_restantes,10)||0);
   x.type_credit=String(x.type_credit||'amortissable').toLowerCase()==='revolving'?'revolving':'amortissable';
   x.plafond_credit=Math.max(0,Number(x.plafond_credit||0));
