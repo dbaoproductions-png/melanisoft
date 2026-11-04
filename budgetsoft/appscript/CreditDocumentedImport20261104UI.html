@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><base target="_top">
+<style>
+body{margin:0;padding:20px;font:14px/1.45 Arial,sans-serif;color:#24303f;background:#f7f9fc}
+h1{font-size:19px;margin:0 0 7px}p{margin:8px 0 14px}.muted{color:#5b6473}
+textarea{width:100%;box-sizing:border-box;height:170px;padding:12px;border:1px solid #b6c1cf;border-radius:7px;font:12px/1.4 monospace;resize:vertical;background:white}
+.actions{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap}
+button{cursor:pointer;background:#234c70;color:#fff;border:0;border-radius:6px;padding:10px 16px;font-weight:600}
+button.secondary{background:#e4eaf0;color:#23415d}button:disabled{opacity:.5;cursor:not-allowed}
+#status{padding:9px 12px;border-radius:6px;background:white;border:1px solid #d3dce5;margin:8px 0}
+#status.error{border-color:#a94c47;color:#9d2820}#status.ok{border-color:#58856e;color:#275c43}
+table{width:100%;border-collapse:collapse;background:white;font-size:12px}
+th,td{border-bottom:1px solid #e1e8ed;padding:8px 6px;text-align:left}
+th:nth-child(n+2),td:nth-child(n+2){text-align:right}
+.table-wrap{max-height:245px;overflow-y:auto}
+.foot{font-size:12px;color:#657386;margin-top:10px}
+</style></head>
+<body>
+<h1>Import contrôlé des 7 crédits BudgetSoft</h1>
+<p class="muted">Ouvrez le fichier JSON de consolidation du 4 novembre, collez son contenu ci-dessous et lancez <b>Analyser</b>. Aucune donnée n'est écrite avant confirmation. Le dépôt de code ne contient pas les montants des contrats.</p>
+<textarea id="payload" placeholder='Collez ici le contenu du fichier BudgetSoft_credits_reference_2026-11-04.json' spellcheck="false"></textarea>
+<div class="actions">
+  <button class="secondary" id="audit">1 · Analyser (lecture seule)</button>
+  <button id="apply" disabled>2 · Appliquer les corrections</button>
+</div>
+<div id="status" aria-live="polite">En attente du fichier JSON.</div>
+<div class="table-wrap"><table><thead><tr><th>Crédit</th><th>Actuel</th><th>Référence</th><th>Contrôle</th></tr></thead><tbody id="rows"></tbody></table></div>
+<p class="foot">Protection : comparaison avec les anciens soldes, blocage en cas de paiement déjà journalisé après le relevé, sauvegarde intégrale de la feuille Credits avant modification. Aucune opération bancaire n'est modifiée.</p>
+<script>
+(function(){
+  'use strict';
+  var payload=document.getElementById('payload'),auditBtn=document.getElementById('audit'),applyBtn=document.getElementById('apply'),status=document.getElementById('status'),rows=document.getElementById('rows');
+  var empreinte='';
+  var euro=function(n){return n==null?'—':Number(n).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';};
+  function message(t,cl){status.textContent=t;status.className=cl||'';}
+  function cellule(tr,v){var td=document.createElement('td');td.textContent=v;tr.appendChild(td);}
+  function rendre(a){
+    rows.textContent='';
+    (a.lignes||[]).forEach(function(l){var tr=document.createElement('tr');
+      cellule(tr,l.credit);cellule(tr,euro(l.solde_actuel));cellule(tr,euro(l.solde_documente));
+      cellule(tr,l.erreur?'BLOQUÉ : '+l.erreur:(l.etat==='deja_documente'?'Déjà conforme':'Prêt'));
+      rows.appendChild(tr);
+    });
+    if(a.ok){empreinte=a.empreinte;applyBtn.disabled=false;message('Audit conforme : '+a.nombreCredits+' crédits, total documenté '+euro(a.sommeDocumentee)+'. Vous pouvez appliquer.', 'ok');}
+    else{empreinte='';applyBtn.disabled=true;message('Audit bloqué sur '+a.creditsEnConflit+' crédit(s). Aucune modification effectuée.','error');}
+  }
+  payload.addEventListener('input',function(){empreinte='';applyBtn.disabled=true;message('Document modifié : relancez l’analyse.');});
+  auditBtn.addEventListener('click',function(){
+    applyBtn.disabled=true;empreinte='';
+    if(!payload.value.trim()){message('Veuillez coller le JSON.','error');return;}
+    auditBtn.disabled=true;message('Analyse des crédits en cours…');
+    google.script.run.withSuccessHandler(function(a){auditBtn.disabled=false;rendre(a);})
+      .withFailureHandler(function(e){auditBtn.disabled=false;message(String(e&&e.message||e),'error');})
+      .auditerImportCreditsDocumentes20261104(payload.value);
+  });
+  applyBtn.addEventListener('click',function(){
+    if(!empreinte||!confirm('Confirmer la mise à jour des sept références dans la feuille Credits ? Une sauvegarde sera créée.'))return;
+    applyBtn.disabled=true;auditBtn.disabled=true;message('Application et reconstruction du snapshot…');
+    google.script.run.withSuccessHandler(function(r){
+      auditBtn.disabled=false;message(r.applique?'Corrections enregistrées. Sauvegarde : '+r.sauvegarde+'. Snapshot : '+(r.snapshot&&r.snapshot.ok?'reconstruit':'à reconstruire'):'Références déjà conformes.', 'ok');
+    }).withFailureHandler(function(e){auditBtn.disabled=false;message(String(e&&e.message||e),'error');})
+      .appliquerImportCreditsDocumentes20261104(payload.value,empreinte);
+  });
+})();
+</script></body></html>
