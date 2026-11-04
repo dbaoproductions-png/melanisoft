@@ -57,6 +57,14 @@ function lireDocumentCredits20261104_(json){
         throw new Error('Seul Créatis peut être en attente du nouveau tableau, sans capital ni échéancier.');
       return;
     }
+    if(cle==='CREATIS'){
+      const emis=String(c.post_deferral_schedule_issued_on||'');
+      if(c.post_deferral_schedule_verified!==true||emis<='2026-08-31'||
+          !Array.isArray(c.amortization_schedule)||c.amortization_schedule.length===0){
+        throw new Error('Créatis : tableau révisé postérieur au report d’août 2026 exigé. Ancien échéancier interdit.');
+      }
+      dateDocumentCredit20261104_(emis,'Créatis : émission du nouvel échéancier');
+    }
     nombreDocumentCredit20261104_(c.balance_documented_eur,cle);
     dateDocumentCredit20261104_(c.balance_reference_date,cle+' date de référence');
     dateDocumentCredit20261104_(c.next_payment_date,cle+' prochaine échéance');
@@ -112,7 +120,7 @@ function correspondancesDocumentCredits20261104_(doc,credits){
     const nouvellesOps=c&&!enAttente?journalDepuisReferenceDocument20261104_(c.id,d.balance_reference_date):[];
     const erreur=!c?'credit_introuvable_ou_ambigu':(!numeroCompatible?'numero_contrat_incompatible':
       (!typeCompatible?'type_incompatible':(enAttente?'':(nouvellesOps.length?'journal_apres_reference':
-      (reportCreatis?'report_creatis_aout_2026_a_verifier':(etat==='conflit_solde'?'solde_inattendu':''))))));
+      (reportCreatis&&!d.post_deferral_schedule_verified?'report_creatis_aout_2026_a_verifier':(etat==='conflit_solde'?'solde_inattendu':''))))));
     return {cle,credit:d.credit_name,credit_id:c?String(c.id):'',etat,erreur,en_attente:enAttente,numero_compatible:numeroCompatible,
       solde_actuel:actuel,solde_attendu_avant:ancien,solde_documente:cible,date_reference:d.balance_reference_date,
       mensualite:Number(d.next_payment_eur),prochaine_echeance:d.next_payment_date,operations_journal_apres_reference:nouvellesOps.length};
