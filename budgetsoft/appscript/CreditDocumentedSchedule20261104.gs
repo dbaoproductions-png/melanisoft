@@ -10,6 +10,7 @@ const CREDIT_DOC_SCHEDULE_HEADERS_20261104=[
 function lignesEcheancierDocumente20261104_(doc,lignes){
   const correspondances=new Map(lignes.map(x=>[x.cle,x.credit_id])),out=[];
   (doc.credits||[]).forEach(c=>{
+    if(c.import_status==='pending_revised_schedule')return;
     if(c.credit_kind!=='amortissable')return;
     const cle=cleDocumentCredit20261104_(c.credit_name),id=correspondances.get(cle);
     if(!id)throw new Error('Échéancier sans crédit identifié : '+cle);
