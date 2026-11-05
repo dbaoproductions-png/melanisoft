@@ -11,6 +11,7 @@ const CREDIT_DOCUMENT_IMPORT_20261104_COLUMNS = [
   'date_reference_documentaire','capital_reference_documentaire',
   'source_reference_documentaire','taux_nominal','libelle_taux',
   'date_dernier_paiement_confirme','taux_programme','date_effet_taux_programme',
+  'statut_documentaire',
   'statut_documentaire'
 ];
 
@@ -144,7 +145,7 @@ function correspondancesDocumentCredits20261104_(doc,credits){
 }
 function empreinteDocumentCredits20261104_(doc,lignes){
   const payload=JSON.stringify({version:CREDIT_DOCUMENT_IMPORT_20261104_VERSION,
-    date:doc.created_as_of,credits:lignes.map(x=>[x.cle,x.credit_id,x.solde_actuel,x.solde_documente,x.etat,x.erreur])});
+    date:doc.created_as_of,document:doc,credits:lignes.map(x=>[x.cle,x.credit_id,x.solde_actuel,x.solde_documente,x.etat,x.erreur])});
   return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,payload).map(b=>('0'+(b&255).toString(16)).slice(-2)).join('');
 }
 function auditerImportCreditsDocumentes20261104(json){
