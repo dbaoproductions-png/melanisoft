@@ -17,7 +17,7 @@ function referenceContractuelleCreditRattrapage20260915_(credit){
   const dateDoc=String(credit&&credit.date_reference_documentaire||'').slice(0,10);
   const sourceDoc=String(credit&&credit.source_reference_documentaire||'');
   const capitalDoc=Number(credit&&credit.capital_reference_documentaire);
-  if(sourceDoc==='import_doc_20261104'&&/^20\d{2}-\d{2}-\d{2}$/.test(dateDoc)&&Number.isFinite(capitalDoc)&&capitalDoc>=0){
+  if(['import_doc_20261104','import_solde_declare_20261105'].includes(sourceDoc)&&/^20\d{2}-\d{2}-\d{2}$/.test(dateDoc)&&Number.isFinite(capitalDoc)&&capitalDoc>=0){
     return {date:dateIsoRattrapageCredit20260915_(dateDoc),capital:capitalDoc,source:sourceDoc};
   }
   if(typeof estCreditCasdenEcheancier20260915_==='function'&&estCreditCasdenEcheancier20260915_(credit))return{date:dateIsoRattrapageCredit20260915_('2026-08-04'),capital:40562.30,source:'echeancier_exact_CASDEN'};
@@ -122,7 +122,10 @@ function simulerRattrapageAmortissementsCredits20260915(){
     const refDate=dateReferenceCreditRattrapage20260915_(credit),refCapital=capitalReferenceCreditRattrapage20260915_(credit),sourceReference=sourceReferenceCreditRattrapage20260915_(credit),capitalActuel=Math.round(Math.max(0,Number(credit.capital_restant||0))*100)/100,refApresJournal=capitalReferenceApresJournalCredit20260916_(credit.id,refDate,refCapital),capitalReferenceEffectif=refApresJournal.capital;
     let confiance='insuffisante',raison='date_reference_absente',resynchronisationSource=false,ajustementDirectSource=0;
     if(refDate){
-      if(refCapital==null){confiance='moyenne';raison='date_reference_trouvee_sans_capital_reference_dans_commentaire';}
+      if(String(credit.statut_documentaire||'')==='solde_declare_echeancier_attendu'){
+        confiance='moyenne';raison='solde_communique_echeancier_non_revise';
+      }
+      else if(refCapital==null){confiance='moyenne';raison='date_reference_trouvee_sans_capital_reference_dans_commentaire';}
       else if(Math.abs(Number(capitalReferenceEffectif)-capitalActuel)<=.01){confiance='haute';raison=refApresJournal.operations.length?'reference_documentaire_plus_journal_concordante':(sourceReference==='commentaire_credit'?'date_et_capital_reference_concordent_avec_capital_actuel':'reference_documentaire_exacte_concordante');}
       else if(sourceReferenceResynchronisableCredit20260915_(sourceReference)){confiance='haute';raison='reference_documentaire_plus_recente_a_resynchroniser';resynchronisationSource=true;ajustementDirectSource=Math.round((capitalActuel-Number(capitalReferenceEffectif))*100)/100;}
       else{confiance='conflit';raison='capital_actuel_differe_du_capital_reference';}
@@ -144,7 +147,9 @@ function simulerRattrapageAmortissementsCredits20260915(){
       operations.push({montant_bancaire_brut:brut,majoration_hors_capital:Math.round(majoration*100)/100,operation_reportee_mais_prelevee:dateReportee,operation_id:String(r.operation.id||''),charge_fixe_id:String(r.charge.id||''),date:r.date.toISOString(),montant:calc.montant,capital_avant:avant,part_capital:calc.partCapital,part_interets:calc.partInterets,part_assurance:calc.partAssurance,part_frais:Number(calc.partFrais||0),capital_apres:calc.capitalApres,methode:calc.methode,ventilation_documentee:documentee,source_rapprochement:r.source});
     });
     const operationsDocumentees=operations.filter(x=>x.ventilation_documentee),operationsEstimees=operations.filter(x=>!x.ventilation_documentee),capitalDocumente=Math.round(operationsDocumentees.reduce((s,x)=>s+Number(x.part_capital||0),0)*100)/100;
-    const applicationAutorisee=confiance==='haute'&&exclues.length===0&&operationsEstimees.length===0;
+    const applicationAutorisee=confiance==='haute'&&
+      String(credit.statut_documentaire||'')!=='solde_declare_echeancier_attendu'&&
+      exclues.length===0&&operationsEstimees.length===0;
     const capitalOperations=Math.round(operations.reduce((s,x)=>s+Number(x.part_capital||0),0)*100)/100,capitalSimule=Math.round(Number(virtuel.capital_restant||0)*100)/100,variationNette=Math.round((capitalSimule-capitalActuel)*100)/100;
     lignes.push({credit_id:String(credit.id||''),credit:String(credit.nom||''),capital_actuel:capitalActuel,date_reference:refDate?Utilities.formatDate(refDate,Session.getScriptTimeZone(),'yyyy-MM-dd'):'',capital_reference:refCapital,capital_reference_apres_journal:capitalReferenceEffectif,operations_journalisees_depuis_reference:refApresJournal.operations.length,source_reference:sourceReference,confiance,raison,resynchronisation_source:resynchronisationSource,ajustement_direct_source:ajustementDirectSource,operations_a_rattraper:operations.length,operations_documentees:operationsDocumentees.length,operations_estimees:operationsEstimees.length,operations_exclues:exclues.length,capital_a_deduire:capitalOperations,capital_documente_a_deduire:capitalDocumente,capital_simule_apres:capitalSimule,variation_nette_capital:variationNette,application_automatique_autorisable:applicationAutorisee,operations,exclues});
   });
