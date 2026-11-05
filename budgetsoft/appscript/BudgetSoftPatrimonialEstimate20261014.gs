@@ -10,8 +10,7 @@ function construireSituationPatrimonialeEstimeeBudgetSoft20261014_(credits,patri
   const lignes=(source.amortissables||[]).concat(source.renouvelables||[]).map(c=>{
     const estime=parId.get(String(c.id||''));
     const enregistre=arr(Math.max(0,Number(c.capital_restant||0)));
-    const utilisable=!!(String(c.statut_documentaire||'')!=='solde_declare_echeancier_attendu'&&
-      estime&&estime.capital_simule_apres!=null&&estime.confiance!=='conflit');
+    const utilisable=!!(estime&&estime.capital_simule_apres!=null&&estime.confiance!=='conflit');
     return {id:String(c.id||''),nom:String(c.nom||''),type:String(c.type_credit||''),
       capitalReference:enregistre,capitalEstime:utilisable?arr(Math.max(0,Number(estime.capital_simule_apres))):enregistre,
       estimationDisponible:utilisable,operationsPrisesEnCompte:utilisable?Number(estime.operations_a_rattraper||0):0,
