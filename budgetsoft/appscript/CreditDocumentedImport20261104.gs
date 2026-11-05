@@ -10,8 +10,7 @@ const CREDIT_DOCUMENT_IMPORT_20261104_BACKUP = 'Backup_Credits_20261104';
 const CREDIT_DOCUMENT_IMPORT_20261104_COLUMNS = [
   'date_reference_documentaire','capital_reference_documentaire',
   'source_reference_documentaire','taux_nominal','libelle_taux',
-  'date_dernier_paiement_confirme','taux_programme','date_effet_taux_programme',
-  'statut_documentaire',
+  'date_dernier_paiement_confirme','taux_programme','date_effet_taux_programme','statut_documentaire',
   'statut_documentaire'
 ];
 
@@ -58,17 +57,6 @@ function lireDocumentCredits20261104_(json){
         throw new Error('Seul Créatis peut être en attente du nouveau tableau, sans capital ni échéancier.');
       return;
     }
-    if(c.import_status==='balance_only_post_deferral'){
-      if(cle!=='CREATIS'||c.credit_kind!=='amortissable'||
-          (c.amortization_schedule||[]).length||c.post_deferral_schedule_verified===true||
-          c.balance_reference_date_kind!=='date_declaration')
-        throw new Error('Créatis : solde seulement, sans échéancier révisé.');
-      nombreDocumentCredit20261104_(c.balance_documented_eur,'solde communiqué');
-      dateDocumentCredit20261104_(c.balance_reported_on,'date de déclaration');
-      if(c.balance_reported_on!==c.balance_reference_date)
-        throw new Error('Créatis : référence = date de déclaration, pas arrêté bancaire.');
-      return;
-    }
     if(cle==='CREATIS'){
       const emis=String(c.post_deferral_schedule_issued_on||'');
       if(c.post_deferral_schedule_verified!==true||emis<='2026-08-31'||
@@ -86,14 +74,10 @@ function lireDocumentCredits20261104_(json){
   });
   const enAttente=d.credits.filter(c=>c.import_status==='pending_revised_schedule');
   if(enAttente.length>1)throw new Error('Un seul crédit peut être laissé en attente.');
-  const total=arrDocumentCredit20261104_(d.credits.filter(c=>c.import_status!=='pending_revised_schedule'&&c.import_status!=='balance_only_post_deferral')
+  const total=arrDocumentCredit20261104_(d.credits.filter(c=>c.import_status!=='pending_revised_schedule')
     .reduce((s,c)=>s+Number(c.balance_documented_eur),0));
   if(Math.abs(total-Number(d.total_documented_balances_eur))>.01)
     throw new Error('Le total déclaré ne correspond pas aux crédits importables.');
-  const totalMixte=arrDocumentCredit20261104_(d.credits.filter(c=>c.import_status!=='pending_revised_schedule')
-    .reduce((s,c)=>s+Number(c.balance_documented_eur),0));
-  if(Math.abs(totalMixte-Number(d.total_balances_including_reported_eur))>.01)
-    throw new Error('Total mixte avec solde communiqué incohérent.');
   return d;
 }
 function journalDepuisReferenceDocument20261104_(creditId,dateRef){
@@ -116,7 +100,6 @@ function correspondancesDocumentCredits20261104_(doc,credits){
     const c=candidats.length===1?candidats[0]:null;
     const ancien=nombreDocumentCredit20261104_(d.balance_previous_budgetsoft_eur,'ancien');
     const enAttente=d.import_status==='pending_revised_schedule';
-    const soldeDeclare=d.import_status==='balance_only_post_deferral';
     const cible=enAttente?null:nombreDocumentCredit20261104_(d.balance_documented_eur,'nouveau');
     const actuel=c?arrDocumentCredit20261104_(Number(c.capital_restant||0)):null;
     const typeAttendu=d.credit_kind==='amortissable'?'amortissable':'revolving';
@@ -125,7 +108,7 @@ function correspondancesDocumentCredits20261104_(doc,credits){
     const suffixe=numeroDoc.slice(-4);
     const numeroCompatible=!!(c&&suffixe&&numeroActuel.endsWith(suffixe));
     const typeCompatible=!!(c&&String(c.type_credit||typeAttendu).toLowerCase()===typeAttendu);
-    const dejaMarque=!!(c&&['import_doc_20261104','import_solde_declare_20261105'].includes(String(c.source_reference_documentaire||''))&&
+    const dejaMarque=!!(c&&String(c.source_reference_documentaire||'')==='import_doc_20261104'&&
       String(c.date_reference_documentaire||'').slice(0,10)===d.balance_reference_date);
     const etat=!c?'introuvable':(enAttente?'en_attente_echeancier':
       (Math.abs(actuel-cible)<.01?(dejaMarque?'deja_documente':'pret_meta'):(Math.abs(actuel-ancien)<.01?'pret':'conflit_solde')));
@@ -137,8 +120,8 @@ function correspondancesDocumentCredits20261104_(doc,credits){
     const nouvellesOps=c&&!enAttente?journalDepuisReferenceDocument20261104_(c.id,d.balance_reference_date):[];
     const erreur=!c?'credit_introuvable_ou_ambigu':(!numeroCompatible?'numero_contrat_incompatible':
       (!typeCompatible?'type_incompatible':(enAttente?'':(nouvellesOps.length?'journal_apres_reference':
-      (reportCreatis&&!soldeDeclare&&!d.post_deferral_schedule_verified?'report_creatis_aout_2026_a_verifier':(etat==='conflit_solde'?'solde_inattendu':''))))));
-    return {cle,credit:d.credit_name,credit_id:c?String(c.id):'',etat,erreur,en_attente:enAttente,solde_declare:soldeDeclare,numero_compatible:numeroCompatible,
+      (reportCreatis&&!d.post_deferral_schedule_verified?'report_creatis_aout_2026_a_verifier':(etat==='conflit_solde'?'solde_inattendu':''))))));
+    return {cle,credit:d.credit_name,credit_id:c?String(c.id):'',etat,erreur,en_attente:enAttente,numero_compatible:numeroCompatible,
       solde_actuel:actuel,solde_attendu_avant:ancien,solde_documente:cible,date_reference:d.balance_reference_date,
       mensualite:Number(d.next_payment_eur),prochaine_echeance:d.next_payment_date,operations_journal_apres_reference:nouvellesOps.length};
   });
@@ -160,10 +143,8 @@ function auditerImportCreditsDocumentes20261104(json){
     date:'2026-11-04',nombreCredits:lignes.length,
     nombreCreditsImportables:lignes.filter(x=>!x.en_attente).length,
     nombreCreditsEnAttente:lignes.filter(x=>x.en_attente).length,
-    nombreCreditsAvecSoldeDeclare:lignes.filter(x=>x.solde_declare).length,
     creditsEnConflit:erreurs.length,
     sommeActuelle:totalActuel,sommeDocumentee:Number(doc.total_documented_balances_eur),
-    sommeAvecSoldeDeclare:Number(doc.total_balances_including_reported_eur),
     mensualitesDocumentees:Number(doc.total_corrected_monthly_payment_eur),
     empreinte:empreinteDocumentCredits20261104_(doc,lignes),lignes};
 }
@@ -229,23 +210,6 @@ function appliquerImportCreditsDocumentes20261104(json,empreintePrevue){
     for(const ligne of audit.lignes){
       const d=doc.credits.find(x=>cleDocumentCredit20261104_(x.credit_name)===ligne.cle);
       const credit=credits.find(x=>String(x.id)===ligne.credit_id);
-      if(ligne.solde_declare){
-        // Solde communiqué à la date de déclaration, date d’arrêté bancaire inconnue.
-        // Ne pas recalculer l’échéancier, date de fin, intérêts ni opérations.
-        enregistrerCreditEtendu_(Object.assign({},credit,{
-          capital_restant:Number(d.balance_documented_eur),
-          capital_reference_documentaire:Number(d.balance_documented_eur),
-          date_reference_documentaire:String(d.balance_reference_date),
-          source_reference_documentaire:'import_solde_declare_20261105',
-          statut_documentaire:'solde_declare_echeancier_attendu',
-          date_dernier_paiement_confirme:String(d.last_paid_date_confirmed||''),
-          commentaire:String(credit.commentaire||'').replace(/\s+$/,'')+
-            ' | Capital communiqué le 05/11/2026, date d’arrêté bancaire inconnue.'+
-            ' Échéancier révisé attendu après report d’août.'
-        }));
-        modifies.push({credit:d.credit_name,solde:Number(d.balance_documented_eur),statut:'solde_declare'});
-        continue;
-      }
       if(ligne.en_attente){
         // Aucun capital, taux, échéance ni échéancier Créatis recalculé :
         // on marque seulement la nécessité d'un document actualisé.
@@ -264,8 +228,7 @@ function appliquerImportCreditsDocumentes20261104(json,empreintePrevue){
     result={ok:true,applique:true,version:CREDIT_DOCUMENT_IMPORT_20261104_VERSION,
       sauvegarde:CREDIT_DOCUMENT_IMPORT_20261104_BACKUP,nombreEcheances,modifies,
       creancesEnAttente:audit.lignes.filter(x=>x.en_attente).map(x=>x.credit),
-      totalDocumenteHorsAttente:Number(doc.total_documented_balances_eur),
-      totalAvecSoldeDeclare:Number(doc.total_balances_including_reported_eur)};
+      totalDocumenteHorsAttente:Number(doc.total_documented_balances_eur)};
   }finally{lock.releaseLock();}
   if(result&&result.applique&&typeof reconstruireSnapshotGlobalSyntheseBudgetSoft20260907==='function'){
     try{const s=reconstruireSnapshotGlobalSyntheseBudgetSoft20260907('import_credits_documentes_20261104');
