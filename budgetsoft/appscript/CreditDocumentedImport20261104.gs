@@ -254,7 +254,9 @@ function appliquerImportCreditsDocumentes20261104(json,empreintePrevue){
   return result;
 }
 function ouvrirImportCreditsDocumentes20261104(){
-  const html=HtmlService.createHtmlOutputFromFile('CreditDocumentedImport20261104UI')
-    .setWidth(880).setHeight(670);
-  SpreadsheetApp.getUi().showModalDialog(html,'BudgetSoft — Import documentaire des crédits');
+  // Compatibilite avec les appels depuis l'editeur Apps Script TEST autonome.
+  // La modale est affichee uniquement dans la page web BudgetSoft / Financements.
+  const message='Ouvrez BudgetSoft TEST, rubrique Financements, puis cliquez sur « Auditer références ». Cette fonction ne peut pas ouvrir de fenêtre depuis l’éditeur Apps Script autonome.';
+  console.log(message);
+  return {ok:true,mode:'interface_web',message};
 }
