@@ -77,8 +77,13 @@ function lireDocumentCredits20261104_(json){
   if(enAttente.length>1)throw new Error('Un seul crédit peut être laissé en attente.');
   const total=arrDocumentCredit20261104_(d.credits.filter(c=>c.import_status!=='pending_revised_schedule')
     .reduce((s,c)=>s+Number(c.balance_documented_eur),0));
-  if(Math.abs(total-Number(d.total_documented_balances_eur))>.01)
+  if(!Number.isFinite(Number(d.total_documented_balances_eur))||
+     Math.abs(total-Number(d.total_documented_balances_eur))>.01)
     throw new Error('Le total déclaré ne correspond pas aux crédits importables.');
+  const mensualites=arrDocumentCredit20261104_(d.credits.reduce((s,c)=>s+Number(c.next_payment_eur),0));
+  if(!Number.isFinite(Number(d.total_corrected_monthly_payment_eur))||
+     Math.abs(mensualites-Number(d.total_corrected_monthly_payment_eur))>.01)
+    throw new Error('Le total déclaré des mensualités ne correspond pas aux sept crédits.');
   return d;
 }
 function journalDepuisReferenceDocument20261104_(creditId,dateRef){
@@ -201,16 +206,27 @@ function appliquerImportCreditsDocumentes20261104(json,empreintePrevue){
     const deja=audit.lignes.filter(x=>!x.en_attente).every(x=>x.etat==='deja_documente');
     if(deja)return {ok:true,applique:false,dejaAJour:true,total:Number(doc.total_documented_balances_eur)};
     const ss=SpreadsheetApp.getActiveSpreadsheet(),source=ss.getSheetByName('Credits');
+    if(!source)throw new Error('La feuille Credits est introuvable.');
     if(ss.getSheetByName(CREDIT_DOCUMENT_IMPORT_20261104_BACKUP))throw new Error('Sauvegarde déjà présente. Vérifier une précédente importation avant toute nouvelle écriture.');
+    if(ss.getSheetByName(CREDIT_DOC_SCHEDULE_SHEET_20261104))throw new Error('Echéanciers déjà présents. Audit manuel nécessaire.');
+    // Préparer toutes les nouvelles lignes AVANT de toucher au classeur.
+    // Une date, un calendrier ou une correspondance erronés ne doivent pas laisser un import partiel.
+    const credits=lireCreditsEtendusV2_();
+    const preparations=audit.lignes.map(ligne=>{
+      const d=doc.credits.find(x=>cleDocumentCredit20261104_(x.credit_name)===ligne.cle);
+      const credit=credits.find(x=>String(x.id)===ligne.credit_id);
+      if(!d||!credit)throw new Error('Correspondance crédit introuvable avant écriture : '+ligne.cle);
+      return {ligne,d,credit,prochain:ligne.en_attente?null:creditDepuisDocument20261104_(credit,d)};
+    });
+    if(!lignesEcheancierDocumente20261104_(doc,audit.lignes).length)
+      throw new Error('Aucune échéance documentaire exploitable : import bloqué.');
     const sauvegarde=source.copyTo(ss);
     sauvegarde.setName(CREDIT_DOCUMENT_IMPORT_20261104_BACKUP);
     sauvegarde.hideSheet();
     assurerColonnesDocumentCredits20261104_();
     const nombreEcheances=enregistrerEcheanciersDocumentes20261104_(doc,audit.lignes);
-    const credits=lireCreditsEtendusV2_(),modifies=[];
-    for(const ligne of audit.lignes){
-      const d=doc.credits.find(x=>cleDocumentCredit20261104_(x.credit_name)===ligne.cle);
-      const credit=credits.find(x=>String(x.id)===ligne.credit_id);
+    const modifies=[];
+    for(const {ligne,d,credit,prochain} of preparations){
       if(ligne.en_attente){
         // Aucun capital, taux, échéance ni échéancier Créatis recalculé :
         // on marque seulement la nécessité d'un document actualisé.
@@ -221,7 +237,6 @@ function appliquerImportCreditsDocumentes20261104(json,empreintePrevue){
         }));
         continue;
       }
-      const prochain=creditDepuisDocument20261104_(credit,d);
       prochain.statut_documentaire='documente';
       enregistrerCreditEtendu_(prochain);
       modifies.push({credit:d.credit_name,solde:Number(d.balance_documented_eur),date:d.balance_reference_date});
