@@ -35,9 +35,15 @@
     const est=estimationCredit_(c);
     const capital=est&&est.estimationDisponible?est.capitalEstime:c.capital_restant;
     const sourceDocumentee=String(c.source_reference_documentaire||'')==='import_doc_20261104';
+    const creatisConfirme=String(c.source_reference_documentaire||'')==='espace_client_capital_confirme_20261107'&&
+      String(c.statut_documentaire||'')==='solde_confirme_echeancier_simule';
+    const estimationDistincte=!!(est&&est.estimationDisponible&&Number.isFinite(Number(est.capitalEstime))&&
+      Math.abs(Number(est.capitalEstime)-Number(c.capital_restant))>.009);
     const enAttente=String(c.statut_documentaire||'')==='echeancier_revision_attendu';
     const resume=enAttente?'Ancien solde indicatif — report août 2026, à vérifier':
-      (sourceDocumentee&&!(est&&est.estimationDisponible&&Math.abs(Number(est.capitalEstime)-Number(c.capital_restant))>.009)?(renouvelable?'Encours documenté':'Capital documenté')+' au '+date_(c.date_reference_documentaire):renouvelable?'Encours estimé':'Capital restant estimé');
+      creatisConfirme&&!estimationDistincte?'Capital vérifié au '+date_(c.date_reference_documentaire)+' · échéancier simulé':
+      sourceDocumentee&&!estimationDistincte?(renouvelable?'Encours documenté':'Capital documenté')+' au '+date_(c.date_reference_documentaire):
+      renouvelable?'Encours estimé':'Capital restant estimé';
     return `<div class="credit-row"><div class="account-main credit-row-main"><div class="account-icon">${renouvelable?'🔄':'💼'}</div><div><strong>${esc_(c.nom||'Crédit')}</strong><small>${c.numero_pret?'N° '+esc_(c.numero_pret):''}</small></div></div><div class="credit-metrics"><div class="credit-metric"><strong>${euro_(capital)}</strong><small>${resume}</small></div><div class="credit-metric"><strong>${euro_(c.mensualite)}</strong><small>Mensualité</small></div><div class="credit-metric"><strong>${date_(c.prochaine_echeance)&&esc_(prochaineEcheanceEstimee_(c))}</strong><small>Prochaine échéance estimée</small></div><div class="credit-metric"><strong>${taux_(c.taux)}</strong><small>${esc_(String(c.libelle_taux||'TAEG'))}${renouvelable?' variable':''}</small></div></div></div>`;
   }
   function chargerMensualitesCredits_(){
