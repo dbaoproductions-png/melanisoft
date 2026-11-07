@@ -11,6 +11,15 @@ function dateIsoRattrapageCredit20260915_(s){
 }
 
 function referenceContractuelleCreditRattrapage20260915_(credit){
+  // Une référence plus récente, importée et contrôlée, prime sur les anciens
+  // relevés 2026-08/09. Le journal ne doit soustraire que les opérations
+  // effectivement appliquées APRES cette nouvelle date.
+  const dateDoc=String(credit&&credit.date_reference_documentaire||'').slice(0,10);
+  const sourceDoc=String(credit&&credit.source_reference_documentaire||'');
+  const capitalDoc=Number(credit&&credit.capital_reference_documentaire);
+  if(sourceDoc==='import_doc_20261104'&&/^20\d{2}-\d{2}-\d{2}$/.test(dateDoc)&&Number.isFinite(capitalDoc)&&capitalDoc>=0){
+    return {date:dateIsoRattrapageCredit20260915_(dateDoc),capital:capitalDoc,source:sourceDoc};
+  }
   if(typeof estCreditCasdenEcheancier20260915_==='function'&&estCreditCasdenEcheancier20260915_(credit))return{date:dateIsoRattrapageCredit20260915_('2026-08-04'),capital:40562.30,source:'echeancier_exact_CASDEN'};
   if(typeof estCreditAccessio20260915_==='function'&&estCreditAccessio20260915_(credit))return{date:dateIsoRattrapageCredit20260915_('2026-08-21'),capital:800.00,source:'releve_exact_ACCESSIO'};
   if(typeof referenceSiteCofidis20260915_==='function'){const c=referenceSiteCofidis20260915_(credit);if(c)return{date:dateIsoRattrapageCredit20260915_(c.date),capital:Number(c.capital),source:c.source};}
@@ -48,7 +57,7 @@ function montantCompatibleEcheanceCreditRattrapage20260915_(credit,operation){
   const mens=Math.abs(Number(credit&&credit.mensualite||0)),montant=Math.abs(Number(operation&&operation.montant||0));if(!mens||!montant)return true;
   const tolerance=Math.max(10,mens*.15);return Math.abs(montant-mens)<=tolerance;
 }
-function methodeDocumenteeRattrapage20260915_(methode){return /^(echeancier_exact_|releve_exact_|ventilation_explicite_commentaire_datee|contrat_COFIDIS_)/.test(String(methode||''));}
+function methodeDocumenteeRattrapage20260915_(methode){return /^(echeancier_exact_|echeancier_officiel_prive_20261104$|releve_exact_|ventilation_explicite_commentaire_datee|contrat_COFIDIS_)/.test(String(methode||''));}
 
 function journalAppliqueDepuisReferenceCredit20260916_(creditId,refDate){
   if(!refDate||typeof lireJournalAmortissementsCredits20260915_!=='function')return[];
