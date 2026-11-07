@@ -228,6 +228,10 @@ function appliquerImportCreditsDocumentes20261104(json,empreintePrevue){
     const modifies=[];
     for(const {ligne,d,credit,prochain} of preparations){
       if(ligne.en_attente){
+        // Ne pas écraser une référence Créatis plus récente, confirmée depuis
+        // l'espace client : le JSON historique du 04/11 reste en attente
+        // uniquement pour son échéancier OFFICIEL, pas pour son capital.
+        if(String(credit.statut_documentaire||'')==='solde_confirme_echeancier_simule')continue;
         // Aucun capital, taux, échéance ni échéancier Créatis recalculé :
         // on marque seulement la nécessité d'un document actualisé.
         enregistrerCreditEtendu_(Object.assign({},credit,{
@@ -256,7 +260,7 @@ function appliquerImportCreditsDocumentes20261104(json,empreintePrevue){
 function ouvrirImportCreditsDocumentes20261104(){
   // Compatibilite avec les appels depuis l'editeur Apps Script TEST autonome.
   // La modale est affichee uniquement dans la page web BudgetSoft / Financements.
-  const message='Ouvrez BudgetSoft TEST, rubrique Financements, puis cliquez sur « Auditer références ». Cette fonction ne peut pas ouvrir de fenêtre depuis l’éditeur Apps Script autonome.';
+  const message='Ouvrez BudgetSoft TEST, rubrique Crédits, puis cliquez sur « Auditer références ». Cette fonction ne peut pas ouvrir de fenêtre depuis l’éditeur Apps Script autonome.';
   console.log(message);
   return {ok:true,mode:'interface_web',message};
 }
