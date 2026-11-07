@@ -57,7 +57,7 @@ function montantCompatibleEcheanceCreditRattrapage20260915_(credit,operation){
   const mens=Math.abs(Number(credit&&credit.mensualite||0)),montant=Math.abs(Number(operation&&operation.montant||0));if(!mens||!montant)return true;
   const tolerance=Math.max(10,mens*.15);return Math.abs(montant-mens)<=tolerance;
 }
-function methodeDocumenteeRattrapage20260915_(methode){return /^(echeancier_exact_|releve_exact_|ventilation_explicite_commentaire_datee|contrat_COFIDIS_)/.test(String(methode||''));}
+function methodeDocumenteeRattrapage20260915_(methode){return /^(echeancier_exact_|echeancier_officiel_prive_20261104$|releve_exact_|ventilation_explicite_commentaire_datee|contrat_COFIDIS_)/.test(String(methode||''));}
 
 function journalAppliqueDepuisReferenceCredit20260916_(creditId,refDate){
   if(!refDate||typeof lireJournalAmortissementsCredits20260915_!=='function')return[];
