@@ -1,0 +1,148 @@
+<style>
+.creatis-projection-modal .modal-card{width:min(760px,calc(100vw - 24px));max-width:760px;max-height:88vh;overflow:auto;margin:auto}
+.creatis-projection-modal .creatis-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.creatis-projection-modal label{display:block;font-size:13px;font-weight:600}
+.creatis-projection-modal label input{width:100%;box-sizing:border-box;margin-top:6px;padding:9px}
+.creatis-projection-modal .creatis-projection-output{margin:12px 0;padding:12px;background:#f1f7fa;border-radius:10px;white-space:pre-wrap;line-height:1.6}
+.creatis-projection-modal .creatis-warning{font-size:13px;color:#805a1d;line-height:1.5}
+@media(max-width:620px){.creatis-projection-modal .creatis-grid{grid-template-columns:1fr}}
+</style>
+<script>
+(function(){
+  'use strict';
+  let modal=null,dernierAudit=null,derniersParametres=null,sequence=0,application=false;
+  const euro=v=>Number(v||0).toLocaleString('fr-FR',{style:'currency',currency:'EUR'});
+  const el=id=>document.getElementById(id);
+  function valeurDateLocale(){
+    try{return new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Paris',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
+    catch(_){return new Date().toISOString().slice(0,10);}
+  }
+  function finMois(iso){
+    const [a,m]=iso.split('-').map(Number);
+    return new Date(Date.UTC(a,m,0)).toISOString().slice(0,10);
+  }
+  function nombreSaisi(s){
+    return Number(String(s||'').replace(/\s/g,'').replace(',','.'));
+  }
+  function valeurs(){
+    return {
+      capital_verifie:nombreSaisi(el('cp-capital').value),
+      date_reference:el('cp-reference').value,
+      taux_nominal_annuel_pct:nombreSaisi(el('cp-tna').value),
+      mensualite:nombreSaisi(el('cp-mensualite').value),
+      premiere_echeance_prevue:el('cp-premiere').value
+    };
+  }
+  function annuler(){
+    dernierAudit=null;derniersParametres=null;sequence++;
+    const btn=el('cp-appliquer');if(btn)btn.disabled=true;
+    if(el('cp-resultat'))el('cp-resultat').textContent='Aucune simulation validée.';
+  }
+  function afficherEtat(t){el('cp-message').textContent=t;}
+  function construireModal(){
+    if(modal)return modal;
+    modal=document.createElement('div');
+    modal.id='creatis-projection-modal';
+    modal.className='modal hidden credit-modal-overlay creatis-projection-modal';
+    modal.setAttribute('role','dialog');
+    modal.setAttribute('aria-modal','true');
+    modal.setAttribute('aria-label','Créatis, capital confirmé et échéancier simulé');
+    modal.innerHTML=`
+      <div class="modal-card">
+        <div class="modal-heading"><div><p class="panel-kicker">Crédits</p><h2>Créatis — capital confirmé et simulation</h2></div>
+        <button type="button" class="modal-close" id="cp-fermer" aria-label="Fermer">×</button></div>
+        <p class="helper-text">Saisis le capital vérifié sur ton espace client. Le taux nominal et la mensualité proviennent de l’ancien tableau. La première date d’échéance est une hypothèse, pas une information contractuelle.</p>
+        <div class="creatis-grid">
+          <label>Capital vérifié (€)<input id="cp-capital" inputmode="decimal" autocomplete="off" placeholder="Capital constaté sur l’application"></label>
+          <label>Date de vérification<input id="cp-reference" type="date"></label>
+          <label>Mensualité habituelle (€)<input id="cp-mensualite" inputmode="decimal"></label>
+          <label>Taux nominal annuel (TNA en %)<input id="cp-tna" inputmode="decimal" placeholder="Ex. taux figurant sur le contrat"></label>
+          <label>Première échéance supposée<input id="cp-premiere" type="date"></label>
+        </div>
+        <p class="creatis-warning">La projection ne constitue PAS un échéancier Créatis officiel. Elle ne sera pas insérée dans la feuille des échéanciers contractuels ni utilisée comme preuve d’un paiement.</p>
+        <div class="form-actions">
+          <button type="button" class="secondary-button" id="cp-auditer">1 · Simuler / analyser (lecture seule)</button>
+          <button type="button" class="primary-button" id="cp-appliquer" disabled>2 · Enregistrer le capital confirmé</button>
+        </div>
+        <p id="cp-message" role="status" aria-live="polite" class="helper-text">Aucune modification en cours.</p>
+        <div id="cp-resultat" class="creatis-projection-output">Aucune simulation validée.</div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.querySelector('#cp-fermer').addEventListener('click',()=>{if(!application){modal.classList.add('hidden');annuler();}});
+    modal.addEventListener('click',e=>{if(e.target===modal&&!application){modal.classList.add('hidden');annuler();}});
+    modal.querySelectorAll('input').forEach(input=>input.addEventListener('input',()=>{
+      annuler();afficherEtat('Paramètres modifiés : relance une simulation avant d’enregistrer.');
+    }));
+    el('cp-auditer').addEventListener('click',()=>{
+      let params=valeurs();
+      annuler();
+      const demande=sequence;
+      el('cp-auditer').disabled=true;
+      afficherEtat('Contrôle en lecture seule…');
+      google.script.run.withSuccessHandler(resultat=>{
+        el('cp-auditer').disabled=false;
+        if(demande!==sequence)return;
+        dernierAudit=resultat;derniersParametres=JSON.stringify(params);
+        el('cp-resultat').textContent=
+          'Capital actuel BudgetSoft : '+euro(resultat.capitalActuel)+'\n'+
+          'Capital confirmé : '+euro(resultat.capitalVerifie)+'\n'+
+          'Variation proposée : '+euro(resultat.variation)+'\n'+
+          'Échéances simulées : '+resultat.nombreEcheances+'\n'+
+          'Intérêts estimés : '+euro(resultat.interetsSimules)+'\n'+
+          'Première échéance supposée : '+resultat.premiereEcheancePrevue+'\n'+
+          'Dernière échéance supposée : '+resultat.derniereEcheancePrevue+'\n'+
+          'STATUT : SIMULATION NON CONTRACTUELLE';
+        el('cp-appliquer').disabled=!(resultat.ok&&resultat.empreinte)||!!resultat.dejaAJour;
+        afficherEtat(resultat.dejaAJour?'Solde déjà enregistré avec sa projection.':'Simulation conforme. Vérifie les hypothèses avant d’enregistrer.');
+      }).withFailureHandler(erreur=>{
+        el('cp-auditer').disabled=false;
+        if(demande!==sequence)return;
+        afficherEtat('Contrôle impossible : '+String(erreur&&erreur.message||erreur));
+      }).auditCreatisBalanceProjection20261107(params);
+    });
+    el('cp-appliquer').addEventListener('click',()=>{
+      if(application||!dernierAudit||!dernierAudit.empreinte||!derniersParametres)return;
+      const params=valeurs();
+      if(JSON.stringify(params)!==derniersParametres){annuler();return;}
+      if(!confirm('Enregistrer le capital confirmé et une projection NON CONTRACTUELLE pour Créatis ? Une sauvegarde de la feuille Credits sera créée. Aucune écriture bancaire ne sera générée.'))return;
+      application=true;
+      el('cp-appliquer').disabled=true;
+      el('cp-auditer').disabled=true;
+      modal.querySelectorAll('input').forEach(x=>x.disabled=true);
+      afficherEtat('Mise à jour du capital et sauvegarde…');
+      google.script.run.withSuccessHandler(resultat=>{
+        application=false;
+        el('cp-auditer').disabled=false;
+        modal.querySelectorAll('input').forEach(x=>x.disabled=false);
+        annuler();
+        afficherEtat(resultat.applique?
+          'Capital mis à jour. Simulation conservée séparément. Snapshot : '+(resultat.snapshot&&resultat.snapshot.ok?'actualisé':'à contrôler')+'.':
+          'Aucune modification : déjà à jour.');
+        if(typeof window.chargerCreditsUI==='function')window.chargerCreditsUI(true);
+      }).withFailureHandler(erreur=>{
+        application=false;
+        el('cp-auditer').disabled=false;
+        modal.querySelectorAll('input').forEach(x=>x.disabled=false);
+        annuler();
+        afficherEtat('Mise à jour interrompue : '+String(erreur&&erreur.message||erreur)+'. Examiner le classeur avant de recommencer.');
+      }).appliquerCreatisBalanceProjection20261107(params,dernierAudit.empreinte);
+    });
+    return modal;
+  }
+  window.ouvrirProjectionCreatis20261107=function(credit){
+    const m=construireModal();
+    if(application)return;
+    annuler();
+    el('cp-capital').value='';
+    el('cp-reference').value=valeurDateLocale();
+    el('cp-mensualite').value=credit&&credit.mensualite?String(credit.mensualite):'';
+    const nominal=Number(credit&&credit.taux_nominal||0);
+    const match=String(credit&&credit.commentaire||'').match(/TNA[^0-9]{0,12}(\d+(?:[,.]\d+)?)/i);
+    el('cp-tna').value=nominal>0?String(nominal):(match?match[1].replace(',','.'):'' );
+    el('cp-premiere').value=finMois(valeurDateLocale());
+    afficherEtat('Renseigne le solde vérifié puis lance la simulation.');
+    m.classList.remove('hidden');
+    el('cp-capital').focus();
+  };
+})();
+</script>
