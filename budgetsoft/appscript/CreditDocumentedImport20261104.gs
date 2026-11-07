@@ -10,8 +10,7 @@ const CREDIT_DOCUMENT_IMPORT_20261104_BACKUP = 'Backup_Credits_20261104';
 const CREDIT_DOCUMENT_IMPORT_20261104_COLUMNS = [
   'date_reference_documentaire','capital_reference_documentaire',
   'source_reference_documentaire','taux_nominal','libelle_taux',
-  'date_dernier_paiement_confirme','taux_programme','date_effet_taux_programme','statut_documentaire',
-  'statut_documentaire'
+  'date_dernier_paiement_confirme','taux_programme','date_effet_taux_programme','statut_documentaire'
 ];
 
 function cleDocumentCredit20261104_(nom) {
@@ -33,7 +32,9 @@ function nombreDocumentCredit20261104_(n,libelle){
 }
 function dateDocumentCredit20261104_(s,libelle){
   const t=String(s||'');
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(t)||isNaN(Date.parse(t+'T12:00:00'))){
+  const valide=/^\d{4}-\d{2}-\d{2}$/.test(t);
+  const date=valide?new Date(t+'T12:00:00Z'):null;
+  if(!valide||!date||!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==t){
     throw new Error(libelle+' : date ISO requise.');
   }
   return t;
