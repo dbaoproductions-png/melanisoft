@@ -79,9 +79,147 @@
       `<div class="cards"><article class="card metric-card"><span>Endettement total estimé</span><strong>${euro_(detteEstimee.endettementTotalEstime)}</strong><small>Crédits estimés + dettes hors crédit · même snapshot que Patrimoine et Analyses</small></article><article class="card metric-card"><span>Capital des crédits estimé</span><strong>${euro_(detteEstimee.capitalCreditsEstime)}</strong><small>Après échéances bancaires reconnues</small></article><article class="card metric-card"><span>Dettes hors crédit</span><strong>${euro_(detteEstimee.dettesHorsCredit)}</strong><small>Dettes soldées exclues du passif</small></article></div>`:'';
     const avertissementCreatis=credits.some(c=>String(c.statut_documentaire||'')==='echeancier_revision_attendu')?
       '<p class="helper-text" style="font-weight:600">Créatis : échéancier révisé attendu après report d’août 2026. Son ancien capital et les totaux qui l’incluent restent indicatifs.</p>':'';
-    zone.innerHTML=`${resumeEstime}${avertissementCreatis}<div class="section-toolbar"><p class="section-intro">Suivi séparé des crédits et des dettes hors crédit. Les données sont lues sans migration ni réparation automatique.</p><div class="toolbar-buttons"><button class="primary-button" id="add-credit">＋ Crédit</button><button class="secondary-button" id="add-debt">＋ Dette</button><button class="secondary-button" id="refresh-credits">Actualiser</button></div></div><article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Financements</span><h2>Crédits amortissables</h2></div></div><div id="credits-list">${classiques.length?classiques.map(c=>ligneCredit_(c,false)).join(''):'<div class="empty-state">Aucun crédit amortissable enregistré.</div>'}</div>${totalAmort}</article><article class="card panel credit-panel"><div class="panel-heading"><div><span class="panel-kicker">Réserves de crédit</span><h2>Crédits renouvelables</h2></div></div><div>${renouvelables.length?renouvelables.map(c=>ligneCredit_(c,true)).join(''):'<div class="empty-state">Aucun crédit renouvelable enregistré.</div>'}</div>${totalRev}</article><article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Historique</span><h2>Remboursements mensuels des dettes</h2></div></div><div id="credits-payments-chart" class="helper-text">Chargement des paiements constatés…</div></article><article class="card panel credit-panel"><div class="panel-heading"><div><span class="panel-kicker">Hors crédits</span><h2>Autres dettes / impayés</h2></div><button class="primary-button" id="add-debt-2">＋ Ajouter une dette</button></div><p class="helper-text">Une dette payée est clôturée : elle ne rentre plus dans l’endettement mais reste consultable ci-dessous.</p><div>${dettes.length?dettes.map(d=>ligneDette_(d,false)).join(''):'<div class="empty-state">Aucune dette hors crédit active.</div>'}</div>${totalDettes}${soldees.length?`<details class="settled-debts"><summary>Dettes soldées / inactives (${soldees.length})</summary><div>${soldees.map(d=>ligneDette_(d,true)).join('')}</div></details>`:''}</article>`;
+    zone.innerHTML=`${resumeEstime}${avertissementCreatis}<div class="section-toolbar"><p class="section-intro">Suivi séparé des crédits et des dettes hors crédit. Les données sont lues sans migration ni réparation automatique.</p><div class="toolbar-buttons"><button class="primary-button" id="add-credit">＋ Crédit</button><button class="secondary-button" id="add-debt">＋ Dette</button><button class="secondary-button" id="audit-credits-documentaires" type="button">📄 Auditer références</button><button class="secondary-button" id="refresh-credits">Actualiser</button></div></div><article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Financements</span><h2>Crédits amortissables</h2></div></div><div id="credits-list">${classiques.length?classiques.map(c=>ligneCredit_(c,false)).join(''):'<div class="empty-state">Aucun crédit amortissable enregistré.</div>'}</div>${totalAmort}</article><article class="card panel credit-panel"><div class="panel-heading"><div><span class="panel-kicker">Réserves de crédit</span><h2>Crédits renouvelables</h2></div></div><div>${renouvelables.length?renouvelables.map(c=>ligneCredit_(c,true)).join(''):'<div class="empty-state">Aucun crédit renouvelable enregistré.</div>'}</div>${totalRev}</article><article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Historique</span><h2>Remboursements mensuels des dettes</h2></div></div><div id="credits-payments-chart" class="helper-text">Chargement des paiements constatés…</div></article><article class="card panel credit-panel"><div class="panel-heading"><div><span class="panel-kicker">Hors crédits</span><h2>Autres dettes / impayés</h2></div><button class="primary-button" id="add-debt-2">＋ Ajouter une dette</button></div><p class="helper-text">Une dette payée est clôturée : elle ne rentre plus dans l’endettement mais reste consultable ci-dessous.</p><div>${dettes.length?dettes.map(d=>ligneDette_(d,false)).join(''):'<div class="empty-state">Aucune dette hors crédit active.</div>'}</div>${totalDettes}${soldees.length?`<details class="settled-debts"><summary>Dettes soldées / inactives (${soldees.length})</summary><div>${soldees.map(d=>ligneDette_(d,true)).join('')}</div></details>`:''}</article>`;
     chargerMensualitesCredits_();
-    document.getElementById('refresh-credits')?.addEventListener('click',()=>chargerCreditsUI_(true));document.getElementById('add-credit')?.addEventListener('click',()=>ouvrirCredit_(null,null));document.getElementById('add-debt')?.addEventListener('click',()=>ouvrirDette_());document.getElementById('add-debt-2')?.addEventListener('click',()=>ouvrirDette_());zone.querySelectorAll('[data-debt-edit]').forEach(b=>b.onclick=()=>ouvrirDette_(dettesToutes.find(d=>String(d.id)===String(b.dataset.debtEdit))));zone.querySelectorAll('[data-debt-close]').forEach(b=>b.onclick=()=>{if(confirm('Marquer cette dette comme payée ?'))actionDette_('cloturerDetteV2',b.dataset.debtClose);});zone.querySelectorAll('[data-debt-reactivate]').forEach(b=>b.onclick=()=>actionDette_('reactiverDetteV2',b.dataset.debtReactivate));zone.querySelectorAll('[data-debt-delete]').forEach(b=>b.onclick=()=>{if(confirm('Supprimer définitivement cette dette ?'))actionDette_('supprimerDetteV2',b.dataset.debtDelete);});zone.querySelectorAll('[data-credit-alert]').forEach(b=>b.onclick=()=>ouvrirAlerte_(Number(b.dataset.creditAlert)));
+    document.getElementById('audit-credits-documentaires')?.addEventListener('click',ouvrirAuditCreditsDocumentaires_);document.getElementById('refresh-credits')?.addEventListener('click',()=>chargerCreditsUI_(true));document.getElementById('add-credit')?.addEventListener('click',()=>ouvrirCredit_(null,null));document.getElementById('add-debt')?.addEventListener('click',()=>ouvrirDette_());document.getElementById('add-debt-2')?.addEventListener('click',()=>ouvrirDette_());zone.querySelectorAll('[data-debt-edit]').forEach(b=>b.onclick=()=>ouvrirDette_(dettesToutes.find(d=>String(d.id)===String(b.dataset.debtEdit))));zone.querySelectorAll('[data-debt-close]').forEach(b=>b.onclick=()=>{if(confirm('Marquer cette dette comme payée ?'))actionDette_('cloturerDetteV2',b.dataset.debtClose);});zone.querySelectorAll('[data-debt-reactivate]').forEach(b=>b.onclick=()=>actionDette_('reactiverDetteV2',b.dataset.debtReactivate));zone.querySelectorAll('[data-debt-delete]').forEach(b=>b.onclick=()=>{if(confirm('Supprimer définitivement cette dette ?'))actionDette_('supprimerDetteV2',b.dataset.debtDelete);});zone.querySelectorAll('[data-credit-alert]').forEach(b=>b.onclick=()=>ouvrirAlerte_(Number(b.dataset.creditAlert)));
+  }
+
+
+  // L'application TEST est un projet Apps Script autonome : pas de SpreadsheetApp.getUi().
+  // L'audit documentaire se déroule dans la page BudgetSoft (google.script.run).
+  function assurerModalAuditCreditsDocumentaires_(){
+    let modal=document.getElementById('credit-doc-audit-modal');
+    if(modal)return modal;
+    modal=document.createElement('div');
+    modal.id='credit-doc-audit-modal';
+    modal.className='modal hidden credit-modal-overlay';
+    modal.setAttribute('role','dialog');
+    modal.setAttribute('aria-modal','true');
+    modal.setAttribute('aria-label','Audit documentaire des crédits');
+    modal.innerHTML=[
+      '<div class="modal-card credit-modal-card credit-doc-audit-card">',
+      '<div class="modal-heading"><div><p class="panel-kicker">Financements</p><h2>Références documentaires des crédits</h2></div><button type="button" class="modal-close" data-credit-doc-close aria-label="Fermer">×</button></div>',
+      '<p class="helper-text">Choisissez le fichier JSON du 5 novembre 2026 (« Créatis à vérifier »), ou collez son contenu. Le contrôle est en lecture seule. Aucune opération bancaire n’est modifiée.</p>',
+      '<label class="credit-doc-label">Fichier de références (JSON)<input type="file" id="credit-doc-file" accept=".json,application/json"></label>',
+      '<label class="credit-doc-label">Ou contenu JSON<textarea id="credit-doc-payload" rows="7" spellcheck="false" placeholder="Collez ici le référentiel documentaire des crédits"></textarea></label>',
+      '<div class="form-actions"><button type="button" class="secondary-button" id="credit-doc-audit">1 · Analyser (lecture seule)</button><button type="button" class="primary-button" id="credit-doc-apply" disabled>2 · Appliquer les corrections</button></div>',
+      '<p class="helper-text" role="status" aria-live="polite" id="credit-doc-status">En attente du fichier.</p>',
+      '<div class="credit-doc-result-scroll"><table class="credit-doc-results"><thead><tr><th>Crédit</th><th>Solde actuel</th><th>Référence</th><th>Contrôle</th></tr></thead><tbody id="credit-doc-results-body"></tbody></table></div>',
+      '<p class="helper-text">Créatis : aucun capital ni échéancier révisé ne sera importé. Ne cliquez sur « Appliquer » qu’après vérification de chaque résultat.</p>',
+      '</div>'
+    ].join('');
+    document.body.appendChild(modal);
+    const fichier=modal.querySelector('#credit-doc-file');
+    const payload=modal.querySelector('#credit-doc-payload');
+    const audit=modal.querySelector('#credit-doc-audit');
+    const appliquer=modal.querySelector('#credit-doc-apply');
+    const statut=modal.querySelector('#credit-doc-status');
+    const tableau=modal.querySelector('#credit-doc-results-body');
+    let empreinte='',documentAudite='',sequence=0,applicationEnCours=false;
+    function invaliderAudit_(){
+      empreinte='';
+      documentAudite='';
+      appliquer.disabled=true;
+      sequence++;
+      tableau.textContent='';
+    }
+    function fermer_(){
+      if(applicationEnCours)return;
+      modal.classList.add('hidden');
+      payload.value='';
+      fichier.value='';
+      invaliderAudit_();
+      statut.textContent='En attente du fichier.';
+    }
+    modal.querySelectorAll('[data-credit-doc-close]').forEach(b=>b.addEventListener('click',fermer_));
+    modal.addEventListener('click',e=>{if(e.target===modal)fermer_();});
+    payload.addEventListener('input',()=>{
+      invaliderAudit_();
+      statut.textContent='Contenu modifié : relancez l’analyse avant toute correction.';
+    });
+    fichier.addEventListener('change',()=>{
+      invaliderAudit_();
+      const choisi=fichier.files&&fichier.files[0];
+      if(!choisi)return;
+      if(choisi.size>350000){statut.textContent='Fichier trop volumineux (350 Ko maximum).';return;}
+      const demande=sequence;
+      choisi.text().then(texte=>{
+        if(demande!==sequence)return;
+        payload.value=texte;
+        invaliderAudit_();
+        statut.textContent='Fichier chargé. Cliquez sur « Analyser (lecture seule) ».';
+      }).catch(erreur=>{
+        if(demande!==sequence)return;
+        statut.textContent='Impossible de lire le fichier : '+String(erreur&&erreur.message||erreur);
+      });
+    });
+    audit.addEventListener('click',()=>{
+      const contenu=payload.value;
+      if(!contenu.trim()){statut.textContent='Choisissez un fichier JSON ou collez son contenu.';return;}
+      invaliderAudit_();
+      const demande=sequence;
+      audit.disabled=true;
+      statut.textContent='Audit en lecture seule en cours…';
+      google.script.run.withSuccessHandler(resultat=>{
+        audit.disabled=false;
+        if(demande!==sequence||contenu!==payload.value)return;
+        tableau.textContent='';
+        (resultat.lignes||[]).forEach(ligne=>{
+          const tr=document.createElement('tr');
+          const etat=ligne.erreur?'BLOQUÉ : '+ligne.erreur:(ligne.en_attente?'Créatis en attente':(ligne.etat==='deja_documente'?'Déjà documenté':'Prêt'));
+          [ligne.credit,euro_(ligne.solde_actuel),ligne.solde_documente==null?'—':euro_(ligne.solde_documente),etat].forEach(valeur=>{
+            const td=document.createElement('td');td.textContent=String(valeur==null?'—':valeur);tr.appendChild(td);
+          });
+          tableau.appendChild(tr);
+        });
+        if(resultat.ok&&resultat.empreinte){
+          empreinte=String(resultat.empreinte);
+          documentAudite=contenu;
+          appliquer.disabled=false;
+          statut.textContent='Audit conforme : '+resultat.nombreCreditsImportables+' crédits documentés, '+resultat.nombreCreditsEnAttente+' en attente. Total hors Créatis : '+euro_(resultat.sommeDocumentee)+'. Vérifiez les lignes avant toute application.';
+        }else{
+          statut.textContent='Audit non conforme : '+(resultat.creditsEnConflit||0)+' crédit(s) en conflit. Aucune donnée modifiée.';
+        }
+      }).withFailureHandler(erreur=>{
+        audit.disabled=false;
+        if(demande!==sequence)return;
+        statut.textContent='Audit interrompu : '+String(erreur&&erreur.message||erreur);
+      }).auditerImportCreditsDocumentes20261104(contenu);
+    });
+    appliquer.addEventListener('click',()=>{
+      if(applicationEnCours||!empreinte||!documentAudite||documentAudite!==payload.value)return;
+      if(!confirm('Confirmer la modification des six crédits documentés ? Une sauvegarde sera créée dans le classeur. Créatis conservera son capital actuel. Cette opération doit être vérifiée avant de continuer.'))return;
+      applicationEnCours=true;
+      appliquer.disabled=true;
+      audit.disabled=true;
+      fichier.disabled=true;
+      payload.disabled=true;
+      statut.textContent='Application des corrections et reconstruction du snapshot…';
+      google.script.run.withSuccessHandler(resultat=>{
+        applicationEnCours=false;
+        audit.disabled=false;
+        fichier.disabled=false;
+        payload.disabled=false;
+        invaliderAudit_();
+        if(resultat.applique){
+          statut.textContent='Corrections enregistrées. Sauvegarde : '+(resultat.sauvegarde||'créée')+'. Snapshot : '+(resultat.snapshot&&resultat.snapshot.ok?'actualisé':'à vérifier / reconstruire')+'.';
+        }else statut.textContent='Aucune correction nécessaire : références déjà conformes.';
+        cacheCredits_=null;
+      }).withFailureHandler(erreur=>{
+        applicationEnCours=false;
+        audit.disabled=false;
+        fichier.disabled=false;
+        payload.disabled=false;
+        invaliderAudit_();
+        statut.textContent='Application interrompue : '+String(erreur&&erreur.message||erreur)+'. Vérifiez l’état du classeur avant de relancer.';
+      }).appliquerImportCreditsDocumentes20261104(documentAudite,empreinte);
+    });
+    return modal;
+  }
+  function ouvrirAuditCreditsDocumentaires_(){
+    const modal=assurerModalAuditCreditsDocumentaires_();
+    modal.classList.remove('hidden');
+    modal.querySelector('#credit-doc-file').focus();
   }
 
   function assurerModalCredit_(){let m=document.getElementById('credit-modal-v2');if(m)return m;m=document.createElement('div');m.id='credit-modal-v2';m.className='modal hidden credit-modal-overlay';m.innerHTML=`<div class="modal-card credit-modal-card"><div class="modal-heading"><div><p class="panel-kicker">Financement</p><h2 id="credit-modal-title">Ajouter un crédit</h2></div><button class="modal-close" type="button" data-credit-cancel>×</button></div><div id="credit-reconcile-guide" class="credit-reconcile-guide hidden"><strong id="credit-reconcile-problem"></strong><span id="credit-reconcile-action"></span></div><form id="credit-form-v2"><input type="hidden" id="credit-id"><div id="credit-priority-fields" class="credit-priority-fields"></div><details id="credit-details" class="credit-details" open><summary>Détails du crédit</summary><div class="form-grid credit-full-grid"><label class="full-field">Nom<input id="credit-name" required></label><label>N° de prêt / contrat<input id="credit-number"></label><label>Type<select id="credit-type"><option value="amortissable">Crédit amortissable</option><option value="revolving">Crédit renouvelable</option></select></label><label data-credit-field="capital">Capital / encours restant<input id="credit-capital" inputmode="decimal" required></label><label>Mensualité actuelle<input id="credit-monthly" inputmode="decimal"></label><label>TAEG (%)<input id="credit-rate" inputmode="decimal"></label><label>Mensualités restantes<input id="credit-remaining" type="number" min="0"></label><label data-credit-field="next">Prochaine échéance<input id="credit-next" type="date"></label><label>Date de fin<input id="credit-end" type="date"></label><label>Coût restant estimé<input id="credit-cost" inputmode="decimal"></label><label data-credit-field="limit">Plafond de réserve<input id="credit-limit" inputmode="decimal"></label><label data-credit-field="available">Disponible communiqué<input id="credit-available" inputmode="decimal"></label><label>Assurance mensuelle<input id="credit-insurance" inputmode="decimal"></label><label class="full-field">Précision sur le coût restant<textarea id="credit-cost-note" rows="2"></textarea></label><label class="full-field">Commentaire<textarea id="credit-comment" rows="2"></textarea></label></div></details><div class="form-actions credit-modal-actions"><button type="button" class="secondary-button" data-credit-cancel>Annuler</button><button type="submit" class="primary-button">Enregistrer les corrections</button></div></form></div>`;document.body.appendChild(m);m.querySelectorAll('[data-credit-cancel]').forEach(b=>b.onclick=()=>m.classList.add('hidden'));m.onclick=e=>{if(e.target===m)m.classList.add('hidden');};m.querySelector('form').onsubmit=enregistrerCreditDepuisModal_;return m;}
@@ -109,6 +247,6 @@
   function actionDette_(methode,id){google.script.run.withSuccessHandler(()=>{cacheCredits_=null;chargerCreditsUI_(true);}).withFailureHandler(err=>{if(typeof afficherErreur==='function')afficherErreur(err.message||String(err));})[methode](id);}
   function chargerCreditsUI_(force){const zone=document.getElementById('generic-view');if(!force&&cacheCredits_){rendreCredits_(cacheCredits_);return;}const pre=!force&&window.__BUDGETSOFT_PREFETCH&&window.__BUDGETSOFT_PREFETCH.credits;if(pre){cacheCredits_=pre;delete window.__BUDGETSOFT_PREFETCH.credits;rendreCredits_(pre);return;}if(zone)zone.innerHTML='<section class="loading">Chargement des crédits et dettes…</section>';google.script.run.withSuccessHandler(rendreCredits_).withFailureHandler(err=>{if(typeof afficherErreur==='function')afficherErreur(err.message||String(err));}).chargerCreditsEtDettesV2();}
   window.chargerCreditsUI=chargerCreditsUI_;window.budgetsoftModules=window.budgetsoftModules||{};window.budgetsoftModules.credits=()=>chargerCreditsUI_(false);const base=window.ouvrirVue;if(typeof base==='function')window.ouvrirVue=function(view){const r=base.apply(this,arguments);if(view==='credits')chargerCreditsUI_(false);return r;};
-  const st=document.createElement('style');st.textContent=`.credit-estimate{margin:8px 0;padding:9px 12px;border-left:3px solid #32876a;background:#f1f8f4;border-radius:6px}.credit-estimate strong,.credit-estimate small{display:block}.credit-estimate small{font-size:11px;color:#52645d}.credit-row{display:grid;grid-template-columns:minmax(220px,1.05fr) minmax(0,3fr);gap:20px;align-items:start;padding:16px 0;border-bottom:1px solid var(--line)}.credit-row:last-child{border-bottom:0}.credit-row-main{min-width:0}.credit-row-main strong,.credit-row-main small{display:block}.credit-row-main small{margin-top:4px;color:var(--muted)}.credit-metrics{display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:16px 18px;min-width:0}.credit-metric{min-width:0}.credit-metric strong,.credit-metric small{display:block}.credit-metric strong{font-size:15px;color:var(--ink);white-space:nowrap}.credit-metric small{margin-top:3px;color:var(--muted);font-size:11px;line-height:1.25}.credit-note{margin-left:0!important;padding-left:0}@media(max-width:1100px){.credit-row{grid-template-columns:1fr}.credit-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:760px){.credit-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:480px){.credit-metrics{grid-template-columns:1fr}}.credit-panel,.credit-control{margin-top:18px}.credit-note{margin:0 0 4px 58px}.credit-note.last{margin-bottom:14px}.credit-control{border-left:4px solid #d9e5df}.credit-alert-list{display:grid;gap:8px;margin-top:14px}.credit-alert{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 14px;border:1px solid #e4ebe7;border-radius:12px;background:#fbfdfc}.credit-alert.warn{border-color:#ead8ad;background:#fffaf0}.credit-alert-icon{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#edf4f1;font-weight:800}.credit-alert strong,.credit-alert span{display:block}.credit-alert span{font-size:12px;opacity:.72;margin-top:2px}.credit-ok{font-weight:700;color:#39735b}.debt-row{grid-template-columns:minmax(220px,1.4fr) repeat(3,minmax(100px,.6fr)) minmax(280px,auto)}.debt-inactive{opacity:.65}.debt-actions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}.debt-action{padding:7px 9px;font-size:12px}.debt-action.danger{color:#9b2c2c}.settled-debts{margin-top:14px;border-top:1px solid #edf1ef;padding-top:12px}.settled-debts summary{cursor:pointer;font-weight:700}.credit-frame-totals{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}.credit-frame-totals>div{background:#f7faf8;border-radius:10px;padding:10px 12px}.credit-frame-totals span,.credit-frame-totals strong{display:block}.credit-frame-totals span{font-size:11px;color:var(--muted)}.credit-frame-totals strong{margin-top:4px;font-size:15px;color:var(--ink)}.credit-modal-overlay{align-items:center;padding:24px}.credit-modal-card{width:min(720px,calc(100vw - 40px));max-width:720px;max-height:82vh;overflow:auto;margin:auto;padding:20px}.credit-reconcile-guide{padding:13px 15px;margin:0 0 14px;border-radius:12px;background:#fff8e8;border:1px solid #ead8ad}.credit-reconcile-guide strong,.credit-reconcile-guide span{display:block}.credit-reconcile-guide span{margin-top:5px;font-size:13px;line-height:1.4}.credit-priority-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:12px}.credit-field-focus{padding:10px;border-radius:10px;background:#f7faf8;border:1px solid #d9e5df}.credit-details{border-top:1px solid #e7ece9;padding-top:10px}.credit-details summary{cursor:pointer;font-weight:700;color:#52645d;margin-bottom:10px}.credit-full-grid{padding-top:4px}.credit-modal-actions{position:sticky;bottom:-20px;background:#fff;padding:12px 0 2px;margin-top:10px;border-top:1px solid #edf1ef}.hidden{display:none!important}@media(max-width:1050px){.debt-row{grid-template-columns:1fr 1fr}.debt-actions{grid-column:1/-1;justify-content:flex-start}}@media(max-width:760px){.credit-alert{grid-template-columns:32px 1fr}.credit-alert button{grid-column:2;justify-self:start}.credit-note{margin-left:0}.debt-row{grid-template-columns:1fr}.debt-actions{grid-column:auto}.credit-modal-overlay{padding:10px}.credit-modal-card{width:calc(100vw - 20px);max-height:90vh;padding:16px}.credit-priority-fields{grid-template-columns:1fr}}`;document.head.appendChild(st);
+  const st=document.createElement('style');st.textContent=`.credit-estimate{margin:8px 0;padding:9px 12px;border-left:3px solid #32876a;background:#f1f8f4;border-radius:6px}.credit-estimate strong,.credit-estimate small{display:block}.credit-estimate small{font-size:11px;color:#52645d}.credit-row{display:grid;grid-template-columns:minmax(220px,1.05fr) minmax(0,3fr);gap:20px;align-items:start;padding:16px 0;border-bottom:1px solid var(--line)}.credit-row:last-child{border-bottom:0}.credit-row-main{min-width:0}.credit-row-main strong,.credit-row-main small{display:block}.credit-row-main small{margin-top:4px;color:var(--muted)}.credit-metrics{display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:16px 18px;min-width:0}.credit-metric{min-width:0}.credit-metric strong,.credit-metric small{display:block}.credit-metric strong{font-size:15px;color:var(--ink);white-space:nowrap}.credit-metric small{margin-top:3px;color:var(--muted);font-size:11px;line-height:1.25}.credit-note{margin-left:0!important;padding-left:0}@media(max-width:1100px){.credit-row{grid-template-columns:1fr}.credit-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:760px){.credit-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:480px){.credit-metrics{grid-template-columns:1fr}}.credit-panel,.credit-control{margin-top:18px}.credit-note{margin:0 0 4px 58px}.credit-note.last{margin-bottom:14px}.credit-control{border-left:4px solid #d9e5df}.credit-alert-list{display:grid;gap:8px;margin-top:14px}.credit-alert{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 14px;border:1px solid #e4ebe7;border-radius:12px;background:#fbfdfc}.credit-alert.warn{border-color:#ead8ad;background:#fffaf0}.credit-alert-icon{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#edf4f1;font-weight:800}.credit-alert strong,.credit-alert span{display:block}.credit-alert span{font-size:12px;opacity:.72;margin-top:2px}.credit-ok{font-weight:700;color:#39735b}.debt-row{grid-template-columns:minmax(220px,1.4fr) repeat(3,minmax(100px,.6fr)) minmax(280px,auto)}.debt-inactive{opacity:.65}.debt-actions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}.debt-action{padding:7px 9px;font-size:12px}.debt-action.danger{color:#9b2c2c}.settled-debts{margin-top:14px;border-top:1px solid #edf1ef;padding-top:12px}.settled-debts summary{cursor:pointer;font-weight:700}.credit-frame-totals{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}.credit-frame-totals>div{background:#f7faf8;border-radius:10px;padding:10px 12px}.credit-frame-totals span,.credit-frame-totals strong{display:block}.credit-frame-totals span{font-size:11px;color:var(--muted)}.credit-frame-totals strong{margin-top:4px;font-size:15px;color:var(--ink)}.credit-modal-overlay{align-items:center;padding:24px}.credit-modal-card{width:min(720px,calc(100vw - 40px));max-width:720px;max-height:82vh;overflow:auto;margin:auto;padding:20px}.credit-reconcile-guide{padding:13px 15px;margin:0 0 14px;border-radius:12px;background:#fff8e8;border:1px solid #ead8ad}.credit-reconcile-guide strong,.credit-reconcile-guide span{display:block}.credit-reconcile-guide span{margin-top:5px;font-size:13px;line-height:1.4}.credit-priority-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:12px}.credit-field-focus{padding:10px;border-radius:10px;background:#f7faf8;border:1px solid #d9e5df}.credit-details{border-top:1px solid #e7ece9;padding-top:10px}.credit-details summary{cursor:pointer;font-weight:700;color:#52645d;margin-bottom:10px}.credit-full-grid{padding-top:4px}.credit-modal-actions{position:sticky;bottom:-20px;background:#fff;padding:12px 0 2px;margin-top:10px;border-top:1px solid #edf1ef}.credit-doc-audit-card{width:min(880px,calc(100vw - 24px));max-width:880px;max-height:90vh;overflow:auto}.credit-doc-label{display:block;font-size:13px;font-weight:600;margin:12px 0}.credit-doc-label input,.credit-doc-label textarea{display:block;width:100%;box-sizing:border-box;margin-top:7px}.credit-doc-label textarea{font-family:monospace;font-size:12px;min-height:130px}.credit-doc-result-scroll{max-height:290px;overflow:auto;margin-top:14px}.credit-doc-results{width:100%;border-collapse:collapse;font-size:12px}.credit-doc-results th,.credit-doc-results td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}.credit-doc-results td:nth-child(2),.credit-doc-results td:nth-child(3){text-align:right;white-space:nowrap}.hidden{display:none!important}@media(max-width:1050px){.debt-row{grid-template-columns:1fr 1fr}.debt-actions{grid-column:1/-1;justify-content:flex-start}}@media(max-width:760px){.credit-alert{grid-template-columns:32px 1fr}.credit-alert button{grid-column:2;justify-self:start}.credit-note{margin-left:0}.debt-row{grid-template-columns:1fr}.debt-actions{grid-column:auto}.credit-modal-overlay{padding:10px}.credit-modal-card{width:calc(100vw - 20px);max-height:90vh;padding:16px}.credit-priority-fields{grid-template-columns:1fr}}`;document.head.appendChild(st);
 })();
 </script>
