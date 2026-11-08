@@ -51,14 +51,16 @@ function auditerToutesDonneesAnalysesBudgetSoft20261108(){
       variantes[n]=d||null;
     }catch(ex){ajouter('api_'+n+'_appel',false,String(ex&&ex.message||ex));variantes[n]=null;}
   });
-  let ops=[],categories=[],budgets=[],fixes=[];
+  let ops=[],categories=[],budgets=[],fixes=[],pluxee=[],parametres=[];
   try{
     ops=lireTable_('Operations')||[];
     categories=lireTable_('Categories')||[];
     budgets=lireTable_('Budget')||[];
     fixes=lireTable_('Charges_fixes')||[];
+    parametres=lireTable_('Parametres')||[];
+    if(typeof lirePluxee_==='function')pluxee=lirePluxee_()||[];
     ajouter('sources_tableaux_valides',
-      [ops,categories,budgets,fixes].every(Array.isArray),'Une table source est illisible.');
+      [ops,categories,budgets,fixes,parametres,pluxee].every(Array.isArray),'Une table source est illisible.');
   }catch(ex){ajouter('sources_lecture',false,String(ex&&ex.message||ex));}
   const types={};
   (Array.isArray(categories)?categories:[]).forEach(c=>{const nom=String(c&&c.nom||'').trim();if(nom)types[nom]=String(c.type||'').toLowerCase();});
@@ -84,7 +86,7 @@ function auditerToutesDonneesAnalysesBudgetSoft20261108(){
   if(sansCategorie)attention('operations_sans_categorie',sansCategorie+' mouvement(s) sans catégorie.');
   if(horsReferentiel)attention('operations_categories_non_referencees',horsReferentiel+' mouvement(s) dont la catégorie canonique est absente de Categories ; vérifier leur inclusion.');
   if(doublonsIds)attention('operations_ids_doubles',doublonsIds+' identifiant(s) dupliqué(s), susceptibles de fausser les rapprochements.');
-  const sources={operations:mouvements.length,categories:categories.length,budgets:budgets.length,chargesFixes:fixes.length,
+  const sources={operations:mouvements.length,categories:categories.length,budgets:budgets.length,chargesFixes:fixes.length,pluxee:pluxee.length,
     datesInvalides,montantsInvalides,sansCategorie,horsReferentiel,doublonsIds};
 
   const periodeCle=p=>String(p&&p.cle||'').trim();
@@ -171,6 +173,23 @@ function auditerToutesDonneesAnalysesBudgetSoft20261108(){
         variable=nb(fRec.revenusVariables),totalPer=somme(per,'revenus');
       ajouter(label+'_revenus_vs_cycles',proche(revenuTotal,totalPer,.02),
         'Somme des revenus économiques de la fenêtre différente du total des cycles : contrôler opérations futures et dates.');
+      ajouter(label+'_revenus_moyenne_mensuelle',proche(nb(fRec.moyenneMensuelle),
+        revenuTotal/n,.02),'La moyenne des recettes ne correspond pas à la fenêtre déclarée.');
+      const referenceRec=rec.references||{},salaireAttendu=mouvements.filter(function(o){
+        const od=date(o.date_analyse),refLimite=typeof bornerDateBancaireFinJour_==='function'
+          ?bornerDateBancaireFinJour_(date(d.dateReference)):date(d.dateReference);
+        return od&&refLimite&&od<=refLimite&&Number(o.montant||0)>0&&
+          String(o.categorie||'').trim()==='Salaires';
+      }).sort(function(x,y){return date(y.date_analyse)-date(x.date_analyse);})[0];
+      ajouter(label+'_reference_dernier_salaire',
+        proche(nb(referenceRec.salairePatrick),
+          salaireAttendu?Number(salaireAttendu.montant):0,.02),
+        'Le salaire de référence ne correspond pas au dernier salaire positif connu à la date du snapshot.');
+      ['loyerAppartement','garage','pluxeeMensuel'].forEach(function(champ){
+        ajouter(label+'_reference_'+champ,
+          nb(referenceRec[champ])!==null&&nb(referenceRec[champ])>=0,
+          'Montant de référence '+champ+' invalide.');
+      });
       ajouter(label+'_revenus_part_variable',proche(nb(fRec.partVariable),
         revenuTotal>0?variable/revenuTotal*100:0,.02),'Pourcentage variable incohérent.');
       const prod=fRec.producteurs||{},totalProd=arr(Object.values(prod).reduce((s,v)=>s+Number(v||0),0));
@@ -207,7 +226,27 @@ function auditerToutesDonneesAnalysesBudgetSoft20261108(){
       ajouter(label+'_alimentation_total',proche(nb(ali.totalReel),
         arr(Number(ali.coursesBanque||0)+Number(ali.restaurantsBanque||0)+Number(ali.pluxeeTotal||0)),.02),
         'Total alimentation mal calculé.');
-      if(Number(ali.pluxeeAClasser||0)>0)
+      const refPluxeeDebut=date(fDep.debut),refPluxeeFin=date(fDep.fin);
+      const chiffresPluxee={courses:0,restaurants:0,aClasser:0};
+      if(refPluxeeDebut&&refPluxeeFin){
+        pluxee.forEach(function(op){
+          const dOp=date(op.date),val=Number(op.montant||0);
+          if(!dOp||dOp<refPluxeeDebut||dOp>refPluxeeFin||
+             String(op.statut||'valide').toLowerCase()==='refuse'||val>=0)return;
+          const cat=String(op.categorie||'').trim(),mont=Math.abs(val);
+          if(cat==='Courses')chiffresPluxee.courses+=mont;
+          else if(cat==='Restaurants')chiffresPluxee.restaurants+=mont;
+          else chiffresPluxee.aClasser+=mont;
+        });
+        if(!proche(arr(chiffresPluxee.courses),nb(ali.pluxeeCourses),.02)||
+           !proche(arr(chiffresPluxee.restaurants),nb(ali.pluxeeRestaurants),.02))
+          attention(label+'_pluxee_periode',
+            'Les dépenses Pluxee de la fenêtre par dates diffèrent de l’agrégation affichée : vérifier le périmètre des cycles.');
+      }
+      const nonClasse=arr(chiffresPluxee.aClasser);
+      if(nonClasse>0)
+        attention(label+'_pluxee_a_classer',nonClasse+' € du registre Pluxee à classer en Courses/Restaurants.');
+      else if(Number(ali.pluxeeAClasser||0)>0)
         attention(label+'_pluxee_a_classer',arr(ali.pluxeeAClasser)+' € Pluxee à classer en Courses/Restaurants.');
       const brut=nb(sa.soinsEtCouvertureBruts),remb=nb(sa.remboursements);
       ajouter(label+'_sante_repartition',brut!==null&&proche(
@@ -219,7 +258,8 @@ function auditerToutesDonneesAnalysesBudgetSoft20261108(){
       ajouter(label+'_themes_presents',themes.length>0,'Regroupements thématiques indisponibles.');
       ajouter(label+'_themes_uniques',eviterDoublon(themes.map(x=>String(x.nom||''))),
         'Thème dupliqué.');
-      themes.forEach((x,i)=>ajouter(label+'_theme_'+i+'_montant',nombreValide(x.montant)&&x.montant>=-.01,
+      themes.forEach((x,i)=>ajouter(label+'_theme_'+i+'_montant',nombreValide(x.montant)&&
+        (x.montant>=-.01||String(x.nom)==='Désendettement net estimé'),
         'Montant non numérique ou négatif pour un regroupement de dépenses.'));
       const alimentation=themes.find(x=>x.nom==='Alimentation / quotidien');
       if(alimentation&&Number(alimentation.montant)+.01<Number(ali.coursesReelles||0))
@@ -227,6 +267,35 @@ function auditerToutesDonneesAnalysesBudgetSoft20261108(){
       const sante=themes.find(x=>x.nom==='Santé nette');
       if(sante)ajouter(label+'_themes_sante',proche(nb(sante.montant),nb(sa.coutNet),.02),
         'Regroupement Santé nette divergent du panneau Santé.');
+      const financement=fDep.financement||null;
+      ajouter(label+'_financement_detail',!!financement,'Ventilation du financement indisponible.');
+      if(financement){
+        const sorties=nb(financement.sortiesFinancement),cap=nb(financement.capitalRembourseEstime),
+          cout=nb(financement.coutFinancementEstime),reinj=nb(financement.reinjectionsTresorerie),
+          net=nb(financement.desendettementNetEstime);
+        ajouter(label+'_financement_ventilation',
+          sorties!==null&&cap!==null&&cout!==null&&proche(sorties,arr(cap+cout),.02),
+          'Capital remboursé estimé + coût estimé ne reconstituent pas les sorties de financement.');
+        ajouter(label+'_financement_desendettement',
+          cap!==null&&reinj!==null&&net!==null&&proche(net,arr(cap-reinj),.02),
+          'Le désendettement net estimé ne soustrait pas correctement les réinjections de crédit.');
+        ajouter(label+'_financement_ratio',
+          financement.estimation===true&&nb(financement.ratioCapitalEstime)!==null&&
+          financement.ratioCapitalEstime>=0&&financement.ratioCapitalEstime<=1,
+          'Le ratio de capital estimé doit être identifié comme simulation et rester compris entre 0 et 1.');
+        const correspondances={
+          'Crédits / financement':sorties,
+          'Capital remboursé estimé':cap,
+          'Réinjections de crédit':reinj,
+          'Désendettement net estimé':net
+        };
+        Object.keys(correspondances).forEach(function(nom){
+          const theme=themes.find(x=>String(x.nom)===nom);
+          ajouter(label+'_financement_theme_'+nom.replace(/[^a-z]/gi,'_'),
+            !!theme&&proche(nb(theme.montant),correspondances[nom],.02),
+            'Le thème '+nom+' ne concorde pas avec la ventilation détaillée du financement.');
+        });
+      }
     }
     const fi=dep.fixes||{};
     if(dep.fixes){
@@ -234,6 +303,14 @@ function auditerToutesDonneesAnalysesBudgetSoft20261108(){
         'Montant mensuel de référence des charges fixes invalide.');
       ajouter(label+'_fixes_nombre',Number.isInteger(fi.nombre)&&fi.nombre>=0,
         'Nombre de charges fixes actives incorrect.');
+      if(typeof actifAnalyse20260904_==='function'&&typeof montantMensuelChargeAnalyse20260904_==='function'){
+        const actifs=fixes.filter(actifAnalyse20260904_);
+        const total=arr(actifs.reduce((z,x)=>z+montantMensuelChargeAnalyse20260904_(x),0));
+        ajouter(label+'_fixes_source_nombre',fi.nombre===actifs.length,
+          'Nombre de charges fixes actives divergent de la table Charges_fixes.');
+        ajouter(label+'_fixes_source_montant',proche(nb(fi.montantMensuelReference),total,.02),
+          'Référence mensuelle des charges fixes différente de leur calendrier.');
+      }
     }
 
     const series=d.seriesCourbes||null;
