@@ -1,0 +1,134 @@
+<style>
+.budgetsoft-categories-20261108 .modal-card{width:min(1000px,calc(100vw - 24px));max-width:1000px;max-height:90vh;overflow:auto;margin:auto}
+.budgetsoft-categories-20261108 .category-20261108-help{line-height:1.6;font-size:13px;margin-bottom:12px}
+.budgetsoft-categories-20261108 .category-20261108-table-wrap{max-height:290px;overflow:auto;border:1px solid var(--line,#d8ded9);border-radius:10px;margin-bottom:14px}
+.budgetsoft-categories-20261108 table{border-collapse:collapse;width:100%;font-size:12px}
+.budgetsoft-categories-20261108 th,.budgetsoft-categories-20261108 td{padding:7px 9px;border-bottom:1px solid var(--line,#d8ded9);text-align:left;vertical-align:top}
+.budgetsoft-categories-20261108 th{position:sticky;top:0;background:#f6f8f7}
+.budgetsoft-categories-20261108 .right{text-align:right;white-space:nowrap}
+.budgetsoft-categories-20261108 h3{font-size:15px;margin:12px 0 6px}
+.budgetsoft-categories-20261108 .category-20261108-status{white-space:pre-wrap;font-size:13px;line-height:1.5}
+.budgetsoft-categories-20261108 .category-20261108-confirm{display:flex;gap:8px;align-items:flex-start;font-size:13px}
+.budgetsoft-categories-20261108 .category-20261108-confirm input{margin-top:3px}
+</style>
+<script>
+(function(){
+  'use strict';
+  let modal=null,empreinte='',application=false;
+  const el=id=>document.getElementById(id);
+  const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
+  const eur=n=>Number(n||0).toLocaleString('fr-FR',{style:'currency',currency:'EUR'});
+  const jour=d=>String(d||'').slice(0,10);
+  function status(s){el('category-20261108-status').textContent=s;}
+  function fermer(){if(application)return;modal.classList.add('hidden');empreinte='';}
+  function tabl(rows,pluxee){
+    const lignes=(rows||[]).map(x=>'<tr>'+
+      '<td>'+esc(jour(x.date))+'</td>'+
+      '<td>'+esc(x.libelle)+'</td>'+
+      '<td class="right">'+eur(Math.abs(Number(x.montant||0)))+'</td>'+
+      '<td><strong>'+esc(x.categorie)+'</strong></td>'+
+      '</tr>').join('');
+    return '<div class="category-20261108-table-wrap"><table><thead><tr><th>Date '+(pluxee?'':'(opération ou comptable)')+
+      '</th><th>Libellé</th><th class="right">Montant</th><th>Catégorie proposée</th></tr></thead><tbody>'+
+      lignes+'</tbody></table></div>';
+  }
+  function afficherPlan(r){
+    const ici=el('category-20261108-plan'),checkbox=el('category-20261108-oui'),
+      appliquer=el('category-20261108-appliquer');
+    empreinte=r&&r.ok?r.empreinte:'';
+    if(!r||!r.ok){
+      checkbox.disabled=true;checkbox.checked=false;appliquer.disabled=true;
+      ici.innerHTML='<p class="error">Contrôle préalable refusé : '+esc((r&&r.erreurs||[]).join(' · ')||'Réponse indisponible')+'</p>';
+      status('Aucune écriture possible tant que le contrôle ne passe pas.');
+      return;
+    }
+    ici.innerHTML='<h3>Banque — '+r.nombreBanque+' opérations ('+eur(r.montantBanque)+')</h3>'+
+      '<p class="helper-text">Les dates comptables éventuellement futures sont conservées.</p>'+
+      tabl(r.banque,false)+
+      '<h3>Pluxee — '+r.nombrePluxee+' dépenses ('+eur(r.montantPluxee)+')</h3>'+
+      '<p class="helper-text">Hoppy Monkey Club est proposé en Restaurants ; toutes les autres lignes sont proposées en Courses.</p>'+
+      tabl(r.pluxee,true)+
+      '<p class="helper-text">Les 33 lignes seront classées sans changer leurs montants, dates, comptes ou identifiants. Deux feuilles de sauvegarde seront créées.</p>';
+    checkbox.disabled=false;checkbox.checked=false;appliquer.disabled=true;
+    status('Contrôle en lecture seule conforme. Vérifie les 33 catégories avant de confirmer.');
+  }
+  function preparer(){
+    if(application)return;
+    empreinte='';el('category-20261108-oui').checked=false;
+    el('category-20261108-oui').disabled=true;
+    el('category-20261108-appliquer').disabled=true;
+    el('category-20261108-auditer').disabled=true;
+    status('Lecture des opérations et préparation de la sauvegarde…');
+    google.script.run.withSuccessHandler(r=>{
+      el('category-20261108-auditer').disabled=false;afficherPlan(r);
+    }).withFailureHandler(err=>{
+      el('category-20261108-auditer').disabled=false;
+      status('Échec du contrôle : '+String(err&&err.message||err));
+    }).auditerCategoriesValideesBudgetSoft20261108();
+  }
+  function appliquer(){
+    if(application||!empreinte||!el('category-20261108-oui').checked)return;
+    if(!confirm('Appliquer les 18 catégories bancaires et les 15 catégories Pluxee exactement comme affiché, en sauvegardant intégralement les deux feuilles ?'))return;
+    application=true;
+    el('category-20261108-appliquer').disabled=true;
+    el('category-20261108-auditer').disabled=true;
+    el('category-20261108-oui').disabled=true;
+    status('Sauvegardes puis modification des seules catégories…');
+    google.script.run.withSuccessHandler(r=>{
+      application=false;empreinte='';
+      el('category-20261108-auditer').disabled=false;
+      if(!r||!r.ok){
+        status('Résultat inattendu : vérifier le classeur avant tout nouvel essai.');
+        return;
+      }
+      status('Catégories enregistrées : '+r.nombreBanque+' lignes Banque et '+
+        r.nombrePluxee+' lignes Pluxee.\nSauvegardes : '+r.sauvegardeBanque+
+        ' et '+r.sauvegardePluxee+
+        '\nSnapshot : '+(r.snapshot&&r.snapshot.ok?'actualisé':'à contrôler')+
+        '. Actualise BudgetSoft pour voir les données.');
+      el('category-20261108-plan').innerHTML='<p>Corrections enregistrées. Les anciennes valeurs des deux feuilles sont conservées dans les sauvegardes masquées.</p>';
+    }).withFailureHandler(err=>{
+      application=false;empreinte='';
+      el('category-20261108-auditer').disabled=false;
+      status('Application interrompue : '+String(err&&err.message||err)+
+        '\nNe pas réessayer sans examiner les feuilles de sauvegarde.');
+    }).appliquerCategoriesValideesBudgetSoft20261108(empreinte);
+  }
+  function monter(){
+    if(modal)return modal;
+    modal=document.createElement('div');
+    modal.id='budgetsoft-categories-20261108-modal';
+    modal.className='modal hidden credit-modal-overlay budgetsoft-categories-20261108';
+    modal.setAttribute('role','dialog');
+    modal.setAttribute('aria-modal','true');
+    modal.setAttribute('aria-label','Valider les catégories des opérations et de Pluxee');
+    modal.innerHTML='<div class="modal-card"><div class="modal-heading">'+
+      '<div><p class="panel-kicker">Opérations et Pluxee</p><h2>Classer les mouvements non catégorisés</h2></div>'+
+      '<button type="button" class="modal-close" id="category-20261108-fermer" aria-label="Fermer">×</button></div>'+
+      '<p class="category-20261108-help">Propositions établies à partir des catégories que tu as validées pour les paiements bancaires et de l’identification des commerçants Pluxee. La validation ne crée ni ne supprime aucune dépense.</p>'+
+      '<p id="category-20261108-status" class="category-20261108-status" role="status">Contrôle non lancé.</p>'+
+      '<div id="category-20261108-plan"></div>'+
+      '<label class="category-20261108-confirm"><input id="category-20261108-oui" type="checkbox" disabled>'+
+      '<span>J’ai vérifié les catégories ci-dessus, y compris Hoppy Monkey Club en Restaurants, et j’autorise leur enregistrement.</span></label>'+
+      '<div class="form-actions">'+
+      '<button type="button" class="secondary-button" id="category-20261108-auditer">1 · Vérifier les 33 lignes</button>'+
+      '<button type="button" class="primary-button" id="category-20261108-appliquer" disabled>2 · Enregistrer les catégories</button>'+
+      '</div></div>';
+    document.body.appendChild(modal);
+    el('category-20261108-fermer').addEventListener('click',fermer);
+    modal.addEventListener('click',e=>{if(e.target===modal)fermer();});
+    el('category-20261108-auditer').addEventListener('click',preparer);
+    el('category-20261108-appliquer').addEventListener('click',appliquer);
+    el('category-20261108-oui').addEventListener('change',()=>{
+      el('category-20261108-appliquer').disabled=!empreinte||!el('category-20261108-oui').checked;
+    });
+    return modal;
+  }
+  window.ouvrirValidationCategoriesBudgetSoft20261108=function(){
+    monter();
+    if(application)return;
+    modal.classList.remove('hidden');
+    preparer();
+  };
+})();
+</script>
