@@ -166,6 +166,25 @@ function auditerToutesDonneesAnalysesBudgetSoft20261108(){
         proche(nb(b.ecart),arr(Number(b.prevu)-Number(b.reel)),.02),
         'Alerte budgétaire non justifiée ou écart mal calculé.');
     });
+    const posteDepenses={};
+    cats.forEach(function(c){posteDepenses[String(c.nom||'')]=Number(c.montant||0);});
+    const alertesAttendues=budgets.filter(function(b){
+      return String(b&&b.mois||'')===periodeCle(courante)&&
+        String(b&&b.type||'').toLowerCase()==='depense'&&
+        types[String(b&&b.poste||'').trim()]!=='tresorerie';
+    }).map(function(b){
+      const poste=String(b.poste||'').trim(),famillePoste=poste==='Énergies'?'Énergies':famille(poste);
+      const prevu=Number(b.prevu||0),reel=Number(posteDepenses[famillePoste]||0);
+      return{poste,prevu,reel,ecart:prevu-reel};
+    }).filter(function(b){return b.prevu>0&&b.reel>b.prevu;})
+      .sort(function(x,y){return x.ecart-y.ecart;});
+    ajouter(label+'_alertes_budgets_source',alertesAttendues.length===alertes.length&&
+      alertesAttendues.every(function(x,i){
+        const y=alertes[i];
+        return !!y&&x.poste===String(y.poste||'')&&
+          proche(x.prevu,nb(y.prevu),.02)&&proche(x.reel,nb(y.reel),.02);
+      }),'Les dépassements de budget ne correspondent pas aux postes de Budget.');
+
 
     ajouter(label+'_bloc_recettes',!!fRec,'Recettes indisponibles sur cet horizon.');
     if(fRec){
@@ -397,11 +416,13 @@ function auditerToutesDonneesAnalysesBudgetSoft20261108(){
       const deb=date(p.debut),fin=date(p.fin);
       if(!deb||!fin){sourceParCycle.push(null);return;}
       const borne=fin<finRef?fin:finRef;
-      let revenus=0,depenses=0,tresorerie=0,operations=0;
+      let revenus=0,depenses=0,tresorerie=0,operations=0,sortiesFinancement=0,reinjections=0;
       mouvements.forEach(function(o){
         const od=date(o.date_analyse);if(!od||od<deb||od>fin)return;
         if(od>borne){if(idx===d.periodes.length-1)excluesFutures++;return;}
         const val=Number(o.montant||0),cat=String(o.categorie||'').trim(),type=types[cat]||'';
+        if(val<0&&(cat==='Crédits'||cat==='Crédits revolving'))sortiesFinancement+=Math.abs(val);
+        if(val>0&&cat==='Crédits de trésorerie')reinjections+=val;
         if(estTresorerie(o)){tresorerie+=val;return;}
         if(val>0&&estRevenu(cat,type)){revenus+=val;operations++;return;}
         if(val<0&&type==='depense'){
@@ -412,7 +433,8 @@ function auditerToutesDonneesAnalysesBudgetSoft20261108(){
           }
         }
       });
-      sourceParCycle.push({revenus:arr(revenus),depenses:arr(depenses),tresorerie:arr(tresorerie),operations});
+      sourceParCycle.push({revenus:arr(revenus),depenses:arr(depenses),tresorerie:arr(tresorerie),operations,
+        sortiesFinancement:arr(sortiesFinancement),reinjections:arr(reinjections)});
     });
     const ecarts=[];
     sourceParCycle.forEach(function(x,i){
@@ -426,6 +448,18 @@ function auditerToutesDonneesAnalysesBudgetSoft20261108(){
     });
     ajouter('source_'+n+'p_cycles_comptables',ecarts.length===0,
       ecarts.length+' discordance(s) entre les lignes Operations et les cycles Analyses ; '+JSON.stringify(ecarts.slice(0,5)));
+    const f=d.depensesDetail&&d.depensesDetail.fenetres&&d.depensesDetail.fenetres[String(n)]||{};
+    const fin=f.financement||null,finSource=arr(sourceParCycle.reduce(function(z,x){
+      return z+Number(x&&x.sortiesFinancement||0);
+    },0)),reinjectionsSource=arr(sourceParCycle.reduce(function(z,x){
+      return z+Number(x&&x.reinjections||0);
+    },0));
+    if(fin){
+      ajouter('source_'+n+'p_sorties_financement',proche(nb(fin.sortiesFinancement),finSource,.02),
+        'Sorties de financement du panneau ≠ remboursements bancaires enregistrés à la date de référence : vérifier opérations futures.');
+      ajouter('source_'+n+'p_reinjections',proche(nb(fin.reinjectionsTresorerie),reinjectionsSource,.02),
+        'Réinjections de financement ≠ mouvements de trésorerie déjà constatés.');
+    }
     const courant=(d.periodes||[]).slice(-1)[0]||{};
     if(d.categories&&d.categories.length){
       const difference=d.categories.map(x=>({nom:String(x.nom||''),attendu:arr(catCourant[String(x.nom||'')]||0),affiche:arr(x.montant)}))
