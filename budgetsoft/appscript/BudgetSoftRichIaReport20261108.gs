@@ -194,6 +194,8 @@ function genererRapportIaDetailleBudgetSoft20261108(options){
         lignesCharges=raw.map(x=>({
           libelle:short(x.libelle||x.nom||x.description||'Charge sans intitulé'),
           categorie:short(x.categorie),montant:number(x.montant),
+          equivalentMensuel:typeof montantMensuelChargeAnalyse20260904_==='function'?
+            number(montantMensuelChargeAnalyse20260904_(x)):null,
           frequence:str(x.frequence),actif:!['0','false','non','inactif'].includes(str(x.actif).toLowerCase()),
           dateDebut:str(x.date_debut),dateFin:str(x.date_fin),commentaire:short(x.commentaire)
         }));
@@ -201,9 +203,10 @@ function genererRapportIaDetailleBudgetSoft20261108(options){
     }
   }catch(ex){note.push('Détail des charges fixes indisponible : '+short(ex&&ex.message));}
   if(lignesCharges&&lignesCharges.length){
-    md.push('','| Charge | Catégorie | Montant saisi | Fréquence | Active |',
-      '|---|---|---:|---|---|');
-    lignesCharges.forEach(x=>md.push('| '+x.libelle+' | '+x.categorie+' | '+money(x.montant)+' | '+x.frequence+' | '+(x.actif?'oui':'non')+' |'));
+    md.push('','| Charge | Catégorie | Montant saisi | Fréquence | Équivalent mensuel | Active |',
+      '|---|---|---:|---|---:|---|');
+    lignesCharges.forEach(x=>md.push('| '+x.libelle+' | '+x.categorie+' | '+money(x.montant)+
+      ' | '+x.frequence+' | '+money(x.equivalentMensuel)+' | '+(x.actif?'oui':'non')+' |'));
   }else md.push('','Détail ligne par ligne indisponible ; seuls les totaux de référence issus du snapshot sont fiables.');
   md.push('');
 
@@ -252,11 +255,14 @@ function genererRapportIaDetailleBudgetSoft20261108(options){
     '- Plafonds des renouvelables : '+money(credits.plafondRenouvelable)+
       ' ; disponibles théoriques : '+money(credits.disponibleRenouvelable)+'.',
     '',
-    '| Crédit | Nature | Capital restant | Mensualité | Taux saisi | Échéance prochaine | Fin |',
-    '|---|---|---:|---:|---:|---|---|');
+    '| Crédit | Nature | Capital restant | Mensualité | Taux saisi | Coût restant (saisi/estimé) | Échéance prochaine | Fin |',
+    '|---|---|---:|---:|---:|---:|---|---|');
   (credits.amortissables.concat(credits.renouvelables)).forEach(x=>md.push(
     '| '+x.nom+' | '+(x.type||'amortissable')+' | '+money(x.capitalRestant)+' | '+money(x.mensualite)+
-    ' | '+percentage(x.tauxSaisi)+' | '+(x.prochaineEcheance||'—')+' | '+(x.dateFin||'—')+' |'));
+    ' | '+percentage(x.tauxSaisi)+' | '+money(x.coutRestant)+' | '+(x.prochaineEcheance||'—')+' | '+(x.dateFin||'—')+' |'));
+  credits.renouvelables.forEach(x=>{if(x.plafondCredit!=null||x.disponibleCredit!=null)
+    md.push('- '+x.nom+' : plafond '+money(x.plafondCredit)+
+      ', disponible théorique '+money(x.disponibleCredit)+'.');});
   md.push('','#### Dettes hors crédit');
   if(credits.dettes.length)credits.dettes.forEach(x=>md.push('- '+x.nom+' : reste '+money(x.resteAPayer)+
     ', mensualité '+money(x.mensualite)+', statut '+(x.statut||'—')+'.'));
