@@ -4,7 +4,7 @@
  * d'Operations, sans publier de snapshot ni modifier de feuille.
  * Journal : synthèses chiffrées / codes de contrôle, jamais de libellé bancaire.
  */
-const BUDGETSOFT_ANALYSES_EXHAUSTIVE_AUDIT_20261108_VERSION='2026-11-08.1';
+const BUDGETSOFT_ANALYSES_EXHAUSTIVE_AUDIT_20261108_VERSION='2026-11-08.2';
 
 function auditerToutesDonneesAnalysesBudgetSoft20261108(){
   const erreurs=[],avertissements=[],controles=[],resume={};
@@ -86,6 +86,8 @@ function auditerToutesDonneesAnalysesBudgetSoft20261108(){
   if(sansCategorie)attention('operations_sans_categorie',sansCategorie+' mouvement(s) sans catégorie.');
   if(horsReferentiel)attention('operations_categories_non_referencees',horsReferentiel+' mouvement(s) dont la catégorie canonique est absente de Categories ; vérifier leur inclusion.');
   if(doublonsIds)attention('operations_ids_doubles',doublonsIds+' identifiant(s) dupliqué(s), susceptibles de fausser les rapprochements.');
+  if(budgets.length===0)attention('budgets_absents',
+    'La table Budget ne contient aucune enveloppe : les calculs de dépassement sont cohérents avec ce vide, mais aucun suivi budgétaire chiffré ne peut être vérifié.');
   const sources={operations:mouvements.length,categories:categories.length,budgets:budgets.length,chargesFixes:fixes.length,pluxee:pluxee.length,
     datesInvalides,montantsInvalides,sansCategorie,horsReferentiel,doublonsIds};
 
@@ -192,8 +194,16 @@ function auditerToutesDonneesAnalysesBudgetSoft20261108(){
         variable=nb(fRec.revenusVariables),totalPer=somme(per,'revenus');
       ajouter(label+'_revenus_vs_cycles',proche(revenuTotal,totalPer,.02),
         'Somme des revenus économiques de la fenêtre différente du total des cycles : contrôler opérations futures et dates.');
-      ajouter(label+'_revenus_moyenne_mensuelle',proche(nb(fRec.moyenneMensuelle),
-        revenuTotal/n,.02),'La moyenne des recettes ne correspond pas à la fenêtre déclarée.');
+      // La référence Recettes ignore le cycle courant incomplet : comparer
+      // comme le moteur métier, sur les seuls cycles réellement clôturés.
+      const moyenneRecettesAttendues=completes.length
+        ?completes.reduce((z,p)=>z+Number(p.revenus||0),0)/completes.length:0;
+      ajouter(label+'_revenus_base_moyenne',
+        Number(fRec.baseMoyenneMensuelle)===completes.length,
+        'Le nombre de cycles complets servant à la moyenne des recettes est incohérent.');
+      ajouter(label+'_revenus_moyenne_mensuelle',
+        proche(nb(fRec.moyenneMensuelle),moyenneRecettesAttendues,.02),
+        'La moyenne des recettes ne correspond pas aux seuls cycles complets.');
       const referenceRec=rec.references||{},salaireAttendu=mouvements.filter(function(o){
         const od=date(o.date_analyse),refLimite=typeof bornerDateBancaireFinJour_==='function'
           ?bornerDateBancaireFinJour_(date(d.dateReference)):date(d.dateReference);
@@ -323,7 +333,9 @@ function auditerToutesDonneesAnalysesBudgetSoft20261108(){
       ajouter(label+'_fixes_nombre',Number.isInteger(fi.nombre)&&fi.nombre>=0,
         'Nombre de charges fixes actives incorrect.');
       if(typeof actifAnalyse20260904_==='function'&&typeof montantMensuelChargeAnalyse20260904_==='function'){
-        const actifs=fixes.filter(actifAnalyse20260904_);
+        // L'API reçoit c.actif, pas l'objet charge : sinon les objets
+        // inactifs sont évalués comme truthy et gonflent artificiellement les totaux.
+        const actifs=fixes.filter(c=>actifAnalyse20260904_(c.actif));
         const total=arr(actifs.reduce((z,x)=>z+montantMensuelChargeAnalyse20260904_(x),0));
         ajouter(label+'_fixes_source_nombre',fi.nombre===actifs.length,
           'Nombre de charges fixes actives divergent de la table Charges_fixes.');
