@@ -1,0 +1,176 @@
+<style>
+.bsia{display:grid;gap:16px}.bsia p{line-height:1.5}
+.bsia .actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}
+.bsia .context{width:100%;box-sizing:border-box;min-height:290px;resize:vertical;padding:12px;font:14px/1.55 inherit;border:1px solid var(--line,#d5ddd8);border-radius:10px}
+.bsia .report{width:100%;box-sizing:border-box;min-height:380px;resize:vertical;padding:12px;font:12px/1.5 Consolas,monospace;border:1px solid var(--line,#d5ddd8);border-radius:10px}
+.bsia .status{font-size:13px;color:var(--muted,#65736b);white-space:pre-wrap;min-height:20px}
+.bsia .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:10px}
+.bsia .tiles div{border:1px solid var(--line,#d5ddd8);border-radius:9px;padding:10px}
+.bsia .tiles small,.bsia .tiles strong{display:block}
+.bsia .tiles small{color:var(--muted,#65736b);margin-bottom:6px}.bsia .tiles strong{font-size:16px}
+</style>
+<script>
+(function(){
+  'use strict';
+  const ID='bsia-unifiee-20261108',PREV='budgetsoft_ai_report_context_20260926';
+  let loaded=false,loading=false,saving=false,generating=false,revision='',draft='',saved='',lastModified='',report=null;
+  const el=id=>document.getElementById(id);
+  const euro=x=>Number(x||0).toLocaleString('fr-FR',{style:'currency',currency:'EUR'});
+  const esc=x=>String(x==null?'':x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function status(id,t){const x=el(id);if(x)x.textContent=t;}
+  function dirty(){return draft!==saved;}
+  function repaint(){
+    const t=el('bsia-chars');if(t)t.textContent=draft.length.toLocaleString('fr-FR')+' caractères';
+    const b=el('bsia-save');if(b)b.disabled=!loaded||loading||saving||!dirty();
+    if(loaded&&!saving)status('bsia-status',dirty()?'Modifications non enregistrées.':'Contexte enregistré'+(lastModified?' · '+lastModified.slice(0,10):'')+'.');
+  }
+  function load(){
+    if(loading||loaded)return;
+    loading=true;status('bsia-status','Chargement du contexte privé…');
+    google.script.run.withSuccessHandler(r=>{
+      loading=false;loaded=true;
+      revision=String(r&&r.empreinte||'');saved=String(r&&r.texte||'');
+      lastModified=String(r&&r.modifieLe||'');
+      let previous='';try{previous=localStorage.getItem(PREV)||'';}catch(_){}
+      draft=saved||previous;
+      const t=el('bsia-context');if(t){t.value=draft;t.disabled=false;}
+      repaint();
+      if(previous&&!saved)status('bsia-status','Contexte de l’ancien Rapport IA récupéré dans ce navigateur ; clique sur Enregistrer pour le conserver dans BudgetSoft.');
+    }).withFailureHandler(e=>{
+      loading=false;status('bsia-status','Chargement impossible : '+String(e&&e.message||e));
+    }).lireContexteIaBudgetSoft20261108();
+  }
+  function save(){
+    if(!loaded||saving||!dirty())return;
+    saving=true;repaint();
+    const value=draft,rev=revision;
+    status('bsia-status','Enregistrement…');
+    google.script.run.withSuccessHandler(r=>{
+      saving=false;if(!r||!r.ok){status('bsia-status','Réponse d’enregistrement invalide.');return;}
+      revision=r.empreinte;saved=value;lastModified=r.modifieLe||'';
+      repaint();
+      status('bsia-status',dirty()?'Version enregistrée. Il reste de nouvelles modifications non enregistrées.':'Contexte enregistré dans BudgetSoft.');
+    }).withFailureHandler(e=>{
+      saving=false;repaint();
+      status('bsia-status','Enregistrement refusé : '+String(e&&e.message||e)+'. Conserve ton texte, et copie-le avant de recharger.');
+    }).enregistrerContexteIaBudgetSoft20261108(value,rev);
+  }
+  function reload(){
+    if(dirty()&&!confirm('Abandonner les modifications non enregistrées et recharger le contexte sauvegardé ?'))return;
+    loaded=false;load();
+  }
+  async function copy(value,field){
+    if(!value){alert('Aucun texte à copier.');return;}
+    try{await navigator.clipboard.writeText(value);}
+    catch(_){
+      const t=el(field);if(!t)return;
+      t.focus();t.select();try{document.execCommand('copy');}catch(e){alert('Copie impossible : sélectionne le texte et copie-le manuellement.');}
+    }
+  }
+  function conseil(){
+    status('bsia-advice-status','Lecture des indicateurs du conseiller…');
+    google.script.run.withSuccessHandler(r=>{
+      const box=el('bsia-advice');if(!box)return;
+      if(!r||!r.ok){box.textContent='Diagnostic indisponible dans le snapshot : '+String(r&&r.erreur||'aucune donnée');return;}
+      const d=r.indicateurs||{};
+      const cells=[['Indice indicatif',(r.score==null?'—':r.score)+'/100'],
+        ['Revenus moyens / cycle',euro(d.revenusMoyens)],
+        ['Dépenses moyennes / cycle',euro(d.depensesMoyennes)],
+        ['Capital restant',euro(d.capitalRestant)],
+        ['Mensualités',euro(d.mensualites)],
+        ['Taux endettement',String(d.tauxEndettement==null?'—':d.tauxEndettement)+' %']];
+      box.innerHTML='<div class="tiles">'+cells.map(x=>'<div><small>'+esc(x[0])+'</small><strong>'+esc(x[1])+'</strong></div>').join('')+'</div>'+
+        '<p class="helper-text">'+esc(r.synthese||'')+'</p>';
+      status('bsia-advice-status','Diagnostic disponible depuis le snapshot BudgetSoft.');
+    }).withFailureHandler(e=>status('bsia-advice-status','Diagnostic indisponible : '+String(e&&e.message||e)))
+      .chargerConseillerFinancier();
+  }
+  function enableReport(on){
+    ['bsia-copy-report','bsia-md','bsia-json'].forEach(id=>{const b=el(id);if(b)b.disabled=!on;});
+  }
+  function generate(){
+    if(!loaded||generating)return;
+    generating=true;report=null;enableReport(false);
+    const b=el('bsia-generate');b.disabled=true;
+    status('bsia-export-status','Lecture des synthèses 3, 6 et 12 cycles…');
+    google.script.run.withSuccessHandler(r=>{
+      generating=false;const b=el('bsia-generate');if(b)b.disabled=false;
+      if(!r||!r.ok){status('bsia-export-status','Rapport indisponible.');return;}
+      report=r;
+      const p=el('bsia-preview');if(p)p.value=r.markdown||'';
+      enableReport(true);
+      status('bsia-export-status','Rapport prêt · révision '+String(r.revisionBudgetSoft||'')+
+        (dirty()?' · attention : contexte non enregistré':'')+'.');
+    }).withFailureHandler(e=>{
+      generating=false;const b=el('bsia-generate');if(b)b.disabled=false;
+      status('bsia-export-status','Export indisponible : '+String(e&&e.message||e));
+    }).genererRapportIaConsolideBudgetSoft20261108({contexte:draft});
+  }
+  function download(ext){
+    if(!report)return;
+    const value=ext==='json'?report.json:report.markdown;
+    const blob=new Blob([value],{type:ext==='json'?'application/json;charset=utf-8':'text/markdown;charset=utf-8'});
+    const url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download='BudgetSoft_IA_'+new Date().toISOString().slice(0,10)+'.'+ext;
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
+  function build(){
+    const z=el('generic-view');if(!z)return;
+    z.innerHTML=[
+      '<div class="bsia" id="'+ID+'">',
+      '<p class="helper-text">Le contexte du foyer, le Conseiller et le Rapport IA sont désormais réunis dans cet onglet.</p>',
+      '<article class="card panel">',
+      '<div class="panel-heading"><div><span class="panel-kicker">Profil du foyer</span><h2>Contexte</h2></div></div>',
+      '<p class="helper-text">Texte libre pour guider une IA sur votre situation. Après enregistrement, il est conservé dans les propriétés du projet BudgetSoft, et non uniquement dans le navigateur.</p>',
+      '<label for="bsia-context">Contexte familial et professionnel</label>',
+      '<textarea id="bsia-context" class="context" disabled placeholder="Colle ici le résumé rédigé pour les IA, puis enregistre-le."></textarea>',
+      '<div class="actions"><button id="bsia-save" class="primary-button" disabled>Enregistrer le contexte</button>',
+      '<button id="bsia-reload" class="secondary-button">Recharger</button>',
+      '<button id="bsia-copy-context" class="secondary-button">Copier</button>',
+      '<small id="bsia-chars"></small></div>',
+      '<p id="bsia-status" class="status" role="status">Chargement…</p>',
+      '<p class="helper-text">Ces informations peuvent être sensibles : vérifie-les avant de les transmettre à une IA externe.</p>',
+      '</article>',
+      '<article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Données financières</span><h2>Conseiller IA</h2></div>',
+      '<button id="bsia-refresh-advice" class="secondary-button">Actualiser</button></div>',
+      '<p id="bsia-advice-status" class="status">Chargement du diagnostic…</p><div id="bsia-advice"></div></article>',
+      '<article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Export contextualisé</span><h2>Rapport IA</h2></div></div>',
+      '<p class="helper-text">Produit un prompt Markdown et un export JSON avec le contexte affiché et les données validées sur 3, 6 et 12 cycles. Aucun envoi automatique vers une IA extérieure.</p>',
+      '<div class="actions"><button id="bsia-generate" class="primary-button">Générer le rapport</button>',
+      '<button id="bsia-copy-report" class="secondary-button" disabled>Copier le rapport</button>',
+      '<button id="bsia-md" class="secondary-button" disabled>Télécharger .md</button>',
+      '<button id="bsia-json" class="secondary-button" disabled>Télécharger .json</button></div>',
+      '<p id="bsia-export-status" class="status">Rapport non généré.</p>',
+      '<textarea id="bsia-preview" class="report" readonly placeholder="Rapport Markdown disponible après génération."></textarea>',
+      '</article></div>'
+    ].join('');
+    const t=el('bsia-context');t.value=draft;t.disabled=!loaded;
+    t.addEventListener('input',()=>{draft=t.value;repaint();});
+    el('bsia-save').addEventListener('click',save);
+    el('bsia-reload').addEventListener('click',reload);
+    el('bsia-copy-context').addEventListener('click',()=>copy(draft,'bsia-context'));
+    el('bsia-refresh-advice').addEventListener('click',conseil);
+    el('bsia-generate').addEventListener('click',generate);
+    el('bsia-copy-report').addEventListener('click',()=>copy(report&&report.markdown||'','bsia-preview'));
+    el('bsia-md').addEventListener('click',()=>download('md'));
+    el('bsia-json').addEventListener('click',()=>download('json'));
+    if(report){el('bsia-preview').value=report.markdown||'';enableReport(true);}
+    conseil();
+    if(loaded)repaint();else load();
+  }
+  function open(){if(!el(ID))build();}
+  function install(){
+    const nav=document.querySelector('.nav-item[data-view="ia"]');
+    if(nav){const span=nav.querySelector('span');if(span)span.textContent='IA';}
+    const original=window.ouvrirVue;
+    if(typeof original==='function'&&!original.__bsIa20261108){
+      const wrap=function(view){const result=original.apply(this,arguments);if(view==='ia')open();return result;};
+      wrap.__bsIa20261108=true;window.ouvrirVue=wrap;
+    }
+    if(window.state&&window.state.currentView==='ia')open();
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);
+  else install();
+})();
+</script>
