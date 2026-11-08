@@ -92,19 +92,19 @@
     if(!loaded||generating)return;
     generating=true;report=null;enableReport(false);
     const b=el('bsia-generate');b.disabled=true;
-    status('bsia-export-status','Lecture des synthèses 3, 6 et 12 cycles…');
+    status('bsia-export-status','Préparation du dossier complet (13 sections, cycles, crédits, patrimoine, trésorerie)…');
     google.script.run.withSuccessHandler(r=>{
       generating=false;const b=el('bsia-generate');if(b)b.disabled=false;
       if(!r||!r.ok){status('bsia-export-status','Rapport indisponible.');return;}
       report=r;
       const p=el('bsia-preview');if(p)p.value=r.markdown||'';
       enableReport(true);
-      status('bsia-export-status','Rapport prêt · révision '+String(r.revisionBudgetSoft||'')+
+      status('bsia-export-status','Rapport détaillé prêt · '+String(r.statistiques&&r.statistiques.nombreSections||13)+' sections · '+Number(r.statistiques&&r.statistiques.tailleMarkdown||0).toLocaleString('fr-FR')+' caractères · révision '+String(r.revisionBudgetSoft||'')+
         (dirty()?' · attention : contexte non enregistré':'')+'.');
     }).withFailureHandler(e=>{
       generating=false;const b=el('bsia-generate');if(b)b.disabled=false;
       status('bsia-export-status','Export indisponible : '+String(e&&e.message||e));
-    }).genererRapportIaConsolideBudgetSoft20261108({contexte:draft});
+    }).genererRapportIaDetailleBudgetSoft20261108({contexte:draft});
   }
   function download(ext){
     if(!report)return;
@@ -136,7 +136,7 @@
       '<button id="bsia-refresh-advice" class="secondary-button">Actualiser</button></div>',
       '<p id="bsia-advice-status" class="status">Chargement du diagnostic…</p><div id="bsia-advice"></div></article>',
       '<article class="card panel"><div class="panel-heading"><div><span class="panel-kicker">Export contextualisé</span><h2>Rapport IA</h2></div></div>',
-      '<p class="helper-text">Produit un prompt Markdown et un export JSON avec le contexte affiché et les données validées sur 3, 6 et 12 cycles. Aucun envoi automatique vers une IA extérieure.</p>',
+      '<p class="helper-text">Produit un dossier détaillé en Markdown et JSON : 12 cycles, revenus par source, dépenses par catégorie, crédits, dettes, charges fixes, patrimoine, Pluxee, trésorerie et prévisions. Aucun envoi automatique vers une IA extérieure.</p>',
       '<div class="actions"><button id="bsia-generate" class="primary-button">Générer le rapport</button>',
       '<button id="bsia-copy-report" class="secondary-button" disabled>Copier le rapport</button>',
       '<button id="bsia-md" class="secondary-button" disabled>Télécharger .md</button>',
