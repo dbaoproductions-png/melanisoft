@@ -65,7 +65,7 @@ function auditerOperationsSansCategorieEtPluxee20261108(){
       cat!=='Courses'&&cat!=='Restaurants';
   }).map(function(o){
     return {id:texte(o.id),date:jour(o.date),libelle:texte(o.libelle),
-      montant:arr(Math.abs(Number(o.montant))),categorieActuelle:texte(o.categorie),
+      montant:arr(Math.abs(Number(o.montant))),dateHeureSource:texte(o.date),categorieActuelle:texte(o.categorie),
       statut:texte(o.statut||'valide'),source:texte(o.source),
       decision:'Courses ou Restaurants (à vérifier sur la transaction)'};
   }).sort(function(a,b){return b.date.localeCompare(a.date)||a.montant-b.montant;});
@@ -85,7 +85,9 @@ function auditerOperationsSansCategorieEtPluxee20261108(){
   };
   [3,6,12].forEach(function(n){
     const f=fenetres[String(n)],lignes=pluxeeNonClassees.filter(function(o){
-      const d=dt(o.date);return d&&d>=f.debut&&d<=f.fin;
+      // Utiliser l'horodatage d'origine : ne pas perdre l'heure en
+      // convertissant prématurément la date Pluxee au format AAAA-MM-JJ.
+      const d=dt(o.dateHeureSource);return d&&d>=f.debut&&d<=f.fin;
     });
     recapPluxee.fenetres[String(n)]={
       debut:f.debutTexte,fin:f.finTexte,nombre:lignes.length,
