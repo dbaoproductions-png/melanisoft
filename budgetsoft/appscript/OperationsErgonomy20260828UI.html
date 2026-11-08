@@ -37,11 +37,18 @@
   function installerActionsCourantes(){
     const toolbar=document.querySelector('#operations .section-toolbar');if(!toolbar||q('operations-current-actions'))return;
     const d=document.createElement('div');d.id='operations-current-actions';
-    d.innerHTML=`<button type="button" class="primary-button" id="operations-manual-top">＋ Saisie manuelle</button><button type="button" class="secondary-button" id="operations-pdf-top">📄 Relevé PDF</button><button type="button" class="secondary-button" id="operations-hello-top">📋 Copier-coller Hello bank!</button>`;
+    d.innerHTML=`<button type="button" class="primary-button" id="operations-manual-top">＋ Saisie manuelle</button><button type="button" class="secondary-button" id="operations-pdf-top">📄 Relevé PDF</button><button type="button" class="secondary-button" id="operations-hello-top">📋 Copier-coller Hello bank!</button><button type="button" class="secondary-button" id="operations-finaliser-categories-top">✅ Finaliser les catégories</button>`;
     toolbar.appendChild(d);
     q('operations-manual-top').onclick=()=>q('add-operation-button')?.click();
     q('operations-pdf-top').onclick=()=>q('import-pdf-button')?.click();
     q('operations-hello-top').onclick=()=>ouvrirBanqueMode('flux');
+    // Ne pas placer cette action dans .toolbar-buttons : OperationsReview
+    // masque tous les enfants directs de ce conteneur au chargement.
+    q('operations-finaliser-categories-top').onclick=()=>{
+      if(typeof window.ouvrirValidationCategoriesBudgetSoft20261108==='function')
+        window.ouvrirValidationCategoriesBudgetSoft20261108();
+      else alert('La validation des catégories n’est pas disponible dans cette version. Ouvre BudgetSoft TEST /dev et actualise la page.');
+    };
     const maintenance=q('operations-maintenance-modern');if(maintenance)maintenance.onclick=()=>ouvrirBanqueMode('maintenance');
   }
 
