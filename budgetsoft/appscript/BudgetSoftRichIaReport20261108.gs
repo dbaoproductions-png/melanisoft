@@ -124,6 +124,11 @@ function genererRapportIaDetailleBudgetSoft20261108(options){
       '- Recours au crédit de trésorerie : '+money(recettes.injectionCreditsTresorerie)+
       ' ; cycles concernés : '+printable(recettes.cyclesAvecRecoursCredit)+'.');
     recettes.apportParProducteur.forEach(x=>md.push('- Producteur '+x.producteur+' : '+money(x.montant)+'.'));
+    if(n===12&&recettes.references){
+      md.push('- Dernier salaire de référence enregistré : '+money(recettes.references.salairePatrick)+
+        ' ; loyer mensuel de référence paramétré : '+money(recettes.references.loyerAppartement)+
+        ' ; garage de référence paramétré : '+money(recettes.references.garage)+'.');
+    }
     md.push('','| Source de revenu | Montant |','|---|---:|');
     recettes.sources.forEach(x=>md.push('| '+x.categorie+' | '+money(x.montant)+' |'));
     md.push('','#### Alimentation, santé, énergie et financement ('+n+' cycles)');
@@ -146,6 +151,21 @@ function genererRapportIaDetailleBudgetSoft20261108(options){
     if(n===12||n===3){
       md.push('','#### Dépenses par thème ('+n+' cycles)','| Thème | Montant |','|---|---:|');
       depensesDetail.themes.forEach(x=>md.push('| '+x.theme+' | '+money(x.montant)+' |'));
+    }
+    if(n===12&&etude.seriesHistoriques){
+      const courbes=etude.seriesHistoriques,blocs=['revenus','chargesFixes','pilotable','dettes','capital'];
+      const valCourbe=(nom,i)=>{
+        const b=courbes[nom],tot=b&&Array.isArray(b.series)?b.series.find(x=>x.total===true)||b.series[0]:null;
+        const value=tot&&Array.isArray(tot.valeurs)?tot.valeurs[i]:null;
+        return value==null?'non prouvé':money(value);
+      };
+      const libelles=courbes.revenus&&courbes.revenus.labels||cycles.map(x=>x.libelle);
+      md.push('','#### Historique financier par cycle : données observées et preuves structurelles',
+        '| Cycle | Revenus prouvés | Charges fixes rapprochées | Pilotable constaté | Dette prouvée | Actifs prouvés |',
+        '|---|---:|---:|---:|---:|---:|');
+      cycles.forEach((x,i)=>md.push('| '+(libelles[i]||x.libelle||x.cle)+' | '+
+        blocs.map(k=>valCourbe(k,i)).join(' | ')+' |'));
+      md.push('','Les cases « non prouvé » en dette et capital ne doivent jamais être remplacées par zéro.');
     }
     if(n===3){
       md.push('','#### Catégories de dépenses du cycle courant','| Catégorie | Montant | Part |','|---|---:|---:|');
@@ -260,7 +280,7 @@ function genererRapportIaDetailleBudgetSoft20261108(options){
     biens:assets(pat.actifs,['nom','type','valeur','date_valeur']),
     livrets:assets(pat.livrets,['nom','type','solde']),
     placements:assets(pat.placements,['nom','type','solde']),
-    estimation:estim.ok!==false?{
+    estimation:estim.ok===true?{
       dateReference:str(estim.dateReference),
       capitalCreditsEnregistre:number(estim.capitalCreditsEnregistre),
       capitalCreditsEstime:number(estim.capitalCreditsEstime),
@@ -390,7 +410,19 @@ function genererRapportIaDetailleBudgetSoft20261108(options){
         cft1:npath(x,'cft1'),het1:npath(x,'het1'),
         rt1:npath(x,'rt1'),soldeProjet:npath(x,'soldeFin')
       }))},
-    express:{pilotable:cerExpress.pilotable||null,contexte:cerExpress.contexte||null},
+    express:{
+      cycle:cerExpress.cycle||null,meteo:cerExpress.meteo||null,
+      pilotable:cerExpress.pilotable?{
+        allocation:number(cerExpress.pilotable.allocation),
+        consomme:number(cerExpress.pilotable.consomme),
+        reste:number(cerExpress.pilotable.reste),
+        lignes:(cerExpress.pilotable.lignes||[]).slice(0,40).map(x=>({
+          categorie:short(x.categorie),allocation:number(x.allocation),
+          consomme:number(x.consomme),reste:number(x.reste),vigilance:short(x.niveau||x.vigilance&&x.vigilance.niveau)
+        }))
+      }:null,
+      decision:cerExpress.decision||cerExpress.contexteDecision||null
+    },
     engagements:{ok:eng.ok!==false,nombreLignes:number(eng.nombreLignes),
       nombreOperations:number(eng.nombreOperations),
       clefsDisponibles:Object.keys(eng).filter(k=>typeof eng[k]==='number').slice(0,35),
@@ -403,11 +435,23 @@ function genererRapportIaDetailleBudgetSoft20261108(options){
   forecast.cerbere.periodes.forEach(x=>md.push('- '+(x.cle||'Cycle')+' ['+(x.debut||'?')+
     ' → '+(x.fin||'?')+'] : Rt1 '+money(x.rt1)+', CFt1 '+money(x.cft1)+
     ', HEt1 '+money(x.het1)+' (données absentes = non disponibles).'));
-  if(cerExpress.pilotable&&typeof cerExpress.pilotable==='object'){
-    const p=cerExpress.pilotable;
-    ['reste','parJour','engage','initial'].forEach(k=>{if(number(p[k])!=null)
-      md.push('- Pilotable Express '+k+' : '+money(p[k])+'.');});
+  if(forecast.express.pilotable){
+    const p=forecast.express.pilotable;
+    [['allocation','Allocation EP'],['consomme','Pilotable consommé'],['reste','Pilotable restant']].forEach(k=>{
+      if(number(p[k[0]])!=null)md.push('- '+k[1]+' : '+money(p[k[0]])+'.');
+    });
+    if(p.lignes&&p.lignes.length){
+      md.push('','| Catégorie pilotable | Allocation | Consommé | Reste | Vigilance |','|---|---:|---:|---:|---|');
+      p.lignes.forEach(x=>md.push('| '+x.categorie+' | '+money(x.allocation)+' | '+money(x.consomme)+
+        ' | '+money(x.reste)+' | '+(x.vigilance||'—')+' |'));
+    }
   }
+  const decision=forecast.express.decision||{};
+  [['prochainCycleEp','EP prochain cycle'],['prochainCycleCbEngagee','CB engagée prochain cycle'],
+    ['prochainCycleEpConsommee','EP déjà consommée cycle suivant'],
+    ['prochainCycleEpDisponible','EP disponible cycle suivant']].forEach(k=>{
+      if(number(decision[k[0]])!=null)md.push('- '+k[1]+' : '+money(decision[k[0]])+'.');
+    });
   Object.keys(forecast.engagements.indicateurs).forEach(k=>md.push('- Engagements '+k+' : '+money(forecast.engagements.indicateurs[k])+'.'));
   md.push('');
 
