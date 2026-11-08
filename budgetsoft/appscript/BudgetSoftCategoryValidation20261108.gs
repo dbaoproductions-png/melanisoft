@@ -67,9 +67,9 @@ function construireProjetCategoriesBudgetSoft20261108_(){
   verifierInitialisation_();
   const ss=SpreadsheetApp.getActiveSpreadsheet(),erreurs=[];
   const op=preparerFeuilleCategorie20261108_(ss,'Operations',
-    ['id','montant','categorie','date','libelle_bancaire']);
+    ['id','montant','categorie','date','date_comptable','libelle_bancaire','compte']);
   const pl=preparerFeuilleCategorie20261108_(ss,'Pluxee',
-    ['id','montant','categorie','date','libelle','statut']);
+    ['id','montant','categorie','date','libelle','statut','source']);
   const banques=reglesBanqueCategorie20261108_(),pluxees=reglesPluxeeCategorie20261108_();
   const categories=lireTable_('Categories')||[];
   const actives=new Map(categories.filter(c=>{
@@ -91,7 +91,12 @@ function construireProjetCategoriesBudgetSoft20261108_(){
     if(!id||!Number.isFinite(montant)||montant>=0||correspondances.length!==1)return null;
     const choisi=correspondances[0];
     return{feuille:f.nom,ligne:idx+2,id,libelle:String(libelle||'').slice(0,180),
-      date:normaliserDate(ligne[f.col.date]),montant:Math.round(montant*100)/100,
+      date:normaliserDate(ligne[f.col.date]),
+      dateComptable:f.col.date_comptable===undefined?'':normaliserDate(ligne[f.col.date_comptable]),
+      compte:f.col.compte===undefined?'':String(ligne[f.col.compte]||''),
+      statut:f.col.statut===undefined?'':String(ligne[f.col.statut]||''),
+      source:f.col.source===undefined?'':String(ligne[f.col.source]||''),
+      montant:Math.round(montant*100)/100,
       ancienneCategorie:String(ligne[f.col.categorie]||'').trim(),
       categorie:choisi.categorie,regle:choisi.cle};
   };
@@ -140,8 +145,8 @@ function construireProjetCategoriesBudgetSoft20261108_(){
 
   const empreinteMatiere=[
     BUDGETSOFT_CATEGORY_VALIDATION_VERSION_20261108,
-    projets.banque.map(x=>[x.feuille,x.ligne,x.id,x.libelle,x.date,x.montant,x.ancienneCategorie,x.categorie]),
-    projets.pluxee.map(x=>[x.feuille,x.ligne,x.id,x.libelle,x.date,x.montant,x.ancienneCategorie,x.categorie])
+    projets.banque.map(x=>[x.feuille,x.ligne,x.id,x.libelle,x.date,x.dateComptable,x.compte,x.montant,x.ancienneCategorie,x.categorie]),
+    projets.pluxee.map(x=>[x.feuille,x.ligne,x.id,x.libelle,x.date,x.statut,x.source,x.montant,x.ancienneCategorie,x.categorie])
   ];
   const empreinte=Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,JSON.stringify(empreinteMatiere))
     .map(b=>('0'+(b&255).toString(16)).slice(-2)).join('');
