@@ -99,7 +99,7 @@
       report=r;
       const p=el('bsia-preview');if(p)p.value=r.markdown||'';
       enableReport(true);
-      status('bsia-export-status','Rapport détaillé prêt · '+String(r.statistiques&&r.statistiques.nombreSections||13)+' sections · '+Number(r.statistiques&&r.statistiques.tailleMarkdown||0).toLocaleString('fr-FR')+' caractères · révision '+String(r.revisionBudgetSoft||'')+
+      status('bsia-export-status','Rapport détaillé prêt · '+String(r.statistiques&&r.statistiques.nombreSections||13)+' sections · '+String(r.statistiques&&r.statistiques.nombreCredits||0)+' crédits · '+String(r.statistiques&&r.statistiques.nombreChargesFixes||0)+' charges fixes · '+Number(r.statistiques&&r.statistiques.tailleMarkdown||0).toLocaleString('fr-FR')+' caractères · révision '+String(r.revisionBudgetSoft||'')+
         (dirty()?' · attention : contexte non enregistré':'')+'.');
     }).withFailureHandler(e=>{
       generating=false;const b=el('bsia-generate');if(b)b.disabled=false;
