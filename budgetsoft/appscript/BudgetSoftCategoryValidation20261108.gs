@@ -193,6 +193,10 @@ function appliquerCategoriesValideesBudgetSoft20261108(empreintePrevue){
     const copiePl=pl.copyTo(ss);
     copiePl.setName(BUDGETSOFT_CATEGORY_BACKUP_PLUXEE_20261108);
     copiePl.hideSheet();
+    // En cas d'interruption au milieu des 33 écritures, les vues doivent
+    // refuser de traiter l'ancien snapshot comme frais.
+    if(typeof marquerSnapshotGlobalBudgetSoftObsolete20260916_==='function')
+      marquerSnapshotGlobalBudgetSoftObsolete20260916_('categorisation_confirmee_20261108');
     let banque=0,pluxee=0;
     audit.banque.forEach(x=>{op.f.getRange(x.ligne,op.cat).setValue(x.categorie);banque++;});
     audit.pluxee.forEach(x=>{p.f.getRange(x.ligne,p.cat).setValue(x.categorie);pluxee++;});
@@ -204,8 +208,6 @@ function appliquerCategoriesValideesBudgetSoft20261108(empreintePrevue){
       note:'Aucun montant, date, crédit ou opération bancaire ajouté/supprimé. Sauvegardes masquées avant modification.'};
   }finally{lock.releaseLock();}
   if(out&&out.applique){
-    if(typeof marquerSnapshotGlobalBudgetSoftObsolete20260916_==='function')
-      marquerSnapshotGlobalBudgetSoftObsolete20260916_('categorisation_confirmee_20261108');
     if(typeof reconstruireSnapshotGlobalSyntheseBudgetSoft20260907==='function'){
       try{const r=reconstruireSnapshotGlobalSyntheseBudgetSoft20260907('categories_banque_pluxee_confirmees_20261108');
         out.snapshot={ok:!!(r&&r.ok),revisionBudgetSoft:r&&r.revisionBudgetSoft||'',erreur:r&&r.erreur||''};
