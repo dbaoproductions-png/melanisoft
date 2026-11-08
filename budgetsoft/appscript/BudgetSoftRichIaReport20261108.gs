@@ -501,3 +501,38 @@ function genererRapportIaDetailleBudgetSoft20261108(options){
     }
   };
 }
+
+/**
+ * Contrôle autonome du nouveau Rapport IA ; le journal ne contient AUCUN
+ * texte de contexte personnel, libellé de crédit ni montant financier.
+ */
+function auditerRapportIaDetailleBudgetSoft20261108(){
+  const t=Date.now();
+  const rapport=genererRapportIaDetailleBudgetSoft20261108();
+  const contenu=JSON.parse(rapport.json);
+  const checks={
+    reponseValide:rapport.ok===true,
+    revisionIdentique:rapport.revisionBudgetSoft===contenu.revisionBudgetSoft,
+    horizonsComplets:[3,6,12].every(n=>contenu.horizons&&
+      contenu.horizons[String(n)]&&
+      contenu.horizons[String(n)].cycles.length===n),
+    sectionsAttendu:rapport.statistiques.nombreSections===13,
+    creditsDetails:Array.isArray(contenu.credits&&contenu.credits.amortissables)&&
+      Array.isArray(contenu.credits&&contenu.credits.renouvelables),
+    patrimoineDetails:Array.isArray(contenu.patrimoine&&contenu.patrimoine.biens),
+    chargesDocumentees:contenu.chargesFixes&&contenu.chargesFixes.reference!=null,
+    donneesPluxee:contenu.pluxee&&contenu.pluxee.solde!==null,
+    projectionFutureNonInventee:contenu.tresorerie&&
+      contenu.tresorerie.cycleSuivant&&
+      (contenu.tresorerie.cycleSuivant.projectionTresorerieDisponible!==false||
+       contenu.tresorerie.cycleSuivant.soldeFinCycle===null)
+  };
+  const resultat={ok:Object.keys(checks).every(k=>checks[k]===true),
+    lectureSeule:true,version:BUDGETSOFT_RAPPORT_IA_DETAILLE_VERSION_20261108,
+    revisionBudgetSoft:rapport.revisionBudgetSoft,
+    controles:checks,statistiques:rapport.statistiques,
+    dureeMs:Date.now()-t,
+    confidentialite:'Le journal ne contient ni contexte personnel ni chiffres du foyer.'};
+  console.log('[AUDIT RAPPORT IA DETAILLE BUDGETSOFT 20261108] '+JSON.stringify(resultat));
+  return resultat;
+}
