@@ -97,6 +97,7 @@ jobs:
           fi
           ACCESS_TOKEN=$(python3 -c 'import json; print(json.load(open("/tmp/oauth-response.json")).get("access_token", ""))')
           test -n "$ACCESS_TOKEN" || { echo 'Google returned HTTP success but no access token'; exit 1; }
+          echo "::add-mask::$ACCESS_TOKEN"
           echo "ACCESS_TOKEN=$ACCESS_TOKEN" >> "$GITHUB_ENV"
           echo 'Google OAuth access token obtained successfully.'
 
