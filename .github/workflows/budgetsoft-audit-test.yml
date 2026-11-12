@@ -1,0 +1,142 @@
+name: BudgetSoft - Audit de non-régression TEST
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - budgetsoft-import-lab
+    paths:
+      - 'budgetsoft/audit-request.json'
+      - '.github/workflows/budgetsoft-audit-test.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: budgetsoft-audit-test
+  cancel-in-progress: false
+
+jobs:
+  audit-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SCRIPT_ID: 1tvGARYmwH11M0XfsoRKmtLoETCL6_8fmXD16iU39oGWgHHULGiYbDT-n
+
+    steps:
+      - name: Check out TEST branch
+        uses: actions/checkout@v7
+        with:
+          ref: budgetsoft-import-lab
+
+      - name: Obtain Google OAuth access token
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          GOOGLE_OAUTH_REFRESH_TOKEN: ${{ secrets.GOOGLE_OAUTH_REFRESH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GOOGLE_OAUTH_CLIENT_ID"
+          test -n "$GOOGLE_OAUTH_CLIENT_SECRET"
+          test -n "$GOOGLE_OAUTH_REFRESH_TOKEN"
+          HTTP_CODE=$(curl -sS -o /tmp/oauth.json -w '%{http_code}' -X POST https://oauth2.googleapis.com/token \
+            --data-urlencode "client_id=$GOOGLE_OAUTH_CLIENT_ID" \
+            --data-urlencode "client_secret=$GOOGLE_OAUTH_CLIENT_SECRET" \
+            --data-urlencode "refresh_token=$GOOGLE_OAUTH_REFRESH_TOKEN" \
+            --data-urlencode "grant_type=refresh_token")
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "Google OAuth preflight failed (HTTP $HTTP_CODE); response body suppressed."
+            exit 1
+          fi
+          ACCESS_TOKEN=$(python3 -c 'import json; print(json.load(open("/tmp/oauth.json")).get("access_token", ""))')
+          test -n "$ACCESS_TOKEN"
+          echo "::add-mask::$ACCESS_TOKEN"
+          echo "ACCESS_TOKEN=$ACCESS_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Verify private Apps Script API executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          HTTP_CODE=$(curl -sS -o /tmp/deployments.json -w '%{http_code}' \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            "https://script.googleapis.com/v1/projects/$SCRIPT_ID/deployments")
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "Apps Script deployment preflight failed (HTTP $HTTP_CODE); response body suppressed."
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json, pathlib, sys
+          d=json.load(open('/tmp/deployments.json'))
+          found=[]
+          for dep in d.get('deployments', []):
+              for entry in dep.get('entryPoints', []):
+                  if entry.get('entryPointType') == 'EXECUTION_API':
+                      found.append(dep.get('deploymentId', ''))
+          if not found:
+              print('No private execution API deployment is visible to the configured Google account.')
+              print('The project may need one-time API-executable publication or additional OAuth scopes.')
+              sys.exit(1)
+          pathlib.Path('/tmp/execution-api-ready').write_text('ready')
+          print('Private Apps Script execution API is available.')
+          PY
+
+      - name: Run BudgetSoft audit and full refresh
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/run-request.json <<'JSON'
+          {"function":"executerAuditRegressionBudgetSoft20261112","parameters":[],"devMode":true}
+          JSON
+          HTTP_CODE=$(curl -sS --max-time 360 -o /tmp/run-response.json -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/run-request.json \
+            "https://script.googleapis.com/v1/scripts/$SCRIPT_ID:run")
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "Apps Script run request failed (HTTP $HTTP_CODE); response body suppressed."
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json, pathlib, sys
+          d=json.load(open('/tmp/run-response.json'))
+          if d.get('error'):
+              print('Apps Script reported an execution error; details suppressed.')
+              sys.exit(1)
+          result=(d.get('response') or {}).get('result')
+          if not isinstance(result, dict):
+              print('Apps Script returned no structured audit result.')
+              sys.exit(1)
+          allowed={
+            'ok': result.get('ok'),
+            'version': result.get('version'),
+            'dateLocale': result.get('dateLocale'),
+            'actualisation': result.get('actualisation'),
+            'audit': result.get('audit'),
+            'coherenceFinanciere': result.get('coherenceFinanciere'),
+            'integriteOperations': result.get('integriteOperations'),
+            'sourcesStablesPendantAudit': result.get('sourcesStablesPendantAudit'),
+            'erreurExecution': result.get('erreurExecution'),
+            'typeErreur': result.get('typeErreur'),
+            'dureeTotaleMs': result.get('dureeTotaleMs')
+          }
+          # Only allow known, non-financial fields into public logs/artifacts.
+          pathlib.Path('/tmp/budgetsoft-audit-result.json').write_text(
+            json.dumps(allowed, ensure_ascii=False, indent=2), encoding='utf-8'
+          )
+          print('Audit completed; sanitized result is available as a workflow artifact.')
+          for key in ('ok','dateLocale','actualisation','audit','coherenceFinanciere','integriteOperations','sourcesStablesPendantAudit','erreurExecution','typeErreur','dureeTotaleMs'):
+              print(key + '=' + json.dumps(allowed.get(key), ensure_ascii=False))
+          if allowed.get('ok') is not True:
+              sys.exit(1)
+          PY
+
+      - name: Upload sanitized audit result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: budgetsoft-audit-result-${{ github.run_id }}
+          path: /tmp/budgetsoft-audit-result.json
+          if-no-files-found: ignore
+          retention-days: 7
