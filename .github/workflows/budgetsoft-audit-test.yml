@@ -7,7 +7,6 @@ on:
       - budgetsoft-import-lab
     paths:
       - 'budgetsoft/audit-request.json'
-      - '.github/workflows/budgetsoft-audit-test.yml'
 
 permissions:
   contents: read
