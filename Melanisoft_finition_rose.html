@@ -73,7 +73,7 @@
         <div class="grid-2">
           <div class="field"><span>Échantillonnage ISO 2859-1</span><div id="isoPreview" class="iso-preview">Le nombre de vues sera calculé automatiquement après sélection de la livraison.</div></div>
         </div>
-        <p class="small">Un échantillon ALÉA distinct est calculé automatiquement pour chaque titre, selon le niveau de contrôle général II et un NQA de 1 %. Chaque vue ne compte qu’une fois : son TIFF est utilisé en priorité pour le contrôle visuel, et son JPEG sert de repli si le TIFF correspondant manque.</p>
+        <p class="small">Un échantillon ALÉA distinct est calculé automatiquement pour chaque titre, selon le niveau de contrôle général II et un NQA de 1 %. Chaque vue ne compte qu’une fois : son TIFF est utilisé en priorité pour le contrôle visuel, et son JPEG sert de repli si le TIFF correspondant manque. Pour chaque vue tirée, les DPI et les métadonnées EXIF/IPTC/ICC sont contrôlés séparément sur les fichiers JPEG et TIFF présents.</p>
         <div class="actions">
           <button id="run">Analyser la livraison</button>
           <button id="exportAttentionExcel" disabled>Exporter les points d’attention détaillés (Excel)</button>
@@ -81,6 +81,17 @@
           <button id="exportAleaExcel" disabled>Exporter le fichier d’échantillonnage ALÉA (Excel)</button>
         </div>
         <p id="status" class="small"></p><progress id="prog" value="0" max="100" style="display:none"></progress>
+        <div class="field" style="margin-top:14px">
+          <strong>Retour du contrôle visuel ALÉA</strong>
+          <p class="small">Après l'export, saisir « Conforme » ou « NC » dans chacune des huit colonnes I à P pour chaque vue. La colonne Q décrit les défauts de l'original sans supprimer les NC déjà saisies. Renseigner le contrôleur, puis importer le même fichier XLSX : l'identifiant du tirage sera vérifié. Une feuille incomplète ne permet pas de conclure.</p>
+          <label for="visualReviewer"><span>Contrôleur ayant examiné l'échantillon</span></label>
+          <input id="visualReviewer" type="text" placeholder="Nom du contrôleur">
+          <label for="visualReviewFile"><span>Fichier ALÉA complété (.xlsx)</span></label>
+          <input id="visualReviewFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+          <div class="actions"><button id="importVisualReview" disabled>Importer les résultats visuels</button></div>
+          <p id="visualReviewStatus" class="small" aria-live="polite"></p>
+          <div id="visualReviewSummary" class="small"></div>
+        </div>
       </section>
       <div id="summary" class="card" style="display:none"></div>
       <div id="controls" class="card" style="display:none"></div>
@@ -130,10 +141,12 @@ const GallicaQCState = {
   reco: { candidates: [], validatedPath: '', lastRead: null },
   iso: { lastPlan: null },
   alea: { rows: [] },
-  report: { html: '', aleaHtml: '' }
+  report: { html: '', aleaHtml: '' },
+  metadata: { lastAudit: null },
+  visualReview: { lastImport: null, sampleId: '' }
 };
 
-let anomalies=[], files=[], reportHtml='', aleaHtml='', aleaRows=[], recoCandidates=[], validatedReco='', lastIsoPlan=null, lastRecoRead=null, lastRecurrenceSummary=null;
+let anomalies=[], files=[], reportHtml='', aleaHtml='', aleaRows=[], recoCandidates=[], validatedReco='', lastIsoPlan=null, lastRecoRead=null, lastRecurrenceSummary=null, lastMetadataAudit=null, lastVisualReview=null, lastSampleId='', lastAnalyzedRows=[];
 const MelanisoftPerformance = {
   heartbeatEvery: 200,
   async yieldToBrowser(message){
@@ -159,6 +172,9 @@ function syncGallicaQCState(){
   GallicaQCState.reco.lastRead=lastRecoRead;
   GallicaQCState.iso.lastPlan=lastIsoPlan;
   GallicaQCState.alea.rows=aleaRows;
+  GallicaQCState.metadata.lastAudit=lastMetadataAudit;
+  GallicaQCState.visualReview.lastImport=lastVisualReview;
+  GallicaQCState.visualReview.sampleId=lastSampleId;
   GallicaQCState.report.html=reportHtml;
   GallicaQCState.report.aleaHtml=aleaHtml;
 }
@@ -398,12 +414,187 @@ function buildIsoSampleByTitle(jpegRows,tiffRows){
     sample
   };
 }
+// Le tableau ALÉA existant reste le seul support de saisie du contrôle humain.
+// Les huit contrôles I:P sont obligatoires ; Q et R restent des notes contextuelles.
+const VISUAL_CONTROL_TASKS=[
+  'Page entière / double page',
+  'Cadrage',
+  'Sens de lecture',
+  'Redressement',
+  'Lisibilité',
+  'Date et numéro de fascicule',
+  'Colorimétrie et rendu',
+  'Taille conforme à l’original (100 %)'
+];
+const VISUAL_REVIEW_HEADERS=[
+  'N° tirage','Titre','Lot du titre','Lettre-code','Seuil Ac / Re',
+  'Répertoire','Fichier','Chemin complet',...VISUAL_CONTROL_TASKS,
+  'Défaut de l’original ou contrainte matérielle (information)','Commentaire libre','ID de tirage'
+];
+function assessVisualReviewRows(table,sample,plan,sampleId){
+  const issues=[];
+  const invalid=()=>({valid:false,issues,byTitle:[],reviewed:0,total:Array.isArray(sample)?sample.length:0,nonConforming:0,complete:false});
+  if(!Array.isArray(sample)||!sample.length||!plan||!sampleId){
+    issues.push('Aucun échantillon actif à rapprocher : relancer l’analyse de la livraison.');
+    return invalid();
+  }
+  if(!Array.isArray(table)||!table.length){
+    issues.push('Fichier ALÉA vide ou illisible.');
+    return invalid();
+  }
+  const headers=table[0]||[];
+  if(VISUAL_REVIEW_HEADERS.some((expected,i)=>String(headers[i]||'').trim()!==expected)){
+    issues.push('En-têtes ALÉA différents de ceux produits par cette version (19 colonnes attendues).');
+    return invalid();
+  }
+  const paths=new Map(),submitted=new Map();
+  sample.forEach((item,i)=>{
+    const key=String(item.path||'').replace(/\\/g,'/').trim();
+    if(!key||paths.has(key))issues.push('Échantillon actif non unique ou sans chemin : '+key);
+    paths.set(key,{item,number:i+1});
+  });
+  for(let i=1;i<table.length;i++){
+    const row=table[i]||[];
+    const key=String(row[7]||'').replace(/\\/g,'/').trim();
+    if(!key){issues.push('Ligne '+(i+1)+' : chemin complet absent.');continue;}
+    if(submitted.has(key)){issues.push('Chemin répété dans le retour ALÉA : '+key);continue;}
+    submitted.set(key,row);
+    const match=paths.get(key);
+    if(!match){issues.push('Fichier absent du tirage courant : '+key);continue;}
+    const item=match.item;
+    const cell=j=>String(row[j]??'').trim();
+    const expectedThreshold='Ac '+item.isoAccept+' / Re '+item.isoReject;
+    if(cell(18)!==sampleId)issues.push('Identifiant de tirage différent à la ligne '+(i+1)+' : '+key);
+    if(cell(0)!==String(match.number)||cell(1)!==String(item.isoTitle||titleLabelForRow(item))
+      ||cell(2)!==String(item.isoLotSize)||cell(3)!==String(item.isoCode)
+      ||cell(4)!==expectedThreshold||cell(6)!==String(item.name)){
+      issues.push('Référence de tirage ou de titre modifiée à la ligne '+(i+1)+' : '+key);
+    }
+    for(let c=8;c<16;c++){
+      const value=cell(c).toLowerCase();
+      if(value && value!=='conforme' && value!=='nc'){
+        issues.push('Valeur inconnue en '+VISUAL_REVIEW_HEADERS[c]+', ligne '+(i+1)+' : '+cell(c));
+      }
+    }
+  }
+  for(const key of paths.keys())if(!submitted.has(key))issues.push('Vue du tirage absente du retour : '+key);
+  if(issues.length)return invalid();
+  const plans=Array.isArray(plan.plans)&&plan.plans.length?plan.plans:[plan];
+  const byTitle=[];
+  for(const p of plans){
+    const items=sample.filter(r=>String(r.isoTitlePath||titlePathForRow(r))===String(p.titlePath));
+    if(!items.length||items.length!==p.sampleSize){
+      issues.push('Échantillon incohérent avec le plan ISO du titre '+(p.title||p.titlePath||'inconnu'));
+      continue;
+    }
+    let reviewed=0,nonConforming=0,criteriaNC=0;
+    for(const item of items){
+      const row=submitted.get(String(item.path||'').replace(/\\/g,'/').trim());
+      const values=Array.from({length:8},(_,i)=>String(row[8+i]||'').trim().toLowerCase());
+      if(values.every(v=>v==='conforme'||v==='nc')){
+        reviewed++;
+        const defects=values.filter(v=>v==='nc').length;
+        criteriaNC+=defects;
+        if(defects>0)nonConforming++; // une vue vaut une unité NC, même avec plusieurs défauts
+      }
+    }
+    const complete=reviewed===items.length;
+    const status=!complete?'EN ATTENTE'
+      :nonConforming>=p.reject?'REJET STATISTIQUE'
+      :nonConforming<=p.accept?'ACCEPTATION STATISTIQUE':'À EXPERTISER';
+    byTitle.push({title:p.title,titlePath:p.titlePath,lotSize:p.lotSize,sampleSize:p.sampleSize,
+      code:p.code,accept:p.accept,reject:p.reject,reviewed,nonConforming,criteriaNC,complete,status});
+  }
+  if(issues.length)return invalid();
+  const reviewed=byTitle.reduce((n,x)=>n+x.reviewed,0);
+  return {valid:true,issues:[],byTitle,reviewed,total:sample.length,
+    nonConforming:byTitle.reduce((n,x)=>n+x.nonConforming,0),
+    complete:byTitle.every(x=>x.complete)};
+}
+function resetVisualReview(){
+  lastVisualReview=null;
+  const file=$('visualReviewFile');
+  if(file)file.value='';
+  const status=$('visualReviewStatus');
+  if(status)status.textContent='En attente de la saisie des résultats ALÉA.';
+  const summary=$('visualReviewSummary');
+  if(summary)summary.innerHTML='';
+  const button=$('importVisualReview');
+  if(button)button.disabled=true;
+}
+function visualReviewSummaryHtml(){
+  if(!lastVisualReview)return '<p class="small">Décision sur échantillon visuel : EN ATTENTE du fichier ALÉA complété. Aucune acceptation de lot n’est prononcée.</p>';
+  const x=lastVisualReview;
+  if(!x.valid)return '<p class="err">Import ALÉA refusé : '+x.issues.slice(0,12).map(esc).join(' ; ')+'. Aucun verdict n’est produit.</p>';
+  const rows=x.byTitle.map(p=>'<tr><td>'+esc(p.title)+'</td><td>'+p.reviewed+' / '+p.sampleSize+
+    '</td><td>'+p.nonConforming+'</td><td>Ac '+p.accept+' / Re '+p.reject+'</td><td>'+esc(p.status)+'</td></tr>').join('');
+  return '<p class="small">Tirage : '+esc(lastSampleId)+' · Contrôleur : '+esc(x.reviewer||'non renseigné')+
+    ' · Import : '+esc(x.importedAt||'')+' · '+x.reviewed+' / '+x.total+' vues entièrement renseignées. Les NC sont comptées par <b>vue</b>, et non par critère ; un défaut de l’original noté en Q ne supprime pas une NC saisie en I:P.</p>'+
+    '<table><tr><th>Titre</th><th>Vues contrôlées</th><th>Vues NC</th><th>Seuil Ac / Re</th><th>Décision statistique sur échantillon</th></tr>'+rows+'</table>'+
+    '<p class="small"><b>Important :</b> une acceptation statistique de l’échantillon ne vaut pas validation définitive de la livraison. Les autres contrôles et la décision professionnelle restent nécessaires.</p>';
+}
+function updateVisualReviewDisplay(){
+  const target=$('visualReviewSummary');
+  if(target)target.innerHTML=visualReviewSummaryHtml();
+}
+function invalidateVisualReview(){
+  if(lastVisualReview){
+    lastVisualReview=null;
+    updateVisualReviewDisplay();
+    if(lastAnalyzedRows.length)$('rapportMetier').innerHTML=buildReportMetierHtml(lastAnalyzedRows);
+    $('visualReviewStatus').textContent='Fichier ou contrôleur modifié : importer de nouveau le résultat ALÉA.';
+  }
+}
+$('visualReviewFile').addEventListener('change',invalidateVisualReview);
+$('visualReviewer').addEventListener('input',invalidateVisualReview);
+$('importVisualReview').onclick=async()=>{
+  lastVisualReview=null;updateVisualReviewDisplay();
+  const importingSampleId=lastSampleId;
+  const file=$('visualReviewFile').files?.[0];
+  const reviewer=String($('visualReviewer').value||'').trim();
+  const msg=$('visualReviewStatus');
+  if(!aleaRows.length||!lastSampleId){msg.textContent='Analyser une livraison avant d’importer son ALÉA.';return;}
+  if(!file||!file.name.toLowerCase().endsWith('.xlsx')){msg.textContent='Sélectionner le fichier ALÉA complété au format XLSX.';return;}
+  if(!reviewer){msg.textContent='Renseigner le nom du contrôleur avant l’import.';return;}
+  if(file.size>20*1024*1024){msg.textContent='Fichier ALÉA trop volumineux pour cet import (maximum 20 Mo).';return;}
+  msg.textContent='Lecture locale du fichier ALÉA en cours...';
+  try{
+    const table=await readXlsxRows(file);
+    if(lastSampleId!==importingSampleId || !lastAnalyzedRows.length
+      || $('visualReviewFile').files?.[0]!==file
+      || String($('visualReviewer').value||'').trim()!==reviewer){
+      msg.textContent='Le tirage, le fichier ou le contrôleur a changé pendant la lecture : relancer l’import.';
+      return;
+    }
+    lastVisualReview={...assessVisualReviewRows(table,aleaRows,lastIsoPlan,importingSampleId),reviewer,importedAt:new Date().toLocaleString('fr-FR')};
+    msg.textContent=lastVisualReview.valid?
+      (lastVisualReview.complete?'Résultats complets importés. Décisions statistiques calculées par titre.':'Fichier importé, mais des contrôles visuels restent à renseigner.') :
+      'Import refusé : le fichier ne correspond pas exactement au tirage actif ou contient des valeurs invalides.';
+  }catch(error){
+    lastVisualReview={valid:false,issues:['Impossible de lire le XLSX : '+String(error&&error.message||error)],byTitle:[]};
+    msg.textContent='Import impossible : format XLSX invalide ou illisible.';
+  }
+  updateVisualReviewDisplay();
+  if(lastAnalyzedRows.length)$('rapportMetier').innerHTML=buildReportMetierHtml(lastAnalyzedRows);
+};
+
 function buildTechnicalSampleRows(visualSample){
   const selected=new Map();
   visualSample.forEach(row=>{
     if(row&&row.path&&!selected.has(row.path))selected.set(row.path,row);
   });
   return [...selected.values()];
+}
+// Une vue est tiree une seule fois pour le visuel, mais ses deux formats
+// doivent etre examines pour EXIF/IPTC/ICC (guide metier 2025, p. 13 et 23).
+function buildMetadataSampleRows(visualSample,jpegRows,tiffRows){
+  const logicalKey=row=>normKey(titlePathForRow(row))+'|'+imageLogicalKey(row);
+  const selectedViews=new Set(visualSample.map(logicalKey));
+  const byPath=new Map();
+  [...jpegRows,...tiffRows].forEach(row=>{
+    if(row&&row.path&&selectedViews.has(logicalKey(row))&&!byPath.has(row.path))byPath.set(row.path,row);
+  });
+  return [...byPath.values()];
 }
 function imagePairKey(row){
   return normKey(titlePathForRow(row))+'|'+normKey(baseNoExt(row&&row.name||''));
@@ -419,6 +610,7 @@ function compareJpegTiffRows(jpegRows,tiffRows){
 }
 function populateReco(){
   files=[...$('folder').files]; validatedReco=''; $('recoStatus').textContent=''; lastIsoPlan=null; updateIsoPreview(null);
+  resetVisualReview(); lastSampleId=''; lastAnalyzedRows=[];
   recoCandidates=files.filter(f=>['.xls','.xlsx','.csv'].includes(ext(f.name))).map(f=>f.webkitRelativePath);
   const box=$('recoBox'), sel=$('recoSelect'); sel.innerHTML='';
   if(recoCandidates.length){
@@ -427,7 +619,7 @@ function populateReco(){
   } else { box.style.display='none'; }
 }
 $('folder').addEventListener('change', populateReco);
-$('validateReco').onclick=()=>{validatedReco=$('recoSelect').value||''; $('recoStatus').innerHTML=validatedReco?'<span class="ok">Fichier validé : '+esc(validatedReco)+'</span>':'<span class="warn">Aucun fichier sélectionné</span>';};
+$('validateReco').onclick=()=>{resetVisualReview(); validatedReco=$('recoSelect').value||''; $('recoStatus').innerHTML=validatedReco?'<span class="ok">Fichier validé : '+esc(validatedReco)+'</span>':'<span class="warn">Aucun fichier sélectionné</span>';};
 
 
 // La colonne Nombre doit rester lisible :
@@ -929,6 +1121,7 @@ async function recoRowsToMap(table){
     firstJpeg:headerIndex(headers,[/ref.*1er.*fichier.*numerique.*jpeg/, /1er.*fichier.*jpeg/, /jpeg/]),
     firstTiff:headerIndex(headers,[/ref.*1er.*fichier.*numerique.*tiff/, /1er.*fichier.*tiff/, /tiff/]),
     produced:headerIndex(headers,[/nbre.*fichiers.*produits?/, /nombre.*fichiers.*produits?/, /nb.*fichiers.*produits?/, /fichiers.*produits?/]),
+    anneeFin:headerIndex(headers,[/^annee fin$/]),
     observation:headerIndex(headers,[/^observation$/, /^observations$/, /observation.*prestataire/, /observations.*prestataire/, /commentaire.*prestataire/]),
     establishment:headerIndex(headers,[/^etablissement de conservation$/, /etablissement.*conservation/]),
     coteTitle:headerIndex(headers,[/^cote titre$/])
@@ -939,28 +1132,41 @@ async function recoRowsToMap(table){
   const observationCandidates=headers.map((h,i)=>({h,i})).filter(x=>/^observations?$/.test(x.h)||/observation.*prestataire|commentaire.*prestataire/.test(x.h));
   const providerObservation=observationCandidates.find(x=>idx.produced>=0&&x.i>idx.produced);
   if(providerObservation)idx.observation=providerObservation.i;
-  if(idx.repertoire<0||idx.produced<0)return {status:'headers',map:new Map(),entries:[],message:'Colonnes récolement non reconnues : attendu au minimum « Répertoire » et « Nbre de fichiers produits »'};
-  let map=new Map(), entries=[], ignored=[];
+  if(idx.produced<0||(idx.repertoire<0&&idx.firstJpeg<0&&idx.firstTiff<0))
+    return {status:'headers',map:new Map(),entries:[],message:'Colonnes récolement non reconnues : attendues « Nbre de fichiers produits » et « Répertoire » ou une référence de premier fichier JPEG/TIFF'};
+  let map=new Map(), entries=[], ignored=[], skipped=[], dateIssues=[];
   for(let i=headerRow+1;i<table.length;i++){
     let cols=table[i];
-    let repertoire=String(cols[idx.repertoire]||'').trim();
+    let repertoire=idx.repertoire>=0?String(cols[idx.repertoire]||'').trim():'';
     let firstJpeg=idx.firstJpeg>=0?String(cols[idx.firstJpeg]||'').trim():'';
     let firstTiff=idx.firstTiff>=0?String(cols[idx.firstTiff]||'').trim():'';
     let produced=firstInt(cols[idx.produced]);
     let annee=idx.annee>=0?String(cols[idx.annee]||'').trim():'';
     let mois=idx.mois>=0?String(cols[idx.mois]||'').trim():'';
     let jour=idx.jour>=0?String(cols[idx.jour]||'').trim():'';
-    let date='';
-    if(annee||mois||jour){
-      let y=annee.replace(/\D/g,'').padStart(4,'0').slice(-4);
-      let m=mois.replace(/\D/g,'').padStart(2,'0').slice(-2);
-      let d=jour.replace(/\D/g,'').padStart(2,'0').slice(-2);
-      if(y&&m&&d)date=y+m+d;
+    // Les modèles OLL possèdent une ligne de consignes, des lignes de synthèse
+    // et parfois un total final ; aucune ne doit compter comme fascicule.
+    const instruction=i===headerRow+1 &&
+      cols.some(v=>/^(obligatoire|prestataire|facultatif|aaaa|indiquer)/i.test(String(v||'').trim()));
+    const summaryWithEnd=idx.anneeFin>=0&&i<=headerRow+2&&
+      String(cols[idx.anneeFin]||'').trim()&&!repertoire&&!firstJpeg&&!firstTiff;
+    const summaryTotal=(i<=headerRow+2||i===table.length-1)&&!annee&&!mois&&!jour&&!repertoire&&!firstJpeg&&!firstTiff&&
+      (produced!==null||(idx.nbPages>=0&&String(cols[idx.nbPages]||'').trim()));
+    if(instruction||summaryWithEnd||summaryTotal){
+      skipped.push({row:i+1,reason:instruction?'consignes du modèle':'synthèse ou total du récolement'});
+      await MelanisoftPerformance.heartbeat(i+1,table.length,'Indexation du récolement : '+(i+1)+' / '+table.length+' lignes...');
+      continue;
     }
-    if(!validDate(date)){
-      const refs=[repertoire,firstJpeg,firstTiff].join(' ');
-      const found=[...refs.matchAll(/(?:^|[^0-9])(\d{8})(?:[^0-9]|$)/g)].map(m=>m[1]).find(validDate);
-      if(found)date=found;
+    // Ne jamais transformer « 2 et 3 » en 23 ou « 15-16 » en 1516.
+    const strictDate=/^\d{4}$/.test(annee)&&/^\d{1,2}$/.test(mois)&&/^\d{1,2}$/.test(jour)
+      ?annee+mois.padStart(2,'0')+jour.padStart(2,'0'):'';
+    const refText=[repertoire,firstJpeg,firstTiff].join(' ');
+    const refDate=[...refText.matchAll(/(?:^|[^0-9])(\d{8})(?:[^0-9]|$)/g)].map(m=>m[1]).find(validDate)||'';
+    let date=validDate(strictDate)?strictDate:refDate;
+    if(refDate && !validDate(strictDate)){
+      dateIssues.push({row:i+1,date:refDate,reason:'Date initiale manquante, ambiguë ou invalide : '+[annee,mois,jour].join('/')+' ; date retrouvée dans les références du prestataire.'});
+    }else if(refDate&&strictDate!==refDate){
+      dateIssues.push({row:i+1,date:strictDate,reason:'Date du récolement '+strictDate+' différente de celle du fichier numérique '+refDate+'.'});
     }
 
     // Filtre métier : seules les lignes correspondant à de vrais fascicules sont exploitées.
@@ -970,7 +1176,7 @@ async function recoRowsToMap(table){
     let reasons=[];
     if(!date || date==='00000000' || !validDate(date))reasons.push('date vide ou invalide');
     if(reasons.length){
-      ignored.push({row:i+1,repertoire,date,reason:reasons.join(', ')});
+      ignored.push({row:i+1,repertoire,date,rawDate:[annee,mois,jour].join('/'),reason:reasons.join(', ')});
       await MelanisoftPerformance.heartbeat(i+1,table.length,'Indexation du récolement : '+(i+1)+' / '+table.length+' lignes...');
       continue;
     }
@@ -997,7 +1203,7 @@ async function recoRowsToMap(table){
   ['Année début','Mois début','Jour début','Nb de pages','Pagination','Répertoire','Réf. 1er fichier numérique (JPEG)','Réf. 1er fichier numérique (TIFF)','Nbre de fichiers produits','Observation prestataire','Etablissement de conservation','Cote titre'].forEach((label,i)=>{
     const keys=['annee','mois','jour','nbPages','pagination','repertoire','firstJpeg','firstTiff','produced','observation','establishment','coteTitle']; if(idx[keys[i]]>=0)found.push(label);
   });
-  return {status:'ok',map,entries,ignored,headers:idx,message:entries.length+' lignes de récolement exploitables, '+ignored.length+' lignes ignorées. Colonnes reconnues : '+found.join(', ')};
+  return {status:'ok',map,entries,ignored,skipped,dateIssues,headers:idx,message:entries.length+' lignes de récolement exploitables, '+ignored.length+' lignes sans date exploitable, '+skipped.length+' lignes de consignes/synthèse/total écartées, '+dateIssues.length+' date(s) à vérifier. Colonnes reconnues : '+found.join(', ')};
 }
 async function loadRecoViewCounts(rows, validatedPath){
   if(!validatedPath)return {status:'missing',map:new Map(),entries:[],message:'Aucun récolement validé'};
@@ -1193,6 +1399,31 @@ function recordEmbeddedMetadataIssues(meta,row,recoResult){
   else if(!meta.iccRgb)add('ALERTE',53,row.path,'Profil ICC détecté mais espace colorimétrique non RGB'+(meta.iccColorSpace?' : '+meta.iccColorSpace:''));
 }
 
+// L'analyse des metadonnees se fait independamment de l'ouverture visuelle
+// afin qu'un JPEG associe a un TIFF selectionne ne soit jamais saute.
+async function inspectMetadataSampleRows(metadataRows,recoResult){
+  const result={total:0,jpeg:0,tiff:0,errors:0};
+  for(const row of metadataRows){
+    const jpeg=['.jpg','.jpeg'].includes(row.ext);
+    result.total++;
+    if(jpeg)result.jpeg++;else result.tiff++;
+    try{
+      const meta=jpeg?await readJpegTechnicalMetadata(row.file):await readTiffMeta(row.file);
+      recordEmbeddedMetadataIssues(meta,row,recoResult);
+      const dimensionMeta=jpeg?await readJpegMeta(row.file):meta;
+      const dpi=dimensionMeta.dpi;
+      if(!dpi)add('ALERTE',43,row.path,'DPI '+(jpeg?'JPEG':'TIFF')+' absent ou non détecté : conformité à 400 dpi non vérifiable');
+      else if(dpi!==400)add('ALERTE',44,row.path,'DPI '+(jpeg?'JPEG':'TIFF')+' : '+dpi+', attendu 400');
+    }catch(error){
+      result.errors++;
+      const message='Métadonnées '+(jpeg?'JPEG':'TIFF')+' non analysées : '+String(error&&error.message||error);
+      [43,51,52,53].forEach(id=>add('ALERTE',id,row.path,message));
+    }
+    await MelanisoftPerformance.heartbeat(result.total,metadataRows.length,
+      'Contrôle DPI/EXIF/IPTC/ICC JPEG et TIFF : '+result.total+' / '+metadataRows.length+' fichiers...');
+  }
+  return result;
+}
 function firstInt(v){
   const m=String(v||'').match(/\d+/);
   return m ? parseInt(m[0],10) : null;
@@ -1436,7 +1667,7 @@ function exhaustivitySummaryHtml(){
 }
 
 
-$('run').onclick=async()=>{try{files=[...$('folder').files]; updateControl1Label(); const C=cfg(); const c3=controls.find(c=>c.id===3); if(c3)c3.name='Arborescence des dossiers conforme ('+C.consult+' / '+C.conserv+')'; anomalies=[]; lastRecurrenceSummary=null; updateRecurrencePreview(null); controls.forEach(c=>{c.status='OK';c.count=0}); lastExhaustivitySummary=null; updateControl1Label(); $('prog').style.display='block'; $('status').textContent='Analyse en cours...';
+$('run').onclick=async()=>{try{$('exportAleaExcel').disabled=true; $('exportHtml').disabled=true; $('exportAttentionExcel').disabled=true; files=[...$('folder').files]; updateControl1Label(); const C=cfg(); const c3=controls.find(c=>c.id===3); if(c3)c3.name='Arborescence des dossiers conforme ('+C.consult+' / '+C.conserv+')'; anomalies=[]; lastRecurrenceSummary=null; lastMetadataAudit=null; lastSampleId=''; lastAnalyzedRows=[]; resetVisualReview(); updateRecurrencePreview(null); controls.forEach(c=>{c.status='NON VÉRIFIÉ';c.count=0}); lastExhaustivitySummary=null; updateControl1Label(); $('prog').style.display='block'; $('status').textContent='Analyse en cours...';
 setC(1,files.length?'OK':'ERREUR'); setC(2,files.length?'OK':'ERREUR',files.length); if(!files.length)return;
 const rows=files.map(f=>{let parts=f.webkitRelativePath.split('/');return {file:f,path:f.webkitRelativePath,name:f.name,parts,ext:ext(f.name),size:f.size,parsed:parseName(f.name)}});
 await MelanisoftPerformance.yieldToBrowser('Inventaire des fichiers terminé. Classement en cours...');
@@ -1506,6 +1737,11 @@ const diskLookup=buildDiskLookup(imageRows);
 await MelanisoftPerformance.yieldToBrowser('Nommage contrôlé. Lecture du récolement...');
 let recoViewCounts=await loadRecoViewCounts(rows, validatedReco); lastRecoRead=recoViewCounts;
 if(recoViewCounts.status==='ok'){
+  if(recoViewCounts.ignored?.length){
+    add('ALERTE',36,'',recoViewCounts.ignored.length+' ligne(s) de récolement ignorée(s) faute de date exploitable : contrôle d’exhaustivité incomplet.');
+    for(const item of recoViewCounts.ignored)add('ALERTE',36,'','Ligne '+item.row+' : date saisie « '+item.rawDate+' » non exploitable ; '+item.reason,item.row);
+  }
+  for(const issue of (recoViewCounts.dateIssues||[]))add('ALERTE',36,'',issue.reason,issue.row);
   for(let recoIndex=0;recoIndex<recoViewCounts.entries.length;recoIndex++){
     const e=recoViewCounts.entries[recoIndex];
     const prestDate=entryDateFromRefs(e);
@@ -1563,8 +1799,10 @@ if(recoViewCounts.status==='ok'){
     const manualExpected=firstInt(entry.nbPages);
     const prestExpected=Number.isFinite(entry.produced)?entry.produced:null;
     const problems=[];
+    if(manualExpected===null || prestExpected===null)problems.push('comparaison récolement initial / prestataire non vérifiable : nombre de vues ou fichiers produits non renseigné');
     const identity=recoEntryFasciculeIdentity(entry);
     if(identity)recoIdentities.add(identity);
+    else problems.push('identité du fascicule non identifiable à partir des références prestataire : comparaison d’exhaustivité non vérifiable');
 
     const cmpManualPrest=compareDefinedValues('récolement initial',manualExpected,'saisie prestataire',prestExpected);
     if(cmpManualPrest)problems.push('le nombre de vues du récolement initial ne correspond pas au nombre indiqué par le prestataire ('+cmpManualPrest+')');
@@ -1602,15 +1840,16 @@ if(recoViewCounts.status==='ok'){
 const exhaustivityAudit=buildExhaustivityAudit(imageRows,recoViewCounts); recordExhaustivityAudit(exhaustivityAudit);
 if(recoViewCounts.status==='ok' && recoCompared>0 && recoDiff===0 && !exhaustivityAudit.diagnostics.length)add('INFO',34,'','Récolement cohérent pour '+recoOk+' ligne(s) exploitée(s).');
 if(recoViewCounts.status!=='ok')add('INFO',34,'',recoViewCounts.message+' La détection statistique des valeurs atypiques reste utilisée comme aide au contrôle.');
-setC(26,anomalies.some(a=>a.control===26)?'ALERTE':'OK',anomalies.filter(a=>a.control===26).length); setC(27,anomalies.some(a=>a.control===27)?'ALERTE':'OK',anomalies.filter(a=>a.control===27).length); setC(34,anomalies.some(a=>a.control===34&&a.type==='ALERTE')?'ALERTE':'OK',new Set(anomalies.filter(a=>a.control===34&&a.type==='ALERTE').map(a=>a.path+'#'+(a.line||''))).size); setC(35,anomalies.some(a=>a.control===35&&a.type==='ALERTE')?'ALERTE':'OK',anomalies.filter(a=>a.control===35&&a.type==='ALERTE').length);
+setC(26,anomalies.some(a=>a.control===26)?'ALERTE':'OK',anomalies.filter(a=>a.control===26).length); setC(27,anomalies.some(a=>a.control===27)?'ALERTE':'OK',anomalies.filter(a=>a.control===27).length); setC(34,recoViewCounts.status!=='ok'||!recoViewCounts.entries?.length?'NON VÉRIFIABLE':(recoViewCounts.ignored?.length||anomalies.some(a=>a.control===34&&a.type==='ALERTE')?'ALERTE':'OK'),new Set(anomalies.filter(a=>a.control===34&&a.type==='ALERTE').map(a=>a.path+'#'+(a.line||''))).size); setC(35,!fascEntries.length?'NON VÉRIFIABLE':(anomalies.some(a=>a.control===35&&a.type==='ALERTE')?'ALERTE':'OK'),anomalies.filter(a=>a.control===35&&a.type==='ALERTE').length);
 const pairComparison=compareJpegTiffRows(jpeg,tiff);
 pairComparison.jpegWithoutTiff.forEach(r=>add('ALERTE',32,r.path,'JPEG sans TIFF correspondant dans le même titre'));
 pairComparison.tiffWithoutJpeg.forEach(r=>add('ALERTE',33,r.path,'TIFF sans JPEG correspondant dans le même titre'));
 setC(32,pairComparison.jpegWithoutTiff.length?'ALERTE':'OK',pairComparison.jpegWithoutTiff.length);
 setC(33,pairComparison.tiffWithoutJpeg.length?'ALERTE':'OK',pairComparison.tiffWithoutJpeg.length);
 setC(31,pairComparison.jpegWithoutTiff.length||pairComparison.tiffWithoutJpeg.length?'ALERTE':'OK',pairComparison.jpegWithoutTiff.length+pairComparison.tiffWithoutJpeg.length);
-let rec=recoRows; if(validatedReco){setC(36,anomalies.some(a=>a.control===36)?'ALERTE':'OK',rec.length);} else {setC(36,rec.length?'ALERTE':'ALERTE',rec.length); if(rec.length)add('ALERTE',36,rec.map(r=>r.path).join(' | '),'Fichier(s) de récolement candidat(s) détecté(s), mais aucun n’a été validé dans l’interface'); else add('ALERTE',36,'','Aucun fichier de récolement XLS/XLSX/CSV détecté');} let non=annexRows; setC(37,non.length?'ALERTE':'OK',non.length);
+let rec=recoRows; if(validatedReco){setC(36,recoViewCounts.status!=='ok'?'NON VÉRIFIABLE':(anomalies.some(a=>a.control===36)?'ALERTE':'OK'),rec.length);} else {setC(36,rec.length?'ALERTE':'ALERTE',rec.length); if(rec.length)add('ALERTE',36,rec.map(r=>r.path).join(' | '),'Fichier(s) de récolement candidat(s) détecté(s), mais aucun n’a été validé dans l’interface'); else add('ALERTE',36,'','Aucun fichier de récolement XLS/XLSX/CSV détecté');} let non=annexRows; setC(37,non.length?'ALERTE':'OK',non.length);
 const isoSelection=buildIsoSampleByTitle(jpeg,tiff); lastIsoPlan=isoSelection.summary; updateIsoPreview(lastIsoPlan); aleaRows=isoSelection.sample; let sample=aleaRows;
+lastSampleId=sample.length?'ISO-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10):'ISO-VIDE';
 if(sample.length)setC(49,'OK',sample.length);
 else {add('ALERTE',49,'','Aucun fichier image exploitable pour constituer l’échantillon ISO par titre.');setC(49,'ALERTE',0);}
 if(recoViewCounts.status!=='ok'){
@@ -1618,6 +1857,7 @@ if(recoViewCounts.status!=='ok'){
 }
 await MelanisoftPerformance.yieldToBrowser('Contrôles métier terminés. Analyse technique des images...');
 const technicalSample=buildTechnicalSampleRows(sample);
+const metadataSample=buildMetadataSampleRows(sample,jpeg,tiff);
 let max=technicalSample.length,done=0,histogramSuccess=0;
 for(let r of technicalSample){
   try{
@@ -1625,35 +1865,23 @@ for(let r of technicalSample){
       let m=await readJpegMeta(r.file);
       if(!m.w||!m.h)add('ALERTE',42,r.path,'Dimensions JPEG non lues');
       else if(m.w<500||m.h<500)add('ALERTE',47,r.path,`Image très petite ${m.w}x${m.h}`);
-      if(!m.dpi)add('ALERTE',43,r.path,'DPI JPEG absent ou non détecté : conformité à 400 dpi non vérifiable');
-      else if(m.dpi!==400)add('ALERTE',44,r.path,`DPI ${m.dpi}, attendu 400`);
       try{
         let h=await analyzeJpegHistogram(r.file);
         histogramSuccess++;
         h.issues.forEach(issue=>add('ALERTE',30.5,r.path,issue));
       }catch(histErr){
-        add('INFO',30.5,r.path,'Histogramme non analysé : '+String(histErr.message||histErr));
+        add('ALERTE',30.5,r.path,'Histogramme non analysé : '+String(histErr.message||histErr));
       }
-      try{
-        let meta=await readJpegTechnicalMetadata(r.file);
-        recordEmbeddedMetadataIssues(meta,r,recoViewCounts);
-      }catch(metaErr){
-        const msg='Métadonnées JPEG non analysées : '+String(metaErr.message||metaErr);
-        add('ALERTE',51,r.path,msg); add('ALERTE',52,r.path,msg); add('ALERTE',53,r.path,msg);
-      }
-    } else {
+     } else {
       let m=await readTiffMeta(r.file);
       if(!m.w||!m.h)add('ALERTE',46,r.path,'Dimensions TIFF non lues');
       else if(m.w<500||m.h<500)add('ALERTE',47,r.path,`TIFF très petit ${m.w}x${m.h}`);
-      if(!m.dpi)add('ALERTE',43,r.path,'DPI TIFF absent ou non détecté : conformité à 400 dpi non vérifiable');
-      else if(m.dpi!==400)add('ALERTE',44,r.path,`DPI TIFF ${m.dpi}, attendu 400`);
-      recordEmbeddedMetadataIssues(m,r,recoViewCounts);
       try{
         let h=await analyzeJpegHistogram(r.file);
         histogramSuccess++;
         h.issues.forEach(issue=>add('ALERTE',30.5,r.path,issue));
       }catch(histErr){
-        add('INFO',30.5,r.path,'Histogramme TIFF non analysé par le navigateur : '+String(histErr.message||histErr));
+        add('ALERTE',30.5,r.path,'Histogramme TIFF non analysé par le navigateur : '+String(histErr.message||histErr));
       }
     }
   }catch(e){
@@ -1665,26 +1893,24 @@ for(let r of technicalSample){
       add('ERREUR',45,r.path,message);
       add('ALERTE',46,r.path,'Dimensions TIFF non vérifiables');
     }
-    add('ALERTE',43,r.path,'DPI non vérifiable');
-    add('ALERTE',51,r.path,'Métadonnées EXIF non vérifiables');
-    add('ALERTE',52,r.path,'Métadonnées IPTC non vérifiables');
-    add('ALERTE',53,r.path,'Profil ICC non vérifiable');
-  }
+   }
   done++; $('prog').value=max?done/max*100:100;
   await MelanisoftPerformance.heartbeat(done,max,'Analyse technique des images : '+done+' / '+max+' fichiers...');
 }
 if(technicalSample.length&&histogramSuccess===0)add('ALERTE',30.5,'','Plage dynamique non vérifiable : aucun fichier de l’échantillon n’a pu être décodé pour l’analyse de l’histogramme.');
+lastMetadataAudit=await inspectMetadataSampleRows(metadataSample,recoViewCounts);
 [30.5,41,42,43,44,45,46,47,51,52,53].forEach(id=>{
   const issues=anomalies.filter(a=>a.control===id&&a.type!=='INFO');
   setC(id,issues.some(a=>a.type==='ERREUR')?'ERREUR':(issues.length?'ALERTE':'OK'),issues.length);
 });
 const technicalJpegCount=technicalSample.filter(r=>['.jpg','.jpeg'].includes(r.ext)).length;
 const technicalTiffCount=technicalSample.filter(r=>['.tif','.tiff'].includes(r.ext)).length;
-if(!technicalSample.length)[30.5,43,44,47,51,52,53].forEach(id=>setC(id,'NON APPLICABLE',0));
+if(!technicalSample.length)[30.5,47].forEach(id=>setC(id,'NON VÉRIFIABLE',0));
+if(!metadataSample.length)[43,44,51,52,53].forEach(id=>setC(id,'NON VÉRIFIABLE',0));
 if(!technicalJpegCount)[41,42].forEach(id=>setC(id,'NON APPLICABLE',0));
 if(!technicalTiffCount)[45,46].forEach(id=>setC(id,'NON APPLICABLE',0));
 setC(50,'OK');
-render(rows, sample); $('exportAttentionExcel').disabled=false; $('exportHtml').disabled=false;  $('exportAleaExcel').disabled=false; $('prog').style.display='none'; $('status').textContent='Contrôle terminé.';}catch(e){$('prog').style.display='none'; $('status').innerHTML='<span class=err>Erreur pendant le contrôle : '+esc(e && (e.message||e))+'</span>'; console.error(e);}}
+lastAnalyzedRows=rows; render(rows, sample); $('importVisualReview').disabled=!sample.length; $('exportAttentionExcel').disabled=false; $('exportHtml').disabled=false;  $('exportAleaExcel').disabled=false; $('prog').style.display='none'; $('status').textContent='Contrôle terminé.';}catch(e){$('prog').style.display='none'; $('status').innerHTML='<span class=err>Erreur pendant le contrôle : '+esc(e && (e.message||e))+'</span>'; console.error(e);}}
 
 function controlChapter(id){
   // Les chapitres sont désormais calculés à partir du numéro affiché,
@@ -1724,13 +1950,13 @@ function getReportStats(rows){
   const ok=controls.filter(c=>c.status==='OK').length;
   const al=controls.filter(c=>c.status==='ALERTE').length;
   const er=controls.filter(c=>c.status==='ERREUR').length;
-  return {totalFiles:rows.length,imageRows,jpegRows,tiffRows,imageCount:imageRows.length,jpegCount:jpegRows.length,tiffCount:tiffRows.length,fascCount:fascicules.size,nonInfo,errorCount,alertCount,ok,al,er};
+  return {totalFiles:rows.length,imageRows,jpegRows,tiffRows,imageCount:imageRows.length,jpegCount:jpegRows.length,tiffCount:tiffRows.length,fascCount:fascicules.size,nonInfo,errorCount,alertCount,ok,al,er,unverified:controls.filter(c=>c.status==='NON VÉRIFIABLE'||c.status==='NON VÉRIFIÉ').length};
 }
 function buildDecision(stats){
   if(stats.er>0 || stats.errorCount>0){
     return {level:'err',title:'Contrôle terminé avec erreurs',text:'Des erreurs empêchent de valider la livraison en l’état. Elles doivent être corrigées avant la suite du traitement.'};
   }
-  if(stats.al>0 || stats.alertCount>0){
+  if(stats.al>0 || stats.alertCount>0 || stats.unverified>0){
     return {level:'warn',title:'Contrôle terminé avec points d’attention',text:'La livraison a été analysée. Les alertes listées ci-dessous doivent être vérifiées avant la validation définitive.'};
   }
   return {level:'ok',title:'Contrôle terminé sans anomalie automatique',text:'Aucune erreur ni alerte n’a été détectée. Le contrôle visuel de l’échantillon reste à réaliser.'};
@@ -1742,7 +1968,7 @@ function reportIntroText(stats){
 }
 function reportStatusSentence(stats){
   if(stats.errorCount>0 || stats.er>0)return 'Le contrôle a relevé des erreurs à corriger avant validation.';
-  if(stats.alertCount>0 || stats.al>0)return 'Le contrôle a relevé des points d’attention à examiner.';
+  if(stats.alertCount>0 || stats.al>0 || stats.unverified>0)return 'Le contrôle a relevé des points d’attention ou des vérifications impossibles à réaliser.';
   return 'Les contrôles automatiques ne signalent pas d’anomalie.';
 }
 function anomalySentence(a){
@@ -1812,7 +2038,9 @@ function buildReportMetierHtml(rows){
       <tr><td>Contrôles en erreur</td><td>${stats.er}</td></tr>
       <tr><td>Récolement utilisé</td><td>${validatedReco?esc(validatedReco):'Non validé'}</td></tr>
       <tr><td>Plan d’échantillonnage</td><td>${esc(formatIsoPlan(iso))}</td></tr>
+      <tr><td>Identifiant du tirage</td><td>${esc(lastSampleId||'non créé')}</td></tr>
     </table></div>
+    <div class="report-section"><h3>Retour ALÉA et décision ISO par titre</h3>${visualReviewSummaryHtml()}</div>
     <div class="report-section"><h3>Observations principales</h3>${tops.length?'<table><tr><th>Nature métier</th><th>Nombre</th><th>Constat</th></tr>'+tops.map(t=>`<tr><td>${esc(t.control)}</td><td>${t.count}</td><td>${t.examples.map(x=>esc(anomalySentence({msg:x}))).join('<br>')}</td></tr>`).join('')+'</table>':'<p>Aucune observation automatique à signaler.</p>'}</div>
     <div class="report-section"><h3>Qualité des images</h3><table><tr><th>Contrôle</th><th>Résultat</th><th>Points signalés</th></tr>${qualityRows.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.status)}</td><td>${countDisplay(c)}</td></tr>`).join('')}</table></div>
     ${buildRecoObservationsHtml()}
@@ -1832,6 +2060,7 @@ $('summary').innerHTML=`<h2>Synthèse du contrôle</h2><div class="summary-grid"
     <div class="metric"><span>Fichiers inventoriés</span><strong>${rows.length}</strong></div>
     <div class="metric"><span>Images détectées</span><strong>${imageCount}</strong></div>
     <div class="metric"><span>Fascicules détectés</span><strong>${fascCount}</strong></div>
+    <div class="metric"><span>DPI et métadonnées : JPEG / TIFF examinés dans l’échantillon</span><strong>${lastMetadataAudit?lastMetadataAudit.jpeg+' JPEG / '+lastMetadataAudit.tiff+' TIFF':'Non lancé'}</strong></div>
   </div></div>
   <div class="summary-card"><h3>Résultat du contrôle</h3><div class="metric-list">
     <div class="metric"><span>Contrôles conformes</span><strong class="status-ok">${ok}</strong></div>
@@ -1855,6 +2084,7 @@ $('summary').innerHTML=`<h2>Synthèse du contrôle</h2><div class="summary-grid"
     <div class="metric"><span>Périodicité des fascicules</span><strong>${lastRecurrenceSummary?esc(lastRecurrenceSummary.label):'Contrôle automatique non lancé'}</strong></div>
   </div></div>
 </div>`;
+updateVisualReviewDisplay();
 $('controls').innerHTML='<h2>Contrôles effectués automatiquement</h2>'+groupedControlsHtml();
 const consolidatedRows=consolidatedAnomalies();
 $('anomalies').innerHTML='<h2>Points d’attention détaillés</h2><p class="small">Une seule ligne est affichée par fascicule. Les natures et les détails concatènent toutes les anomalies détectées pour ce fascicule.</p><table class="attention-table"><tr><th>Niveau</th><th>Ligne du récolement</th><th>Nature métier</th><th>Fichier ou fascicule concerné</th><th>Constat consolidé</th></tr>'+consolidatedRows.slice(0,5000).map(a=>`<tr><td>${esc(a.types||a.type)}</td><td>${esc(a.line||'')}</td><td>${esc(a.nature)}</td><td>${esc(a.path)}</td><td>${esc(a.details)}</td></tr>`).join('')+'</table>'+(consolidatedRows.length>5000?'<p>Affichage limité à 5000 lignes. L’export Excel contient la liste complète consolidée.</p>':'');
@@ -1969,21 +2199,8 @@ function buildAleaExcelLegacy(){
 }
 
 function buildAleaExcel(){
-  const manualTasks=[
-    'Page entière / double page',
-    'Cadrage',
-    'Sens de lecture',
-    'Redressement',
-    'Lisibilité',
-    'Date et numéro de fascicule',
-    'Colorimétrie et rendu',
-    'Taille conforme à l’original (100 %)'
-  ];
-  const headers=[
-    'N° tirage','Titre','Lot du titre','Lettre-code','Seuil Ac / Re',
-    'Répertoire','Fichier','Chemin complet',...manualTasks,
-    'Défaut de l’original ou contrainte matérielle (information)','Commentaire libre'
-  ];
+  const manualTasks=VISUAL_CONTROL_TASKS;
+  const headers=VISUAL_REVIEW_HEADERS;
   const rows=aleaRows.map((r,i)=>{
     const parts=r.path.split('/');
     const repertoire=parts.length>=2?parts[parts.length-2]:'';
@@ -1991,10 +2208,10 @@ function buildAleaExcel(){
     const seuil=(r.isoAccept!==undefined&&r.isoReject!==undefined)?`Ac ${r.isoAccept} / Re ${r.isoReject}`:'';
     return [
       i+1,titre,r.isoLotSize||'',r.isoCode||'',seuil,repertoire,r.name,r.path,
-      '','','','','','','','','',''
+      ...Array(manualTasks.length+2).fill(''),lastSampleId
     ];
   });
-  const widths=[10,25,13,13,16,28,32,65,20,18,18,18,18,25,22,24,42,42];
+  const widths=[10,25,13,13,16,28,32,65,20,18,18,18,18,25,22,24,42,42,27];
   const rowHeight=row=>{
     const lines=row.reduce((max,v,i)=>{
       const text=String(v??'');
@@ -2012,6 +2229,8 @@ function buildAleaExcel(){
   const endRow=Math.max(1,rows.length+1);
   const consignes=[
     ['Échantillonnage','Un tirage ISO 2859-1 distinct est constitué pour chaque titre et porte sur les vues logiques. Chaque vue ne compte qu’une fois : son TIFF est prioritaire et son JPEG n’est utilisé qu’en l’absence du TIFF correspondant. La décision Ac/Re s’applique séparément à chaque titre.'],
+    ['Retour des résultats','Remplir toutes les colonnes I à P pour chaque vue : Conforme ou NC (défaut de numérisation). Plusieurs critères NC sur une même vue ne comptent qu’une vue non conforme. Conserver l’identifiant de tirage en colonne S et réimporter le XLSX dans Mélanisoft. Une feuille incomplète ou modifiée ne permet pas de prononcer une acceptation.'],
+    ['Contraintes de l’original','La colonne Q peut signaler un défaut déjà présent sur l’original ou une contrainte matérielle ; elle ne neutralise pas automatiquement une NC saisie en I à P. Corriger explicitement toute NC non imputable au prestataire avant import.'],
     ['Page entière / double page','Vérifier que la page est entière. Une double page doit être numérisée en une seule vue si l’information se poursuit sur les deux pages ; sinon, chaque page doit être une vue distincte.'],
     ['Cadrage','Vérifier l’absence de rognage et de bord parasite. Conserver des marges régulières et suffisantes autour du document, conformément au test validé.'],
     ['Sens de lecture','Vérifier que l’image est orientée dans le sens normal de lecture.'],
@@ -2042,12 +2261,12 @@ function buildAleaExcel(){
   const sheetXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>
-<dimension ref="A1:R${endRow}"/>
+<dimension ref="A1:S${endRow}"/>
 <sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
 <sheetFormatPr defaultRowHeight="15"/>
 <cols>${widths.map((width,i)=>`<col min="${i+1}" max="${i+1}" width="${width}" customWidth="1"/>`).join('')}</cols>
 <sheetData>${sheetRows}</sheetData>
-<autoFilter ref="A1:R${endRow}"/>
+<autoFilter ref="A1:S${endRow}"/>
 <dataValidations count="1"><dataValidation sqref="I2:P${Math.max(2,endRow)}" showDropDown="0" showInputMessage="1" promptTitle="Contrôle visuel" prompt="Choisir Conforme ou NC." showErrorMessage="1" errorTitle="Valeur non valide" error="Choisir Conforme ou NC dans la liste." allowBlank="1" type="list"><formula1>'Listes'!$A$1:$A$2</formula1></dataValidation></dataValidations>
 <pageMargins left="0.2" right="0.2" top="0.4" bottom="0.4" header="0.2" footer="0.2"/>
 <pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/>
@@ -2174,6 +2393,7 @@ function buildReportTxt(){
   push('Fichiers inventoriés : '+stats.totalFiles);
   push('Images JPEG : '+stats.jpegCount);
   push('Images TIFF : '+stats.tiffCount);
+  push('DPI et métadonnées EXIF/IPTC/ICC : '+(lastMetadataAudit?(lastMetadataAudit.total+' fichiers examinés ('+lastMetadataAudit.jpeg+' JPEG, '+lastMetadataAudit.tiff+' TIFF), '+lastMetadataAudit.errors+' erreur(s) de lecture'):'contrôle non lancé'));
   push('Fascicules détectés : '+stats.fascCount);
   push('Anomalies signalées : '+stats.nonInfo.length);
   push('Alertes : '+stats.alertCount);
@@ -2183,6 +2403,12 @@ function buildReportTxt(){
   push('2. ÉCHANTILLONNAGE ISO 2859-1');
   push(formatIsoPlan(iso));
   push('Règle de décision : '+isoDecisionText(iso)+'.');
+  push('Identifiant de tirage : '+(lastSampleId||'non créé'));
+  push('Contrôle visuel : '+(!lastVisualReview?'EN ATTENTE (ALÉA non importé)':!lastVisualReview.valid?'IMPORT REFUSÉ (aucune décision)':lastVisualReview.complete?'COMPLET':'INCOMPLET'));
+  if(lastVisualReview&&lastVisualReview.valid){
+    push('Contrôleur : '+lastVisualReview.reviewer+' ; import : '+lastVisualReview.importedAt);
+    lastVisualReview.byTitle.forEach(p=>push(p.title+' : '+p.status+' ; vues entièrement renseignées '+p.reviewed+'/'+p.sampleSize+' ; vues non conformes '+p.nonConforming+' ; Ac '+p.accept+'/Re '+p.reject));
+  }
   blank();
 
   push('3. RÉCOLEMENT');
@@ -2289,6 +2515,10 @@ const GallicaQC = {
     readTiffMeta,
     analyzeJpegHistogram,
     readJpegTechnicalMetadata
+  },
+  visualReview: {
+    evaluate: assessVisualReviewRows,
+    last: ()=>lastVisualReview
   },
   reports: {
     buildText: buildReportTxt,
