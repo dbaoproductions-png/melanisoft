@@ -10,7 +10,7 @@ const htmlPath = path.join(__dirname, '..', 'Melanisoft_finition_rose.html');
 const html = fs.readFileSync(htmlPath, 'utf8');
 // Garde-fous : un contrôle non réalisé ne doit jamais se déclarer conforme.
 assert.ok(html.includes("controls.forEach(c=>{c.status='NON VÉRIFIÉ';c.count=0})"));
-assert.ok(html.includes("setC(34,recoViewCounts.status!=='ok'?'NON VÉRIFIABLE'"));
+assert.ok(html.includes("setC(34,recoViewCounts.status!=='ok'||!recoViewCounts.entries?.length?'NON VÉRIFIABLE'"));
 assert.ok(html.includes("setC(36,recoViewCounts.status!=='ok'?'NON VÉRIFIABLE'"));
 assert.ok(html.includes("add('ALERTE',30.5,r.path,'Histogramme non analysé"));
 assert.ok(html.includes("add('ALERTE',30.5,r.path,'Histogramme TIFF non analysé"));
