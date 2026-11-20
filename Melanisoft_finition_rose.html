@@ -1563,6 +1563,7 @@ if(recoViewCounts.status==='ok'){
     const manualExpected=firstInt(entry.nbPages);
     const prestExpected=Number.isFinite(entry.produced)?entry.produced:null;
     const problems=[];
+    if(manualExpected===null || prestExpected===null)problems.push('comparaison récolement initial / prestataire non vérifiable : nombre de vues ou fichiers produits non renseigné');
     const identity=recoEntryFasciculeIdentity(entry);
     if(identity)recoIdentities.add(identity);
     else problems.push('identité du fascicule non identifiable à partir des références prestataire : comparaison d’exhaustivité non vérifiable');
