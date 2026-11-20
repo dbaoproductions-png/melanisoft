@@ -375,6 +375,14 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   assert.equal(incompleteDecision.valid,true);
   assert.equal(incompleteDecision.complete,false);
   assert.equal(incompleteDecision.byTitle.find(p=>p.titlePath===markedTitle).status,'EN ATTENTE');
+  // Le texte en Q decrit l'original sans creer ni supprimer une non-conformite.
+  const originalNote=completeReturn.map(x=>[...x]);
+  originalNote[1][16]='Pli d’origine sur le document';
+  assert.equal(api.assessVisualReviewRows(originalNote,iso.sample,iso.summary,'TIRAGE-TEST').nonConforming,0);
+  originalNote[1][8]='NC';
+  assert.equal(api.assessVisualReviewRows(originalNote,iso.sample,iso.summary,'TIRAGE-TEST').nonConforming,1);
+  assert.equal(api.assessVisualReviewRows(null,iso.sample,iso.summary,'TIRAGE-TEST').valid,false);
+  assert.equal(api.assessVisualReviewRows(completeReturn,null,iso.summary,'TIRAGE-TEST').valid,false);
   const staleReturn=completeReturn.map(x=>[...x]);staleReturn[1][18]='TIRAGE-PRECEDENT';
   assert.equal(api.assessVisualReviewRows(staleReturn,iso.sample,iso.summary,'TIRAGE-TEST').valid,false);
   const invalidValue=completeReturn.map(x=>[...x]);invalidValue[1][8]='OK'; // liste autorisee : Conforme / NC
