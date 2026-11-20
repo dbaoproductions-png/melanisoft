@@ -73,7 +73,7 @@
         <div class="grid-2">
           <div class="field"><span>Échantillonnage ISO 2859-1</span><div id="isoPreview" class="iso-preview">Le nombre de vues sera calculé automatiquement après sélection de la livraison.</div></div>
         </div>
-        <p class="small">Un échantillon ALÉA distinct est calculé automatiquement pour chaque titre, selon le niveau de contrôle général II et un NQA de 1 %. Chaque vue ne compte qu’une fois : son TIFF est utilisé en priorité pour le contrôle visuel, et son JPEG sert de repli si le TIFF correspondant manque.</p>
+        <p class="small">Un échantillon ALÉA distinct est calculé automatiquement pour chaque titre, selon le niveau de contrôle général II et un NQA de 1 %. Chaque vue ne compte qu’une fois : son TIFF est utilisé en priorité pour le contrôle visuel, et son JPEG sert de repli si le TIFF correspondant manque. Pour chaque vue tirée, les métadonnées EXIF/IPTC/ICC sont contrôlées séparément sur les fichiers JPEG et TIFF présents.</p>
         <div class="actions">
           <button id="run">Analyser la livraison</button>
           <button id="exportAttentionExcel" disabled>Exporter les points d’attention détaillés (Excel)</button>
@@ -130,10 +130,11 @@ const GallicaQCState = {
   reco: { candidates: [], validatedPath: '', lastRead: null },
   iso: { lastPlan: null },
   alea: { rows: [] },
-  report: { html: '', aleaHtml: '' }
+  report: { html: '', aleaHtml: '' },
+  metadata: { lastAudit: null }
 };
 
-let anomalies=[], files=[], reportHtml='', aleaHtml='', aleaRows=[], recoCandidates=[], validatedReco='', lastIsoPlan=null, lastRecoRead=null, lastRecurrenceSummary=null;
+let anomalies=[], files=[], reportHtml='', aleaHtml='', aleaRows=[], recoCandidates=[], validatedReco='', lastIsoPlan=null, lastRecoRead=null, lastRecurrenceSummary=null, lastMetadataAudit=null;
 const MelanisoftPerformance = {
   heartbeatEvery: 200,
   async yieldToBrowser(message){
@@ -159,6 +160,7 @@ function syncGallicaQCState(){
   GallicaQCState.reco.lastRead=lastRecoRead;
   GallicaQCState.iso.lastPlan=lastIsoPlan;
   GallicaQCState.alea.rows=aleaRows;
+  GallicaQCState.metadata.lastAudit=lastMetadataAudit;
   GallicaQCState.report.html=reportHtml;
   GallicaQCState.report.aleaHtml=aleaHtml;
 }
@@ -404,6 +406,17 @@ function buildTechnicalSampleRows(visualSample){
     if(row&&row.path&&!selected.has(row.path))selected.set(row.path,row);
   });
   return [...selected.values()];
+}
+// Une vue est tiree une seule fois pour le visuel, mais ses deux formats
+// doivent etre examines pour EXIF/IPTC/ICC (guide metier 2025, p. 13 et 23).
+function buildMetadataSampleRows(visualSample,jpegRows,tiffRows){
+  const logicalKey=row=>normKey(titlePathForRow(row))+'|'+imageLogicalKey(row);
+  const selectedViews=new Set(visualSample.map(logicalKey));
+  const byPath=new Map();
+  [...jpegRows,...tiffRows].forEach(row=>{
+    if(row&&row.path&&selectedViews.has(logicalKey(row))&&!byPath.has(row.path))byPath.set(row.path,row);
+  });
+  return [...byPath.values()];
 }
 function imagePairKey(row){
   return normKey(titlePathForRow(row))+'|'+normKey(baseNoExt(row&&row.name||''));
@@ -1193,6 +1206,27 @@ function recordEmbeddedMetadataIssues(meta,row,recoResult){
   else if(!meta.iccRgb)add('ALERTE',53,row.path,'Profil ICC détecté mais espace colorimétrique non RGB'+(meta.iccColorSpace?' : '+meta.iccColorSpace:''));
 }
 
+// L'analyse des metadonnees se fait independamment de l'ouverture visuelle
+// afin qu'un JPEG associe a un TIFF selectionne ne soit jamais saute.
+async function inspectMetadataSampleRows(metadataRows,recoResult){
+  const result={total:0,jpeg:0,tiff:0,errors:0};
+  for(const row of metadataRows){
+    const jpeg=['.jpg','.jpeg'].includes(row.ext);
+    result.total++;
+    if(jpeg)result.jpeg++;else result.tiff++;
+    try{
+      const meta=jpeg?await readJpegTechnicalMetadata(row.file):await readTiffMeta(row.file);
+      recordEmbeddedMetadataIssues(meta,row,recoResult);
+    }catch(error){
+      result.errors++;
+      const message='Métadonnées '+(jpeg?'JPEG':'TIFF')+' non analysées : '+String(error&&error.message||error);
+      [51,52,53].forEach(id=>add('ALERTE',id,row.path,message));
+    }
+    await MelanisoftPerformance.heartbeat(result.total,metadataRows.length,
+      'Contrôle EXIF/IPTC/ICC JPEG et TIFF : '+result.total+' / '+metadataRows.length+' fichiers...');
+  }
+  return result;
+}
 function firstInt(v){
   const m=String(v||'').match(/\d+/);
   return m ? parseInt(m[0],10) : null;
@@ -1436,7 +1470,7 @@ function exhaustivitySummaryHtml(){
 }
 
 
-$('run').onclick=async()=>{try{files=[...$('folder').files]; updateControl1Label(); const C=cfg(); const c3=controls.find(c=>c.id===3); if(c3)c3.name='Arborescence des dossiers conforme ('+C.consult+' / '+C.conserv+')'; anomalies=[]; lastRecurrenceSummary=null; updateRecurrencePreview(null); controls.forEach(c=>{c.status='NON VÉRIFIÉ';c.count=0}); lastExhaustivitySummary=null; updateControl1Label(); $('prog').style.display='block'; $('status').textContent='Analyse en cours...';
+$('run').onclick=async()=>{try{files=[...$('folder').files]; updateControl1Label(); const C=cfg(); const c3=controls.find(c=>c.id===3); if(c3)c3.name='Arborescence des dossiers conforme ('+C.consult+' / '+C.conserv+')'; anomalies=[]; lastRecurrenceSummary=null; lastMetadataAudit=null; updateRecurrencePreview(null); controls.forEach(c=>{c.status='NON VÉRIFIÉ';c.count=0}); lastExhaustivitySummary=null; updateControl1Label(); $('prog').style.display='block'; $('status').textContent='Analyse en cours...';
 setC(1,files.length?'OK':'ERREUR'); setC(2,files.length?'OK':'ERREUR',files.length); if(!files.length)return;
 const rows=files.map(f=>{let parts=f.webkitRelativePath.split('/');return {file:f,path:f.webkitRelativePath,name:f.name,parts,ext:ext(f.name),size:f.size,parsed:parseName(f.name)}});
 await MelanisoftPerformance.yieldToBrowser('Inventaire des fichiers terminé. Classement en cours...');
@@ -1621,6 +1655,7 @@ if(recoViewCounts.status!=='ok'){
 }
 await MelanisoftPerformance.yieldToBrowser('Contrôles métier terminés. Analyse technique des images...');
 const technicalSample=buildTechnicalSampleRows(sample);
+const metadataSample=buildMetadataSampleRows(sample,jpeg,tiff);
 let max=technicalSample.length,done=0,histogramSuccess=0;
 for(let r of technicalSample){
   try{
@@ -1637,20 +1672,12 @@ for(let r of technicalSample){
       }catch(histErr){
         add('ALERTE',30.5,r.path,'Histogramme non analysé : '+String(histErr.message||histErr));
       }
-      try{
-        let meta=await readJpegTechnicalMetadata(r.file);
-        recordEmbeddedMetadataIssues(meta,r,recoViewCounts);
-      }catch(metaErr){
-        const msg='Métadonnées JPEG non analysées : '+String(metaErr.message||metaErr);
-        add('ALERTE',51,r.path,msg); add('ALERTE',52,r.path,msg); add('ALERTE',53,r.path,msg);
-      }
-    } else {
+     } else {
       let m=await readTiffMeta(r.file);
       if(!m.w||!m.h)add('ALERTE',46,r.path,'Dimensions TIFF non lues');
       else if(m.w<500||m.h<500)add('ALERTE',47,r.path,`TIFF très petit ${m.w}x${m.h}`);
       if(!m.dpi)add('ALERTE',43,r.path,'DPI TIFF absent ou non détecté : conformité à 400 dpi non vérifiable');
       else if(m.dpi!==400)add('ALERTE',44,r.path,`DPI TIFF ${m.dpi}, attendu 400`);
-      recordEmbeddedMetadataIssues(m,r,recoViewCounts);
       try{
         let h=await analyzeJpegHistogram(r.file);
         histogramSuccess++;
@@ -1669,21 +1696,20 @@ for(let r of technicalSample){
       add('ALERTE',46,r.path,'Dimensions TIFF non vérifiables');
     }
     add('ALERTE',43,r.path,'DPI non vérifiable');
-    add('ALERTE',51,r.path,'Métadonnées EXIF non vérifiables');
-    add('ALERTE',52,r.path,'Métadonnées IPTC non vérifiables');
-    add('ALERTE',53,r.path,'Profil ICC non vérifiable');
-  }
+   }
   done++; $('prog').value=max?done/max*100:100;
   await MelanisoftPerformance.heartbeat(done,max,'Analyse technique des images : '+done+' / '+max+' fichiers...');
 }
 if(technicalSample.length&&histogramSuccess===0)add('ALERTE',30.5,'','Plage dynamique non vérifiable : aucun fichier de l’échantillon n’a pu être décodé pour l’analyse de l’histogramme.');
+lastMetadataAudit=await inspectMetadataSampleRows(metadataSample,recoViewCounts);
 [30.5,41,42,43,44,45,46,47,51,52,53].forEach(id=>{
   const issues=anomalies.filter(a=>a.control===id&&a.type!=='INFO');
   setC(id,issues.some(a=>a.type==='ERREUR')?'ERREUR':(issues.length?'ALERTE':'OK'),issues.length);
 });
 const technicalJpegCount=technicalSample.filter(r=>['.jpg','.jpeg'].includes(r.ext)).length;
 const technicalTiffCount=technicalSample.filter(r=>['.tif','.tiff'].includes(r.ext)).length;
-if(!technicalSample.length)[30.5,43,44,47,51,52,53].forEach(id=>setC(id,'NON VÉRIFIABLE',0));
+if(!technicalSample.length)[30.5,43,44,47].forEach(id=>setC(id,'NON VÉRIFIABLE',0));
+if(!metadataSample.length)[51,52,53].forEach(id=>setC(id,'NON VÉRIFIABLE',0));
 if(!technicalJpegCount)[41,42].forEach(id=>setC(id,'NON APPLICABLE',0));
 if(!technicalTiffCount)[45,46].forEach(id=>setC(id,'NON APPLICABLE',0));
 setC(50,'OK');
@@ -1835,6 +1861,7 @@ $('summary').innerHTML=`<h2>Synthèse du contrôle</h2><div class="summary-grid"
     <div class="metric"><span>Fichiers inventoriés</span><strong>${rows.length}</strong></div>
     <div class="metric"><span>Images détectées</span><strong>${imageCount}</strong></div>
     <div class="metric"><span>Fascicules détectés</span><strong>${fascCount}</strong></div>
+    <div class="metric"><span>Métadonnées : fichiers JPEG / TIFF examinés dans l’échantillon</span><strong>${lastMetadataAudit?lastMetadataAudit.jpeg+' JPEG / '+lastMetadataAudit.tiff+' TIFF':'Non lancé'}</strong></div>
   </div></div>
   <div class="summary-card"><h3>Résultat du contrôle</h3><div class="metric-list">
     <div class="metric"><span>Contrôles conformes</span><strong class="status-ok">${ok}</strong></div>
@@ -2177,6 +2204,7 @@ function buildReportTxt(){
   push('Fichiers inventoriés : '+stats.totalFiles);
   push('Images JPEG : '+stats.jpegCount);
   push('Images TIFF : '+stats.tiffCount);
+  push('Métadonnées EXIF/IPTC/ICC : '+(lastMetadataAudit?(lastMetadataAudit.total+' fichiers examinés ('+lastMetadataAudit.jpeg+' JPEG, '+lastMetadataAudit.tiff+' TIFF), '+lastMetadataAudit.errors+' erreur(s) de lecture'):'contrôle non lancé'));
   push('Fascicules détectés : '+stats.fascCount);
   push('Anomalies signalées : '+stats.nonInfo.length);
   push('Alertes : '+stats.alertCount);
