@@ -414,6 +414,153 @@ function buildIsoSampleByTitle(jpegRows,tiffRows){
     sample
   };
 }
+// Le tableau ALÉA existant reste le seul support de saisie du contrôle humain.
+// Les huit contrôles I:P sont obligatoires ; Q et R restent des notes contextuelles.
+const VISUAL_CONTROL_TASKS=[
+  'Page entière / double page',
+  'Cadrage',
+  'Sens de lecture',
+  'Redressement',
+  'Lisibilité',
+  'Date et numéro de fascicule',
+  'Colorimétrie et rendu',
+  'Taille conforme à l’original (100 %)'
+];
+const VISUAL_REVIEW_HEADERS=[
+  'N° tirage','Titre','Lot du titre','Lettre-code','Seuil Ac / Re',
+  'Répertoire','Fichier','Chemin complet',...VISUAL_CONTROL_TASKS,
+  'Défaut de l’original ou contrainte matérielle (information)','Commentaire libre','ID de tirage'
+];
+function assessVisualReviewRows(table,sample,plan,sampleId){
+  const issues=[];
+  const invalid=()=>({valid:false,issues,byTitle:[],reviewed:0,total:sample.length,nonConforming:0,complete:false});
+  if(!Array.isArray(sample)||!sample.length||!plan||!sampleId){
+    issues.push('Aucun échantillon actif à rapprocher : relancer l’analyse de la livraison.');
+    return invalid();
+  }
+  if(!Array.isArray(table)||!table.length){
+    issues.push('Fichier ALÉA vide ou illisible.');
+    return invalid();
+  }
+  const headers=table[0]||[];
+  if(VISUAL_REVIEW_HEADERS.some((expected,i)=>String(headers[i]||'').trim()!==expected)){
+    issues.push('En-têtes ALÉA différents de ceux produits par cette version (19 colonnes attendues).');
+    return invalid();
+  }
+  const paths=new Map(),submitted=new Map();
+  sample.forEach((item,i)=>{
+    const key=String(item.path||'').replace(/\\/g,'/').trim();
+    if(!key||paths.has(key))issues.push('Échantillon actif non unique ou sans chemin : '+key);
+    paths.set(key,{item,number:i+1});
+  });
+  for(let i=1;i<table.length;i++){
+    const row=table[i]||[];
+    const key=String(row[7]||'').replace(/\\/g,'/').trim();
+    if(!key){issues.push('Ligne '+(i+1)+' : chemin complet absent.');continue;}
+    if(submitted.has(key)){issues.push('Chemin répété dans le retour ALÉA : '+key);continue;}
+    submitted.set(key,row);
+    const match=paths.get(key);
+    if(!match){issues.push('Fichier absent du tirage courant : '+key);continue;}
+    const item=match.item;
+    const cell=j=>String(row[j]??'').trim();
+    const expectedThreshold='Ac '+item.isoAccept+' / Re '+item.isoReject;
+    if(cell(18)!==sampleId)issues.push('Identifiant de tirage différent à la ligne '+(i+1)+' : '+key);
+    if(cell(0)!==String(match.number)||cell(1)!==String(item.isoTitle||titleLabelForRow(item))
+      ||cell(2)!==String(item.isoLotSize)||cell(3)!==String(item.isoCode)
+      ||cell(4)!==expectedThreshold||cell(6)!==String(item.name)){
+      issues.push('Référence de tirage ou de titre modifiée à la ligne '+(i+1)+' : '+key);
+    }
+    for(let c=8;c<16;c++){
+      const value=cell(c).toLowerCase();
+      if(value && value!=='conforme' && value!=='nc'){
+        issues.push('Valeur inconnue en '+VISUAL_REVIEW_HEADERS[c]+', ligne '+(i+1)+' : '+cell(c));
+      }
+    }
+  }
+  for(const key of paths.keys())if(!submitted.has(key))issues.push('Vue du tirage absente du retour : '+key);
+  if(issues.length)return invalid();
+  const plans=Array.isArray(plan.plans)&&plan.plans.length?plan.plans:[plan];
+  const byTitle=[];
+  for(const p of plans){
+    const items=sample.filter(r=>String(r.isoTitlePath||titlePathForRow(r))===String(p.titlePath));
+    if(!items.length||items.length!==p.sampleSize){
+      issues.push('Échantillon incohérent avec le plan ISO du titre '+(p.title||p.titlePath||'inconnu'));
+      continue;
+    }
+    let reviewed=0,nonConforming=0,criteriaNC=0;
+    for(const item of items){
+      const row=submitted.get(String(item.path||'').replace(/\\/g,'/').trim());
+      const values=Array.from({length:8},(_,i)=>String(row[8+i]||'').trim().toLowerCase());
+      if(values.every(v=>v==='conforme'||v==='nc')){
+        reviewed++;
+        const defects=values.filter(v=>v==='nc').length;
+        criteriaNC+=defects;
+        if(defects>0)nonConforming++; // une vue vaut une unité NC, même avec plusieurs défauts
+      }
+    }
+    const complete=reviewed===items.length;
+    const status=!complete?'EN ATTENTE'
+      :nonConforming>=p.reject?'REJET STATISTIQUE'
+      :nonConforming<=p.accept?'ACCEPTATION STATISTIQUE':'À EXPERTISER';
+    byTitle.push({title:p.title,titlePath:p.titlePath,lotSize:p.lotSize,sampleSize:p.sampleSize,
+      code:p.code,accept:p.accept,reject:p.reject,reviewed,nonConforming,criteriaNC,complete,status});
+  }
+  if(issues.length)return invalid();
+  const reviewed=byTitle.reduce((n,x)=>n+x.reviewed,0);
+  return {valid:true,issues:[],byTitle,reviewed,total:sample.length,
+    nonConforming:byTitle.reduce((n,x)=>n+x.nonConforming,0),
+    complete:byTitle.every(x=>x.complete)};
+}
+function resetVisualReview(){
+  lastVisualReview=null;
+  const file=$('visualReviewFile');
+  if(file)file.value='';
+  const status=$('visualReviewStatus');
+  if(status)status.textContent='En attente de la saisie des résultats ALÉA.';
+  const summary=$('visualReviewSummary');
+  if(summary)summary.innerHTML='';
+  const button=$('importVisualReview');
+  if(button)button.disabled=true;
+}
+function visualReviewSummaryHtml(){
+  if(!lastVisualReview)return '<p class="small">Décision sur échantillon visuel : EN ATTENTE du fichier ALÉA complété. Aucune acceptation de lot n’est prononcée.</p>';
+  const x=lastVisualReview;
+  if(!x.valid)return '<p class="err">Import ALÉA refusé : '+x.issues.slice(0,12).map(esc).join(' ; ')+'. Aucun verdict n’est produit.</p>';
+  const rows=x.byTitle.map(p=>'<tr><td>'+esc(p.title)+'</td><td>'+p.reviewed+' / '+p.sampleSize+
+    '</td><td>'+p.nonConforming+'</td><td>Ac '+p.accept+' / Re '+p.reject+'</td><td>'+esc(p.status)+'</td></tr>').join('');
+  return '<p class="small">Tirage : '+esc(lastSampleId)+' · Contrôleur : '+esc(x.reviewer||'non renseigné')+
+    ' · Import : '+esc(x.importedAt||'')+' · '+x.reviewed+' / '+x.total+' vues entièrement renseignées. Les NC sont comptées par <b>vue</b>, et non par critère ; un défaut de l’original noté en Q ne supprime pas une NC saisie en I:P.</p>'+
+    '<table><tr><th>Titre</th><th>Vues contrôlées</th><th>Vues NC</th><th>Seuil Ac / Re</th><th>Décision statistique sur échantillon</th></tr>'+rows+'</table>'+
+    '<p class="small"><b>Important :</b> une acceptation statistique de l’échantillon ne vaut pas validation définitive de la livraison. Les autres contrôles et la décision professionnelle restent nécessaires.</p>';
+}
+function updateVisualReviewDisplay(){
+  const target=$('visualReviewSummary');
+  if(target)target.innerHTML=visualReviewSummaryHtml();
+}
+$('importVisualReview').onclick=async()=>{
+  lastVisualReview=null;updateVisualReviewDisplay();
+  const file=$('visualReviewFile').files?.[0];
+  const reviewer=String($('visualReviewer').value||'').trim();
+  const msg=$('visualReviewStatus');
+  if(!aleaRows.length||!lastSampleId){msg.textContent='Analyser une livraison avant d’importer son ALÉA.';return;}
+  if(!file||!file.name.toLowerCase().endsWith('.xlsx')){msg.textContent='Sélectionner le fichier ALÉA complété au format XLSX.';return;}
+  if(!reviewer){msg.textContent='Renseigner le nom du contrôleur avant l’import.';return;}
+  if(file.size>20*1024*1024){msg.textContent='Fichier ALÉA trop volumineux pour cet import (maximum 20 Mo).';return;}
+  msg.textContent='Lecture locale du fichier ALÉA en cours...';
+  try{
+    const table=await readXlsxRows(file);
+    lastVisualReview={...assessVisualReviewRows(table,aleaRows,lastIsoPlan,lastSampleId),reviewer,importedAt:new Date().toLocaleString('fr-FR')};
+    msg.textContent=lastVisualReview.valid?
+      (lastVisualReview.complete?'Résultats complets importés. Décisions statistiques calculées par titre.':'Fichier importé, mais des contrôles visuels restent à renseigner.') :
+      'Import refusé : le fichier ne correspond pas exactement au tirage actif ou contient des valeurs invalides.';
+  }catch(error){
+    lastVisualReview={valid:false,issues:['Impossible de lire le XLSX : '+String(error&&error.message||error)],byTitle:[]};
+    msg.textContent='Import impossible : format XLSX invalide ou illisible.';
+  }
+  updateVisualReviewDisplay();
+  if(lastAnalyzedRows.length)$('rapportMetier').innerHTML=buildReportMetierHtml(lastAnalyzedRows);
+};
+
 function buildTechnicalSampleRows(visualSample){
   const selected=new Map();
   visualSample.forEach(row=>{
