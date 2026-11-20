@@ -566,7 +566,8 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   assert.equal(internalMissing.entries.length,2);
   assert.equal(internalMissing.ignored.length,2);
   assert.equal(internalMissing.skipped.length,3);
-  assert.ok(internalMissing.ignored.some(x=>x.row===6 && x.date==='19130431'));
+  assert.ok(internalMissing.ignored.some(x=>x.row===6 && x.rawDate==='1913/4/31'));
+  assert.ok(internalMissing.ignored.some(x=>x.row===5));
 
   // Une édition mentionnée sans image n'est pas une "synthèse" à effacer.
   const secondEdition=modernRow('1890','12','28','4','18901228',null);
