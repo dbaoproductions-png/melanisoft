@@ -1150,7 +1150,7 @@ async function recoRowsToMap(table){
       cols.some(v=>/^(obligatoire|prestataire|facultatif|aaaa|indiquer)/i.test(String(v||'').trim()));
     const summaryWithEnd=idx.anneeFin>=0&&i<=headerRow+2&&
       String(cols[idx.anneeFin]||'').trim()&&!repertoire&&!firstJpeg&&!firstTiff;
-    const summaryTotal=!annee&&!mois&&!jour&&!repertoire&&!firstJpeg&&!firstTiff&&
+    const summaryTotal=(i<=headerRow+2||i===table.length-1)&&!annee&&!mois&&!jour&&!repertoire&&!firstJpeg&&!firstTiff&&
       (produced!==null||(idx.nbPages>=0&&String(cols[idx.nbPages]||'').trim()));
     if(instruction||summaryWithEnd||summaryTotal){
       skipped.push({row:i+1,reason:instruction?'consignes du modèle':'synthèse ou total du récolement'});
