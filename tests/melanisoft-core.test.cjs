@@ -20,6 +20,7 @@ assert.ok(!html.includes("add('INFO',30.5,r.path,'Histogramme TIFF non analysé"
 // Contrôles 34, 35 et 52 : des données insuffisantes ne produisent pas un faux OK.
 assert.ok(html.includes("recoViewCounts.status!=='ok'||!recoViewCounts.entries?.length?'NON VÉRIFIABLE'"));
 assert.ok(html.includes("else problems.push('identité du fascicule non identifiable"));
+assert.ok(html.includes("if(manualExpected===null || prestExpected===null)problems.push('comparaison récolement initial / prestataire non vérifiable"));
 assert.ok(html.includes("setC(35,!fascEntries.length?'NON VÉRIFIABLE'"));
 assert.ok(html.includes("[30.5,43,44,47,51,52,53].forEach(id=>setC(id,'NON VÉRIFIABLE',0))"));
 
