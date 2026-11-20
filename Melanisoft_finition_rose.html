@@ -2003,7 +2003,9 @@ function buildReportMetierHtml(rows){
       <tr><td>Contrôles en erreur</td><td>${stats.er}</td></tr>
       <tr><td>Récolement utilisé</td><td>${validatedReco?esc(validatedReco):'Non validé'}</td></tr>
       <tr><td>Plan d’échantillonnage</td><td>${esc(formatIsoPlan(iso))}</td></tr>
+      <tr><td>Identifiant du tirage</td><td>${esc(lastSampleId||'non créé')}</td></tr>
     </table></div>
+    <div class="report-section"><h3>Retour ALÉA et décision ISO par titre</h3>${visualReviewSummaryHtml()}</div>
     <div class="report-section"><h3>Observations principales</h3>${tops.length?'<table><tr><th>Nature métier</th><th>Nombre</th><th>Constat</th></tr>'+tops.map(t=>`<tr><td>${esc(t.control)}</td><td>${t.count}</td><td>${t.examples.map(x=>esc(anomalySentence({msg:x}))).join('<br>')}</td></tr>`).join('')+'</table>':'<p>Aucune observation automatique à signaler.</p>'}</div>
     <div class="report-section"><h3>Qualité des images</h3><table><tr><th>Contrôle</th><th>Résultat</th><th>Points signalés</th></tr>${qualityRows.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.status)}</td><td>${countDisplay(c)}</td></tr>`).join('')}</table></div>
     ${buildRecoObservationsHtml()}
@@ -2047,6 +2049,7 @@ $('summary').innerHTML=`<h2>Synthèse du contrôle</h2><div class="summary-grid"
     <div class="metric"><span>Périodicité des fascicules</span><strong>${lastRecurrenceSummary?esc(lastRecurrenceSummary.label):'Contrôle automatique non lancé'}</strong></div>
   </div></div>
 </div>`;
+updateVisualReviewDisplay();
 $('controls').innerHTML='<h2>Contrôles effectués automatiquement</h2>'+groupedControlsHtml();
 const consolidatedRows=consolidatedAnomalies();
 $('anomalies').innerHTML='<h2>Points d’attention détaillés</h2><p class="small">Une seule ligne est affichée par fascicule. Les natures et les détails concatènent toutes les anomalies détectées pour ce fascicule.</p><table class="attention-table"><tr><th>Niveau</th><th>Ligne du récolement</th><th>Nature métier</th><th>Fichier ou fascicule concerné</th><th>Constat consolidé</th></tr>'+consolidatedRows.slice(0,5000).map(a=>`<tr><td>${esc(a.types||a.type)}</td><td>${esc(a.line||'')}</td><td>${esc(a.nature)}</td><td>${esc(a.path)}</td><td>${esc(a.details)}</td></tr>`).join('')+'</table>'+(consolidatedRows.length>5000?'<p>Affichage limité à 5000 lignes. L’export Excel contient la liste complète consolidée.</p>':'');
@@ -2161,21 +2164,8 @@ function buildAleaExcelLegacy(){
 }
 
 function buildAleaExcel(){
-  const manualTasks=[
-    'Page entière / double page',
-    'Cadrage',
-    'Sens de lecture',
-    'Redressement',
-    'Lisibilité',
-    'Date et numéro de fascicule',
-    'Colorimétrie et rendu',
-    'Taille conforme à l’original (100 %)'
-  ];
-  const headers=[
-    'N° tirage','Titre','Lot du titre','Lettre-code','Seuil Ac / Re',
-    'Répertoire','Fichier','Chemin complet',...manualTasks,
-    'Défaut de l’original ou contrainte matérielle (information)','Commentaire libre'
-  ];
+  const manualTasks=VISUAL_CONTROL_TASKS;
+  const headers=VISUAL_REVIEW_HEADERS;
   const rows=aleaRows.map((r,i)=>{
     const parts=r.path.split('/');
     const repertoire=parts.length>=2?parts[parts.length-2]:'';
@@ -2183,10 +2173,10 @@ function buildAleaExcel(){
     const seuil=(r.isoAccept!==undefined&&r.isoReject!==undefined)?`Ac ${r.isoAccept} / Re ${r.isoReject}`:'';
     return [
       i+1,titre,r.isoLotSize||'',r.isoCode||'',seuil,repertoire,r.name,r.path,
-      '','','','','','','','','',''
+      ...Array(manualTasks.length+2).fill(''),lastSampleId
     ];
   });
-  const widths=[10,25,13,13,16,28,32,65,20,18,18,18,18,25,22,24,42,42];
+  const widths=[10,25,13,13,16,28,32,65,20,18,18,18,18,25,22,24,42,42,27];
   const rowHeight=row=>{
     const lines=row.reduce((max,v,i)=>{
       const text=String(v??'');
@@ -2204,6 +2194,8 @@ function buildAleaExcel(){
   const endRow=Math.max(1,rows.length+1);
   const consignes=[
     ['Échantillonnage','Un tirage ISO 2859-1 distinct est constitué pour chaque titre et porte sur les vues logiques. Chaque vue ne compte qu’une fois : son TIFF est prioritaire et son JPEG n’est utilisé qu’en l’absence du TIFF correspondant. La décision Ac/Re s’applique séparément à chaque titre.'],
+    ['Retour des résultats','Remplir toutes les colonnes I à P pour chaque vue : Conforme ou NC (défaut de numérisation). Plusieurs critères NC sur une même vue ne comptent qu’une vue non conforme. Conserver l’identifiant de tirage en colonne S et réimporter le XLSX dans Mélanisoft. Une feuille incomplète ou modifiée ne permet pas de prononcer une acceptation.'],
+    ['Contraintes de l’original','La colonne Q peut signaler un défaut déjà présent sur l’original ou une contrainte matérielle ; elle ne neutralise pas automatiquement une NC saisie en I à P. Corriger explicitement toute NC non imputable au prestataire avant import.'],
     ['Page entière / double page','Vérifier que la page est entière. Une double page doit être numérisée en une seule vue si l’information se poursuit sur les deux pages ; sinon, chaque page doit être une vue distincte.'],
     ['Cadrage','Vérifier l’absence de rognage et de bord parasite. Conserver des marges régulières et suffisantes autour du document, conformément au test validé.'],
     ['Sens de lecture','Vérifier que l’image est orientée dans le sens normal de lecture.'],
@@ -2234,12 +2226,12 @@ function buildAleaExcel(){
   const sheetXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>
-<dimension ref="A1:R${endRow}"/>
+<dimension ref="A1:S${endRow}"/>
 <sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
 <sheetFormatPr defaultRowHeight="15"/>
 <cols>${widths.map((width,i)=>`<col min="${i+1}" max="${i+1}" width="${width}" customWidth="1"/>`).join('')}</cols>
 <sheetData>${sheetRows}</sheetData>
-<autoFilter ref="A1:R${endRow}"/>
+<autoFilter ref="A1:S${endRow}"/>
 <dataValidations count="1"><dataValidation sqref="I2:P${Math.max(2,endRow)}" showDropDown="0" showInputMessage="1" promptTitle="Contrôle visuel" prompt="Choisir Conforme ou NC." showErrorMessage="1" errorTitle="Valeur non valide" error="Choisir Conforme ou NC dans la liste." allowBlank="1" type="list"><formula1>'Listes'!$A$1:$A$2</formula1></dataValidation></dataValidations>
 <pageMargins left="0.2" right="0.2" top="0.4" bottom="0.4" header="0.2" footer="0.2"/>
 <pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/>
@@ -2376,6 +2368,12 @@ function buildReportTxt(){
   push('2. ÉCHANTILLONNAGE ISO 2859-1');
   push(formatIsoPlan(iso));
   push('Règle de décision : '+isoDecisionText(iso)+'.');
+  push('Identifiant de tirage : '+(lastSampleId||'non créé'));
+  push('Contrôle visuel : '+(!lastVisualReview?'EN ATTENTE (ALÉA non importé)':!lastVisualReview.valid?'IMPORT REFUSÉ (aucune décision)':lastVisualReview.complete?'COMPLET':'INCOMPLET'));
+  if(lastVisualReview&&lastVisualReview.valid){
+    push('Contrôleur : '+lastVisualReview.reviewer+' ; import : '+lastVisualReview.importedAt);
+    lastVisualReview.byTitle.forEach(p=>push(p.title+' : '+p.status+' ; vues entièrement renseignées '+p.reviewed+'/'+p.sampleSize+' ; vues non conformes '+p.nonConforming+' ; Ac '+p.accept+'/Re '+p.reject));
+  }
   blank();
 
   push('3. RÉCOLEMENT');
@@ -2482,6 +2480,10 @@ const GallicaQC = {
     readTiffMeta,
     analyzeJpegHistogram,
     readJpegTechnicalMetadata
+  },
+  visualReview: {
+    evaluate: assessVisualReviewRows,
+    last: ()=>lastVisualReview
   },
   reports: {
     buildText: buildReportTxt,
