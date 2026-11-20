@@ -461,6 +461,107 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   assert.equal(reco.entries[0].date, '20260101');
   assert.equal(reco.entries[0].produced, null);
 
+  // Récolements OLL de deux générations : tests synthétiques sans publication
+  // des fichiers historiques fournis pour l'audit.
+  const oldHeaders=[
+    'Cote titre','Cote volume','Année','Mois','jour','Format hauteur',
+    'Format largeur simple page (en cm)','Nb de pages','Observations',
+    'Etat physique du document','Réf. Premier fichier numérique (JPEG)',
+    'Réf. Dernier fichier numérique (JPEG)',
+    'Réf. Premier fichier numérique (TIFF)',
+    'Réf. Dernier fichier numérique (TIFF)',
+    'Réf. Premier fichier numérique (TXT)','Réf. Dernier fichier numérique (TXT)',
+    'Réf. Premier fichier numérique (XML.Alto)',
+    'Réf. Dernier fichier numérique (XML.Alto)',
+    'Réf.fichier numérique (PDF)','Nbre de fichiers produits',
+    'Pages blanches','plioir','Nom support (dd)','Observations',
+    'Etat matériel avant restitution'
+  ];
+  function oldRow(annee,mois,jour,produced,jpegRef,tiffRef,note=''){
+    const x=Array(25).fill('');
+    x[2]=annee;x[3]=mois;x[4]=jour;x[7]='4';
+    x[10]=jpegRef;x[12]=tiffRef;x[19]=produced;x[23]=note;
+    return x;
+  }
+  const oldInstructions=oldHeaders.map(()=>'prestataire');
+  oldInstructions[2]='AAAA';oldInstructions[3]='MM';oldInstructions[4]='JJ';
+  const oldTotal=Array(25).fill('');oldTotal[19]='8';
+  const oldFooter=Array(25).fill('');oldFooter[7]='8';
+  const jpegRef='FRB315556101_P08_18720229_0001.jpg';
+  const tiffRef='FRB315556101_P08_18720229_0001.tif';
+  const oldReco=await api.recoRowsToMap([
+    oldHeaders,oldInstructions,oldTotal,
+    oldRow('1872','2','28','4','FRB315556101_P08_18720228_0001.jpg','FRB315556101_P08_18720228_0001.tif'),
+    oldRow('','','','4',jpegRef,tiffRef,'Ligne ajoutée'),
+    oldFooter
+  ]);
+  assert.equal(oldReco.status,'ok');
+  assert.equal(oldReco.entries.length,2);
+  assert.equal(oldReco.skipped.length,3);
+  assert.equal(oldReco.ignored.length,0);
+  assert.equal(oldReco.dateIssues.length,1);
+  assert.equal(oldReco.entries[1].date,'18720229');
+  assert.equal(oldReco.entries[1].observation,'Ligne ajoutée');
+  assert.equal(oldReco.headers.repertoire,-1);
+  assert.ok(oldReco.map.has('frb315556101_p08_18720229_0001'));
+
+  const modernHeaders=Array(35).fill('');
+  Object.assign(modernHeaders,{
+    6:'Etablissement de conservation',10:'Cote titre',
+    13:'Année début',14:'Mois début',15:'jour début',
+    16:'Année fin',17:'mois fin',18:'jour fin',
+    21:'Nb de pages',26:'Répertoire',
+    27:'Réf. 1er fichier numérique (JPEG)',
+    28:'Réf. 1er fichier numérique (TIFF)',
+    29:'Nbre de fichiers produits',33:'Observations'
+  });
+  const modernInstruction=modernHeaders.map(()=>'OBLIGATOIRE');
+  function modernRow(y,m,d,number=4,date='19060101',produced=number){
+    const x=Array(35).fill('');
+    x[13]=y;x[14]=m;x[15]=d;x[21]=number;
+    x[26]='FRB315556101_P032_'+date;
+    x[27]='FRB315556101_P032_'+date+'_0001.jpg';
+    x[28]='FRB315556101_P032_'+date+'_0001.tif';
+    x[29]=produced;
+    return x;
+  }
+  const modernSummary=Array(35).fill('');
+  modernSummary[13]='1904';modernSummary[14]='6';modernSummary[15]='1';
+  modernSummary[16]='1915';modernSummary[17]='1';modernSummary[18]='31';
+  modernSummary[21]='15314';modernSummary[29]='15577';
+  const modernFooter=Array(35).fill('');
+  modernFooter[21]='15314';modernFooter[29]='15577';
+  const combinedDay=modernRow('1906','1','2 et 3',4,'19060103');
+  const missingDate=modernRow('','','',4,'19060911');
+  const modernReco=await api.recoRowsToMap([
+    modernHeaders,modernInstruction,modernSummary,
+    modernRow('1906','1','1',4,'19060101'),
+    combinedDay,missingDate,modernFooter
+  ]);
+  assert.equal(modernReco.status,'ok');
+  assert.equal(modernReco.entries.length,3);
+  assert.equal(modernReco.skipped.length,3);
+  assert.equal(modernReco.ignored.length,0);
+  assert.equal(modernReco.dateIssues.length,2);
+  assert.equal(modernReco.entries[1].date,'19060103');
+  assert.equal(modernReco.entries[2].date,'19060911');
+  assert.equal(modernReco.entries[1].jour,'2 et 3');
+  assert.ok(!modernReco.entries.some(x=>x.date==='19060123'));
+  assert.equal(modernReco.entries.reduce((n,e)=>n+(e.produced||0),0),12);
+
+  // Une édition mentionnée sans image n'est pas une "synthèse" à effacer.
+  const secondEdition=modernRow('1890','12','28','4','18901228',null);
+  secondEdition[26]='';secondEdition[27]='';secondEdition[28]='';
+  secondEdition[29]='';secondEdition[33]='voir ligne du dessus';
+  const supplementary=await api.recoRowsToMap([
+    modernHeaders,modernInstruction,modernSummary,
+    modernRow('1890','12','28','4','18901228',8),
+    secondEdition
+  ]);
+  assert.equal(supplementary.entries.length,2);
+  assert.equal(supplementary.entries[1].observation,'voir ligne du dessus');
+  assert.equal(supplementary.entries[1].produced,null);
+
   const folderNamedFascicule = {
     name: 'image-mal-nommee.tif',
     path: 'Livraison/Titre D/TIFF/2026/FRB123456789_COTE_20260101/image-mal-nommee.tif',
