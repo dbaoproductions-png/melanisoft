@@ -73,7 +73,7 @@
         <div class="grid-2">
           <div class="field"><span>Échantillonnage ISO 2859-1</span><div id="isoPreview" class="iso-preview">Le nombre de vues sera calculé automatiquement après sélection de la livraison.</div></div>
         </div>
-        <p class="small">Un échantillon ALÉA distinct est calculé automatiquement pour chaque titre, selon le niveau de contrôle général II et un NQA de 1 %. Chaque vue ne compte qu’une fois : son TIFF est utilisé en priorité pour le contrôle visuel, et son JPEG sert de repli si le TIFF correspondant manque. Pour chaque vue tirée, les métadonnées EXIF/IPTC/ICC sont contrôlées séparément sur les fichiers JPEG et TIFF présents.</p>
+        <p class="small">Un échantillon ALÉA distinct est calculé automatiquement pour chaque titre, selon le niveau de contrôle général II et un NQA de 1 %. Chaque vue ne compte qu’une fois : son TIFF est utilisé en priorité pour le contrôle visuel, et son JPEG sert de repli si le TIFF correspondant manque. Pour chaque vue tirée, les DPI et les métadonnées EXIF/IPTC/ICC sont contrôlés séparément sur les fichiers JPEG et TIFF présents.</p>
         <div class="actions">
           <button id="run">Analyser la livraison</button>
           <button id="exportAttentionExcel" disabled>Exporter les points d’attention détaillés (Excel)</button>
@@ -1217,13 +1217,17 @@ async function inspectMetadataSampleRows(metadataRows,recoResult){
     try{
       const meta=jpeg?await readJpegTechnicalMetadata(row.file):await readTiffMeta(row.file);
       recordEmbeddedMetadataIssues(meta,row,recoResult);
+      const dimensionMeta=jpeg?await readJpegMeta(row.file):meta;
+      const dpi=dimensionMeta.dpi;
+      if(!dpi)add('ALERTE',43,row.path,'DPI '+(jpeg?'JPEG':'TIFF')+' absent ou non détecté : conformité à 400 dpi non vérifiable');
+      else if(dpi!==400)add('ALERTE',44,row.path,'DPI '+(jpeg?'JPEG':'TIFF')+' : '+dpi+', attendu 400');
     }catch(error){
       result.errors++;
       const message='Métadonnées '+(jpeg?'JPEG':'TIFF')+' non analysées : '+String(error&&error.message||error);
-      [51,52,53].forEach(id=>add('ALERTE',id,row.path,message));
+      [43,51,52,53].forEach(id=>add('ALERTE',id,row.path,message));
     }
     await MelanisoftPerformance.heartbeat(result.total,metadataRows.length,
-      'Contrôle EXIF/IPTC/ICC JPEG et TIFF : '+result.total+' / '+metadataRows.length+' fichiers...');
+      'Contrôle DPI/EXIF/IPTC/ICC JPEG et TIFF : '+result.total+' / '+metadataRows.length+' fichiers...');
   }
   return result;
 }
@@ -1663,8 +1667,6 @@ for(let r of technicalSample){
       let m=await readJpegMeta(r.file);
       if(!m.w||!m.h)add('ALERTE',42,r.path,'Dimensions JPEG non lues');
       else if(m.w<500||m.h<500)add('ALERTE',47,r.path,`Image très petite ${m.w}x${m.h}`);
-      if(!m.dpi)add('ALERTE',43,r.path,'DPI JPEG absent ou non détecté : conformité à 400 dpi non vérifiable');
-      else if(m.dpi!==400)add('ALERTE',44,r.path,`DPI ${m.dpi}, attendu 400`);
       try{
         let h=await analyzeJpegHistogram(r.file);
         histogramSuccess++;
@@ -1676,8 +1678,6 @@ for(let r of technicalSample){
       let m=await readTiffMeta(r.file);
       if(!m.w||!m.h)add('ALERTE',46,r.path,'Dimensions TIFF non lues');
       else if(m.w<500||m.h<500)add('ALERTE',47,r.path,`TIFF très petit ${m.w}x${m.h}`);
-      if(!m.dpi)add('ALERTE',43,r.path,'DPI TIFF absent ou non détecté : conformité à 400 dpi non vérifiable');
-      else if(m.dpi!==400)add('ALERTE',44,r.path,`DPI TIFF ${m.dpi}, attendu 400`);
       try{
         let h=await analyzeJpegHistogram(r.file);
         histogramSuccess++;
@@ -1695,7 +1695,6 @@ for(let r of technicalSample){
       add('ERREUR',45,r.path,message);
       add('ALERTE',46,r.path,'Dimensions TIFF non vérifiables');
     }
-    add('ALERTE',43,r.path,'DPI non vérifiable');
    }
   done++; $('prog').value=max?done/max*100:100;
   await MelanisoftPerformance.heartbeat(done,max,'Analyse technique des images : '+done+' / '+max+' fichiers...');
@@ -1708,8 +1707,8 @@ lastMetadataAudit=await inspectMetadataSampleRows(metadataSample,recoViewCounts)
 });
 const technicalJpegCount=technicalSample.filter(r=>['.jpg','.jpeg'].includes(r.ext)).length;
 const technicalTiffCount=technicalSample.filter(r=>['.tif','.tiff'].includes(r.ext)).length;
-if(!technicalSample.length)[30.5,43,44,47].forEach(id=>setC(id,'NON VÉRIFIABLE',0));
-if(!metadataSample.length)[51,52,53].forEach(id=>setC(id,'NON VÉRIFIABLE',0));
+if(!technicalSample.length)[30.5,47].forEach(id=>setC(id,'NON VÉRIFIABLE',0));
+if(!metadataSample.length)[43,44,51,52,53].forEach(id=>setC(id,'NON VÉRIFIABLE',0));
 if(!technicalJpegCount)[41,42].forEach(id=>setC(id,'NON APPLICABLE',0));
 if(!technicalTiffCount)[45,46].forEach(id=>setC(id,'NON APPLICABLE',0));
 setC(50,'OK');
@@ -1861,7 +1860,7 @@ $('summary').innerHTML=`<h2>Synthèse du contrôle</h2><div class="summary-grid"
     <div class="metric"><span>Fichiers inventoriés</span><strong>${rows.length}</strong></div>
     <div class="metric"><span>Images détectées</span><strong>${imageCount}</strong></div>
     <div class="metric"><span>Fascicules détectés</span><strong>${fascCount}</strong></div>
-    <div class="metric"><span>Métadonnées : fichiers JPEG / TIFF examinés dans l’échantillon</span><strong>${lastMetadataAudit?lastMetadataAudit.jpeg+' JPEG / '+lastMetadataAudit.tiff+' TIFF':'Non lancé'}</strong></div>
+    <div class="metric"><span>DPI et métadonnées : JPEG / TIFF examinés dans l’échantillon</span><strong>${lastMetadataAudit?lastMetadataAudit.jpeg+' JPEG / '+lastMetadataAudit.tiff+' TIFF':'Non lancé'}</strong></div>
   </div></div>
   <div class="summary-card"><h3>Résultat du contrôle</h3><div class="metric-list">
     <div class="metric"><span>Contrôles conformes</span><strong class="status-ok">${ok}</strong></div>
@@ -2204,7 +2203,7 @@ function buildReportTxt(){
   push('Fichiers inventoriés : '+stats.totalFiles);
   push('Images JPEG : '+stats.jpegCount);
   push('Images TIFF : '+stats.tiffCount);
-  push('Métadonnées EXIF/IPTC/ICC : '+(lastMetadataAudit?(lastMetadataAudit.total+' fichiers examinés ('+lastMetadataAudit.jpeg+' JPEG, '+lastMetadataAudit.tiff+' TIFF), '+lastMetadataAudit.errors+' erreur(s) de lecture'):'contrôle non lancé'));
+  push('DPI et métadonnées EXIF/IPTC/ICC : '+(lastMetadataAudit?(lastMetadataAudit.total+' fichiers examinés ('+lastMetadataAudit.jpeg+' JPEG, '+lastMetadataAudit.tiff+' TIFF), '+lastMetadataAudit.errors+' erreur(s) de lecture'):'contrôle non lancé'));
   push('Fascicules détectés : '+stats.fascCount);
   push('Anomalies signalées : '+stats.nonInfo.length);
   push('Alertes : '+stats.alertCount);
