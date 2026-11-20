@@ -433,7 +433,7 @@ const VISUAL_REVIEW_HEADERS=[
 ];
 function assessVisualReviewRows(table,sample,plan,sampleId){
   const issues=[];
-  const invalid=()=>({valid:false,issues,byTitle:[],reviewed:0,total:sample.length,nonConforming:0,complete:false});
+  const invalid=()=>({valid:false,issues,byTitle:[],reviewed:0,total:Array.isArray(sample)?sample.length:0,nonConforming:0,complete:false});
   if(!Array.isArray(sample)||!sample.length||!plan||!sampleId){
     issues.push('Aucun échantillon actif à rapprocher : relancer l’analyse de la livraison.');
     return invalid();
@@ -537,8 +537,19 @@ function updateVisualReviewDisplay(){
   const target=$('visualReviewSummary');
   if(target)target.innerHTML=visualReviewSummaryHtml();
 }
+function invalidateVisualReview(){
+  if(lastVisualReview){
+    lastVisualReview=null;
+    updateVisualReviewDisplay();
+    if(lastAnalyzedRows.length)$('rapportMetier').innerHTML=buildReportMetierHtml(lastAnalyzedRows);
+    $('visualReviewStatus').textContent='Fichier ou contrôleur modifié : importer de nouveau le résultat ALÉA.';
+  }
+}
+$('visualReviewFile').addEventListener('change',invalidateVisualReview);
+$('visualReviewer').addEventListener('input',invalidateVisualReview);
 $('importVisualReview').onclick=async()=>{
   lastVisualReview=null;updateVisualReviewDisplay();
+  const importingSampleId=lastSampleId;
   const file=$('visualReviewFile').files?.[0];
   const reviewer=String($('visualReviewer').value||'').trim();
   const msg=$('visualReviewStatus');
@@ -549,7 +560,11 @@ $('importVisualReview').onclick=async()=>{
   msg.textContent='Lecture locale du fichier ALÉA en cours...';
   try{
     const table=await readXlsxRows(file);
-    lastVisualReview={...assessVisualReviewRows(table,aleaRows,lastIsoPlan,lastSampleId),reviewer,importedAt:new Date().toLocaleString('fr-FR')};
+    if(lastSampleId!==importingSampleId || !lastAnalyzedRows.length){
+      msg.textContent='Le tirage a changé pendant la lecture : relancer l’import sur le nouveau tirage.';
+      return;
+    }
+    lastVisualReview={...assessVisualReviewRows(table,aleaRows,lastIsoPlan,importingSampleId),reviewer,importedAt:new Date().toLocaleString('fr-FR')};
     msg.textContent=lastVisualReview.valid?
       (lastVisualReview.complete?'Résultats complets importés. Décisions statistiques calculées par titre.':'Fichier importé, mais des contrôles visuels restent à renseigner.') :
       'Import refusé : le fichier ne correspond pas exactement au tirage actif ou contient des valeurs invalides.';
@@ -1636,7 +1651,7 @@ function exhaustivitySummaryHtml(){
 }
 
 
-$('run').onclick=async()=>{try{files=[...$('folder').files]; updateControl1Label(); const C=cfg(); const c3=controls.find(c=>c.id===3); if(c3)c3.name='Arborescence des dossiers conforme ('+C.consult+' / '+C.conserv+')'; anomalies=[]; lastRecurrenceSummary=null; lastMetadataAudit=null; lastSampleId=''; lastAnalyzedRows=[]; resetVisualReview(); updateRecurrencePreview(null); controls.forEach(c=>{c.status='NON VÉRIFIÉ';c.count=0}); lastExhaustivitySummary=null; updateControl1Label(); $('prog').style.display='block'; $('status').textContent='Analyse en cours...';
+$('run').onclick=async()=>{try{$('exportAleaExcel').disabled=true; $('exportHtml').disabled=true; $('exportAttentionExcel').disabled=true; files=[...$('folder').files]; updateControl1Label(); const C=cfg(); const c3=controls.find(c=>c.id===3); if(c3)c3.name='Arborescence des dossiers conforme ('+C.consult+' / '+C.conserv+')'; anomalies=[]; lastRecurrenceSummary=null; lastMetadataAudit=null; lastSampleId=''; lastAnalyzedRows=[]; resetVisualReview(); updateRecurrencePreview(null); controls.forEach(c=>{c.status='NON VÉRIFIÉ';c.count=0}); lastExhaustivitySummary=null; updateControl1Label(); $('prog').style.display='block'; $('status').textContent='Analyse en cours...';
 setC(1,files.length?'OK':'ERREUR'); setC(2,files.length?'OK':'ERREUR',files.length); if(!files.length)return;
 const rows=files.map(f=>{let parts=f.webkitRelativePath.split('/');return {file:f,path:f.webkitRelativePath,name:f.name,parts,ext:ext(f.name),size:f.size,parsed:parseName(f.name)}});
 await MelanisoftPerformance.yieldToBrowser('Inventaire des fichiers terminé. Classement en cours...');
