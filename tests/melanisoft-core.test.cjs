@@ -9,12 +9,13 @@ const { TextDecoder, TextEncoder } = require('node:util');
 const htmlPath = path.join(__dirname, '..', 'Melanisoft_finition_rose.html');
 const html = fs.readFileSync(htmlPath, 'utf8');
 // Garde-fous : un contrôle non réalisé ne doit jamais se déclarer conforme.
-assert.match(html, /controls\\.forEach\\(c=>\\{c\\.status='NON VÉRIFIÉ';c\\.count=0\\}\\)/);
-assert.match(html, /setC\\(34,recoViewCounts\\.status!=='ok'\\?'NON VÉRIFIABLE'/);
-assert.match(html, /setC\\(36,recoViewCounts\\.status!=='ok'\\?'NON VÉRIFIABLE'/);
-assert.match(html, /add\\('ALERTE',30\\.5,r\\.path,'Histogramme non analysé/);
-assert.match(html, /add\\('ALERTE',30\\.5,r\\.path,'Histogramme TIFF non analysé/);
-assert.doesNotMatch(html, /add\\('INFO',30\\.5,r\\.path,'Histogramme (?:TIFF )?non analysé/);
+assert.ok(html.includes("controls.forEach(c=>{c.status='NON VÉRIFIÉ';c.count=0})"));
+assert.ok(html.includes("setC(34,recoViewCounts.status!=='ok'?'NON VÉRIFIABLE'"));
+assert.ok(html.includes("setC(36,recoViewCounts.status!=='ok'?'NON VÉRIFIABLE'"));
+assert.ok(html.includes("add('ALERTE',30.5,r.path,'Histogramme non analysé"));
+assert.ok(html.includes("add('ALERTE',30.5,r.path,'Histogramme TIFF non analysé"));
+assert.ok(!html.includes("add('INFO',30.5,r.path,'Histogramme non analysé"));
+assert.ok(!html.includes("add('INFO',30.5,r.path,'Histogramme TIFF non analysé"));
 
 const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
 assert.ok(scriptMatch, 'Le script principal doit être présent dans le HTML.');
