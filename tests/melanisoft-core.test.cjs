@@ -549,6 +549,25 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   assert.ok(!modernReco.entries.some(x=>x.date==='19060123'));
   assert.equal(modernReco.entries.reduce((n,e)=>n+(e.produced||0),0),12);
 
+  // Les lacunes documentaires situees au milieu du tableau ne sont pas des totaux.
+  const missingIdentity=Array(35).fill('');
+  missingIdentity[21]='4';
+  const impossibleNoRef=Array(35).fill('');
+  impossibleNoRef[13]='1913';impossibleNoRef[14]='4';impossibleNoRef[15]='31';
+  impossibleNoRef[33]='ABS';
+  const internalMissing=await api.recoRowsToMap([
+    modernHeaders,modernInstruction,modernSummary,
+    modernRow('1913','4','29',4,'19130429'),
+    missingIdentity,
+    impossibleNoRef,
+    modernRow('1913','5','1',4,'19130501'),
+    modernFooter
+  ]);
+  assert.equal(internalMissing.entries.length,2);
+  assert.equal(internalMissing.ignored.length,2);
+  assert.equal(internalMissing.skipped.length,3);
+  assert.ok(internalMissing.ignored.some(x=>x.row===6 && x.date==='19130431'));
+
   // Une édition mentionnée sans image n'est pas une "synthèse" à effacer.
   const secondEdition=modernRow('1890','12','28','4','18901228',null);
   secondEdition[26]='';secondEdition[27]='';secondEdition[28]='';
