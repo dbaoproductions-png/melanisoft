@@ -1121,6 +1121,7 @@ async function recoRowsToMap(table){
     firstJpeg:headerIndex(headers,[/ref.*1er.*fichier.*numerique.*jpeg/, /1er.*fichier.*jpeg/, /jpeg/]),
     firstTiff:headerIndex(headers,[/ref.*1er.*fichier.*numerique.*tiff/, /1er.*fichier.*tiff/, /tiff/]),
     produced:headerIndex(headers,[/nbre.*fichiers.*produits?/, /nombre.*fichiers.*produits?/, /nb.*fichiers.*produits?/, /fichiers.*produits?/]),
+    anneeFin:headerIndex(headers,[/^annee fin$/]),
     observation:headerIndex(headers,[/^observation$/, /^observations$/, /observation.*prestataire/, /observations.*prestataire/, /commentaire.*prestataire/]),
     establishment:headerIndex(headers,[/^etablissement de conservation$/, /etablissement.*conservation/]),
     coteTitle:headerIndex(headers,[/^cote titre$/])
@@ -1131,28 +1132,41 @@ async function recoRowsToMap(table){
   const observationCandidates=headers.map((h,i)=>({h,i})).filter(x=>/^observations?$/.test(x.h)||/observation.*prestataire|commentaire.*prestataire/.test(x.h));
   const providerObservation=observationCandidates.find(x=>idx.produced>=0&&x.i>idx.produced);
   if(providerObservation)idx.observation=providerObservation.i;
-  if(idx.repertoire<0||idx.produced<0)return {status:'headers',map:new Map(),entries:[],message:'Colonnes récolement non reconnues : attendu au minimum « Répertoire » et « Nbre de fichiers produits »'};
-  let map=new Map(), entries=[], ignored=[];
+  if(idx.produced<0||(idx.repertoire<0&&idx.firstJpeg<0&&idx.firstTiff<0))
+    return {status:'headers',map:new Map(),entries:[],message:'Colonnes récolement non reconnues : attendues « Nbre de fichiers produits » et « Répertoire » ou une référence de premier fichier JPEG/TIFF'};
+  let map=new Map(), entries=[], ignored=[], skipped=[], dateIssues=[];
   for(let i=headerRow+1;i<table.length;i++){
     let cols=table[i];
-    let repertoire=String(cols[idx.repertoire]||'').trim();
+    let repertoire=idx.repertoire>=0?String(cols[idx.repertoire]||'').trim():'';
     let firstJpeg=idx.firstJpeg>=0?String(cols[idx.firstJpeg]||'').trim():'';
     let firstTiff=idx.firstTiff>=0?String(cols[idx.firstTiff]||'').trim():'';
     let produced=firstInt(cols[idx.produced]);
     let annee=idx.annee>=0?String(cols[idx.annee]||'').trim():'';
     let mois=idx.mois>=0?String(cols[idx.mois]||'').trim():'';
     let jour=idx.jour>=0?String(cols[idx.jour]||'').trim():'';
-    let date='';
-    if(annee||mois||jour){
-      let y=annee.replace(/\D/g,'').padStart(4,'0').slice(-4);
-      let m=mois.replace(/\D/g,'').padStart(2,'0').slice(-2);
-      let d=jour.replace(/\D/g,'').padStart(2,'0').slice(-2);
-      if(y&&m&&d)date=y+m+d;
+    // Les modèles OLL possèdent une ligne de consignes, des lignes de synthèse
+    // et parfois un total final ; aucune ne doit compter comme fascicule.
+    const instruction=i===headerRow+1 &&
+      cols.some(v=>/^(obligatoire|prestataire|facultatif|aaaa|indiquer)/i.test(String(v||'').trim()));
+    const summaryWithEnd=idx.anneeFin>=0&&i<=headerRow+2&&
+      String(cols[idx.anneeFin]||'').trim()&&!repertoire&&!firstJpeg&&!firstTiff;
+    const summaryTotal=!annee&&!mois&&!jour&&!repertoire&&!firstJpeg&&!firstTiff&&
+      (produced!==null||(idx.nbPages>=0&&String(cols[idx.nbPages]||'').trim()));
+    if(instruction||summaryWithEnd||summaryTotal){
+      skipped.push({row:i+1,reason:instruction?'consignes du modèle':'synthèse ou total du récolement'});
+      await MelanisoftPerformance.heartbeat(i+1,table.length,'Indexation du récolement : '+(i+1)+' / '+table.length+' lignes...');
+      continue;
     }
-    if(!validDate(date)){
-      const refs=[repertoire,firstJpeg,firstTiff].join(' ');
-      const found=[...refs.matchAll(/(?:^|[^0-9])(\d{8})(?:[^0-9]|$)/g)].map(m=>m[1]).find(validDate);
-      if(found)date=found;
+    // Ne jamais transformer « 2 et 3 » en 23 ou « 15-16 » en 1516.
+    const strictDate=/^\d{4}$/.test(annee)&&/^\d{1,2}$/.test(mois)&&/^\d{1,2}$/.test(jour)
+      ?annee+mois.padStart(2,'0')+jour.padStart(2,'0'):'';
+    const refText=[repertoire,firstJpeg,firstTiff].join(' ');
+    const refDate=[...refText.matchAll(/(?:^|[^0-9])(\d{8})(?:[^0-9]|$)/g)].map(m=>m[1]).find(validDate)||'';
+    let date=validDate(strictDate)?strictDate:refDate;
+    if(refDate && !validDate(strictDate)){
+      dateIssues.push({row:i+1,date:refDate,reason:'Date initiale manquante, ambiguë ou invalide : '+[annee,mois,jour].join('/')+' ; date retrouvée dans les références du prestataire.'});
+    }else if(refDate&&strictDate!==refDate){
+      dateIssues.push({row:i+1,date:strictDate,reason:'Date du récolement '+strictDate+' différente de celle du fichier numérique '+refDate+'.'});
     }
 
     // Filtre métier : seules les lignes correspondant à de vrais fascicules sont exploitées.
@@ -1189,7 +1203,7 @@ async function recoRowsToMap(table){
   ['Année début','Mois début','Jour début','Nb de pages','Pagination','Répertoire','Réf. 1er fichier numérique (JPEG)','Réf. 1er fichier numérique (TIFF)','Nbre de fichiers produits','Observation prestataire','Etablissement de conservation','Cote titre'].forEach((label,i)=>{
     const keys=['annee','mois','jour','nbPages','pagination','repertoire','firstJpeg','firstTiff','produced','observation','establishment','coteTitle']; if(idx[keys[i]]>=0)found.push(label);
   });
-  return {status:'ok',map,entries,ignored,headers:idx,message:entries.length+' lignes de récolement exploitables, '+ignored.length+' lignes ignorées. Colonnes reconnues : '+found.join(', ')};
+  return {status:'ok',map,entries,ignored,skipped,dateIssues,headers:idx,message:entries.length+' lignes de récolement exploitables, '+ignored.length+' lignes sans date exploitable, '+skipped.length+' lignes de consignes/synthèse/total écartées, '+dateIssues.length+' date(s) à vérifier. Colonnes reconnues : '+found.join(', ')};
 }
 async function loadRecoViewCounts(rows, validatedPath){
   if(!validatedPath)return {status:'missing',map:new Map(),entries:[],message:'Aucun récolement validé'};
@@ -1724,6 +1738,7 @@ await MelanisoftPerformance.yieldToBrowser('Nommage contrôlé. Lecture du réco
 let recoViewCounts=await loadRecoViewCounts(rows, validatedReco); lastRecoRead=recoViewCounts;
 if(recoViewCounts.status==='ok'){
   if(recoViewCounts.ignored?.length)add('ALERTE',36,'',recoViewCounts.ignored.length+' ligne(s) de récolement ignorée(s) faute de date exploitable : contrôle d’exhaustivité incomplet.');
+  for(const issue of (recoViewCounts.dateIssues||[]))add('ALERTE',36,'',issue.reason,issue.row);
   for(let recoIndex=0;recoIndex<recoViewCounts.entries.length;recoIndex++){
     const e=recoViewCounts.entries[recoIndex];
     const prestDate=entryDateFromRefs(e);
