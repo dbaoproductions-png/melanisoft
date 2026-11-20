@@ -96,6 +96,9 @@ vm.runInContext(`
     buildExhaustivityAudit,
     buildDecision,
     buildAleaExcel,
+    visualHeaders: VISUAL_REVIEW_HEADERS,
+    assessVisualReviewRows,
+    setSampleId(id) { lastSampleId = id; },
     setAleaRows(rows) { aleaRows = rows; },
     clearAnomalies() { anomalies = []; },
     getAnomalies() { return anomalies; }
@@ -348,6 +351,61 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
     a.control === 44 && a.path === visualTiff.path));
   api.clearAnomalies();
 
+  // Retour ALÉA : huit colonnes obligatoires, identification stricte du tirage,
+  // une unité non conforme par vue, décision séparée par titre.
+  function reviewRow(r,i,id='TIRAGE-TEST'){
+    return [i+1,r.isoTitle,r.isoLotSize,r.isoCode,`Ac ${r.isoAccept} / Re ${r.isoReject}`,
+      '',r.name,r.path,...Array(8).fill('Conforme'),'','',id];
+  }
+  const completeReturn=[api.visualHeaders,...iso.sample.map((r,i)=>reviewRow(r,i))];
+  const completeDecision=api.assessVisualReviewRows(completeReturn,iso.sample,iso.summary,'TIRAGE-TEST');
+  assert.equal(completeDecision.valid,true);
+  assert.equal(completeDecision.complete,true);
+  assert.equal(completeDecision.reviewed,iso.sample.length);
+  assert.ok(completeDecision.byTitle.every(p=>p.status==='ACCEPTATION STATISTIQUE'));
+  const multipleDefects=completeReturn.map(x=>[...x]);
+  multipleDefects[1][8]='NC';multipleDefects[1][9]='NC';
+  const multipleDecision=api.assessVisualReviewRows(multipleDefects,iso.sample,iso.summary,'TIRAGE-TEST');
+  assert.equal(multipleDecision.nonConforming,1); // deux criteres NC sur une seule vue
+  const markedTitle=iso.sample[0].isoTitlePath;
+  assert.equal(multipleDecision.byTitle.find(p=>p.titlePath===markedTitle).status,'REJET STATISTIQUE');
+  const incompleteReturn=completeReturn.map(x=>[...x]);
+  incompleteReturn[1][8]='';
+  const incompleteDecision=api.assessVisualReviewRows(incompleteReturn,iso.sample,iso.summary,'TIRAGE-TEST');
+  assert.equal(incompleteDecision.valid,true);
+  assert.equal(incompleteDecision.complete,false);
+  assert.equal(incompleteDecision.byTitle.find(p=>p.titlePath===markedTitle).status,'EN ATTENTE');
+  const staleReturn=completeReturn.map(x=>[...x]);staleReturn[1][18]='TIRAGE-PRECEDENT';
+  assert.equal(api.assessVisualReviewRows(staleReturn,iso.sample,iso.summary,'TIRAGE-TEST').valid,false);
+  const invalidValue=completeReturn.map(x=>[...x]);invalidValue[1][8]='OK'; // liste autorisee : Conforme / NC
+  assert.equal(api.assessVisualReviewRows(invalidValue,iso.sample,iso.summary,'TIRAGE-TEST').valid,false);
+  const missingRow=completeReturn.slice(0,-1);
+  assert.equal(api.assessVisualReviewRows(missingRow,iso.sample,iso.summary,'TIRAGE-TEST').valid,false);
+  const duplicateRow=[...completeReturn,[...completeReturn[1]]];
+  assert.equal(api.assessVisualReviewRows(duplicateRow,iso.sample,iso.summary,'TIRAGE-TEST').valid,false);
+  const tamperedTitle=completeReturn.map(x=>[...x]);tamperedTitle[1][1]='AUTRE TITRE';
+  assert.equal(api.assessVisualReviewRows(tamperedTitle,iso.sample,iso.summary,'TIRAGE-TEST').valid,false);
+  const foreignFile=completeReturn.map(x=>[...x]);foreignFile[1][7]+='-inconnu';
+  assert.equal(api.assessVisualReviewRows(foreignFile,iso.sample,iso.summary,'TIRAGE-TEST').valid,false);
+  const oldTemplate=completeReturn.map(x=>[...x]);oldTemplate[0].pop();
+  assert.equal(api.assessVisualReviewRows(oldTemplate,iso.sample,iso.summary,'TIRAGE-TEST').valid,false);
+  // Cas concret du guide : 45 000 vues, echantillon 500, Ac 10 / Re 11.
+  const highPlan={...api.iso2859Plan(45000),title:'Titre 45k',titlePath:'Lot/Titre 45k'};
+  const highSample=Array.from({length:500},(_,i)=>({
+    path:`Lot/Titre 45k/TIFF/2026/FICHIER_${i+1}.tif`,
+    name:`FICHIER_${i+1}.tif`,isoTitle:'Titre 45k',isoTitlePath:'Lot/Titre 45k',
+    isoLotSize:45000,isoCode:'N',isoAccept:10,isoReject:11
+  }));
+  const highRows=[api.visualHeaders,...highSample.map((r,i)=>reviewRow(r,i))];
+  for(let i=1;i<=10;i++)highRows[i][8]='NC';
+  const tenNC=api.assessVisualReviewRows(highRows,highSample,highPlan,'TIRAGE-TEST');
+  assert.equal(tenNC.byTitle[0].nonConforming,10);
+  assert.equal(tenNC.byTitle[0].status,'ACCEPTATION STATISTIQUE');
+  highRows[11][8]='NC';
+  const elevenNC=api.assessVisualReviewRows(highRows,highSample,highPlan,'TIRAGE-TEST');
+  assert.equal(elevenNC.byTitle[0].nonConforming,11);
+  assert.equal(elevenNC.byTitle[0].status,'REJET STATISTIQUE');
+
   const pairResult = api.compareJpegTiffRows(
     [titleAJpeg[0], imageRow('Titre B', 'JPEG', 1)],
     [titleATiff[0]],
@@ -471,6 +529,7 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
     isoAccept: 0,
     isoReject: 1,
   };
+  api.setSampleId('TIRAGE-TEST');
   api.setAleaRows([workbookRow]);
   const workbookBytes = api.buildAleaExcel();
   assert.equal(workbookBytes[0], 0x50);
@@ -481,6 +540,9 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   execFileSync('unzip', ['-t', workbookPath], { stdio: 'pipe' });
   const sheetXml = execFileSync('unzip', ['-p', workbookPath, 'xl/worksheets/sheet1.xml'], { encoding: 'utf8' });
   assert.match(sheetXml, /Colorimétrie et rendu/);
+  assert.match(sheetXml, /ID de tirage/);
+  assert.match(sheetXml, /TIRAGE-TEST/);
+  assert.match(sheetXml, /dimension ref="A1:S2"/);
   assert.match(sheetXml, /Taille conforme à l’original \(100 %\)/);
   assert.match(sheetXml, /Date et numéro de fascicule/);
   assert.doesNotMatch(sheetXml, /Exemplarisation/i);
