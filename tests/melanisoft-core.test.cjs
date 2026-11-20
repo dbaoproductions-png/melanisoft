@@ -22,8 +22,8 @@ assert.ok(html.includes("recoViewCounts.status!=='ok'||!recoViewCounts.entries?.
 assert.ok(html.includes("else problems.push('identité du fascicule non identifiable"));
 assert.ok(html.includes("if(manualExpected===null || prestExpected===null)problems.push('comparaison récolement initial / prestataire non vérifiable"));
 assert.ok(html.includes("setC(35,!fascEntries.length?'NON VÉRIFIABLE'"));
-assert.ok(html.includes("[30.5,43,44,47].forEach(id=>setC(id,'NON VÉRIFIABLE',0))"));
-assert.ok(html.includes("[51,52,53].forEach(id=>setC(id,'NON VÉRIFIABLE',0))"));
+assert.ok(html.includes("[30.5,47].forEach(id=>setC(id,'NON VÉRIFIABLE',0))"));
+assert.ok(html.includes("[43,44,51,52,53].forEach(id=>setC(id,'NON VÉRIFIABLE',0))"));
 
 const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
 assert.ok(scriptMatch, 'Le script principal doit être présent dans le HTML.');
@@ -139,9 +139,9 @@ function iptcDataset(dataset, text) {
 }
 const iptcUtf8Charset = [0x1c, 0x01, 90, 0x00, 0x03, 0x1b, 0x25, 0x47];
 
-function syntheticJpeg(sourceValue = 'Archives municipales de Sète') {
+function syntheticJpeg(sourceValue = 'Archives municipales de Sète', dpiValue = 400) {
   const jfif = new Uint8Array(14);
-  jfif.set([0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x01, 0x01, 0x90, 0x01, 0x90], 0);
+  jfif.set([0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x01, (dpiValue >>> 8) & 255, dpiValue & 255, (dpiValue >>> 8) & 255, dpiValue & 255], 0);
   const exif = [...new TextEncoder().encode('Exif\0\0')];
   const app13 = [
     ...new TextEncoder().encode('Photoshop 3.0\0'),
@@ -169,9 +169,9 @@ function syntheticJpeg(sourceValue = 'Archives municipales de Sète') {
   ];
 }
 
-function syntheticTiff() {
+function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   const headline = [...iptcUtf8Charset, ...iptcDataset(105, '16 PER')];
-  const source = iptcDataset(115, 'Archives municipales de Sète');
+  const source = iptcDataset(115, sourceValue);
   const iptc = Uint8Array.from([...headline, ...source]);
   const icc = new Uint8Array(128);
   icc.set(new TextEncoder().encode('RGB '), 16);
@@ -320,6 +320,32 @@ function syntheticTiff() {
   assert.equal(partial.tiff, 1);
   assert.ok(Array.from(api.getAnomalies()).some(a => a.path === brokenJpeg.path && a.control === 52));
   assert.ok(!Array.from(api.getAnomalies()).some(a => a.path === visualTiff.path && a.control === 52));
+  api.clearAnomalies();
+
+  // La defaillance de metadonnees peut concerner uniquement le TIFF.
+  const badTiff = { ...visualTiff, file: fileLike(syntheticTiff('Cote ou source TIFF incorrecte')) };
+  const reverseAudit = await api.inspectMetadataSampleRows(
+    [companionJpeg, badTiff], metadataReco,
+  );
+  assert.equal(reverseAudit.errors, 0);
+  assert.ok(Array.from(api.getAnomalies()).some(a =>
+    a.control === 52 && a.path === badTiff.path && /Source non conforme/.test(a.msg)));
+  // Le JPEG de ce scenario est egalement non conforme : on teste ci-dessous un JPEG sain.
+  api.clearAnomalies();
+  const healthyJpeg = { ...companionJpeg, file: fileLike(syntheticJpeg()) };
+  await api.inspectMetadataSampleRows([healthyJpeg, badTiff], metadataReco);
+  assert.ok(!Array.from(api.getAnomalies()).some(a => a.path === healthyJpeg.path && a.control === 52));
+  assert.ok(Array.from(api.getAnomalies()).some(a => a.path === badTiff.path && a.control === 52));
+
+  // Une resolution JPEG 300 DPI doit etre detectee si le TIFF associe est 400 DPI.
+  api.clearAnomalies();
+  const lowDpiJpeg = { ...companionJpeg, file: fileLike(syntheticJpeg('Archives municipales de Sète', 300)) };
+  const dpiAudit = await api.inspectMetadataSampleRows([lowDpiJpeg, visualTiff], metadataReco);
+  assert.equal(dpiAudit.errors, 0);
+  assert.ok(Array.from(api.getAnomalies()).some(a =>
+    a.control === 44 && a.path === lowDpiJpeg.path && /300/.test(a.msg)));
+  assert.ok(!Array.from(api.getAnomalies()).some(a =>
+    a.control === 44 && a.path === visualTiff.path));
   api.clearAnomalies();
 
   const pairResult = api.compareJpegTiffRows(
