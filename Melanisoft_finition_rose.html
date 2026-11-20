@@ -1565,6 +1565,7 @@ if(recoViewCounts.status==='ok'){
     const problems=[];
     const identity=recoEntryFasciculeIdentity(entry);
     if(identity)recoIdentities.add(identity);
+    else problems.push('identité du fascicule non identifiable à partir des références prestataire : comparaison d’exhaustivité non vérifiable');
 
     const cmpManualPrest=compareDefinedValues('récolement initial',manualExpected,'saisie prestataire',prestExpected);
     if(cmpManualPrest)problems.push('le nombre de vues du récolement initial ne correspond pas au nombre indiqué par le prestataire ('+cmpManualPrest+')');
@@ -1602,7 +1603,7 @@ if(recoViewCounts.status==='ok'){
 const exhaustivityAudit=buildExhaustivityAudit(imageRows,recoViewCounts); recordExhaustivityAudit(exhaustivityAudit);
 if(recoViewCounts.status==='ok' && recoCompared>0 && recoDiff===0 && !exhaustivityAudit.diagnostics.length)add('INFO',34,'','Récolement cohérent pour '+recoOk+' ligne(s) exploitée(s).');
 if(recoViewCounts.status!=='ok')add('INFO',34,'',recoViewCounts.message+' La détection statistique des valeurs atypiques reste utilisée comme aide au contrôle.');
-setC(26,anomalies.some(a=>a.control===26)?'ALERTE':'OK',anomalies.filter(a=>a.control===26).length); setC(27,anomalies.some(a=>a.control===27)?'ALERTE':'OK',anomalies.filter(a=>a.control===27).length); setC(34,recoViewCounts.status!=='ok'?'NON VÉRIFIABLE':(anomalies.some(a=>a.control===34&&a.type==='ALERTE')?'ALERTE':'OK'),new Set(anomalies.filter(a=>a.control===34&&a.type==='ALERTE').map(a=>a.path+'#'+(a.line||''))).size); setC(35,anomalies.some(a=>a.control===35&&a.type==='ALERTE')?'ALERTE':'OK',anomalies.filter(a=>a.control===35&&a.type==='ALERTE').length);
+setC(26,anomalies.some(a=>a.control===26)?'ALERTE':'OK',anomalies.filter(a=>a.control===26).length); setC(27,anomalies.some(a=>a.control===27)?'ALERTE':'OK',anomalies.filter(a=>a.control===27).length); setC(34,recoViewCounts.status!=='ok'||!recoViewCounts.entries?.length?'NON VÉRIFIABLE':(anomalies.some(a=>a.control===34&&a.type==='ALERTE')?'ALERTE':'OK'),new Set(anomalies.filter(a=>a.control===34&&a.type==='ALERTE').map(a=>a.path+'#'+(a.line||''))).size); setC(35,!fascEntries.length?'NON VÉRIFIABLE':(anomalies.some(a=>a.control===35&&a.type==='ALERTE')?'ALERTE':'OK'),anomalies.filter(a=>a.control===35&&a.type==='ALERTE').length);
 const pairComparison=compareJpegTiffRows(jpeg,tiff);
 pairComparison.jpegWithoutTiff.forEach(r=>add('ALERTE',32,r.path,'JPEG sans TIFF correspondant dans le même titre'));
 pairComparison.tiffWithoutJpeg.forEach(r=>add('ALERTE',33,r.path,'TIFF sans JPEG correspondant dans le même titre'));
@@ -1680,7 +1681,7 @@ if(technicalSample.length&&histogramSuccess===0)add('ALERTE',30.5,'','Plage dyna
 });
 const technicalJpegCount=technicalSample.filter(r=>['.jpg','.jpeg'].includes(r.ext)).length;
 const technicalTiffCount=technicalSample.filter(r=>['.tif','.tiff'].includes(r.ext)).length;
-if(!technicalSample.length)[30.5,43,44,47,51,52,53].forEach(id=>setC(id,'NON APPLICABLE',0));
+if(!technicalSample.length)[30.5,43,44,47,51,52,53].forEach(id=>setC(id,'NON VÉRIFIABLE',0));
 if(!technicalJpegCount)[41,42].forEach(id=>setC(id,'NON APPLICABLE',0));
 if(!technicalTiffCount)[45,46].forEach(id=>setC(id,'NON APPLICABLE',0));
 setC(50,'OK');
