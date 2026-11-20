@@ -560,8 +560,10 @@ $('importVisualReview').onclick=async()=>{
   msg.textContent='Lecture locale du fichier ALÉA en cours...';
   try{
     const table=await readXlsxRows(file);
-    if(lastSampleId!==importingSampleId || !lastAnalyzedRows.length){
-      msg.textContent='Le tirage a changé pendant la lecture : relancer l’import sur le nouveau tirage.';
+    if(lastSampleId!==importingSampleId || !lastAnalyzedRows.length
+      || $('visualReviewFile').files?.[0]!==file
+      || String($('visualReviewer').value||'').trim()!==reviewer){
+      msg.textContent='Le tirage, le fichier ou le contrôleur a changé pendant la lecture : relancer l’import.';
       return;
     }
     lastVisualReview={...assessVisualReviewRows(table,aleaRows,lastIsoPlan,importingSampleId),reviewer,importedAt:new Date().toLocaleString('fr-FR')};
