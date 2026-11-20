@@ -81,6 +81,17 @@
           <button id="exportAleaExcel" disabled>Exporter le fichier d’échantillonnage ALÉA (Excel)</button>
         </div>
         <p id="status" class="small"></p><progress id="prog" value="0" max="100" style="display:none"></progress>
+        <div class="field" style="margin-top:14px">
+          <strong>Retour du contrôle visuel ALÉA</strong>
+          <p class="small">Après l'export, saisir « Conforme » ou « NC » dans chacune des huit colonnes I à P pour chaque vue. La colonne Q décrit les défauts de l'original sans supprimer les NC déjà saisies. Renseigner le contrôleur, puis importer le même fichier XLSX : l'identifiant du tirage sera vérifié. Une feuille incomplète ne permet pas de conclure.</p>
+          <label for="visualReviewer"><span>Contrôleur ayant examiné l'échantillon</span></label>
+          <input id="visualReviewer" type="text" placeholder="Nom du contrôleur">
+          <label for="visualReviewFile"><span>Fichier ALÉA complété (.xlsx)</span></label>
+          <input id="visualReviewFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+          <div class="actions"><button id="importVisualReview" disabled>Importer les résultats visuels</button></div>
+          <p id="visualReviewStatus" class="small" aria-live="polite"></p>
+          <div id="visualReviewSummary" class="small"></div>
+        </div>
       </section>
       <div id="summary" class="card" style="display:none"></div>
       <div id="controls" class="card" style="display:none"></div>
@@ -131,10 +142,11 @@ const GallicaQCState = {
   iso: { lastPlan: null },
   alea: { rows: [] },
   report: { html: '', aleaHtml: '' },
-  metadata: { lastAudit: null }
+  metadata: { lastAudit: null },
+  visualReview: { lastImport: null, sampleId: '' }
 };
 
-let anomalies=[], files=[], reportHtml='', aleaHtml='', aleaRows=[], recoCandidates=[], validatedReco='', lastIsoPlan=null, lastRecoRead=null, lastRecurrenceSummary=null, lastMetadataAudit=null;
+let anomalies=[], files=[], reportHtml='', aleaHtml='', aleaRows=[], recoCandidates=[], validatedReco='', lastIsoPlan=null, lastRecoRead=null, lastRecurrenceSummary=null, lastMetadataAudit=null, lastVisualReview=null, lastSampleId='', lastAnalyzedRows=[];
 const MelanisoftPerformance = {
   heartbeatEvery: 200,
   async yieldToBrowser(message){
@@ -161,6 +173,8 @@ function syncGallicaQCState(){
   GallicaQCState.iso.lastPlan=lastIsoPlan;
   GallicaQCState.alea.rows=aleaRows;
   GallicaQCState.metadata.lastAudit=lastMetadataAudit;
+  GallicaQCState.visualReview.lastImport=lastVisualReview;
+  GallicaQCState.visualReview.sampleId=lastSampleId;
   GallicaQCState.report.html=reportHtml;
   GallicaQCState.report.aleaHtml=aleaHtml;
 }
@@ -432,6 +446,7 @@ function compareJpegTiffRows(jpegRows,tiffRows){
 }
 function populateReco(){
   files=[...$('folder').files]; validatedReco=''; $('recoStatus').textContent=''; lastIsoPlan=null; updateIsoPreview(null);
+  resetVisualReview(); lastSampleId=''; lastAnalyzedRows=[];
   recoCandidates=files.filter(f=>['.xls','.xlsx','.csv'].includes(ext(f.name))).map(f=>f.webkitRelativePath);
   const box=$('recoBox'), sel=$('recoSelect'); sel.innerHTML='';
   if(recoCandidates.length){
@@ -440,7 +455,7 @@ function populateReco(){
   } else { box.style.display='none'; }
 }
 $('folder').addEventListener('change', populateReco);
-$('validateReco').onclick=()=>{validatedReco=$('recoSelect').value||''; $('recoStatus').innerHTML=validatedReco?'<span class="ok">Fichier validé : '+esc(validatedReco)+'</span>':'<span class="warn">Aucun fichier sélectionné</span>';};
+$('validateReco').onclick=()=>{resetVisualReview(); validatedReco=$('recoSelect').value||''; $('recoStatus').innerHTML=validatedReco?'<span class="ok">Fichier validé : '+esc(validatedReco)+'</span>':'<span class="warn">Aucun fichier sélectionné</span>';};
 
 
 // La colonne Nombre doit rester lisible :
@@ -1474,7 +1489,7 @@ function exhaustivitySummaryHtml(){
 }
 
 
-$('run').onclick=async()=>{try{files=[...$('folder').files]; updateControl1Label(); const C=cfg(); const c3=controls.find(c=>c.id===3); if(c3)c3.name='Arborescence des dossiers conforme ('+C.consult+' / '+C.conserv+')'; anomalies=[]; lastRecurrenceSummary=null; lastMetadataAudit=null; updateRecurrencePreview(null); controls.forEach(c=>{c.status='NON VÉRIFIÉ';c.count=0}); lastExhaustivitySummary=null; updateControl1Label(); $('prog').style.display='block'; $('status').textContent='Analyse en cours...';
+$('run').onclick=async()=>{try{files=[...$('folder').files]; updateControl1Label(); const C=cfg(); const c3=controls.find(c=>c.id===3); if(c3)c3.name='Arborescence des dossiers conforme ('+C.consult+' / '+C.conserv+')'; anomalies=[]; lastRecurrenceSummary=null; lastMetadataAudit=null; lastSampleId=''; lastAnalyzedRows=[]; resetVisualReview(); updateRecurrencePreview(null); controls.forEach(c=>{c.status='NON VÉRIFIÉ';c.count=0}); lastExhaustivitySummary=null; updateControl1Label(); $('prog').style.display='block'; $('status').textContent='Analyse en cours...';
 setC(1,files.length?'OK':'ERREUR'); setC(2,files.length?'OK':'ERREUR',files.length); if(!files.length)return;
 const rows=files.map(f=>{let parts=f.webkitRelativePath.split('/');return {file:f,path:f.webkitRelativePath,name:f.name,parts,ext:ext(f.name),size:f.size,parsed:parseName(f.name)}});
 await MelanisoftPerformance.yieldToBrowser('Inventaire des fichiers terminé. Classement en cours...');
@@ -1652,6 +1667,7 @@ setC(33,pairComparison.tiffWithoutJpeg.length?'ALERTE':'OK',pairComparison.tiffW
 setC(31,pairComparison.jpegWithoutTiff.length||pairComparison.tiffWithoutJpeg.length?'ALERTE':'OK',pairComparison.jpegWithoutTiff.length+pairComparison.tiffWithoutJpeg.length);
 let rec=recoRows; if(validatedReco){setC(36,recoViewCounts.status!=='ok'?'NON VÉRIFIABLE':(anomalies.some(a=>a.control===36)?'ALERTE':'OK'),rec.length);} else {setC(36,rec.length?'ALERTE':'ALERTE',rec.length); if(rec.length)add('ALERTE',36,rec.map(r=>r.path).join(' | '),'Fichier(s) de récolement candidat(s) détecté(s), mais aucun n’a été validé dans l’interface'); else add('ALERTE',36,'','Aucun fichier de récolement XLS/XLSX/CSV détecté');} let non=annexRows; setC(37,non.length?'ALERTE':'OK',non.length);
 const isoSelection=buildIsoSampleByTitle(jpeg,tiff); lastIsoPlan=isoSelection.summary; updateIsoPreview(lastIsoPlan); aleaRows=isoSelection.sample; let sample=aleaRows;
+lastSampleId=sample.length?'ISO-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10):'ISO-VIDE';
 if(sample.length)setC(49,'OK',sample.length);
 else {add('ALERTE',49,'','Aucun fichier image exploitable pour constituer l’échantillon ISO par titre.');setC(49,'ALERTE',0);}
 if(recoViewCounts.status!=='ok'){
@@ -1712,7 +1728,7 @@ if(!metadataSample.length)[43,44,51,52,53].forEach(id=>setC(id,'NON VÉRIFIABLE'
 if(!technicalJpegCount)[41,42].forEach(id=>setC(id,'NON APPLICABLE',0));
 if(!technicalTiffCount)[45,46].forEach(id=>setC(id,'NON APPLICABLE',0));
 setC(50,'OK');
-render(rows, sample); $('exportAttentionExcel').disabled=false; $('exportHtml').disabled=false;  $('exportAleaExcel').disabled=false; $('prog').style.display='none'; $('status').textContent='Contrôle terminé.';}catch(e){$('prog').style.display='none'; $('status').innerHTML='<span class=err>Erreur pendant le contrôle : '+esc(e && (e.message||e))+'</span>'; console.error(e);}}
+lastAnalyzedRows=rows; render(rows, sample); $('importVisualReview').disabled=!sample.length; $('exportAttentionExcel').disabled=false; $('exportHtml').disabled=false;  $('exportAleaExcel').disabled=false; $('prog').style.display='none'; $('status').textContent='Contrôle terminé.';}catch(e){$('prog').style.display='none'; $('status').innerHTML='<span class=err>Erreur pendant le contrôle : '+esc(e && (e.message||e))+'</span>'; console.error(e);}}
 
 function controlChapter(id){
   // Les chapitres sont désormais calculés à partir du numéro affiché,
