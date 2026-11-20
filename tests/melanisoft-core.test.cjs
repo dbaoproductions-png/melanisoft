@@ -91,6 +91,7 @@ vm.runInContext(`
     recoRowsToMap,
     buildDiskLookup,
     buildExhaustivityAudit,
+    buildDecision,
     buildAleaExcel,
     setAleaRows(rows) { aleaRows = rows; }
   };
@@ -263,6 +264,20 @@ function syntheticTiff() {
     ],
     ['2026', '1', '1', '10', '', '', '', '', '', ''],
   ];
+  // La décision finale ne peut jamais être verte avec un contrôle non vérifiable.
+  const decisionBase = { er: 0, errorCount: 0, al: 0, alertCount: 0, unverified: 1 };
+  assert.equal(api.buildDecision(decisionBase).level, 'warn');
+  assert.equal(api.buildDecision({ ...decisionBase, unverified: 0 }).level, 'ok');
+
+  // Une ligne de récolement datée incorrectement doit rester visible dans l'audit.
+  const ignoredRecoTable = [
+    ['Année début', 'Mois début', 'Jour début', 'Répertoire', 'Nbre de fichiers produits'],
+    ['2026', '13', '40', '', '10'],
+  ];
+  const ignoredReco = await api.recoRowsToMap(ignoredRecoTable);
+  assert.equal(ignoredReco.entries.length, 0);
+  assert.equal(ignoredReco.ignored.length, 1);
+
   const reco = await api.recoRowsToMap(recoTable);
   assert.equal(reco.status, 'ok');
   assert.equal(reco.entries.length, 1);
