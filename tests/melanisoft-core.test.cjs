@@ -304,7 +304,7 @@ function syntheticTiff() {
   assert.equal(exhaustivity.diagnostics.length, 2);
 
   const auditCall = html.indexOf('recordExhaustivityAudit(exhaustivityAudit)');
-  const auditStatus = html.indexOf("setC(34,anomalies.some(a=>a.control===34");
+  const auditStatus = html.indexOf("setC(34,recoViewCounts.status!=='ok'");
   assert.ok(auditCall >= 0 && auditStatus > auditCall);
 
   const jpeg = fileLike(syntheticJpeg());
