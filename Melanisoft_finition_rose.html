@@ -1176,7 +1176,7 @@ async function recoRowsToMap(table){
     let reasons=[];
     if(!date || date==='00000000' || !validDate(date))reasons.push('date vide ou invalide');
     if(reasons.length){
-      ignored.push({row:i+1,repertoire,date,reason:reasons.join(', ')});
+      ignored.push({row:i+1,repertoire,date,rawDate:[annee,mois,jour].join('/'),reason:reasons.join(', ')});
       await MelanisoftPerformance.heartbeat(i+1,table.length,'Indexation du récolement : '+(i+1)+' / '+table.length+' lignes...');
       continue;
     }
@@ -1737,7 +1737,10 @@ const diskLookup=buildDiskLookup(imageRows);
 await MelanisoftPerformance.yieldToBrowser('Nommage contrôlé. Lecture du récolement...');
 let recoViewCounts=await loadRecoViewCounts(rows, validatedReco); lastRecoRead=recoViewCounts;
 if(recoViewCounts.status==='ok'){
-  if(recoViewCounts.ignored?.length)add('ALERTE',36,'',recoViewCounts.ignored.length+' ligne(s) de récolement ignorée(s) faute de date exploitable : contrôle d’exhaustivité incomplet.');
+  if(recoViewCounts.ignored?.length){
+    add('ALERTE',36,'',recoViewCounts.ignored.length+' ligne(s) de récolement ignorée(s) faute de date exploitable : contrôle d’exhaustivité incomplet.');
+    for(const item of recoViewCounts.ignored)add('ALERTE',36,'','Ligne '+item.row+' : date saisie « '+item.rawDate+' » non exploitable ; '+item.reason,item.row);
+  }
   for(const issue of (recoViewCounts.dateIssues||[]))add('ALERTE',36,'',issue.reason,issue.row);
   for(let recoIndex=0;recoIndex<recoViewCounts.entries.length;recoIndex++){
     const e=recoViewCounts.entries[recoIndex];
