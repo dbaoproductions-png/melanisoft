@@ -83,6 +83,8 @@ vm.runInContext(`
     iso2859Plan,
     buildIsoSampleByTitle,
     buildTechnicalSampleRows,
+    buildMetadataSampleRows,
+    inspectMetadataSampleRows,
     compareJpegTiffRows,
     parseName,
     readJpegMeta,
@@ -93,7 +95,9 @@ vm.runInContext(`
     buildExhaustivityAudit,
     buildDecision,
     buildAleaExcel,
-    setAleaRows(rows) { aleaRows = rows; }
+    setAleaRows(rows) { aleaRows = rows; },
+    clearAnomalies() { anomalies = []; },
+    getAnomalies() { return anomalies; }
   };
 `, context);
 const api = context.__api;
@@ -134,7 +138,7 @@ function iptcDataset(dataset, text) {
 }
 const iptcUtf8Charset = [0x1c, 0x01, 90, 0x00, 0x03, 0x1b, 0x25, 0x47];
 
-function syntheticJpeg() {
+function syntheticJpeg(sourceValue = 'Archives municipales de Sète') {
   const jfif = new Uint8Array(14);
   jfif.set([0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x01, 0x01, 0x90, 0x01, 0x90], 0);
   const exif = [...new TextEncoder().encode('Exif\0\0')];
@@ -142,7 +146,7 @@ function syntheticJpeg() {
     ...new TextEncoder().encode('Photoshop 3.0\0'),
     ...iptcUtf8Charset,
     ...iptcDataset(105, '16 PER'),
-    ...iptcDataset(115, 'Archives municipales de Sète'),
+    ...iptcDataset(115, sourceValue),
   ];
   const profile = new Uint8Array(128);
   profile.set(new TextEncoder().encode('RGB '), 16);
@@ -243,6 +247,79 @@ function syntheticTiff() {
     [...technical.map(row => row.path)],
     [titleATiff[0].path],
   );
+
+  // Une vue ISO selectionnee sur le TIFF declenche DEUX lectures de metadonnees.
+  // Un Source IPTC errone dans le JPEG doit etre detecte meme si son TIFF est sain.
+  const visualTiff = {
+    ...titleATiff[0],
+    parsed: api.parseName(titleATiff[0].name),
+    file: fileLike(syntheticTiff()),
+  };
+  const companionJpeg = {
+    ...titleAJpeg[0],
+    parsed: api.parseName(titleAJpeg[0].name),
+    file: fileLike(syntheticJpeg('Source IPTC incorrecte')),
+  };
+  const unrelatedJpeg = {
+    ...titleBJpeg[0],
+    parsed: api.parseName(titleBJpeg[0].name),
+    file: fileLike(syntheticJpeg()),
+  };
+  const metadataFiles = api.buildMetadataSampleRows(
+    [visualTiff],
+    [companionJpeg, unrelatedJpeg],
+    [visualTiff],
+  );
+  assert.equal(api.buildTechnicalSampleRows([visualTiff]).length, 1);
+  assert.equal(metadataFiles.length, 2);
+  assert.ok(metadataFiles.some(row => row.path === visualTiff.path));
+  assert.ok(metadataFiles.some(row => row.path === companionJpeg.path));
+  assert.ok(!metadataFiles.some(row => row.path === unrelatedJpeg.path));
+  const reference = {
+    row: 2,
+    establishment: 'Archives municipales de Sète',
+    coteTitle: '16 PER',
+  };
+  const metadataReco = {
+    status: 'ok',
+    map: new Map([['frb123456789_cote_20260101_0001', reference]]),
+    entries: [reference],
+  };
+  api.clearAnomalies();
+  const checked = await api.inspectMetadataSampleRows(metadataFiles, metadataReco);
+  assert.equal(checked.total, 2);
+  assert.equal(checked.jpeg, 1);
+  assert.equal(checked.tiff, 1);
+  assert.equal(checked.errors, 0);
+  const metadataAlerts = Array.from(api.getAnomalies());
+  assert.ok(metadataAlerts.some(a => a.control === 52
+    && a.path === companionJpeg.path && /Source non conforme/.test(a.msg)));
+  assert.ok(!metadataAlerts.some(a => a.path === visualTiff.path && a.control === 52));
+
+  // Le repli JPEG ne cree pas une deuxieme vue ISO ou un TIFF fictif.
+  const jpegOnly = {
+    ...titleAJpegWithoutTiff,
+    parsed: api.parseName(titleAJpegWithoutTiff.name),
+    file: fileLike(syntheticJpeg()),
+  };
+  const fallbackMetadata = api.buildMetadataSampleRows(
+    [jpegOnly], [jpegOnly, companionJpeg], [visualTiff],
+  );
+  assert.equal(fallbackMetadata.length, 1);
+  assert.equal(fallbackMetadata[0].path, jpegOnly.path);
+  assert.equal(api.buildMetadataSampleRows(
+    [visualTiff], [companionJpeg, companionJpeg], [visualTiff, visualTiff],
+  ).length, 2);
+
+  // Un JPEG corrompu ne masque pas la verification du TIFF correspondant.
+  api.clearAnomalies();
+  const brokenJpeg = { ...companionJpeg, file: fileLike([0, 1, 2]) };
+  const partial = await api.inspectMetadataSampleRows([brokenJpeg, visualTiff], metadataReco);
+  assert.equal(partial.errors, 1);
+  assert.equal(partial.tiff, 1);
+  assert.ok(Array.from(api.getAnomalies()).some(a => a.path === brokenJpeg.path && a.control === 52));
+  assert.ok(!Array.from(api.getAnomalies()).some(a => a.path === visualTiff.path && a.control === 52));
+  api.clearAnomalies();
 
   const pairResult = api.compareJpegTiffRows(
     [titleAJpeg[0], imageRow('Titre B', 'JPEG', 1)],
