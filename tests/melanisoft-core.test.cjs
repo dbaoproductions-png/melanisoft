@@ -17,6 +17,12 @@ assert.ok(html.includes("add('ALERTE',30.5,r.path,'Histogramme TIFF non analysé
 assert.ok(!html.includes("add('INFO',30.5,r.path,'Histogramme non analysé"));
 assert.ok(!html.includes("add('INFO',30.5,r.path,'Histogramme TIFF non analysé"));
 
+// Contrôles 34, 35 et 52 : des données insuffisantes ne produisent pas un faux OK.
+assert.ok(html.includes("recoViewCounts.status!=='ok'||!recoViewCounts.entries?.length?'NON VÉRIFIABLE'"));
+assert.ok(html.includes("else problems.push('identité du fascicule non identifiable"));
+assert.ok(html.includes("setC(35,!fascEntries.length?'NON VÉRIFIABLE'"));
+assert.ok(html.includes("[30.5,43,44,47,51,52,53].forEach(id=>setC(id,'NON VÉRIFIABLE',0))"));
+
 const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
 assert.ok(scriptMatch, 'Le script principal doit être présent dans le HTML.');
 
