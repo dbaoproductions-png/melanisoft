@@ -1632,7 +1632,7 @@ for(let r of technicalSample){
         histogramSuccess++;
         h.issues.forEach(issue=>add('ALERTE',30.5,r.path,issue));
       }catch(histErr){
-        add('ALERTE',30.5,r.path,'Histogramme non analysé : +String(histErr.message||histErr));
+        add('ALERTE',30.5,r.path,'Histogramme non analysé : '+String(histErr.message||histErr));
       }
       try{
         let meta=await readJpegTechnicalMetadata(r.file);
@@ -1653,7 +1653,7 @@ for(let r of technicalSample){
         histogramSuccess++;
         h.issues.forEach(issue=>add('ALERTE',30.5,r.path,issue));
       }catch(histErr){
-        add('ALERTE',30.5,r.path,'Histogramme TIFF non analysé par le navigateur : +String(histErr.message||histErr));
+        add('ALERTE',30.5,r.path,'Histogramme TIFF non analysé par le navigateur : '+String(histErr.message||histErr));
       }
     }
   }catch(e){
