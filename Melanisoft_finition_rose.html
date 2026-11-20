@@ -1506,6 +1506,7 @@ const diskLookup=buildDiskLookup(imageRows);
 await MelanisoftPerformance.yieldToBrowser('Nommage contrôlé. Lecture du récolement...');
 let recoViewCounts=await loadRecoViewCounts(rows, validatedReco); lastRecoRead=recoViewCounts;
 if(recoViewCounts.status==='ok'){
+  if(recoViewCounts.ignored?.length)add('ALERTE',36,'',recoViewCounts.ignored.length+' ligne(s) de récolement ignorée(s) faute de date exploitable : contrôle d’exhaustivité incomplet.');
   for(let recoIndex=0;recoIndex<recoViewCounts.entries.length;recoIndex++){
     const e=recoViewCounts.entries[recoIndex];
     const prestDate=entryDateFromRefs(e);
@@ -1604,7 +1605,7 @@ if(recoViewCounts.status==='ok'){
 const exhaustivityAudit=buildExhaustivityAudit(imageRows,recoViewCounts); recordExhaustivityAudit(exhaustivityAudit);
 if(recoViewCounts.status==='ok' && recoCompared>0 && recoDiff===0 && !exhaustivityAudit.diagnostics.length)add('INFO',34,'','Récolement cohérent pour '+recoOk+' ligne(s) exploitée(s).');
 if(recoViewCounts.status!=='ok')add('INFO',34,'',recoViewCounts.message+' La détection statistique des valeurs atypiques reste utilisée comme aide au contrôle.');
-setC(26,anomalies.some(a=>a.control===26)?'ALERTE':'OK',anomalies.filter(a=>a.control===26).length); setC(27,anomalies.some(a=>a.control===27)?'ALERTE':'OK',anomalies.filter(a=>a.control===27).length); setC(34,recoViewCounts.status!=='ok'||!recoViewCounts.entries?.length?'NON VÉRIFIABLE':(anomalies.some(a=>a.control===34&&a.type==='ALERTE')?'ALERTE':'OK'),new Set(anomalies.filter(a=>a.control===34&&a.type==='ALERTE').map(a=>a.path+'#'+(a.line||''))).size); setC(35,!fascEntries.length?'NON VÉRIFIABLE':(anomalies.some(a=>a.control===35&&a.type==='ALERTE')?'ALERTE':'OK'),anomalies.filter(a=>a.control===35&&a.type==='ALERTE').length);
+setC(26,anomalies.some(a=>a.control===26)?'ALERTE':'OK',anomalies.filter(a=>a.control===26).length); setC(27,anomalies.some(a=>a.control===27)?'ALERTE':'OK',anomalies.filter(a=>a.control===27).length); setC(34,recoViewCounts.status!=='ok'||!recoViewCounts.entries?.length?'NON VÉRIFIABLE':(recoViewCounts.ignored?.length||anomalies.some(a=>a.control===34&&a.type==='ALERTE')?'ALERTE':'OK'),new Set(anomalies.filter(a=>a.control===34&&a.type==='ALERTE').map(a=>a.path+'#'+(a.line||''))).size); setC(35,!fascEntries.length?'NON VÉRIFIABLE':(anomalies.some(a=>a.control===35&&a.type==='ALERTE')?'ALERTE':'OK'),anomalies.filter(a=>a.control===35&&a.type==='ALERTE').length);
 const pairComparison=compareJpegTiffRows(jpeg,tiff);
 pairComparison.jpegWithoutTiff.forEach(r=>add('ALERTE',32,r.path,'JPEG sans TIFF correspondant dans le même titre'));
 pairComparison.tiffWithoutJpeg.forEach(r=>add('ALERTE',33,r.path,'TIFF sans JPEG correspondant dans le même titre'));
@@ -1726,13 +1727,13 @@ function getReportStats(rows){
   const ok=controls.filter(c=>c.status==='OK').length;
   const al=controls.filter(c=>c.status==='ALERTE').length;
   const er=controls.filter(c=>c.status==='ERREUR').length;
-  return {totalFiles:rows.length,imageRows,jpegRows,tiffRows,imageCount:imageRows.length,jpegCount:jpegRows.length,tiffCount:tiffRows.length,fascCount:fascicules.size,nonInfo,errorCount,alertCount,ok,al,er};
+  return {totalFiles:rows.length,imageRows,jpegRows,tiffRows,imageCount:imageRows.length,jpegCount:jpegRows.length,tiffCount:tiffRows.length,fascCount:fascicules.size,nonInfo,errorCount,alertCount,ok,al,er,unverified:controls.filter(c=>c.status==='NON VÉRIFIABLE'||c.status==='NON VÉRIFIÉ').length};
 }
 function buildDecision(stats){
   if(stats.er>0 || stats.errorCount>0){
     return {level:'err',title:'Contrôle terminé avec erreurs',text:'Des erreurs empêchent de valider la livraison en l’état. Elles doivent être corrigées avant la suite du traitement.'};
   }
-  if(stats.al>0 || stats.alertCount>0){
+  if(stats.al>0 || stats.alertCount>0 || stats.unverified>0){
     return {level:'warn',title:'Contrôle terminé avec points d’attention',text:'La livraison a été analysée. Les alertes listées ci-dessous doivent être vérifiées avant la validation définitive.'};
   }
   return {level:'ok',title:'Contrôle terminé sans anomalie automatique',text:'Aucune erreur ni alerte n’a été détectée. Le contrôle visuel de l’échantillon reste à réaliser.'};
@@ -1744,7 +1745,7 @@ function reportIntroText(stats){
 }
 function reportStatusSentence(stats){
   if(stats.errorCount>0 || stats.er>0)return 'Le contrôle a relevé des erreurs à corriger avant validation.';
-  if(stats.alertCount>0 || stats.al>0)return 'Le contrôle a relevé des points d’attention à examiner.';
+  if(stats.alertCount>0 || stats.al>0 || stats.unverified>0)return 'Le contrôle a relevé des points d’attention ou des vérifications impossibles à réaliser.';
   return 'Les contrôles automatiques ne signalent pas d’anomalie.';
 }
 function anomalySentence(a){
