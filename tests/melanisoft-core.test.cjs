@@ -213,6 +213,13 @@ function syntheticTiff() {
 }
 
 (async () => {
+  // Référence chiffrée du guide Occitanie Livre & Lecture, juillet 2025, p. 13-14.
+  const referencePlan = api.iso2859Plan(45000);
+  assert.equal(referencePlan.code, 'N');
+  assert.equal(referencePlan.sampleSize, 500);
+  assert.equal(referencePlan.accept, 10);
+  assert.equal(referencePlan.reject, 11);
+
   const titleAJpeg = Array.from({ length: 10 }, (_, i) => imageRow('Titre A', 'JPEG', i + 1));
   const titleATiff = Array.from({ length: 10 }, (_, i) => imageRow('Titre A', 'TIFF', i + 1));
   const titleAJpegWithoutTiff = imageRow('Titre A', 'JPEG', 11);
