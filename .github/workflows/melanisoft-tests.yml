@@ -1,0 +1,38 @@
+name: Melanisoft - tests de non-regression
+
+on:
+  push:
+    branches:
+      - 'audit/melanisoft-*'
+    paths:
+      - 'Melanisoft_finition_rose.html'
+      - 'Melanisoft_v1_1.html'
+      - 'tests/melanisoft-core.test.cjs'
+      - '.github/workflows/melanisoft-tests.yml'
+  pull_request:
+    paths:
+      - 'Melanisoft_finition_rose.html'
+      - 'Melanisoft_v1_1.html'
+      - 'tests/melanisoft-core.test.cjs'
+      - '.github/workflows/melanisoft-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests du moteur Melanisoft
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Extraire le code
+        uses: actions/checkout@v4
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verifier la syntaxe du banc de tests
+        run: node --check tests/melanisoft-core.test.cjs
+      - name: Executer les tests de non-regression
+        run: node tests/melanisoft-core.test.cjs
