@@ -1149,7 +1149,7 @@ async function recoRowsToMap(table){
   idx.originalObservation=(observationCandidates.find(x=>idx.produced>=0&&x.i<idx.produced)||{}).i??-1;
   if(idx.produced<0||(idx.repertoire<0&&idx.firstJpeg<0&&idx.firstTiff<0))
     return {status:'headers',map:new Map(),entries:[],message:'Colonnes récolement non reconnues : attendues « Nbre de fichiers produits » et « Répertoire » ou une référence de premier fichier JPEG/TIFF'};
-  let map=new Map(), entries=[], ignored=[], skipped=[], dateIssues=[], currentEstablishment='', currentCote=';
+  let map=new Map(), entries=[], ignored=[], skipped=[], dateIssues=[], currentEstablishment='', currentCote='';
   for(let i=headerRow+1;i<table.length;i++){
     let cols=table[i]||[];
     if(!cols.some(v=>String(v??'').trim()))continue;
