@@ -1403,18 +1403,23 @@ function iptcConformityIssues(meta,row,recoResult){
     return issues;
   }
   const expectedSource=String(entry.establishment||'').trim();
+  const sourceRule=APPROVED_IPTC_SOURCE_EQUIVALENCES.find(p=>
+    normMetadataText(p.reco)===normMetadataText(expectedSource));
+  const requiredSource=sourceRule?sourceRule.source:expectedSource;
   const expectedHeadline=String(entry.coteTitle||'').trim();
   if(!expectedSource){
     issues.push({
       line:entry.row,
       message:'Conformité du champ IPTC Source non vérifiable : la colonne « Etablissement de conservation » est vide dans le récolement.'
     });
-  }else if(meta.iptcSource && normMetadataText(meta.iptcSourceValue)!==normMetadataText(expectedSource)){
-    const approved=acceptedIptcSourceEquivalence(meta.iptcSourceValue,expectedSource);
-    if(approved)approvedIptcSourceCount++;
-    else issues.push({
+  }else if(meta.iptcSource){
+    if(normMetadataText(meta.iptcSourceValue)===normMetadataText(requiredSource)){
+      if(sourceRule)approvedIptcSourceCount++;
+    }else issues.push({
       line:entry.row,
-      message:`Champ IPTC Source non conforme : « ${meta.iptcSourceValue} », attendu « ${expectedSource} » d’après la colonne « Etablissement de conservation » du récolement.`
+      message:`Champ IPTC Source non conforme : « ${meta.iptcSourceValue} », attendu « ${requiredSource} »`+
+        (sourceRule?` selon la dénomination métier validée (libellé ancien du récolement : « ${expectedSource} »).`:
+        ` d’après la colonne « Etablissement de conservation » du récolement.`)
     });
   }
   if(!expectedHeadline){
