@@ -25,6 +25,13 @@
 #anomalies .attention-details-row details[open]{max-width:100%}
 #anomalies .attention-details-row ol{padding-left:17px}
 #anomalies .attention-details-row li{margin:6px 0}
+#anomalies .technical-body{padding:10px 0 4px;line-height:1.45}
+#anomalies .technical-findings{padding-left:22px;margin:0 0 12px}
+#anomalies .technical-findings>li{margin:10px 0}
+#anomalies .technical-findings>li strong{display:block;margin-bottom:3px}
+#anomalies .raw-details{margin:10px 0;padding:10px;border:1px solid var(--line);border-radius:10px;background:white}
+#anomalies .raw-details summary{font-weight:600}
+#anomalies .raw-details code{overflow-wrap:anywhere;word-break:break-word}
 #controls{overflow-x:hidden}
 #controls table{min-width:0;width:100%}
 .app-footer{margin:24px 0 6px;text-align:center;color:#7b5368;font-size:12px}
@@ -386,6 +393,82 @@ function summarizeConsolidatedAnomaly(group){
     action:[...new Set(actions)].join(' '),
     technicalDetails:group.details
   };
+}
+// Le volet technique présente des CONSTATS DISTINCTS avant les signalements
+// élémentaires. Les messages bruts restent disponibles sans être réécrits.
+function technicalDetailModel(group){
+  const items=Array.isArray(group&&group.items)?group.items:[];
+  const sections=[];
+  const countId=items.some(a=>Number(a.control)===34||Number(a.control)===35);
+  const modeItems=items.filter(a=>/valeur la plus fr[eé]quente|nombre le plus fr[eé]quent|valeur modale/i.test(String(a.msg||'')));
+  const countItems=countId?items.filter(a=>
+    [34,35].includes(Number(a.control))&&!modeItems.includes(a)):[];
+  const others=items.filter(a=>!countItems.includes(a)&&!modeItems.includes(a));
+  if(countItems.length){
+    const line=String(group.line||'').split(',')[0].trim();
+    const entry=lastRecoRead&&lastRecoRead.status==='ok'?
+      (lastRecoRead.entries||[]).find(e=>String(e.row)===line):null;
+    const original=entry&&String(entry.nbPages??'').trim()!==''?Number(entry.nbPages):NaN;
+    const produced=entry&&String(entry.produced??'').trim()!==''?Number(entry.produced):NaN;
+    const difference=countItems.map(a=>String(a.msg||'')).join(' ').match(/(\d+)\s*≠\s*(?:[^\d]{0,35})(\d+)/);
+    const first=Number.isFinite(original)?original:difference?Number(difference[1]):null;
+    const second=Number.isFinite(produced)?produced:difference?Number(difference[2]):null;
+    sections.push({
+      title:'Un écart de décompte',
+      text:first!==null&&second!==null?
+        first+' pages recensées dans le récolement ; '+second+' vues indiquées par le prestataire.':
+        'La comparaison entre le récolement et la livraison présente un écart.',
+      count:countItems.length
+    });
+    if(entry&&(entry.originalObservation||entry.observation)){
+      sections.push({
+        title:'Informations du récolement'+(line?' (ligne '+line+')':''),
+        text:[entry.originalObservation?'Original : '+entry.originalObservation:'',
+          entry.observation?'Prestataire : '+entry.observation:''].filter(Boolean).join(' | '),
+        count:0
+      });
+    }
+  }
+  if(modeItems.length){
+    const m=modeItems.map(a=>String(a.msg||'')).join(' ').match(/contient\s+(\d+)\s+vues?[\s\S]*?fr[eé]quente du lot est\s+(\d+)/i);
+    sections.push({
+      title:'Comparaison indicative au reste du lot',
+      text:m?m[1]+' vues dans ce fascicule, contre '+m[2]+' pour le nombre le plus fréquent du lot. Ce seul écart n’établit pas une non-conformité.':
+        'Le nombre de vues de ce fascicule diffère du nombre habituel dans le lot ; cette différence ne suffit pas à conclure.',
+      count:modeItems.length
+    });
+  }
+  if(others.length){
+    const bucket=new Map();
+    others.forEach(a=>{
+      const message=anomalySentence(a);
+      const key=String(Number(a.control))+'|'+message;
+      const found=bucket.get(key)||{title:anomalyBusinessLabel(a),text:message,count:0};
+      found.count++;
+      bucket.set(key,found);
+    });
+    sections.push(...bucket.values());
+  }
+  return {sections,raw:items};
+}
+function technicalDetailHtml(group){
+  const data=technicalDetailModel(group);
+  const sourceCount=data.raw.length;
+  const count=data.sections.filter(x=>x.count>0).length;
+  const source=group.path||'Livraison';
+  const lines=data.sections.map(s=>'<li><strong>'+esc(s.title)+'</strong>'+
+    '<div>'+esc(s.text)+'</div>'+
+    (s.count>1?'<span class="small">'+s.count+' signalements concordants</span>':'')+'</li>').join('');
+  const raw=data.raw.map(item=>'<li><strong>'+esc(displayControlLabel(item.control))+'</strong>'+
+    '<div>'+esc(anomalySentence(item))+'</div>'+
+    (item.path?'<div class="small">Fichier ou dossier : <code>'+esc(item.path)+'</code></div>':'')+
+    (item.line?'<div class="small">Récolement : ligne '+esc(item.line)+'</div>':'')+'</li>').join('');
+  return '<details class="technical-details"><summary>Détails : '+count+' constat'+(count===1?'':'s')+
+    ' · '+sourceCount+' signalement'+(sourceCount===1?'':'s')+'</summary>'+
+    '<div class="technical-body"><ol class="technical-findings">'+lines+'</ol>'+
+    '<details class="raw-details"><summary>Consulter les '+sourceCount+' signalements d’origine</summary>'+
+    '<p class="small">Référence du fascicule ou du lot : <code>'+esc(source)+'</code></p>'+
+    '<ol>'+raw+'</ol></details></div></details>';
 }
 function periodicalFolderName(){
   if(!files || !files.length)return 'sélectionné';
@@ -2233,7 +2316,7 @@ $('summary').innerHTML=`<h2>Synthèse du contrôle</h2><div class="summary-grid"
 updateVisualReviewDisplay();
 $('controls').innerHTML='<h2>Contrôles effectués automatiquement</h2>'+groupedControlsHtml();
 const consolidatedRows=consolidatedAnomalies();
-$('anomalies').innerHTML='<h2>Points d’attention</h2><p class="small">Un constat synthétique par fascicule ou lot. Les références complètes et les diagnostics d’origine restent accessibles dans « Détails techniques » et dans l’export Excel.</p><table class="attention-table"><tr><th>Niveau</th><th>Fascicule / lot</th><th>Constat</th><th>À vérifier</th></tr>'+consolidatedRows.slice(0,5000).map(a=>`<tr><td>${esc(a.type)}</td><td><strong>${esc(a.label)}</strong>${a.line?'<div class="small">Récolement : ligne '+esc(a.line)+'</div>':''}</td><td><strong>${esc(a.topic)}</strong><div>${esc(a.summary)}</div></td><td>${esc(a.action)}</td></tr><tr class="attention-details-row"><td colspan="4"><details><summary>Voir les détails techniques (${a.count})</summary><div class="small"><strong>Référence :</strong> ${esc(a.path)}<ol>${a.items.map(x=>'<li>'+esc(anomalyDetailText(x))+'</li>').join('')}</ol></div></details></td></tr>`).join('')+'</table>'+(consolidatedRows.length>5000?'<p>Affichage limité à 5000 lignes. L’export Excel contient la liste complète consolidée.</p>':'');
+$('anomalies').innerHTML='<h2>Points d’attention</h2><p class="small">Un constat synthétique par fascicule ou lot. Les références complètes et les diagnostics d’origine restent accessibles dans « Détails techniques » et dans l’export Excel.</p><table class="attention-table"><tr><th>Niveau</th><th>Fascicule / lot</th><th>Constat</th><th>À vérifier</th></tr>'+consolidatedRows.slice(0,5000).map(a=>`<tr><td>${esc(a.type)}</td><td><strong>${esc(a.label)}</strong>${a.line?'<div class="small">Récolement : ligne '+esc(a.line)+'</div>':''}</td><td><strong>${esc(a.topic)}</strong><div>${esc(a.summary)}</div></td><td>${esc(a.action)}</td></tr><tr class="attention-details-row"><td colspan="4">${technicalDetailHtml(a)}</td></tr>`).join('')+'</table>'+(consolidatedRows.length>5000?'<p>Affichage limité à 5000 lignes. L’export Excel contient la liste complète consolidée.</p>':'');
 $('rapportMetier').innerHTML=exhaustivitySummaryHtml()+buildReportMetierHtml(rows);
 reportHtml='<!doctype html><meta charset=utf-8><title>MÉLANISOFT — Rapport de contrôle qualité</title><h1>MÉLANISOFT</h1><h2>Rapport de contrôle qualité</h2>'+$('summary').innerHTML+$('rapportMetier').innerHTML+$('controls').innerHTML+$('anomalies').innerHTML;
 GallicaQCState.report.metierHtml=$('rapportMetier').innerHTML;
