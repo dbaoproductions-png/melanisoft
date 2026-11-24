@@ -13,7 +13,8 @@ assert.ok(html.includes("controls.forEach(c=>{c.status='NON VÉRIFIÉ';c.count=0
 assert.ok(html.includes("setC(34,recoViewCounts.status!=='ok'||!recoViewCounts.entries?.length?'NON VÉRIFIABLE'"));
 assert.ok(html.includes("setC(36,recoViewCounts.status!=='ok'?'NON VÉRIFIABLE'"));
 assert.ok(html.includes("add('ALERTE',30.5,r.path,'Histogramme non analysé"));
-assert.ok(html.includes("add('ALERTE',30.5,r.path,'Histogramme TIFF non analysé"));
+assert.ok(html.includes("add('INFO',30.5,r.path,'Histogramme TIFF non vérifiable dans ce navigateur"));
+assert.ok(html.includes("histogramTiffUndecoded>0)add('ALERTE',30.5"));
 assert.ok(!html.includes("add('INFO',30.5,r.path,'Histogramme non analysé"));
 assert.ok(!html.includes("add('INFO',30.5,r.path,'Histogramme TIFF non analysé"));
 
