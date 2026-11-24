@@ -101,6 +101,7 @@ vm.runInContext(`
     buildDecision,
     buildAleaExcel,
     buildAttentionExcel,
+    consolidatedAnomalies,
     topAnomalies,
     recoObservationForLine,
     recoObservationsList,
@@ -682,7 +683,10 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   fs.writeFileSync(detailPath,xmlBytes);
   const detailSheetXml=execFileSync('unzip',['-p',detailPath,'xl/worksheets/sheet1.xml'],{encoding:'utf8'});
   assert.match(detailSheetXml,/Original : Feuille supplément en date du 3 mars/);
-  assert.match(detailSheetXml,/Observations \(original \/ prestataire\)/);
+  assert.match(detailSheetXml,/Observations du récolement/);
+  assert.match(detailSheetXml,/dimension ref="A1:J2"/);
+  assert.match(detailSheetXml,/hidden="1"/);
+  assert.match(detailSheetXml,/Détails techniques/);
 
   // Les totaux par catégorie ne doivent PAS re-compter toutes les alertes
   // d'un fascicule pour chacune des natures présentes dans ce même fascicule.
@@ -697,6 +701,57 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   assert.equal(byNature['incohérence récolement/prestataire'],1);
   assert.equal(byNature['périodicité à vérifier'],1);
   assert.equal(Object.values(byNature).reduce((n,x)=>n+x,0),4);
+  api.clearAnomalies();
+
+  // Six alertes métier -> trois lignes courtes, tout en conservant six
+  // références originales dans le volet de détails et l'annexe technique.
+  const fasc1901='FRB315556101_P015_19010303';
+  const fasc1900='FRB315556101_P015_19001104';
+  api.setAnomalies([
+    {type:'ALERTE',control:22.5,path:'Supplement_agricole_Telegramme/JPEG/1900/'+fasc1900,
+      msg:'Périodicité hebdomadaire atypique : 14 jours entre 19001021 et 19001104.'},
+    {type:'ALERTE',control:34,line:46,path:fasc1901,
+      msg:'Écart nombre de vues/pages : récolement manuel 8 ≠ prestataire 9.'},
+    {type:'ALERTE',control:35,path:'Supplement_agricole_Telegramme/JPEG/1901/'+fasc1901,
+      msg:'Le fascicule contient 9 vues documentaires, alors que la valeur la plus fréquente du lot est 12.'},
+    {type:'ALERTE',control:34,line:46,path:fasc1901,
+      msg:'La ligne de récolement n’est pas cohérente : récolement initial 8 ≠ saisie prestataire 9.'},
+    {type:'ALERTE',control:34,line:46,path:'Supplement_agricole_Telegramme/TIFF/1901/'+fasc1901,
+      msg:'Diagnostic d’exhaustivité du fascicule : récolement initial 8 vues ≠ prestataire 9 vues.'},
+    {type:'ALERTE',control:30.5,path:'',
+      msg:'50 TIFF de l’échantillon non décodés graphiquement par ce navigateur : histogrammes non vérifiables.'}
+  ]);
+  const compact=api.consolidatedAnomalies();
+  assert.equal(compact.length,3);
+  assert.equal(compact.reduce((n,r)=>n+r.count,0),6);
+  const cPeriod=compact.find(r=>r.topic==='Périodicité');
+  const cViews=compact.find(r=>r.topic==='Nombre de vues');
+  const cTiff=compact.find(r=>r.topic==='Histogramme TIFF');
+  assert.ok(cPeriod&&cViews&&cTiff);
+  assert.match(cPeriod.summary,/14 jours.*21\/10\/1900.*04\/11\/1900/);
+  assert.match(cPeriod.action,/parution/);
+  assert.equal(cViews.count,4);
+  assert.match(cViews.label,/03\/03\/1901/);
+  assert.match(cViews.summary,/9 vues.*8 pages/);
+  assert.match(cViews.action,/feuille supplémentaire/);
+  assert.doesNotMatch(cViews.summary,/référence :|Diagnostic d.exhaustivité|\s\|\s/i);
+  assert.match(cTiff.summary,/50 TIFF/);
+  assert.match(cTiff.action,/lecteur TIFF/);
+  assert.match(cViews.details,/Diagnostic d.exhaustivité/); // Aucune perte de détail.
+  const compactBytes=api.buildAttentionExcel();
+  const compactDir=fs.mkdtempSync(path.join(os.tmpdir(),'melanisoft-compact-'));
+  const compactPath=path.join(compactDir,'attention-compact.xlsx');
+  fs.writeFileSync(compactPath,compactBytes);
+  execFileSync('unzip',['-t',compactPath],{stdio:'pipe'});
+  const compactXml=execFileSync('unzip',['-p',compactPath,'xl/worksheets/sheet1.xml'],{encoding:'utf8'});
+  assert.match(compactXml,/dimension ref="A1:J4"/);
+  assert.match(compactXml,/À vérifier/);
+  assert.match(compactXml,/14 jours/);
+  assert.match(compactXml,/9 vues/);
+  assert.match(compactXml,/Détails techniques/);
+  assert.match(compactXml,/hidden="1"/);
+  assert.match(html,/<details><summary>Voir/);
+  assert.match(html,/ANNEXE — RÉFÉRENCES TECHNIQUES DES POINTS D’ATTENTION/);
   api.clearAnomalies();
 
   assert.equal(new Set([api.logicalFasciculeKey(titleAJpeg[0]),api.logicalFasciculeKey(titleATiff[0])]).size,1);
