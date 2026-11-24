@@ -1172,8 +1172,8 @@ async function recoRowsToMap(table){
       if(!instruction && (summaryWithEnd||summaryTotal)){
         const headEstablishment=idx.establishment>=0?String(cols[idx.establishment]??'').trim():'';
         const headCote=idx.coteTitle>=0?String(cols[idx.coteTitle]??'').trim():'';
-        if(headEstablishment)currentEstablishment=headEstablishment;
-        if(headCote)currentCote=headCote;
+        if(headEstablishment&&!/^(choisir|obligatoire|prestataire|facultatif|etablissement)/i.test(headEstablishment))currentEstablishment=headEstablishment;
+        if(headCote&&!/^(la cote|la côte|indiquer|obligatoire|prestataire|facultatif)/i.test(headCote))currentCote=headCote;
       }
       skipped.push({row:i+1,reason:instruction?'consignes du modèle':'synthèse ou total du récolement'});
       await MelanisoftPerformance.heartbeat(i+1,table.length,'Indexation du récolement : '+(i+1)+' / '+table.length+' lignes...');
