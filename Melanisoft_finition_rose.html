@@ -399,10 +399,12 @@ function summarizeConsolidatedAnomaly(group){
 function technicalDetailModel(group){
   const items=Array.isArray(group&&group.items)?group.items:[];
   const sections=[];
-  const countId=items.some(a=>Number(a.control)===34||Number(a.control)===35);
   const modeItems=items.filter(a=>/valeur la plus fr[eé]quente|nombre le plus fr[eé]quent|valeur modale/i.test(String(a.msg||'')));
-  const countItems=countId?items.filter(a=>
-    [34,35].includes(Number(a.control))&&!modeItems.includes(a)):[];
+  const countItems=items.filter(a=>{
+    const msg=String(a.msg||'');
+    return [34,35].includes(Number(a.control))&&!modeItems.includes(a)&&
+      (/\d+\s*≠\s*\d+/.test(msg)||/écart nombre de vues\/pages|récolement initial.*prestataire|nombre de vues du récolement/i.test(msg));
+  });
   const others=items.filter(a=>!countItems.includes(a)&&!modeItems.includes(a));
   if(countItems.length){
     const line=String(group.line||'').split(',')[0].trim();
@@ -460,7 +462,7 @@ function technicalDetailHtml(group){
     '<div>'+esc(s.text)+'</div>'+
     (s.count>1?'<span class="small">'+s.count+' signalements concordants</span>':'')+'</li>').join('');
   const raw=data.raw.map(item=>'<li><strong>'+esc(displayControlLabel(item.control))+'</strong>'+
-    '<div>'+esc(anomalySentence(item))+'</div>'+
+    '<div>'+esc(String(item.msg||anomalySentence(item)))+'</div>'+
     (item.path?'<div class="small">Fichier ou dossier : <code>'+esc(item.path)+'</code></div>':'')+
     (item.line?'<div class="small">Récolement : ligne '+esc(item.line)+'</div>':'')+'</li>').join('');
   return '<details class="technical-details"><summary>Détails : '+count+' constat'+(count===1?'':'s')+
