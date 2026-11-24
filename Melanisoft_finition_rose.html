@@ -146,7 +146,7 @@ const GallicaQCState = {
   visualReview: { lastImport: null, sampleId: '' }
 };
 
-let anomalies=[], files=[], reportHtml='', aleaHtml='', aleaRows=[], recoCandidates=[], validatedReco='', lastIsoPlan=null, lastRecoRead=null, lastRecurrenceSummary=null, lastMetadataAudit=null, lastVisualReview=null, lastSampleId='', lastAnalyzedRows=[];
+let anomalies=[], files=[], reportHtml='', aleaHtml='', aleaRows=[], recoCandidates=[], validatedReco='', lastIsoPlan=null, lastRecoRead=null, lastRecurrenceSummary=null, lastMetadataAudit=null, lastVisualReview=null, lastSampleId='', lastAnalyzedRows=[], approvedIptcSourceCount=0;
 const MelanisoftPerformance = {
   heartbeatEvery: 200,
   async yieldToBrowser(message){
@@ -1121,6 +1121,19 @@ function cleanRef(v){return String(v||'').trim().replace(/\.[A-Za-z0-9]+$/,'');}
 function normMetadataText(v){
   return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[’‘]/g,"'").replace(/\s+/g,' ').trim().toLowerCase();
 }
+// Validation métier du 24/11/2026 : les livraisons peuvent utiliser la
+// dénomination précise BEP alors que le récolement emploie le terme générique.
+// Une équivalence est directionnelle et limitée à cette paire exacte.
+const APPROVED_IPTC_SOURCE_EQUIVALENCES=[{
+  reco:'Bibliothèque municipale de Toulouse',
+  source:"Bibliothèque d'Etude et du Patrimoine de Toulouse",
+  justification:'Dénomination IPTC Source validée par le responsable du contrôle, 24/11/2026'
+}];
+function acceptedIptcSourceEquivalence(found,expected){
+  return APPROVED_IPTC_SOURCE_EQUIVALENCES.find(p=>
+    normMetadataText(p.reco)===normMetadataText(expected)&&
+    normMetadataText(p.source)===normMetadataText(found))||null;
+}
 async function recoRowsToMap(table){
   if(!table||table.length<2)return {status:'empty',map:new Map(),entries:[],message:'Récolement vide'};
   const headerRow=findHeaderRow(table);
@@ -1397,7 +1410,9 @@ function iptcConformityIssues(meta,row,recoResult){
       message:'Conformité du champ IPTC Source non vérifiable : la colonne « Etablissement de conservation » est vide dans le récolement.'
     });
   }else if(meta.iptcSource && normMetadataText(meta.iptcSourceValue)!==normMetadataText(expectedSource)){
-    issues.push({
+    const approved=acceptedIptcSourceEquivalence(meta.iptcSourceValue,expectedSource);
+    if(approved)approvedIptcSourceCount++;
+    else issues.push({
       line:entry.row,
       message:`Champ IPTC Source non conforme : « ${meta.iptcSourceValue} », attendu « ${expectedSource} » d’après la colonne « Etablissement de conservation » du récolement.`
     });
@@ -1705,7 +1720,7 @@ function exhaustivitySummaryHtml(){
 }
 
 
-$('run').onclick=async()=>{try{$('exportAleaExcel').disabled=true; $('exportHtml').disabled=true; $('exportAttentionExcel').disabled=true; files=[...$('folder').files]; updateControl1Label(); const C=cfg(); const c3=controls.find(c=>c.id===3); if(c3)c3.name='Arborescence des dossiers conforme ('+C.consult+' / '+C.conserv+')'; anomalies=[]; lastRecurrenceSummary=null; lastMetadataAudit=null; lastSampleId=''; lastAnalyzedRows=[]; resetVisualReview(); updateRecurrencePreview(null); controls.forEach(c=>{c.status='NON VÉRIFIÉ';c.count=0}); lastExhaustivitySummary=null; updateControl1Label(); $('prog').style.display='block'; $('status').textContent='Analyse en cours...';
+$('run').onclick=async()=>{try{$('exportAleaExcel').disabled=true; $('exportHtml').disabled=true; $('exportAttentionExcel').disabled=true; files=[...$('folder').files]; updateControl1Label(); const C=cfg(); const c3=controls.find(c=>c.id===3); if(c3)c3.name='Arborescence des dossiers conforme ('+C.consult+' / '+C.conserv+')'; anomalies=[]; approvedIptcSourceCount=0; lastRecurrenceSummary=null; lastMetadataAudit=null; lastSampleId=''; lastAnalyzedRows=[]; resetVisualReview(); updateRecurrencePreview(null); controls.forEach(c=>{c.status='NON VÉRIFIÉ';c.count=0}); lastExhaustivitySummary=null; updateControl1Label(); $('prog').style.display='block'; $('status').textContent='Analyse en cours...';
 setC(1,files.length?'OK':'ERREUR'); setC(2,files.length?'OK':'ERREUR',files.length); if(!files.length)return;
 const rows=files.map(f=>{let parts=f.webkitRelativePath.split('/');return {file:f,path:f.webkitRelativePath,name:f.name,parts,ext:ext(f.name),size:f.size,parsed:parseName(f.name)}});
 await MelanisoftPerformance.yieldToBrowser('Inventaire des fichiers terminé. Classement en cours...');
@@ -2085,6 +2100,7 @@ function buildReportMetierHtml(rows){
     <div class="report-section"><h3>Retour ALÉA et décision ISO par titre</h3>${visualReviewSummaryHtml()}</div>
     <div class="report-section"><h3>Observations principales</h3>${tops.length?'<table><tr><th>Nature métier</th><th>Nombre</th><th>Constat</th></tr>'+tops.map(t=>`<tr><td>${esc(t.control)}</td><td>${t.count}</td><td>${t.examples.map(x=>esc(anomalySentence({msg:x}))).join('<br>')}</td></tr>`).join('')+'</table>':'<p>Aucune observation automatique à signaler.</p>'}</div>
     <div class="report-section"><h3>Qualité des images</h3><table><tr><th>Contrôle</th><th>Résultat</th><th>Points signalés</th></tr>${qualityRows.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.status)}</td><td>${countDisplay(c)}</td></tr>`).join('')}</table></div>
+    ${approvedIptcSourceCount?'<div class="report-section"><h3>Validation de dénomination IPTC Source</h3><p>Équivalence autorisée pour '+approvedIptcSourceCount+' fichier(s) examinés : « Bibliothèque municipale de Toulouse » (récolement) correspond à « Bibliothèque d\'Etude et du Patrimoine de Toulouse » (IPTC Source). Les autres valeurs restent vérifiées normalement.</p></div>':''}
     ${buildRecoObservationsHtml()}
     <div class="report-section"><h3>Suites à donner</h3><div class="recommendations">${recos.map(r=>`<div class="recommendation"><strong>${esc(r.title)}</strong><span>${esc(r.text)}</span></div>`).join('')}</div></div>
     <div class="report-section"><h3>Conclusion</h3><p>Les contrôles automatiques ont été réalisés sur la livraison sélectionnée. Les points signalés doivent être examinés par le contrôleur avant validation définitive. Le fichier ALÉA complète ce rapport par un contrôle visuel de l’échantillon.</p></div>`;
@@ -2460,6 +2476,10 @@ function buildReportTxt(){
   push('Dossier des images de consultation : '+cfg().consult);
   push('Dossier des images de conservation : '+cfg().conserv);
   push('Périodicité des fascicules : '+(lastRecurrenceSummary ? lastRecurrenceSummary.label : 'contrôle automatique non lancé'));
+  if(approvedIptcSourceCount){
+    push('IPTC Source — équivalence métier validée : « Bibliothèque municipale de Toulouse » dans le récolement = « Bibliothèque d\'Etude et du Patrimoine de Toulouse » dans les fichiers, pour '+approvedIptcSourceCount+' fichier(s) de l’échantillon.');
+    push('Cette équivalence n’autorise aucune autre valeur IPTC Source.');
+  }
   blank();
 
   push('4. POINTS D’ATTENTION PRIORITAIRES');
