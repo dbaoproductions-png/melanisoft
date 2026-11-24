@@ -102,6 +102,8 @@ vm.runInContext(`
     buildAleaExcel,
     buildAttentionExcel,
     consolidatedAnomalies,
+    technicalDetailModel,
+    technicalDetailHtml,
     topAnomalies,
     recoObservationForLine,
     recoObservationsList,
@@ -738,6 +740,34 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   assert.match(cTiff.summary,/50 TIFF/);
   assert.match(cTiff.action,/lecteur TIFF/);
   assert.match(cViews.details,/Diagnostic d.exhaustivité/); // Aucune perte de détail.
+  const technical=api.technicalDetailModel(cViews);
+  assert.equal(technical.raw.length,4);
+  assert.equal(technical.sections.filter(x=>x.count>0).length,2); // 2 faits, pas 4 répétitions
+  assert.equal(technical.sections.find(x=>x.title==='Un écart de décompte').count,3);
+  assert.equal(technical.sections.find(x=>/Comparaison indicative/.test(x.title)).count,1);
+  assert.ok(technical.sections.some(x=>/Feuille supplément en date du 3 mars/.test(x.text)));
+  const technicalHtml=api.technicalDetailHtml(cViews);
+  assert.match(technicalHtml,/Détails : 2 constats · 4 signalements/);
+  assert.match(technicalHtml,/3 signalements concordants/);
+  assert.match(technicalHtml,/Comparer|Comparaison indicative/);
+  assert.match(technicalHtml,/Consulter les 4 signalements d’origine/);
+  assert.match(technicalHtml,/Diagnostic d’exhaustivité du fascicule/); // texte d'origine préservé
+  assert.match(technicalHtml,/Fichier ou dossier/);
+  const technicalSummary=technicalHtml.split('Consulter les 4 signalements d’origine')[0];
+  assert.ok(!technicalSummary.includes('Diagnostic d’exhaustivité du fascicule'));
+  // Un autre type de diagnostic 34 ne doit pas être fusionné en un faux écart de vues.
+  const unrelatedTechnical=api.technicalDetailModel({
+    path:'FRB123456789_COTE_20260101',line:'',
+    items:[{type:'ALERTE',control:34,path:'p.tif',msg:'Référence de fichier manquante au récolement.'}]
+  });
+  assert.ok(!unrelatedTechnical.sections.some(x=>x.title==='Un écart de décompte'));
+  // Contenu issu du disque : échappement obligatoire avant insertion dans innerHTML.
+  const escapedTechnical=api.technicalDetailHtml({
+    path:'<script>alert(1)</script>',items:[{control:34,msg:'<img src=x onerror=alert(1)>',path:'<a>'}]
+  });
+  assert.ok(!escapedTechnical.includes('<script>'));
+  assert.ok(!escapedTechnical.includes('<img src='));
+  assert.match(escapedTechnical,/&lt;img/);
   const compactBytes=api.buildAttentionExcel();
   const compactDir=fs.mkdtempSync(path.join(os.tmpdir(),'melanisoft-compact-'));
   const compactPath=path.join(compactDir,'attention-compact.xlsx');
@@ -750,7 +780,8 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   assert.match(compactXml,/9 vues/);
   assert.match(compactXml,/Détails techniques/);
   assert.match(compactXml,/hidden="1"/);
-  assert.match(html,/<details><summary>Voir/);
+  assert.match(html,/technicalDetailHtml\(a\)/);
+  assert.match(html,/technical-findings/);
   assert.match(html,/ANNEXE — RÉFÉRENCES TECHNIQUES DES POINTS D’ATTENTION/);
   api.clearAnomalies();
 
