@@ -216,7 +216,7 @@ const controls=[
 [11,'Détection des images de consultation JPEG'],[12,'Détection des images de conservation TIFF'],[13,'Vérification de l’extension des fichiers JPEG'],[14,'Vérification de l’extension des fichiers TIFF'],[15,'Recherche d’espaces dans les noms de fichiers'],[16,'Vérification de l’usage des underscores dans les noms de fichiers'],[17,'Vérification du nommage normalisé des fichiers'],[18,'Détection des fichiers correspondant à un fascicule bis'],[19,'Vérification du numéro de vue sur quatre chiffres'],[20,'Vérification de l’absence de vue numérotée 0000'],
 [21,'Vérification de la validité des dates AAAAMMJJ'],[22,'Signalement des dates impossibles'],[22.5,'Vérification de la périodicité attendue des fascicules'],[23,'Cohérence entre l’année du fichier et le dossier d’année'],[24,'Cohérence entre la date du fichier et le dossier de fascicule'],[25,'Cohérence du suffixe bis'],[26,'Recherche de vues manquantes dans les fascicules'],[27,'Vérification du démarrage de chaque fascicule à la vue 0001'],[28,'Recherche de noms de fichiers en doublon'],[29,'Recherche de chemins complets en doublon'],[30,'Recherche de fichiers vides'],[30.5,'Analyse de cohérence de l’histogramme des images'],
 [31,'Vérification de la correspondance entre JPEG et TIFF'],[32,'Recherche de JPEG sans TIFF correspondant'],[33,'Recherche de TIFF sans JPEG correspondant'],[34,'Cohérence entre récolement initial, saisie prestataire et fichiers livrés'],[35,'Repérage des fascicules avec un nombre de vues atypique'],[36,'Vérification du fichier de récolement sélectionné'],[37,'Inventaire des documents annexes livrés'],[38,'Nombre de titres ou ensembles documentaires détectés'],[39,'Synthèse des contrôles par titre ou ensemble documentaire'],
-[41,'Vérification de l’ouverture des JPEG de l’échantillon'],[42,'Lecture des dimensions des JPEG de l’échantillon'],[43,'Présence et lecture du DPI des JPEG et TIFF de l’échantillon'],[44,'Signalement des images dont le DPI diffère de 400'],[45,'Vérification de l’ouverture des TIFF de l’échantillon'],[46,'Lecture des dimensions des TIFF de l’échantillon'],[47,'Signalement des images de très petite dimension'],[48,'Signalement des fichiers de taille inhabituelle'],[51,'Présence des métadonnées EXIF sur les JPEG et TIFF de l’échantillon'],[52,'Présence et conformité des métadonnées IPTC JPEG/TIFF avec le récolement'],[53,'Vérification du profil colorimétrique ICC en RGB sur les JPEG et TIFF'],[49,'Génération d’un échantillon ISO distinct par titre, TIFF prioritaire'],[50,'Disponibilité du rapport de contrôle']
+[41,'Lecture des en-têtes JPEG de l’échantillon'],[42,'Lecture des dimensions des JPEG de l’échantillon'],[43,'Présence et lecture du DPI des JPEG et TIFF de l’échantillon'],[44,'Signalement des images dont le DPI diffère de 400'],[45,'Lecture des en-têtes TIFF de l’échantillon'],[46,'Lecture des dimensions des TIFF de l’échantillon'],[47,'Signalement des images de très petite dimension'],[48,'Signalement des fichiers de taille inhabituelle'],[51,'Présence des métadonnées EXIF sur les JPEG et TIFF de l’échantillon'],[52,'Présence et conformité des métadonnées IPTC JPEG/TIFF avec le récolement'],[53,'Vérification du profil colorimétrique ICC en RGB sur les JPEG et TIFF'],[49,'Génération d’un échantillon ISO distinct par titre, TIFF prioritaire'],[50,'Disponibilité du rapport de contrôle']
 ].map(x=>({id:x[0],name:x[1],status:'Non lancé',count:0}));
 const controlDisplayOrder=[1,2,3,36,37,38,39,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,22.5,23,24,25,26,27,28,29,30,31,32,33,41,42,43,44,45,46,47,48,30.5,51,52,53,34,35,49,50];
 function orderedControls(){
@@ -245,7 +245,7 @@ function anomalyBusinessLabel(a){
   if(id===28 || id===29 || /doublon|présent .* fois/i.test(msg))return 'doublon de fichier';
   if(id===32 || /JPEG sans TIFF/i.test(msg))return 'TIFF manquant';
   if(id===33 || /TIFF sans JPEG/i.test(msg))return 'JPEG manquant';
-  if(id===52)return 'métadonnées IPTC non conformes';
+  if(id===52)return /non vérifiable/i.test(msg)?'IPTC à vérifier':'métadonnées IPTC non conformes';
   if(id===34 || /récolement|prestataire/i.test(msg))return 'incohérence récolement/prestataire';
   if([23,24,25].includes(id) || /dossier d’année|dossier de fascicule|inventaire|disque/i.test(msg))return 'incohérence inventaire/disque';
   if([7,8,9,10,13,14,15,16,17,19,20,21,22,22.5].includes(id) || /nommage|Date impossible|date.*invalide|underscore|espace|0000|périodicité/i.test(msg))return 'erreur de nommage';
@@ -1890,7 +1890,7 @@ if(recoViewCounts.status!=='ok'){
 await MelanisoftPerformance.yieldToBrowser('Contrôles métier terminés. Analyse technique des images...');
 const technicalSample=buildTechnicalSampleRows(sample);
 const metadataSample=buildMetadataSampleRows(sample,jpeg,tiff);
-let max=technicalSample.length,done=0,histogramSuccess=0;
+let max=technicalSample.length,done=0,histogramSuccess=0,histogramTiffUndecoded=0;
 for(let r of technicalSample){
   try{
     if(['.jpg','.jpeg'].includes(r.ext)){
@@ -1913,7 +1913,8 @@ for(let r of technicalSample){
         histogramSuccess++;
         h.issues.forEach(issue=>add('ALERTE',30.5,r.path,issue));
       }catch(histErr){
-        add('ALERTE',30.5,r.path,'Histogramme TIFF non analysé par le navigateur : '+String(histErr.message||histErr));
+        histogramTiffUndecoded++;
+        add('INFO',30.5,r.path,'Histogramme TIFF non vérifiable dans ce navigateur (décodage graphique indisponible) : '+String(histErr.message||histErr));
       }
     }
   }catch(e){
@@ -1929,7 +1930,8 @@ for(let r of technicalSample){
   done++; $('prog').value=max?done/max*100:100;
   await MelanisoftPerformance.heartbeat(done,max,'Analyse technique des images : '+done+' / '+max+' fichiers...');
 }
-if(technicalSample.length&&histogramSuccess===0)add('ALERTE',30.5,'','Plage dynamique non vérifiable : aucun fichier de l’échantillon n’a pu être décodé pour l’analyse de l’histogramme.');
+if(histogramTiffUndecoded>0)add('ALERTE',30.5,'',histogramTiffUndecoded+' TIFF de l’échantillon non décodés graphiquement par ce navigateur : histogrammes TIFF non vérifiables. Ce constat ne démontre pas que ces fichiers sont endommagés. Les références restent disponibles dans les informations de diagnostic.');
+if(technicalSample.length&&histogramSuccess===0&&histogramTiffUndecoded===0)add('ALERTE',30.5,'','Plage dynamique non vérifiable : aucun fichier de l’échantillon n’a pu être décodé pour l’analyse de l’histogramme.');
 lastMetadataAudit=await inspectMetadataSampleRows(metadataSample,recoViewCounts);
 [30.5,41,42,43,44,45,46,47,51,52,53].forEach(id=>{
   const issues=anomalies.filter(a=>a.control===id&&a.type!=='INFO');
