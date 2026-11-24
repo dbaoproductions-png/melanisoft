@@ -240,7 +240,8 @@ function anomalyBusinessLabel(a){
   const msg=String((a&&a.msg)||'');
   const id=Number(a&&a.control);
   if(id===26 || /Vue\(s\) manquante|vues? manqu/i.test(msg))return 'vues manquantes';
-  if(id===35 || /atypique|en trop|trop de vues|nombre de vues/i.test(msg))return 'vues en trop';
+  if(id===22.5 || /Périodicité .*atypique|Périodicité non régulière/i.test(msg))return 'périodicité à vérifier';
+  if(id===35 || /en trop|trop de vues|nombre de vues/i.test(msg))return 'nombre de vues à examiner';
   if(id===28 || id===29 || /doublon|présent .* fois/i.test(msg))return 'doublon de fichier';
   if(id===32 || /JPEG sans TIFF/i.test(msg))return 'TIFF manquant';
   if(id===33 || /TIFF sans JPEG/i.test(msg))return 'JPEG manquant';
@@ -331,6 +332,10 @@ function titlePathForRow(r){
   const parts=(r&&r.parts)||[];
   const i=imageDirIndex(parts);
   return i>0?parts.slice(0,i).join('/'):(parts[0]||'(titre non identifié)');
+}
+function logicalFasciculeKey(row){
+  const path=folderOfPath(row&&row.path||'');
+  return normKey(titlePathForRow(row))+'|'+(imageFasciculeIdentity(row)||normKey(fascLastPart(path)));
 }
 function titleLabelForRow(r){
   const path=titlePathForRow(r);
@@ -1087,10 +1092,19 @@ async function readXlsxRows(file){
     let arr=[];
     const cells=Array.from(rowNodes[i].getElementsByTagName('c'));
     for(const c of cells)arr[colIndexFromRef(c.getAttribute('r'))]=xlsxCellText(c, shared).trim();
-    if(arr.some(x=>String(x||'').trim()))rows.push(arr);
+    // Préserver les positions réelles : le rapport doit renvoyer à la ligne Excel,
+    // y compris lorsque la feuille contient des lignes vides.
+    appendXlsxRowAtExcelNumber(rows,arr,rowNodes[i].getAttribute('r'));
     await MelanisoftPerformance.heartbeat(i+1,rowNodes.length,'Lecture du récolement XLSX : lignes '+(i+1)+' / '+rowNodes.length+'...');
   }
   return rows;
+}
+function appendXlsxRowAtExcelNumber(rows,values,excelRowNumber){
+  const n=Number(excelRowNumber);
+  const target=Number.isSafeInteger(n)&&n>rows.length?n:rows.length+1;
+  if(target>200000)throw new Error('Numérotation de ligne XLSX anormalement élevée');
+  while(rows.length<target-1)rows.push([]);
+  rows.push(values);
 }
 function normHeader(h){return String(h||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[’']/g,'').replace(/[^a-z0-9]+/g,' ').trim();}
 function findHeaderRow(table){
@@ -1132,11 +1146,13 @@ async function recoRowsToMap(table){
   const observationCandidates=headers.map((h,i)=>({h,i})).filter(x=>/^observations?$/.test(x.h)||/observation.*prestataire|commentaire.*prestataire/.test(x.h));
   const providerObservation=observationCandidates.find(x=>idx.produced>=0&&x.i>idx.produced);
   if(providerObservation)idx.observation=providerObservation.i;
+  idx.originalObservation=(observationCandidates.find(x=>idx.produced>=0&&x.i<idx.produced)||{}).i??-1;
   if(idx.produced<0||(idx.repertoire<0&&idx.firstJpeg<0&&idx.firstTiff<0))
     return {status:'headers',map:new Map(),entries:[],message:'Colonnes récolement non reconnues : attendues « Nbre de fichiers produits » et « Répertoire » ou une référence de premier fichier JPEG/TIFF'};
-  let map=new Map(), entries=[], ignored=[], skipped=[], dateIssues=[];
+  let map=new Map(), entries=[], ignored=[], skipped=[], dateIssues=[], currentEstablishment='', currentCote=';
   for(let i=headerRow+1;i<table.length;i++){
-    let cols=table[i];
+    let cols=table[i]||[];
+    if(!cols.some(v=>String(v??'').trim()))continue;
     let repertoire=idx.repertoire>=0?String(cols[idx.repertoire]||'').trim():'';
     let firstJpeg=idx.firstJpeg>=0?String(cols[idx.firstJpeg]||'').trim():'';
     let firstTiff=idx.firstTiff>=0?String(cols[idx.firstTiff]||'').trim():'';
@@ -1148,11 +1164,17 @@ async function recoRowsToMap(table){
     // et parfois un total final ; aucune ne doit compter comme fascicule.
     const instruction=i===headerRow+1 &&
       cols.some(v=>/^(obligatoire|prestataire|facultatif|aaaa|indiquer)/i.test(String(v||'').trim()));
-    const summaryWithEnd=idx.anneeFin>=0&&i<=headerRow+2&&
+    const summaryWithEnd=idx.anneeFin>=0&&i<=headerRow+3&&
       String(cols[idx.anneeFin]||'').trim()&&!repertoire&&!firstJpeg&&!firstTiff;
     const summaryTotal=(i<=headerRow+2||i===table.length-1)&&!annee&&!mois&&!jour&&!repertoire&&!firstJpeg&&!firstTiff&&
       (produced!==null||(idx.nbPages>=0&&String(cols[idx.nbPages]||'').trim()));
     if(instruction||summaryWithEnd||summaryTotal){
+      if(!instruction && (summaryWithEnd||summaryTotal)){
+        const headEstablishment=idx.establishment>=0?String(cols[idx.establishment]??'').trim():'';
+        const headCote=idx.coteTitle>=0?String(cols[idx.coteTitle]??'').trim():'';
+        if(headEstablishment)currentEstablishment=headEstablishment;
+        if(headCote)currentCote=headCote;
+      }
       skipped.push({row:i+1,reason:instruction?'consignes du modèle':'synthèse ou total du récolement'});
       await MelanisoftPerformance.heartbeat(i+1,table.length,'Indexation du récolement : '+(i+1)+' / '+table.length+' lignes...');
       continue;
@@ -1181,6 +1203,15 @@ async function recoRowsToMap(table){
       continue;
     }
 
+    const rawEstablishment=idx.establishment>=0?String(cols[idx.establishment]??'').trim():'';
+    const rawCote=idx.coteTitle>=0?String(cols[idx.coteTitle]??'').trim():'';
+    if(rawCote&&currentCote&&normMetadataText(rawCote)!==normMetadataText(currentCote)&&!rawEstablishment){
+      // Un autre titre sans établissement explicite n'hérite pas silencieusement
+      // de l'établissement du titre précédent.
+      currentEstablishment='';
+    }
+    if(rawCote)currentCote=rawCote;
+    if(rawEstablishment)currentEstablishment=rawEstablishment;
     let entry={
       row:i+1,
       annee, mois, jour, date,
@@ -1191,8 +1222,9 @@ async function recoRowsToMap(table){
       firstTiff,
       produced:Number.isFinite(produced)?produced:null,
       observation:idx.observation>=0?String(cols[idx.observation]||'').trim():'',
-      establishment:idx.establishment>=0?String(cols[idx.establishment]||'').trim():'',
-      coteTitle:idx.coteTitle>=0?String(cols[idx.coteTitle]||'').trim():''
+      originalObservation:idx.originalObservation>=0?String(cols[idx.originalObservation]??'').trim():'',
+      establishment:currentEstablishment,
+      coteTitle:rawCote||currentCote
     };
     entries.push(entry);
     let keys=[repertoire, repertoire.split(/[\\/]/).pop(), cleanRef(entry.firstJpeg), cleanRef(entry.firstTiff)].map(normKey).filter(Boolean);
@@ -1943,7 +1975,7 @@ function getReportStats(rows){
   const imageRows=allImageRows.filter(r=>!isCalibrationImageRow(r));
   const jpegRows=imageRows.filter(r=>['.jpg','.jpeg'].includes(r.ext));
   const tiffRows=imageRows.filter(r=>['.tif','.tiff'].includes(r.ext));
-  const fascicules=new Set(imageRows.map(r=>r.parts.slice(0,-1).join('/')).filter(Boolean));
+  const fascicules=new Set(imageRows.map(logicalFasciculeKey).filter(Boolean));
   const nonInfo=anomalies.filter(a=>a.type!=='INFO');
   const errorCount=nonInfo.filter(a=>a.type==='ERREUR').length;
   const alertCount=nonInfo.filter(a=>a.type==='ALERTE').length;
@@ -2050,7 +2082,7 @@ function buildReportMetierHtml(rows){
 
 function render(rows,sample){syncGallicaQCState(); let ok=controls.filter(c=>c.status==='OK').length, al=controls.filter(c=>c.status==='ALERTE').length, er=controls.filter(c=>c.status==='ERREUR').length; $('summary').style.display='block'; $('controls').style.display='block'; $('anomalies').style.display='block'; $('rapportMetier').style.display='block';
 const imageCount=rows.filter(r=>['.jpg','.jpeg','.tif','.tiff'].includes(r.ext)).length;
-const fascCount=new Set(rows.filter(r=>['.jpg','.jpeg','.tif','.tiff'].includes(r.ext)).map(r=>r.parts.slice(0,-1).join('/')).filter(Boolean)).size;
+const fascCount=new Set(rows.filter(r=>['.jpg','.jpeg','.tif','.tiff'].includes(r.ext)&&!isCalibrationImageRow(r)).map(logicalFasciculeKey).filter(Boolean)).size;
 const recoLabel=validatedReco?esc(validatedReco):'<span class="warn">Aucun fichier validé</span>';
 const recoRead=(lastRecoRead&&lastRecoRead.status==='ok')?`${lastRecoRead.entries.length} lignes exploitables`:(validatedReco?(lastRecoRead?esc(lastRecoRead.message):'Lecture non réalisée'):'Sélection nécessaire');
 const iso=lastIsoPlan||iso2859Plan(sample.length);
