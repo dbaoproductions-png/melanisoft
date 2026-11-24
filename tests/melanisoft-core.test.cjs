@@ -740,12 +740,12 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   assert.match(cTiff.summary,/50 TIFF/);
   assert.match(cTiff.action,/lecteur TIFF/);
   assert.match(cViews.details,/Diagnostic d.exhaustivité/); // Aucune perte de détail.
-  const technical=api.technicalDetailModel(cViews);
-  assert.equal(technical.raw.length,4);
-  assert.equal(technical.sections.filter(x=>x.count>0).length,2); // 2 faits, pas 4 répétitions
-  assert.equal(technical.sections.find(x=>x.title==='Un écart de décompte').count,3);
-  assert.equal(technical.sections.find(x=>/Comparaison indicative/.test(x.title)).count,1);
-  assert.ok(technical.sections.some(x=>/Feuille supplément en date du 3 mars/.test(x.text)));
+  const viewTechnical=api.technicalDetailModel(cViews);
+  assert.equal(viewTechnical.raw.length,4);
+  assert.equal(viewTechnical.sections.filter(x=>x.count>0).length,2); // 2 faits, pas 4 répétitions
+  assert.equal(viewTechnical.sections.find(x=>x.title==='Un écart de décompte').count,3);
+  assert.equal(viewTechnical.sections.find(x=>/Comparaison indicative/.test(x.title)).count,1);
+  assert.ok(viewTechnical.sections.some(x=>/Feuille supplément en date du 3 mars/.test(x.text)));
   const technicalHtml=api.technicalDetailHtml(cViews);
   assert.match(technicalHtml,/Détails : 2 constats · 4 signalements/);
   assert.match(technicalHtml,/3 signalements concordants/);
