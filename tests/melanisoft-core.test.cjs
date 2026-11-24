@@ -583,7 +583,7 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   const tHelp=tHeader.map(()=> '');
   tHelp[13]='AAAA';tHelp[15]='JJ';tHelp[16]='AAAA (ne pas remplir si bulletinage)';
   const tSummary=Array(35).fill('');
-  tSummary[5]='Bibliothèque municipale de Toulouse';
+  tSummary[6]='Bibliothèque municipale de Toulouse';
   tSummary[9]='P015';
   tSummary[13]=1900;tSummary[14]=5;tSummary[15]=27;
   tSummary[16]=1901;tSummary[17]=3;tSummary[18]=3;
