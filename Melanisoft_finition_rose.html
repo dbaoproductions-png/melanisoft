@@ -16,14 +16,15 @@
 /* Synthèse métier courte, colonnes utiles et source technique dépliable. */
 #anomalies{overflow-x:auto}
 #anomalies table{table-layout:fixed;min-width:790px;width:100%}
-#anomalies th:nth-child(1),#anomalies td:nth-child(1){width:78px}
-#anomalies th:nth-child(2),#anomalies td:nth-child(2){width:165px}
-#anomalies th:nth-child(3),#anomalies td:nth-child(3){width:29%}
-#anomalies th:nth-child(4),#anomalies td:nth-child(4){width:auto;white-space:normal}
-#anomalies th:nth-child(5),#anomalies td:nth-child(5){width:105px}
-#anomalies details[open]{min-width:0}
-#anomalies details ol{padding-left:17px}
-#anomalies details li{margin:6px 0}
+#anomalies th:nth-child(1){width:78px}
+#anomalies th:nth-child(2){width:165px}
+#anomalies th:nth-child(3){width:36%}
+#anomalies th:nth-child(4){width:auto;white-space:normal}
+#anomalies .attention-details-row td{background:#fffafc;padding:5px 10px 10px}
+#anomalies .attention-details-row summary{cursor:pointer;color:#793e5c;font-size:12px}
+#anomalies .attention-details-row details[open]{max-width:100%}
+#anomalies .attention-details-row ol{padding-left:17px}
+#anomalies .attention-details-row li{margin:6px 0}
 #controls{overflow-x:hidden}
 #controls table{min-width:0;width:100%}
 .app-footer{margin:24px 0 6px;text-align:center;color:#7b5368;font-size:12px}
@@ -2232,7 +2233,7 @@ $('summary').innerHTML=`<h2>Synthèse du contrôle</h2><div class="summary-grid"
 updateVisualReviewDisplay();
 $('controls').innerHTML='<h2>Contrôles effectués automatiquement</h2>'+groupedControlsHtml();
 const consolidatedRows=consolidatedAnomalies();
-$('anomalies').innerHTML='<h2>Points d’attention</h2><p class="small">Un constat synthétique par fascicule ou lot. Les références complètes et les diagnostics d’origine restent accessibles dans « Détails techniques » et dans l’export Excel.</p><table class="attention-table"><tr><th>Niveau</th><th>Fascicule / lot</th><th>Constat</th><th>À vérifier</th><th>Détails</th></tr>'+consolidatedRows.slice(0,5000).map(a=>`<tr><td>${esc(a.type)}</td><td><strong>${esc(a.label)}</strong>${a.line?'<div class="small">Récolement : ligne '+esc(a.line)+'</div>':''}</td><td><strong>${esc(a.topic)}</strong><div>${esc(a.summary)}</div></td><td>${esc(a.action)}</td><td><details><summary>Voir (${a.count})</summary><div class="small"><strong>Référence :</strong> ${esc(a.path)}<ol>${a.items.map(x=>'<li>'+esc(anomalyDetailText(x))+'</li>').join('')}</ol></div></details></td></tr>`).join('')+'</table>'+(consolidatedRows.length>5000?'<p>Affichage limité à 5000 lignes. L’export Excel contient la liste complète consolidée.</p>':'');
+$('anomalies').innerHTML='<h2>Points d’attention</h2><p class="small">Un constat synthétique par fascicule ou lot. Les références complètes et les diagnostics d’origine restent accessibles dans « Détails techniques » et dans l’export Excel.</p><table class="attention-table"><tr><th>Niveau</th><th>Fascicule / lot</th><th>Constat</th><th>À vérifier</th></tr>'+consolidatedRows.slice(0,5000).map(a=>`<tr><td>${esc(a.type)}</td><td><strong>${esc(a.label)}</strong>${a.line?'<div class="small">Récolement : ligne '+esc(a.line)+'</div>':''}</td><td><strong>${esc(a.topic)}</strong><div>${esc(a.summary)}</div></td><td>${esc(a.action)}</td></tr><tr class="attention-details-row"><td colspan="4"><details><summary>Voir les détails techniques (${a.count})</summary><div class="small"><strong>Référence :</strong> ${esc(a.path)}<ol>${a.items.map(x=>'<li>'+esc(anomalyDetailText(x))+'</li>').join('')}</ol></div></details></td></tr>`).join('')+'</table>'+(consolidatedRows.length>5000?'<p>Affichage limité à 5000 lignes. L’export Excel contient la liste complète consolidée.</p>':'');
 $('rapportMetier').innerHTML=exhaustivitySummaryHtml()+buildReportMetierHtml(rows);
 reportHtml='<!doctype html><meta charset=utf-8><title>MÉLANISOFT — Rapport de contrôle qualité</title><h1>MÉLANISOFT</h1><h2>Rapport de contrôle qualité</h2>'+$('summary').innerHTML+$('rapportMetier').innerHTML+$('controls').innerHTML+$('anomalies').innerHTML;
 GallicaQCState.report.metierHtml=$('rapportMetier').innerHTML;
