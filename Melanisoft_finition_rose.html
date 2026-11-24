@@ -2229,7 +2229,7 @@ $('summary').innerHTML=`<h2>Synthèse du contrôle</h2><div class="summary-grid"
 updateVisualReviewDisplay();
 $('controls').innerHTML='<h2>Contrôles effectués automatiquement</h2>'+groupedControlsHtml();
 const consolidatedRows=consolidatedAnomalies();
-$('anomalies').innerHTML='<h2>Points d’attention détaillés</h2><p class="small">Une seule ligne est affichée par fascicule. Les natures et les détails concatènent toutes les anomalies détectées pour ce fascicule.</p><table class="attention-table"><tr><th>Niveau</th><th>Ligne du récolement</th><th>Nature métier</th><th>Fichier ou fascicule concerné</th><th>Constat consolidé</th></tr>'+consolidatedRows.slice(0,5000).map(a=>`<tr><td>${esc(a.types||a.type)}</td><td>${esc(a.line||'')}</td><td>${esc(a.nature)}</td><td>${esc(a.path)}</td><td>${esc(a.details)}</td></tr>`).join('')+'</table>'+(consolidatedRows.length>5000?'<p>Affichage limité à 5000 lignes. L’export Excel contient la liste complète consolidée.</p>':'');
+$('anomalies').innerHTML='<h2>Points d’attention</h2><p class="small">Un constat synthétique par fascicule ou lot. Les références complètes et les diagnostics d’origine restent accessibles dans « Détails techniques » et dans l’export Excel.</p><table class="attention-table"><tr><th>Niveau</th><th>Fascicule / lot</th><th>Ligne du récolement</th><th>Point à examiner</th><th>Constat</th><th>À vérifier</th><th>Détails</th></tr>'+consolidatedRows.slice(0,5000).map(a=>`<tr><td>${esc(a.type)}</td><td>${esc(a.label)}</td><td>${esc(a.line||'—')}</td><td>${esc(a.topic)}</td><td>${esc(a.summary)}</td><td>${esc(a.action)}</td><td><details><summary>Voir (${a.count})</summary><div class="small"><strong>Référence :</strong> ${esc(a.path)}<ol>${a.items.map(x=>'<li>'+esc(anomalyDetailText(x))+'</li>').join('')}</ol></div></details></td></tr>`).join('')+'</table>'+(consolidatedRows.length>5000?'<p>Affichage limité à 5000 lignes. L’export Excel contient la liste complète consolidée.</p>':'');
 $('rapportMetier').innerHTML=exhaustivitySummaryHtml()+buildReportMetierHtml(rows);
 reportHtml='<!doctype html><meta charset=utf-8><title>MÉLANISOFT — Rapport de contrôle qualité</title><h1>MÉLANISOFT</h1><h2>Rapport de contrôle qualité</h2>'+$('summary').innerHTML+$('rapportMetier').innerHTML+$('controls').innerHTML+$('anomalies').innerHTML;
 GallicaQCState.report.metierHtml=$('rapportMetier').innerHTML;
@@ -2447,27 +2447,27 @@ function buildAleaExcel(){
 }
 
 function buildAttentionExcel(sourceRows){
-  const headers=['N°','Fichier ou fascicule concerné','Nature du problème','Niveau','Ligne(s) du récolement','Constat consolidé','Occurrences regroupées','Observations (original / prestataire)'];
+  const headers=['N°','Niveau','Fascicule / lot','Ligne(s) du récolement','Point à examiner','Constat','À vérifier','Observations du récolement','Occurrences techniques','Détails techniques'];
   const anomaliesRows=(sourceRows===undefined?consolidatedAnomalies():sourceRows)||[];
-  const rows=anomaliesRows.map((a,i)=>[
-    i+1,
-    a.path||'',
-    a.nature||'',
-    a.types||a.type||'',
-    a.line||'',
-    a.details||'',
-    Number.isFinite(Number(a.count))?Number(a.count):'',
-    a.observation!==undefined?a.observation:recoObservationForLine(a.line)
-  ]);
-  const widths=[8,38,30,12,18,80,16,52];
+  const rows=anomaliesRows.map((a,i)=>{
+    const short=a.summary!==undefined?a:summarizeConsolidatedAnomaly(a);
+    return [
+      i+1,a.type||a.types||'',short.label||a.path||'',a.line||'',short.topic||a.nature||'',
+      short.summary||a.details||'',short.action||'Examiner le détail des contrôles.',
+      a.observation!==undefined?a.observation:recoObservationForLine(a.line),
+      Number.isFinite(Number(a.count))?Number(a.count):'',
+      a.details||''
+    ];
+  });
+  const widths=[7,12,29,16,26,74,65,64,18,85];
   const rowHeight=row=>{
-    const lines=row.reduce((max,v,i)=>{
+    const lines=row.slice(0,9).reduce((max,v,i)=>{
       const text=String(v??'');
       const explicit=text.split(/\r?\n/);
       const estimated=explicit.reduce((sum,line)=>sum+Math.max(1,Math.ceil(line.length/Math.max(6,widths[i]-2))),0);
       return Math.max(max,estimated);
     },1);
-    return Math.min(409,Math.max(24,lines*15));
+    return Math.min(120,Math.max(30,lines*15));
   };
   const all=[headers,...rows];
   const sheetRows=all.map((row,ri)=>{
@@ -2480,12 +2480,12 @@ function buildAttentionExcel(sourceRows){
   const sheetXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>
-<dimension ref="A1:H${endRow}"/>
+<dimension ref="A1:J${endRow}"/>
 <sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
 <sheetFormatPr defaultRowHeight="15"/>
-<cols>${widths.map((width,i)=>`<col min="${i+1}" max="${i+1}" width="${width}" customWidth="1"/>`).join('')}</cols>
+<cols>${widths.map((width,i)=>`<col min="${i+1}" max="${i+1}" width="${width}" customWidth="1"${i===9?' hidden="1"':''}/>`).join('')}</cols>
 <sheetData>${sheetRows}</sheetData>
-<autoFilter ref="A1:H${endRow}"/>
+<autoFilter ref="A1:J${endRow}"/>
 <pageMargins left="0.25" right="0.25" top="0.5" bottom="0.5" header="0.2" footer="0.2"/>
 <pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/>
 </worksheet>`;
@@ -2606,13 +2606,12 @@ function buildReportTxt(){
     push('Aucun point d’attention détaillé.');
   } else {
     rows.forEach((a,i)=>{
-      push('Point d’attention '+(i+1));
-      push('Niveau : '+(a.types||a.type));
-      push('Nature métier : '+a.nature);
-      if(a.line)push('Ligne(s) du récolement : '+a.line);
-      if(a.path)push('Fichier ou fascicule concerné : '+a.path);
-      push('Constat consolidé : '+(a.details || ''));
-      push('Occurrences regroupées : '+a.count);
+      push('Point d’attention '+(i+1)+' : '+a.label+' — '+a.topic);
+      push('Niveau : '+(a.type||a.types));
+      if(a.line)push('Ligne du récolement : '+a.line);
+      push('Constat : '+a.summary);
+      push('À vérifier : '+a.action);
+      push('Occurrences techniques regroupées : '+a.count);
       blank();
     });
   }
@@ -2626,7 +2625,15 @@ function buildReportTxt(){
     if(e.observation)push('Prestataire : '+e.observation);
   });
   blank();
-  push('9. NOTE');
+  push('9. ANNEXE — RÉFÉRENCES TECHNIQUES DES POINTS D’ATTENTION');
+  if(!rows.length)push('Aucune référence technique supplémentaire.');
+  else rows.forEach((a,i)=>{
+    push('Point '+(i+1)+' — '+a.label);
+    push('Référence : '+a.path);
+    a.items.forEach(item=>push(' • '+anomalyDetailText(item)));
+    blank();
+  });
+  push('10. NOTE');
   push('La section Échantillon visuel n’est volontairement pas reproduite dans ce rapport TXT. Elle est exportée dans le fichier ALÉA Excel.');
   return lines.join('\n').replace(/\n{3,}/g,'\n\n').trim()+'\n';
 }
