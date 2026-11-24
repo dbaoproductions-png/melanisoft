@@ -92,6 +92,8 @@ vm.runInContext(`
     readJpegTechnicalMetadata,
     readTiffMeta,
     recoRowsToMap,
+    appendXlsxRowAtExcelNumber,
+    logicalFasciculeKey,
     buildDiskLookup,
     buildExhaustivityAudit,
     buildDecision,
@@ -568,6 +570,52 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   assert.equal(internalMissing.skipped.length,3);
   assert.ok(internalMissing.ignored.some(x=>x.row===6 && x.rawDate==='1913/4/31'));
   assert.ok(internalMissing.ignored.some(x=>x.row===5));
+
+  // Recette de régression du Supplément agricole du Télégramme (données de
+  // structure synthétiques inspirées du classeur, sans fichier privé dans GitHub).
+  const keptRows=[];
+  api.appendXlsxRowAtExcelNumber(keptRows,['Première ligne'],1);
+  api.appendXlsxRowAtExcelNumber(keptRows,['En-tête'],3);
+  assert.equal(keptRows.length,3);
+  assert.equal(keptRows[1].length,0); // Ligne 2 Excel blanche conservée.
+  const tHeader=[...modernHeaders];
+  tHeader[23]='Observations'; // observation de l'original AVANT prestation
+  const tHelp=tHeader.map(()=> '');
+  tHelp[13]='AAAA';tHelp[15]='JJ';tHelp[16]='AAAA (ne pas remplir si bulletinage)';
+  const tSummary=Array(35).fill('');
+  tSummary[5]='Bibliothèque municipale de Toulouse';
+  tSummary[9]='P015';
+  tSummary[13]=1900;tSummary[14]=5;tSummary[15]=27;
+  tSummary[16]=1901;tSummary[17]=3;tSummary[18]=3;
+  tSummary[21]=400;tSummary[29]=401;
+  const dates=[];
+  const first=new Date(Date.UTC(1900,4,27));
+  for(let i=0;i<41;i++){
+    const d=new Date(first.getTime()+i*7*86400000);
+    const ymd=d.toISOString().slice(0,10).replace(/-/g,'');
+    if(ymd!=='19001028')dates.push(ymd);
+  }
+  assert.equal(dates.length,40);
+  const tRows=[['Titre du périodique'],[],tHeader,modernInstruction,tHelp,tSummary];
+  dates.forEach((date,i)=>{
+    const a=modernRow(date.slice(0,4),String(Number(date.slice(4,6))),String(Number(date.slice(6,8))),i<20?12:8,date,i===39?9:(i<20?12:8));
+    a[9]='P015';a[5]='';a[21]=i<20?12:8;
+    if(i===39)a[23]='Feuille supplément en date du 3 mars';
+    tRows.push(a);
+  });
+  const tParsed=await api.recoRowsToMap(tRows);
+  assert.equal(tParsed.status,'ok');
+  assert.equal(tParsed.entries.length,40); // La synthèse n'est pas un 41e fascicule.
+  assert.equal(tParsed.skipped.length,3);
+  assert.equal(tParsed.ignored.length,0);
+  assert.equal(tParsed.entries[0].row,7); // Numéro de ligne Excel, pas position comprimée.
+  assert.equal(tParsed.entries[39].row,46);
+  assert.ok(tParsed.entries.every(r=>r.establishment==='Bibliothèque municipale de Toulouse'));
+  assert.equal(tParsed.entries.reduce((x,r)=>x+Number(r.nbPages),0),400);
+  assert.equal(tParsed.entries.reduce((x,r)=>x+r.produced,0),401);
+  assert.equal(tParsed.entries[39].originalObservation,'Feuille supplément en date du 3 mars');
+  assert.equal(new Set([api.logicalFasciculeKey(titleAJpeg[0]),api.logicalFasciculeKey(titleATiff[0])]).size,1);
+  assert.equal(new Set([api.logicalFasciculeKey(titleAJpeg[0]),api.logicalFasciculeKey(titleBJpeg[0])]).size,2);
 
   // Une édition mentionnée sans image n'est pas une "synthèse" à effacer.
   const secondEdition=modernRow('1890','12','28','4','18901228',null);
