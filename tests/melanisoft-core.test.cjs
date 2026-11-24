@@ -88,8 +88,6 @@ vm.runInContext(`
     buildMetadataSampleRows,
     inspectMetadataSampleRows,
     iptcConformityIssues,
-    approvedIptcCount: () => approvedIptcSourceCount,
-    resetApprovedIptcCount: () => { approvedIptcSourceCount=0; },
     compareJpegTiffRows,
     parseName,
     readJpegMeta,
@@ -320,29 +318,44 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   const bepSource="Bibliothèque d'Etude et du Patrimoine de Toulouse";
   const bepJpeg={...companionJpeg,file:fileLike(syntheticJpeg(bepSource))};
   const bepTiff={...visualTiff,file:fileLike(syntheticTiff(bepSource))};
-  api.clearAnomalies();api.resetApprovedIptcCount();
+  api.clearAnomalies();
   const bepAudit=await api.inspectMetadataSampleRows([bepJpeg,bepTiff],bepReco);
   assert.equal(bepAudit.total,2);
   assert.equal(bepAudit.errors,0);
-  assert.equal(api.approvedIptcCount(),2);
+  assert.equal(bepAudit.approvedIptcSource,2);
+  assert.ok(bepAudit.approvedIptcSource<=bepAudit.total);
   assert.ok(!Array.from(api.getAnomalies()).some(a=>a.control===52));
   // Aucune autre valeur n'est autorisée silencieusement ; le nom générique
   // du récolement n'est pas acceptable dans le fichier IPTC.
-  api.clearAnomalies();api.resetApprovedIptcCount();
+  api.clearAnomalies();
   const genericJpeg={...bepJpeg,file:fileLike(syntheticJpeg('Bibliothèque municipale de Toulouse'))};
-  await api.inspectMetadataSampleRows([genericJpeg,bepTiff],bepReco);
-  assert.equal(api.approvedIptcCount(),1);
+  const genericAudit=await api.inspectMetadataSampleRows([genericJpeg,bepTiff],bepReco);
+  assert.equal(genericAudit.approvedIptcSource,1);
   assert.ok(Array.from(api.getAnomalies()).some(a=>a.control===52&&a.path===genericJpeg.path
     && /Bibliothèque d'Etude et du Patrimoine de Toulouse/.test(a.msg)));
   assert.ok(!Array.from(api.getAnomalies()).some(a=>a.control===52&&a.path===bepTiff.path));
   // Une valeur étrangère est également signalée, sans neutraliser les
   // vérifications des champs Headline, EXIF et ICC.
-  api.clearAnomalies();api.resetApprovedIptcCount();
+  api.clearAnomalies();
   const alienJpeg={...bepJpeg,file:fileLike(syntheticJpeg('Autre établissement'))};
-  await api.inspectMetadataSampleRows([alienJpeg,bepTiff],bepReco);
+  const alienAudit=await api.inspectMetadataSampleRows([alienJpeg,bepTiff],bepReco);
+  assert.equal(alienAudit.approvedIptcSource,1);
   assert.ok(Array.from(api.getAnomalies()).some(a=>a.control===52&&a.path===alienJpeg.path));
   assert.ok(!Array.from(api.getAnomalies()).some(a=>a.control===52&&a.path===bepTiff.path));
-  api.clearAnomalies();api.resetApprovedIptcCount();
+  api.clearAnomalies();
+  // Deux lectures du même chemin ne donnent pas deux validations d'IPTC.
+  const repeatedPaths=await api.inspectMetadataSampleRows([bepJpeg,bepJpeg,bepTiff],bepReco);
+  assert.equal(repeatedPaths.total,3);
+  assert.equal(repeatedPaths.approvedIptcSource,2);
+  // Deux analyses successives ne doivent jamais cumuler les décomptes.
+  const separateRun=await api.inspectMetadataSampleRows([bepTiff],bepReco);
+  assert.equal(separateRun.total,1);
+  assert.equal(separateRun.approvedIptcSource,1);
+  assert.equal(api.iptcConformityIssues({
+    iptcSource:true,iptcSourceValue:bepSource,iptcHeadline:true,iptcHeadlineValue:'16 PER'
+  },bepJpeg,bepReco).length,0);
+  assert.equal(separateRun.approvedIptcSource,1);
+  api.clearAnomalies();
 
   // Le repli JPEG ne cree pas une deuxieme vue ISO ou un TIFF fictif.
   const jpegOnly = {
