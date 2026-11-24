@@ -87,6 +87,9 @@ vm.runInContext(`
     buildTechnicalSampleRows,
     buildMetadataSampleRows,
     inspectMetadataSampleRows,
+    iptcConformityIssues,
+    approvedIptcCount: () => approvedIptcSourceCount,
+    resetApprovedIptcCount: () => { approvedIptcSourceCount=0; },
     compareJpegTiffRows,
     parseName,
     readJpegMeta,
@@ -308,6 +311,38 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   assert.ok(metadataAlerts.some(a => a.control === 52
     && a.path === companionJpeg.path && /Source non conforme/.test(a.msg)));
   assert.ok(!metadataAlerts.some(a => a.path === visualTiff.path && a.control === 52));
+
+  // Validation explicite du service : la valeur IPTC Source requise est
+  // « Bibliothèque d'Etude et du Patrimoine de Toulouse » même si le
+  // récolement historique affiche « Bibliothèque municipale de Toulouse ».
+  const bepRecoEntry={row:7,establishment:'Bibliothèque municipale de Toulouse',coteTitle:'16 PER'};
+  const bepReco={status:'ok',map:new Map([['frb123456789_cote_20260101_0001',bepRecoEntry]]),entries:[bepRecoEntry]};
+  const bepSource="Bibliothèque d'Etude et du Patrimoine de Toulouse";
+  const bepJpeg={...companionJpeg,file:fileLike(syntheticJpeg(bepSource))};
+  const bepTiff={...visualTiff,file:fileLike(syntheticTiff(bepSource))};
+  api.clearAnomalies();api.resetApprovedIptcCount();
+  const bepAudit=await api.inspectMetadataSampleRows([bepJpeg,bepTiff],bepReco);
+  assert.equal(bepAudit.total,2);
+  assert.equal(bepAudit.errors,0);
+  assert.equal(api.approvedIptcCount(),2);
+  assert.ok(!Array.from(api.getAnomalies()).some(a=>a.control===52));
+  // Aucune autre valeur n'est autorisée silencieusement ; le nom générique
+  // du récolement n'est pas acceptable dans le fichier IPTC.
+  api.clearAnomalies();api.resetApprovedIptcCount();
+  const genericJpeg={...bepJpeg,file:fileLike(syntheticJpeg('Bibliothèque municipale de Toulouse'))};
+  await api.inspectMetadataSampleRows([genericJpeg,bepTiff],bepReco);
+  assert.equal(api.approvedIptcCount(),1);
+  assert.ok(Array.from(api.getAnomalies()).some(a=>a.control===52&&a.path===genericJpeg.path
+    && /Bibliothèque d'Etude et du Patrimoine de Toulouse/.test(a.msg)));
+  assert.ok(!Array.from(api.getAnomalies()).some(a=>a.control===52&&a.path===bepTiff.path));
+  // Une valeur étrangère est également signalée, sans neutraliser les
+  // vérifications des champs Headline, EXIF et ICC.
+  api.clearAnomalies();api.resetApprovedIptcCount();
+  const alienJpeg={...bepJpeg,file:fileLike(syntheticJpeg('Autre établissement'))};
+  await api.inspectMetadataSampleRows([alienJpeg,bepTiff],bepReco);
+  assert.ok(Array.from(api.getAnomalies()).some(a=>a.control===52&&a.path===alienJpeg.path));
+  assert.ok(!Array.from(api.getAnomalies()).some(a=>a.control===52&&a.path===bepTiff.path));
+  api.clearAnomalies();api.resetApprovedIptcCount();
 
   // Le repli JPEG ne cree pas une deuxieme vue ISO ou un TIFF fictif.
   const jpegOnly = {
