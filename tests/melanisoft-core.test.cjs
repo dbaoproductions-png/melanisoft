@@ -99,6 +99,12 @@ vm.runInContext(`
     buildExhaustivityAudit,
     buildDecision,
     buildAleaExcel,
+    buildAttentionExcel,
+    topAnomalies,
+    recoObservationForLine,
+    recoObservationsList,
+    setRecoRead(result) { lastRecoRead = result; },
+    setAnomalies(items) { anomalies = items; },
     visualHeaders: VISUAL_REVIEW_HEADERS,
     assessVisualReviewRows,
     setSampleId(id) { lastSampleId = id; },
@@ -615,6 +621,36 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   assert.equal(tParsed.entries.reduce((x,r)=>x+Number(r.nbPages),0),400);
   assert.equal(tParsed.entries.reduce((x,r)=>x+r.produced,0),401);
   assert.equal(tParsed.entries[39].originalObservation,'Feuille supplément en date du 3 mars');
+  api.setRecoRead(tParsed);
+  assert.match(api.recoObservationForLine(46), /Original : Feuille supplément en date du 3 mars/);
+  assert.ok(api.recoObservationsList(100).some(e=>e.row===46 && e.originalObservation));
+  // Un écart de 8/9 vues conserve sa justification documentaire en colonne H.
+  const detailRows=[{type:'ALERTE',types:'ALERTE',line:'46',
+    path:'FRB315556101_P015_19010303',nature:'nombre de vues à examiner',
+    details:'8 pages initiales, 9 fichiers produits',count:1}];
+  const xmlBytes=api.buildAttentionExcel(detailRows);
+  const tmpDetail=fs.mkdtempSync(path.join(os.tmpdir(),'melanisoft-attention-'));
+  const detailPath=path.join(tmpDetail,'attention.xlsx');
+  fs.writeFileSync(detailPath,xmlBytes);
+  const detailSheetXml=execFileSync('unzip',['-p',detailPath,'xl/worksheets/sheet1.xml'],{encoding:'utf8'});
+  assert.match(detailSheetXml,/Original : Feuille supplément en date du 3 mars/);
+  assert.match(detailSheetXml,/Observations \(original \/ prestataire\)/);
+
+  // Les totaux par catégorie ne doivent PAS re-compter toutes les alertes
+  // d'un fascicule pour chacune des natures présentes dans ce même fascicule.
+  api.setAnomalies([
+    {type:'ALERTE',control:52,path:'Fascicule-X_0001.jpg',msg:'Champ IPTC Source non conforme'},
+    {type:'ALERTE',control:52,path:'Fascicule-X_0001.tif',msg:'Champ IPTC Source non conforme'},
+    {type:'ALERTE',control:34,path:'Fascicule-X',msg:'Diagnostic d’exhaustivité du fascicule : 8 pages ≠ 9 vues',line:46},
+    {type:'ALERTE',control:22.5,path:'Fascicule-Y',msg:'Périodicité hebdomadaire atypique : 14 jours'}
+  ]);
+  const byNature=Object.fromEntries(api.topAnomalies(10).map(a=>[a.control,a.count]));
+  assert.equal(byNature['métadonnées IPTC non conformes'],2);
+  assert.equal(byNature['incohérence récolement/prestataire'],1);
+  assert.equal(byNature['périodicité à vérifier'],1);
+  assert.equal(Object.values(byNature).reduce((n,x)=>n+x,0),4);
+  api.clearAnomalies();
+
   assert.equal(new Set([api.logicalFasciculeKey(titleAJpeg[0]),api.logicalFasciculeKey(titleATiff[0])]).size,1);
   assert.equal(new Set([api.logicalFasciculeKey(titleAJpeg[0]),api.logicalFasciculeKey(titleBJpeg[0])]).size,2);
 
