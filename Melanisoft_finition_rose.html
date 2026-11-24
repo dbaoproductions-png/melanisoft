@@ -1507,11 +1507,17 @@ function recoObservationNote(entry){
 function recoObservationForLine(line){
   if(!line || !lastRecoRead || lastRecoRead.status!=='ok')return '';
   const entry=(lastRecoRead.entries||[]).find(e=>String(e.row)===String(line));
-  return entry ? String(entry.observation||'').trim() : '';
+  if(!entry)return '';
+  return [
+    entry.originalObservation?'Original : '+entry.originalObservation:'',
+    entry.observation?'Prestataire : '+entry.observation:''
+  ].filter(Boolean).join(' | ');
 }
-function recoObservationsList(limit=30){
+function recoObservationsList(limit=100){
   if(!lastRecoRead || lastRecoRead.status!=='ok')return [];
-  return (lastRecoRead.entries||[]).filter(e=>String(e.observation||'').trim()).slice(0,limit);
+  return (lastRecoRead.entries||[])
+    .filter(e=>String(e.observation||'').trim()||String(e.originalObservation||'').trim())
+    .slice(0,limit);
 }
 
 function folderOfPath(path){
@@ -2026,17 +2032,19 @@ function anomalySentence(a){
   return msg;
 }
 function topAnomalies(limit=8){
+  // Les catégories doivent compter les constats réels, et non multiplier
+  // chaque groupe de fascicule par toutes les natures qui y apparaissent.
   const groups=new Map();
-  consolidatedAnomalies().forEach(a=>{
-    String(a.nature||'point d’attention métier').split(/\s*;\s*/).filter(Boolean).forEach(nature=>{
-      const cur=groups.get(nature)||{control:nature,count:0,types:new Set(),examples:[]};
-      cur.count+=a.count||1;
-      String(a.types||a.type||'').split(/\s*,\s*/).filter(Boolean).forEach(t=>cur.types.add(t));
-      if(cur.examples.length<2)cur.examples.push(a.details);
-      groups.set(nature,cur);
-    });
+  anomalies.filter(a=>a.type!=='INFO').forEach(a=>{
+    const nature=anomalyBusinessLabel(a);
+    const cur=groups.get(nature)||{control:nature,count:0,types:new Set(),examples:[]};
+    cur.count++;
+    cur.types.add(a.type);
+    if(cur.examples.length<2)cur.examples.push(anomalyDetailText(a));
+    groups.set(nature,cur);
   });
-  return [...groups.values()].sort((a,b)=>b.count-a.count).slice(0,limit).map(g=>({control:g.control,count:g.count,types:[...g.types].join(', '),examples:g.examples}));
+  return [...groups.values()].sort((a,b)=>b.count-a.count||a.control.localeCompare(b.control,'fr'))
+    .slice(0,limit).map(g=>({control:g.control,count:g.count,types:[...g.types].join(', '),examples:g.examples}));
 }
 function buildRecommendations(stats){
   const rec=[];
@@ -2128,10 +2136,11 @@ GallicaQCState.report.metierHtml=$('rapportMetier').innerHTML;
 aleaHtml=buildAleaHtml(rows, sample);
 }
 function buildRecoObservationsHtml(){
-  const obs=recoObservationsList(30);
+  const obs=recoObservationsList(100);
   if(!obs.length)return '';
-  const more=(lastRecoRead&&lastRecoRead.entries?lastRecoRead.entries.filter(e=>String(e.observation||'').trim()).length:0)-obs.length;
-  return `<div class="report-section"><h3>Observations du prestataire</h3><p>Les observations renseignées dans le récolement sont reprises ici pour aider à interpréter les écarts éventuels.</p><table><tr><th>Ligne</th><th>Répertoire ou fascicule</th><th>Observation</th></tr>${obs.map(e=>`<tr><td>${esc(e.row)}</td><td>${esc(e.repertoire||e.firstJpeg||e.firstTiff||'')}</td><td>${esc(e.observation)}</td></tr>`).join('')}</table>${more>0?`<p class="small">${more} autre(s) observation(s) figurent dans le récolement.</p>`:''}</div>`;
+  const more=(lastRecoRead&&lastRecoRead.entries?lastRecoRead.entries.filter(e=>
+    String(e.observation||'').trim()||String(e.originalObservation||'').trim()).length:0)-obs.length;
+  return `<div class="report-section"><h3>Observations de l’original et du prestataire</h3><p>Les observations initiales et les remarques du prestataire sont distinctes : une feuille supplémentaire documentée peut justifier un écart de vues sans être supprimée du diagnostic.</p><table><tr><th>Ligne</th><th>Fascicule</th><th>Observation sur l’original</th><th>Observation du prestataire</th></tr>${obs.map(e=>`<tr><td>${esc(e.row)}</td><td>${esc(e.repertoire||e.firstJpeg||e.firstTiff||'')}</td><td>${esc(e.originalObservation||'')}</td><td>${esc(e.observation||'')}</td></tr>`).join('')}</table>${more>0?`<p class="small">${more} autre(s) observation(s) figurent dans le récolement.</p>`:''}</div>`;
 }
 
 function buildAleaHtml(rows,sample){
@@ -2338,7 +2347,7 @@ function buildAleaExcel(){
 }
 
 function buildAttentionExcel(sourceRows){
-  const headers=['N°','Fichier ou fascicule concerné','Nature du problème','Niveau','Ligne(s) du récolement','Constat consolidé','Occurrences regroupées','Observation prestataire'];
+  const headers=['N°','Fichier ou fascicule concerné','Nature du problème','Niveau','Ligne(s) du récolement','Constat consolidé','Occurrences regroupées','Observations (original / prestataire)'];
   const anomaliesRows=(sourceRows===undefined?consolidatedAnomalies():sourceRows)||[];
   const rows=anomaliesRows.map((a,i)=>[
     i+1,
@@ -2504,7 +2513,16 @@ function buildReportTxt(){
     });
   }
 
-  push('8. NOTE');
+  push('8. OBSERVATIONS DES DOCUMENTS ET DU PRESTATAIRE');
+  const observations=recoObservationsList(100);
+  if(!observations.length)push('Aucune observation documentaire renseignée dans les fascicules.');
+  else observations.forEach(e=>{
+    push('Ligne '+e.row+' — '+(e.repertoire||e.firstJpeg||e.firstTiff||'fascicule non identifié'));
+    if(e.originalObservation)push('Original : '+e.originalObservation);
+    if(e.observation)push('Prestataire : '+e.observation);
+  });
+  blank();
+  push('9. NOTE');
   push('La section Échantillon visuel n’est volontairement pas reproduite dans ce rapport TXT. Elle est exportée dans le fichier ALÉA Excel.');
   return lines.join('\n').replace(/\n{3,}/g,'\n\n').trim()+'\n';
 }
