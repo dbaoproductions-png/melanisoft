@@ -295,7 +295,7 @@ function consolidatedAnomalies(){
     const types=[...g.types].sort((a,b)=>(severity[b]||0)-(severity[a]||0));
     const natures=[...g.natureSet].sort();
     const details=[...g.detailSet];
-    return {
+    const row={
       type:types[0]||'',
       types:types.join(', '),
       line:[...g.lineSet].sort((a,b)=>Number(a)-Number(b)||a.localeCompare(b)).join(', '),
@@ -306,9 +306,83 @@ function consolidatedAnomalies(){
       controls:[...g.controls].join(' ; '),
       items:g.items
     };
+    return {...row,...summarizeConsolidatedAnomaly(row)};
   }).sort((a,b)=>a.path.localeCompare(b.path,'fr')||a.nature.localeCompare(b.nature,'fr'));
 }
 
+function readableDate8(v){
+  const str=String(v||'');
+  const m=str.match(/(?<!\d)(\d{4})(\d{2})(\d{2})(?!\d)/);
+  return m?m[3]+'/'+m[2]+'/'+m[1]:'';
+}
+function summarizeConsolidatedAnomaly(group){
+  // Le résumé n'efface jamais les diagnostics originaux : ils restent dans
+  // group.items et group.details (détails dépliables + export d'audit).
+  const items=Array.isArray(group.items)?group.items:[];
+  const hasControl=(id)=>items.some(a=>Number(a.control)===id);
+  const periodicity=items.find(a=>Number(a.control)===22.5);
+  const countIssue=hasControl(34)||hasControl(35);
+  const tiffHistogram=items.find(a=>Number(a.control)===30.5&&/TIFF/i.test(String(a.msg||'')));
+  const accounted=new Set();
+  const observations=[];
+  const actions=[];
+  let topic='Contrôle à examiner';
+  if(periodicity){
+    topic='Périodicité';
+    const m=String(periodicity.msg||'').match(/(\d+)\s+jours?\s+entre\s+(\d{8})\s+et\s+(\d{8})/i);
+    observations.push(m
+      ? 'Intervalle de '+m[1]+' jours entre les fascicules des '+readableDate8(m[2])+' et '+readableDate8(m[3])+'.'
+      : 'Parution à une date inhabituelle pour ce titre.');
+    actions.push('Vérifier la parution dans le bulletinage ou les exemplaires conservés.');
+    accounted.add(periodicity);
+  }
+  if(countIssue){
+    topic=periodicity?'Plusieurs contrôles':'Nombre de vues';
+    const line=String(group.line||'').split(',')[0].trim();
+    const entry=lastRecoRead&&lastRecoRead.status==='ok'
+      ?(lastRecoRead.entries||[]).find(e=>String(e.row)===line):null;
+    const original=entry?Number(entry.nbPages):NaN;
+    const produced=entry?Number(entry.produced):NaN;
+    const msg=items.map(a=>String(a.msg||'')).find(m=>/\d+\s*≠[^\d]*\d+/.test(m))||'';
+    const match=msg.match(/(\d+)\s*≠\s*[^\d]*(\d+)/);
+    const first=Number.isFinite(original)&&original>0?original:match?Number(match[1]):null;
+    const second=Number.isFinite(produced)&&produced>=0?produced:match?Number(match[2]):null;
+    observations.push(first!==null&&second!==null
+      ?second+' vues déclarées pour '+first+' pages recensées dans le récolement.'
+      :'Écart de nombre de vues entre le récolement et la livraison.');
+    const note=[entry?.originalObservation,entry?.observation].filter(Boolean).join(' ');
+    actions.push(/feuille.*suppl|suppl[ée]ment/i.test(note)
+      ? 'Une feuille supplémentaire est signalée : vérifier qu’elle explique la vue en plus.'
+      : 'Comparer les vues livrées aux pages du fascicule et aux observations du récolement.');
+    items.filter(a=>[34,35].includes(Number(a.control))).forEach(a=>accounted.add(a));
+  }
+  if(tiffHistogram){
+    topic=countIssue||periodicity?'Plusieurs contrôles':'Histogramme TIFF';
+    const match=String(tiffHistogram.msg||'').match(/(\d+)\s+TIFF/i);
+    observations.push('Histogramme non calculé pour '+(match?match[1]+' TIFF':'des TIFF')+' : décodage graphique indisponible dans le navigateur.');
+    actions.push('Vérifier les images avec un lecteur TIFF adapté ; cela ne démontre pas une corruption.');
+    items.filter(a=>Number(a.control)===30.5&&/TIFF/i.test(String(a.msg||''))).forEach(a=>accounted.add(a));
+  }
+  const others=items.filter(a=>!accounted.has(a));
+  if(others.length){
+    if(observations.length)topic='Plusieurs contrôles';
+    else if(others.length===1)topic=anomalyBusinessLabel(others[0]);
+    else topic=group.nature.split(' ; ')[0]||'Contrôles à examiner';
+    const unique=[...new Set(others.map(a=>anomalySentence(a)).filter(Boolean))];
+    unique.slice(0,2).forEach(v=>observations.push(v.length<=170?v:v.slice(0,167).trimEnd()+'…'));
+    if(unique.length>2)observations.push((unique.length-2)+' autre(s) constat(s) dans les détails.');
+    actions.push('Examiner les contrôles et leurs références techniques avant de conclure.');
+  }
+  const label=group.path==='Livraison'||!group.path?
+    (tiffHistogram?'Lot TIFF':'Livraison'):
+    (readableDate8(group.path)?'Fascicule du '+readableDate8(group.path):group.path);
+  return {
+    topic,label,
+    summary:observations.join(' '),
+    action:[...new Set(actions)].join(' '),
+    technicalDetails:group.details
+  };
+}
 function periodicalFolderName(){
   if(!files || !files.length)return 'sélectionné';
   const firstPath=files[0].webkitRelativePath || files[0].name || '';
