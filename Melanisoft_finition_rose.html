@@ -1095,6 +1095,196 @@ async function analyzeJpegHistogram(file){
   if(dark>=0.35 && light>=0.35)issues.push('contraste extrême avec écrêtage possible des noirs et des blancs');
   return {issues, mean, std, spread, dark, light};
 }
+// Précontrôle local exploratoire, distinct des contrôles ISO et de l'ALÉA.
+// Les trois indices sont des signaux de tri : aucun ne prouve une non-conformité.
+function analyzeVisualGray(gray,w,h){
+  if(!gray || !Number.isInteger(w)||!Number.isInteger(h)||w<64||h<64||gray.length!==w*h)
+    return {verifiable:false,reason:'Image trop petite ou pixels indisponibles'};
+  const x0=Math.max(2,Math.ceil(w*0.06)),x1=Math.min(w-2,Math.floor(w*0.94));
+  const y0=Math.max(2,Math.ceil(h*0.06)),y1=Math.min(h-2,Math.floor(h*0.94));
+  const stride=Math.max(2,Math.ceil(Math.max(w,h)/270));
+  let n=0,edgeX=0,edgeY=0,lap=0,ink=0,light=0;
+  const darkPoints=[];
+  for(let y=y0;y<y1;y+=stride){
+    const row=y*w;
+    for(let x=x0;x<x1;x+=stride){
+      const i=row+x,v=gray[i],dx=Math.abs(gray[i+1]-gray[i-1]),dy=Math.abs(gray[i+w]-gray[i-w]);
+      edgeX+=dx;edgeY+=dy;
+      const second=4*v-gray[i-1]-gray[i+1]-gray[i-w]-gray[i+w];
+      lap+=(second*second)/16;n++;
+      if(v<155){ink++;darkPoints.push([x,y]);}
+      if(v>215)light++;
+    }
+  }
+  const edgeStrength=(edgeX+edgeY)/Math.max(1,n);
+  const inkRatio=ink/Math.max(1,n);
+  const sharpness=lap/Math.max(1,n);
+  const orientationRatio=(edgeX+1)/(edgeY+1);
+  // Les lignes horizontales produisent habituellement des transitions entre
+  // lignes dans la direction verticale ; inversement pour une page à 90°.
+  // Une photo, une grande illustration ou une grille peut imiter ce motif.
+  const verifiable=n>=350 && edgeStrength>=7 && inkRatio>=0.008 && inkRatio<=0.82;
+  if(!verifiable)return {verifiable:false,reason:'Texte ou contraste insuffisant pour une mesure fiable',
+    sharpness,edgeStrength,inkRatio,orientationRatio,skewDegrees:null,skewConfidence:0,rotation90Suspect:false};
+  const rotation90Suspect=orientationRatio>2.65;
+  let skewDegrees=null,skewConfidence=0;
+  if(!rotation90Suspect && darkPoints.length>=100){
+    // Projection des points sombres sur des lignes d'écriture. La pente
+    // maximisant la concentration de l'encre est un candidat d'inclinaison.
+    const pad=Math.ceil(w*0.11)+3,center=w/2;
+    let best=-1,zero=0,bestAngle=0;
+    for(let half=-10;half<=10;half++){
+      const angle=half*0.5,slope=Math.tan(angle*Math.PI/180);
+      const bins=new Uint16Array(h+2*pad);
+      for(const [x,y] of darkPoints){
+        const bin=Math.round(y-slope*(x-center))+pad;
+        if(bin>=0&&bin<bins.length)bins[bin]++;
+      }
+      let score=0;
+      for(let j=1;j<bins.length-1;j++){const v=bins[j];score+=v*v;}
+      if(half===0)zero=score;
+      if(score>best){best=score;bestAngle=angle;}
+    }
+    skewConfidence=zero>0?best/zero:0;
+    // Un maximum en bord de plage est trop ambigu pour être interprété.
+    if(Math.abs(bestAngle)<4.9)skewDegrees=bestAngle;
+  }
+  return {verifiable:true,sharpness,edgeStrength,inkRatio,orientationRatio,
+    rotation90Suspect,skewDegrees,skewConfidence};
+}
+async function readVisualJpegGray(file){
+  if(typeof createImageBitmap!=='function')throw new Error('Décodage des JPEG indisponible dans ce navigateur');
+  const bitmap=await createImageBitmap(file);
+  const longest=Math.max(bitmap.width,bitmap.height);
+  if(!longest||longest>120000){bitmap.close?.();throw new Error('Dimensions JPEG non exploitables');}
+  const scale=Math.min(1,560/longest);
+  const w=Math.max(1,Math.round(bitmap.width*scale));
+  const h=Math.max(1,Math.round(bitmap.height*scale));
+  const canvas=document.createElement('canvas');
+  canvas.width=w;canvas.height=h;
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});
+  if(!ctx){bitmap.close?.();throw new Error('Canevas 2D indisponible');}
+  try{
+    ctx.drawImage(bitmap,0,0,w,h);
+    const rgba=ctx.getImageData(0,0,w,h).data;
+    const gray=new Uint8Array(w*h);
+    for(let i=0,j=0;i<rgba.length;i+=4,j++)
+      gray[j]=Math.round(0.2126*rgba[i]+0.7152*rgba[i+1]+0.0722*rgba[i+2]);
+    return {gray,w,h};
+  }finally{
+    bitmap.close?.();
+    canvas.width=0;canvas.height=0;
+  }
+}
+function summarizeVisualPrecheck(records){
+  const valid=records.filter(r=>r.metrics&&r.metrics.verifiable);
+  const medians=new Map();
+  for(const key of new Set(valid.map(r=>r.titlePath))){
+    const scores=valid.filter(r=>r.titlePath===key).map(r=>r.metrics.sharpness);
+    medians.set(key,{score:median(scores),count:scores.length});
+  }
+  const rows=records.map(record=>{
+    const issues=[];
+    const m=record.metrics;
+    if(record.error)return {...record,issues,status:'NON ANALYSÉ'};
+    if(!m||!m.verifiable)return {...record,issues,status:'NON VÉRIFIABLE'};
+    if(m.rotation90Suspect)issues.push('Orientation inhabituelle (rotation de 90° possible, à confirmer)');
+    if(m.skewDegrees!==null&&Math.abs(m.skewDegrees)>=2.5&&m.skewConfidence>=1.14)
+      issues.push('Inclinaison probable : '+m.skewDegrees.toFixed(1)+'° (indice '+m.skewConfidence.toFixed(2)+')');
+    const base=medians.get(record.titlePath);
+    if(base&&base.count>=8&&base.score>2&&m.sharpness<base.score*0.32)
+      issues.push('Netteté atypiquement faible pour ce titre (environ '+Math.round(m.sharpness/base.score*100)+' % de la médiane)');
+    return {...record,issues,status:issues.length?'À VÉRIFIER':'AUCUN INDICE DÉTECTÉ'};
+  });
+  return {records:rows,total:rows.length,analyzed:valid.length,
+    suspects:rows.filter(r=>r.status==='À VÉRIFIER').length,
+    unverifiable:rows.filter(r=>r.status==='NON VÉRIFIABLE').length,
+    unreadable:rows.filter(r=>r.status==='NON ANALYSÉ').length,
+    medians};
+}
+function visualPrecheckHtml(result){
+  if(!result)return '';
+  const shown=result.records.filter(r=>r.status!=='AUCUN INDICE DÉTECTÉ');
+  const capped=shown.slice(0,150);
+  return '<p><strong>'+result.total+' JPEG parcourus</strong> · '+result.analyzed+' analysables · '+
+    result.suspects+' à vérifier · '+result.unverifiable+' non vérifiables · '+result.unreadable+
+    ' non décodés. Les autres JPEG ne présentent pas d’indice selon ce prototype ; ce n’est pas un verdict de conformité.</p>'+
+    (capped.length?'<table><tr><th>Fichier</th><th>État</th><th>Indice / motif</th></tr>'+
+    capped.map(r=>'<tr><td>'+esc(r.path)+'</td><td>'+esc(r.status)+'</td><td>'+
+      esc(r.issues.join(' ; ')||r.error||r.metrics?.reason||'')+'</td></tr>').join('')+'</table>':
+    '<p class="small">Aucun signalement particulier, sous réserve des limites des mesures.</p>')+
+    (shown.length>150?'<p class="small">'+(shown.length-150)+' autre(s) résultat(s) figurent dans le CSV complet.</p>':'')+
+    '<p class="small">Repérage indicatif, non étalonné sur un lot de référence : le contrôle humain ALÉA et ses seuils ISO restent inchangés. La rotation de 180° ne peut pas être détectée de manière fiable sans OCR.</p>';
+}
+function resetVisualPrecheck(){
+  visualPrecheckToken++;
+  lastVisualPrecheck=null;
+  $('runVisualPrecheck').disabled=true;
+  $('cancelVisualPrecheck').disabled=true;
+  $('exportVisualPrecheck').disabled=true;
+  $('visualPrecheckStatus').textContent='Lancer d’abord l’analyse de la livraison.';
+  $('visualPrecheckResults').innerHTML='';
+}
+$('cancelVisualPrecheck').onclick=()=>{
+  visualPrecheckToken++;
+  $('cancelVisualPrecheck').disabled=true;
+  $('visualPrecheckStatus').textContent='Arrêt demandé. Aucun résultat incomplet ne sera conservé.';
+};
+$('runVisualPrecheck').onclick=async()=>{
+  if(!lastAnalyzedRows.length)return;
+  const jpeg=lastAnalyzedRows.filter(r=>['.jpg','.jpeg'].includes(r.ext)&&!isCalibrationImageRow(r));
+  if(!jpeg.length)return;
+  const token=++visualPrecheckToken,analysisId=lastSampleId;
+  lastVisualPrecheck=null;
+  $('runVisualPrecheck').disabled=true;
+  $('cancelVisualPrecheck').disabled=false;
+  $('exportVisualPrecheck').disabled=true;
+  $('visualPrecheckResults').innerHTML='';
+  const records=[];
+  try{
+    for(let i=0;i<jpeg.length;i++){
+      if(token!==visualPrecheckToken||analysisId!==lastSampleId)return;
+      const row=jpeg[i];
+      let metrics=null,error='';
+      try{
+        const pixels=await readVisualJpegGray(row.file);
+        metrics=analyzeVisualGray(pixels.gray,pixels.w,pixels.h);
+      }catch(e){error=String(e?.message||e);}
+      if(token!==visualPrecheckToken||analysisId!==lastSampleId)return;
+      records.push({path:row.path,titlePath:titlePathForRow(row),metrics,error});
+      if((i+1)%3===0||i+1===jpeg.length){
+        $('visualPrecheckStatus').textContent='Précontrôle JPEG : '+(i+1)+' / '+jpeg.length+' images...';
+        await MelanisoftPerformance.yieldToBrowser();
+      }
+    }
+    if(token!==visualPrecheckToken||analysisId!==lastSampleId)return;
+    lastVisualPrecheck={...summarizeVisualPrecheck(records),completedAt:new Date().toLocaleString('fr-FR')};
+    $('visualPrecheckResults').innerHTML=visualPrecheckHtml(lastVisualPrecheck);
+    $('visualPrecheckStatus').textContent='Précontrôle indicatif terminé. Les décisions ISO et les alertes automatiques principales restent inchangées.';
+    $('exportVisualPrecheck').disabled=false;
+    if(lastAnalyzedRows.length)$('rapportMetier').innerHTML=exhaustivitySummaryHtml()+buildReportMetierHtml(lastAnalyzedRows);
+  }finally{
+    if(token===visualPrecheckToken){
+      $('runVisualPrecheck').disabled=false;
+      $('cancelVisualPrecheck').disabled=true;
+    }
+  }
+};
+$('exportVisualPrecheck').onclick=()=>{
+  if(!lastVisualPrecheck)return;
+  const header=['Fichier','Titre','État','Indices à vérifier','Inclinaison estimée (°)','Indice inclinaison','Indice orientation','Netteté','Motif absence mesure'];
+  const values=lastVisualPrecheck.records.map(r=>[r.path,r.titlePath,r.status,r.issues.join(' ; '),
+    r.metrics?.skewDegrees??'',r.metrics?.skewConfidence??'',r.metrics?.orientationRatio??'',
+    r.metrics?.sharpness??'',r.error||r.metrics?.reason||'']);
+  const csvCell=v=>{
+    let text=String(v??'');
+    if(/^[=+\-@\t\r]/.test(text))text="'"+text; // Formules CSV non exécutables dans Excel.
+    return '"'+text.replace(/"/g,'""')+'"';
+  };
+  const csv='\uFEFF'+[header,...values].map(row=>row.map(csvCell).join(';')).join('\r\n');
+  download('Melanisoft_precontrole_JPEG.csv',csv,'text/csv;charset=utf-8');
+};
+
 function tiffTypeSize(type){return ({1:1,2:1,3:2,4:4,5:8,7:1,9:4,10:8})[type]||1}
 function tiffNumber(bytes,type,le,index=0){
   const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
