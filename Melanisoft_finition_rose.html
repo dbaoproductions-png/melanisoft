@@ -1228,14 +1228,23 @@ function visualViewNumber(path){
 }
 function summarizeVisualPrecheck(records){
   const valid=records.filter(r=>r.metrics&&r.metrics.verifiable);
-  const medians=new Map(),byView=new Map(),appearanceMedians=new Map();
+  const medians=new Map(),byView=new Map(),appearanceMedians=new Map(),byViewAppearance=new Map();
   for(const record of valid){
     const view=visualViewNumber(record.path);
     if(!view)continue;
     const key=record.titlePath+'|'+view;
     if(!byView.has(key))byView.set(key,[]);
     byView.get(key).push(record.metrics.sharpness);
+    if(!byViewAppearance.has(key))byViewAppearance.set(key,{focus:[],contrast:[]});
+    const candidate=byViewAppearance.get(key);
+    if(Number.isFinite(record.metrics.normalizedSharpness))candidate.focus.push(record.metrics.normalizedSharpness);
+    if(Number.isFinite(record.metrics.regionalContrast))candidate.contrast.push(record.metrics.regionalContrast);
   }
+  const viewAppearanceMedians=new Map([...byViewAppearance].map(([key,v])=>[key,{
+    focus:v.focus.length>=8?median(v.focus):null,
+    contrast:v.contrast.length>=8?median(v.contrast):null,
+    focusCount:v.focus.length,contrastCount:v.contrast.length
+  }]));
   const viewMedians=new Map([...byView].map(([key,scores])=>
     [key,{score:median(scores),count:scores.length}]));
   for(const key of new Set(valid.map(r=>r.titlePath))){
@@ -1258,16 +1267,20 @@ function summarizeVisualPrecheck(records){
     const viewBase=view?viewMedians.get(record.titlePath+'|'+view):null;
     const viewRatio=viewBase&&viewBase.count>=8&&viewBase.score>0&&m?
       m.sharpness/viewBase.score:null;
-    const appearance=appearanceMedians.get(record.titlePath);
-    const focusRatio=Number.isFinite(m?.normalizedSharpness)&&appearance?.focus>0?
-      m.normalizedSharpness/appearance.focus:null;
-    const contrastRatio=Number.isFinite(m?.regionalContrast)&&appearance?.contrast>0?
-      m.regionalContrast/appearance.contrast:null;
+    const titleAppearance=appearanceMedians.get(record.titlePath);
+    const viewAppearance=view?viewAppearanceMedians.get(record.titlePath+'|'+view):null;
+    const focusReference=(viewAppearance?.focus>0)?viewAppearance.focus:titleAppearance?.focus;
+    const contrastReference=(viewAppearance?.contrast>0)?viewAppearance.contrast:titleAppearance?.contrast;
+    const referenceLabel=(viewAppearance?.focus>0)?'des vues n° '+view:'du titre';
+    const focusRatio=Number.isFinite(m?.normalizedSharpness)&&focusReference>0?
+      m.normalizedSharpness/focusReference:null;
+    const contrastRatio=Number.isFinite(m?.regionalContrast)&&contrastReference>0?
+      m.regionalContrast/contrastReference:null;
     const viewContext=viewRatio===null?'Comparaison par rang indisponible':
       viewRatio<0.45?'Indice également faible parmi les vues n° '+view:
       'Différence de contenu ou de mise en page possible pour la vue n° '+view;
-    if(record.error)return {...record,issues,status:'NON ANALYSÉ',view,viewRatio:null,focusRatio:null,contrastRatio:null,signalKind:''};
-    if(!m||!m.verifiable)return {...record,issues,status:'NON VÉRIFIABLE',view,viewRatio:null,focusRatio:null,contrastRatio:null,signalKind:''};
+    if(record.error)return {...record,issues,status:'NON ANALYSÉ',view,viewRatio:null,focusRatio:null,contrastRatio:null,signalKind:'',referenceLabel:''};
+    if(!m||!m.verifiable)return {...record,issues,status:'NON VÉRIFIABLE',view,viewRatio:null,focusRatio:null,contrastRatio:null,signalKind:'',referenceLabel:''};
     let signalKind='';
     if(m.rotation90Suspect){
       issues.push('Orientation inhabituelle (rotation de 90° possible, à confirmer)');
@@ -1281,7 +1294,7 @@ function summarizeVisualPrecheck(records){
     const rawLow=!!(base&&base.count>=8&&base.score>2&&m.sharpness<base.score*0.32);
     const normalizedLow=focusRatio!==null&&focusRatio<0.42&&m.regionalContrast>=18;
     if(normalizedLow){
-      issues.push('Contours moins définis après prise en compte du contraste : flou possible, à examiner (indice corrigé '+Math.round(focusRatio*100)+' % de la médiane du titre).');
+      issues.push('Contours moins définis après prise en compte du contraste : flou possible, à examiner (indice corrigé '+Math.round(focusRatio*100)+' % de la médiane '+referenceLabel+').');
       if(!signalKind)signalKind='Contours atténués (flou possible)';
     }else if(rawLow){
       const pale=contrastRatio!==null&&contrastRatio<0.78&&focusRatio!==null&&focusRatio>=0.60;
@@ -1293,14 +1306,14 @@ function summarizeVisualPrecheck(records){
     if(rawLow||normalizedLow)
       issues.push(viewContext+(viewRatio===null?'.':' ('+Math.round(viewRatio*100)+' % de la médiane de cette position).'));
     return {...record,issues,status:issues.length?'À VÉRIFIER':'AUCUN INDICE DÉTECTÉ',
-      view,viewRatio,focusRatio,contrastRatio,signalKind};
+      view,viewRatio,focusRatio,contrastRatio,signalKind,referenceLabel};
   });
   return {records:rows,total:rows.length,analyzed:valid.length,
     suspects:rows.filter(r=>r.status==='À VÉRIFIER').length,
     unverifiable:rows.filter(r=>r.status==='NON VÉRIFIABLE').length,
     unreadable:rows.filter(r=>r.status==='NON ANALYSÉ').length,
     skewEstimated:valid.filter(r=>r.metrics.skewDegrees!==null).length,
-    medians,viewMedians,appearanceMedians};
+    medians,viewMedians,appearanceMedians,viewAppearanceMedians};
 }
 function visualPrecheckHtml(result){
   if(!result)return '';
@@ -1381,7 +1394,7 @@ $('runVisualPrecheck').onclick=async()=>{
 };
 $('exportVisualPrecheck').onclick=()=>{
   if(!lastVisualPrecheck)return;
-  const header=['Fichier','Titre','État','Indices à vérifier','Inclinaison estimée (°)','Indice inclinaison','Indice orientation','Netteté','Motif absence mesure','N° de vue','Ratio netteté / médiane même n° (%)','Interprétation de la position','Inclinaison mesurable','Contraste régional (0-255)','Variabilité du contraste','Indice de contours corrigé du contraste','Indice corrigé / médiane titre (%)','Contraste / médiane titre (%)','Interprétation du signal'];
+  const header=['Fichier','Titre','État','Indices à vérifier','Inclinaison estimée (°)','Indice inclinaison','Indice orientation','Netteté','Motif absence mesure','N° de vue','Ratio netteté / médiane même n° (%)','Interprétation de la position','Inclinaison mesurable','Contraste régional (0-255)','Variabilité du contraste','Indice de contours corrigé du contraste','Indice corrigé / médiane titre (%)','Contraste / référence (%)','Interprétation du signal','Base de comparaison'];
   const values=lastVisualPrecheck.records.map(r=>[r.path,r.titlePath,r.status,r.issues.join(' ; '),
     r.metrics?.skewDegrees??'',r.metrics?.skewConfidence??'',r.metrics?.orientationRatio??'',
     r.metrics?.sharpness??'',r.error||r.metrics?.reason||'',r.view||'',
@@ -1390,7 +1403,7 @@ $('exportVisualPrecheck').onclick=()=>{
     r.metrics?.regionalContrast??'',r.metrics?.contrastVariation??'',r.metrics?.normalizedSharpness??'',
     r.focusRatio!==null&&r.focusRatio!==undefined?Math.round(r.focusRatio*100):'',
     r.contrastRatio!==null&&r.contrastRatio!==undefined?Math.round(r.contrastRatio*100):'',
-    r.signalKind||'']);
+    r.signalKind||'',r.referenceLabel||'']);
   const csvCell=v=>{
     let text=String(v??'');
     if(/^[=+\-@\t\r]/.test(text))text="'"+text; // Formules CSV non exécutables dans Excel.
