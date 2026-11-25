@@ -94,6 +94,7 @@ vm.runInContext(`
     readJpegTechnicalMetadata,
     readTiffMeta,
     analyzeVisualGray,
+    visualContrastMetrics,
     summarizeVisualPrecheck,
     visualPrecheckHtml,
     recoRowsToMap,
@@ -470,6 +471,35 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   const blurry=syntheticTextPage({blur:true});
   const blurryResult=api.analyzeVisualGray(blurry.gray,blurry.w,blurry.h);
   assert.ok(blurryResult.sharpness<uprightResult.sharpness*0.32);
+  // Une impression moins dense conserve son rapport netteté/contraste²,
+  // contrairement à un vrai floutage. Aucun des cas ne prouve l'origine du défaut.
+  const paleGray=new Uint8Array(upright.gray.length);
+  for(let i=0;i<paleGray.length;i++)
+    paleGray[i]=Math.round(238-(238-upright.gray[i])*0.40);
+  const pale=api.analyzeVisualGray(paleGray,upright.w,upright.h);
+  const rawSharpness=api.visualContrastMetrics(upright.gray,upright.w,upright.h,uprightResult.sharpness);
+  // Mesure du Laplacien à la même position et au même pas de grille que le moteur.
+  function laplacianScore(gray,w,h){
+    const x0=Math.max(2,Math.ceil(w*0.06)),x1=Math.min(w-2,Math.floor(w*0.94));
+    const y0=Math.max(2,Math.ceil(h*0.06)),y1=Math.min(h-2,Math.floor(h*0.94));
+    const stride=Math.max(2,Math.ceil(Math.max(w,h)/270));
+    let lap=0,n=0;
+    for(let y=y0;y<y1;y+=stride)for(let x=x0;x<x1;x+=stride){
+      const k=y*w+x,sec=4*gray[k]-gray[k-1]-gray[k+1]-gray[k-w]-gray[k+w];
+      lap+=sec*sec/16;n++;
+    }
+    return lap/Math.max(1,n);
+  }
+  const paleMetrics=api.visualContrastMetrics(paleGray,upright.w,upright.h,
+    laplacianScore(paleGray,upright.w,upright.h));
+  assert.ok(rawSharpness.normalizedSharpness>0);
+  assert.ok(paleMetrics.regionalContrast<rawSharpness.regionalContrast);
+  assert.ok(Math.abs(paleMetrics.normalizedSharpness/rawSharpness.normalizedSharpness-1)<0.25,
+    'la netteté corrigée doit résister à l’encre pâle');
+  assert.ok(blurryResult.normalizedSharpness<rawSharpness.normalizedSharpness*0.55,
+    'le vrai flou doit réduire l’indice corrigé');
+  assert.ok(paleMetrics.regions>=30);
+
   const empty=syntheticTextPage({blank:true});
   assert.equal(api.analyzeVisualGray(empty.gray,empty.w,empty.h).verifiable,false);
   assert.equal(api.analyzeVisualGray(null,240,320).verifiable,false);
@@ -487,7 +517,7 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   assert.equal(visualSummary.unverifiable,1);
   assert.equal(visualSummary.unreadable,1);
   assert.ok(visualSummary.skewEstimated>=1&&visualSummary.skewEstimated<visualSummary.total);
-  assert.ok(visualSummary.records.find(x=>x.path.endsWith('blurry.jpg')).issues.some(x=>/netteté/i.test(x)));
+  assert.ok(visualSummary.records.find(x=>x.path.endsWith('blurry.jpg')).issues.some(x=>/flou possible|netteté/i.test(x)));
   assert.ok(visualSummary.records.find(x=>x.path.endsWith('turned.jpg')).issues.some(x=>/90°/.test(x)));
   assert.ok(visualSummary.records.find(x=>x.path.endsWith('tilted.jpg')).issues.some(x=>/Inclinaison/.test(x)));
   assert.ok(!visualSummary.records.find(x=>x.path.endsWith('crisp_0.jpg')).issues.length);
