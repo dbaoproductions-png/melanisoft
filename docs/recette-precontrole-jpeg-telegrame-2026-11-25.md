@@ -32,3 +32,30 @@ CSV de précontrôle du titre transmis pour analyse (non publié ici). 401 ligne
 Contrôler visuellement les huit JPEG signalés, particulièrement les six vues 0004, en comparant chaque image à la même page dans les fascicules voisins et au TIFF correspondant. Noter : flou de prise de vue, faible contenu graphique normal, défaut d'impression original ou indéterminé. Vérifier également quelques pages choisies au hasard **non signalées** pour estimer les défauts manqués. Puis relancer le précontrôle mis à jour sur la même livraison et comparer l'export CSV.
 
 **État** : modification validée par les tests automatisés, mais **non encore revalidée avec le disque réel** ; ne pas fusionner dans `main` sans cette recette.
+
+
+## 25 novembre — vérification sur deux JPEG fournis
+
+Les images **FRB315556101_P015_19000527_0004.jpg** et **FRB315556101_P015_19000923_0009.jpg** ont été examinées. Elles présentent une impression et des annonces colorées peu contrastées, avec certains caractères et filets restant visuellement bien délimités. Cela rend plausible un défaut propre à l'imprimé, **sans le démontrer** : il faudrait un original physique ou une référence indépendante.
+
+L'étalonnage local (sur une réduction à 560 pixels, sans publier les images) a comparé l'original numérique à deux transformations artificielles appliquées **uniquement pour le test** :
+
+| JPEG | Source : contraste local / netteté corrigée | Contraste affaibli artificiellement | Flou gaussien artificiel (rayon 2) |
+|---|---|---|---|
+| 19000527_0004 | 57 / 93,1 | 34 / 94,9 | 52 / 27,4 |
+| 19000923_0009 | 42 / 159,5 | 25 / 163,0 | 37 / 49,9 |
+
+*Note méthodologique :* la « netteté corrigée » est un indice expérimental du Laplacien divisé par le carré d'une mesure de contraste régional (fois 10 000). Les valeurs absolues dépendent de l'échelle d'analyse et du contenu. Cet essai ne démontre ni que les documents originaux sont fautifs, ni que les fichiers sont conformes.
+
+Le test met néanmoins en évidence un effet utile : après affaiblissement artificiel de l'encrage, la netteté brute diminue mais **l'indice corrigé reste presque identique** ; après floutage artificiel, il diminue nettement.
+
+### Modifications du précontrôle
+
+- Contraste local sur 36 régions, variabilité régionale, indice de contours corrigé du contraste.
+- Comparaison de la netteté corrigée **aux vues portant le même numéro** lorsque huit références existent ; sinon, à la médiane du titre.
+- Interprétations volontairement prudentes : « contraste faible / origine à vérifier », « contours atténués (flou possible) » ou « netteté atypique / cause indéterminée ». **Aucune classification automatique « défaut de l'original confirmé »**.
+- Les alertes de netteté brute sont conservées, même lorsqu'une cause alternative probable explique la mesure.
+- CSV enrichi avec les scores et la base de comparaison ; résultat ISO et ALÉA inchangés.
+- Tests synthétiques séparant encrage artificiellement pâli, flou artificiel et variations habituelles d'une vue publicitaire au sein du titre.
+
+Le prochain passage sur le disque reste nécessaire pour déterminer le nombre d'alertes réellement pertinentes et les éventuels faux négatifs. Les deux JPEG transmis ne doivent pas être incorporés au dépôt GitHub.
