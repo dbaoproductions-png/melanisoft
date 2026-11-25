@@ -94,7 +94,7 @@
         <p id="status" class="small"></p><progress id="prog" value="0" max="100" style="display:none"></progress>
         <div class="field" style="margin-top:14px">
           <strong>Prototype : précontrôle visuel des JPEG</strong>
-          <p class="small">Analyse locale facultative de tous les JPEG : orientation potentiellement inhabituelle, inclinaison probable et netteté relative au titre. Ces indices ne constituent jamais une non-conformité ISO et ne remplissent pas l’ALÉA. Sans OCR, une page retournée à 180° ne peut pas être détectée de façon fiable.</p>
+          <p class="small">Analyse locale facultative de tous les JPEG : orientation inhabituelle, inclinaison probable, netteté et contraste local. La netteté rapportée au contraste aide à distinguer une impression pâle d’un flou possible, sans prétendre connaître la cause. Ces indices ne constituent jamais une non-conformité ISO et ne remplissent pas l’ALÉA. Sans OCR, une page retournée à 180° ne peut pas être détectée de façon fiable.</p>
           <div class="actions">
             <button id="runVisualPrecheck" disabled>Analyser les JPEG de la livraison</button>
             <button id="cancelVisualPrecheck" disabled type="button">Arrêter le précontrôle</button>
@@ -1309,8 +1309,8 @@ function visualPrecheckHtml(result){
   return '<p><strong>'+result.total+' JPEG parcourus</strong> · '+result.analyzed+' analysables · '+
     result.suspects+' à vérifier · '+result.unverifiable+' non vérifiables · '+result.unreadable+
     ' non décodés · inclinaison estimable sur '+result.skewEstimated+' JPEG. Les autres JPEG ne présentent pas d’indice selon ce prototype ; ce n’est pas un verdict de conformité.</p>'+
-    (capped.length?'<table><tr><th>Fichier</th><th>État</th><th>Indice / motif</th></tr>'+
-    capped.map(r=>'<tr><td>'+esc(r.path)+'</td><td>'+esc(r.status)+'</td><td>'+
+    (capped.length?'<table><tr><th>Fichier</th><th>État</th><th>Interprétation</th><th>Indice / motif</th></tr>'+
+    capped.map(r=>'<tr><td>'+esc(r.path)+'</td><td>'+esc(r.status)+'</td><td>'+esc(r.signalKind||'À examiner')+'</td><td>'+
       esc(r.issues.join(' ; ')||r.error||r.metrics?.reason||'')+'</td></tr>').join('')+'</table>':
     '<p class="small">Aucun signalement particulier, sous réserve des limites des mesures.</p>')+
     (shown.length>150?'<p class="small">'+(shown.length-150)+' autre(s) résultat(s) figurent dans le CSV complet.</p>':'')+
@@ -1381,12 +1381,16 @@ $('runVisualPrecheck').onclick=async()=>{
 };
 $('exportVisualPrecheck').onclick=()=>{
   if(!lastVisualPrecheck)return;
-  const header=['Fichier','Titre','État','Indices à vérifier','Inclinaison estimée (°)','Indice inclinaison','Indice orientation','Netteté','Motif absence mesure','N° de vue','Ratio netteté / médiane même n° (%)','Interprétation de la position','Inclinaison mesurable'];
+  const header=['Fichier','Titre','État','Indices à vérifier','Inclinaison estimée (°)','Indice inclinaison','Indice orientation','Netteté','Motif absence mesure','N° de vue','Ratio netteté / médiane même n° (%)','Interprétation de la position','Inclinaison mesurable','Contraste régional (0-255)','Variabilité du contraste','Indice de contours corrigé du contraste','Indice corrigé / médiane titre (%)','Contraste / médiane titre (%)','Interprétation du signal'];
   const values=lastVisualPrecheck.records.map(r=>[r.path,r.titlePath,r.status,r.issues.join(' ; '),
     r.metrics?.skewDegrees??'',r.metrics?.skewConfidence??'',r.metrics?.orientationRatio??'',
     r.metrics?.sharpness??'',r.error||r.metrics?.reason||'',r.view||'',
     r.viewRatio!==null&&r.viewRatio!==undefined?Math.round(r.viewRatio*100):'',
-    r.viewContext||'',r.metrics?.skewDegrees!==null&&r.metrics?.skewDegrees!==undefined?'Oui':'Non']);
+    r.viewContext||'',r.metrics?.skewDegrees!==null&&r.metrics?.skewDegrees!==undefined?'Oui':'Non',
+    r.metrics?.regionalContrast??'',r.metrics?.contrastVariation??'',r.metrics?.normalizedSharpness??'',
+    r.focusRatio!==null&&r.focusRatio!==undefined?Math.round(r.focusRatio*100):'',
+    r.contrastRatio!==null&&r.contrastRatio!==undefined?Math.round(r.contrastRatio*100):'',
+    r.signalKind||'']);
   const csvCell=v=>{
     let text=String(v??'');
     if(/^[=+\-@\t\r]/.test(text))text="'"+text; // Formules CSV non exécutables dans Excel.
