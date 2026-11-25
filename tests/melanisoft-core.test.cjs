@@ -487,7 +487,7 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   assert.equal(visualSummary.unverifiable,1);
   assert.equal(visualSummary.unreadable,1);
   assert.ok(visualSummary.skewEstimated>=1&&visualSummary.skewEstimated<visualSummary.total);
-  assert.ok(visualSummary.records.find(x=>x.path.endsWith('blurry.jpg')).issues.some(x=>/Netteté/.test(x)));
+  assert.ok(visualSummary.records.find(x=>x.path.endsWith('blurry.jpg')).issues.some(x=>/netteté/i.test(x)));
   assert.ok(visualSummary.records.find(x=>x.path.endsWith('turned.jpg')).issues.some(x=>/90°/.test(x)));
   assert.ok(visualSummary.records.find(x=>x.path.endsWith('tilted.jpg')).issues.some(x=>/Inclinaison/.test(x)));
   assert.ok(!visualSummary.records.find(x=>x.path.endsWith('crisp_0.jpg')).issues.length);
