@@ -537,6 +537,8 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   assert.ok(position9);
   assert.equal(position9.status,'À VÉRIFIER');
   assert.equal(position9.view,'0009');
+  assert.match(position9.viewContext,/vue n° 0009/);
+  assert.equal(byPosition.records.find(r=>r.path.includes('_0001.jpg')).viewContext,'');
   assert.ok(position9.viewRatio>0.60&&position9.viewRatio<0.7);
   assert.match(position9.issues.join(' '),/Différence de contenu ou de mise en page possible/);
   const position1=byPosition.records.find(r=>r.path.includes('_0001.jpg'));
@@ -572,6 +574,8 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   assert.match(html,/Contraste régional \(0-255\)/);
   assert.match(html,/Indice de contours corrigé du contraste/);
   assert.match(html,/Base de comparaison/);
+  assert.match(html,/Indice corrigé \/ médiane de référence \(%\)/);
+  assert.match(html,/viewContext:issues.length\?viewContext:''/);
   assert.match(html,/Ces indices ne constituent jamais une non-conformité ISO/);
   assert.match(html,/précontrôle visuel des JPEG/);
   assert.match(html,/Ces indices ne constituent jamais une non-conformité ISO/);
