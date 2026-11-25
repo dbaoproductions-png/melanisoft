@@ -1228,7 +1228,7 @@ function visualViewNumber(path){
 }
 function summarizeVisualPrecheck(records){
   const valid=records.filter(r=>r.metrics&&r.metrics.verifiable);
-  const medians=new Map(),byView=new Map();
+  const medians=new Map(),byView=new Map(),appearanceMedians=new Map();
   for(const record of valid){
     const view=visualViewNumber(record.path);
     if(!view)continue;
@@ -1239,8 +1239,17 @@ function summarizeVisualPrecheck(records){
   const viewMedians=new Map([...byView].map(([key,scores])=>
     [key,{score:median(scores),count:scores.length}]));
   for(const key of new Set(valid.map(r=>r.titlePath))){
-    const scores=valid.filter(r=>r.titlePath===key).map(r=>r.metrics.sharpness);
+    const local=valid.filter(r=>r.titlePath===key);
+    const scores=local.map(r=>r.metrics.sharpness);
     medians.set(key,{score:median(scores),count:scores.length});
+    const focus=local.map(r=>r.metrics.normalizedSharpness).filter(Number.isFinite);
+    const contrasts=local.map(r=>r.metrics.regionalContrast).filter(Number.isFinite);
+    appearanceMedians.set(key,{
+      focus:focus.length>=8?median(focus):null,
+      contrast:contrasts.length>=8?median(contrasts):null,
+      focusCount:focus.length,
+      contrastCount:contrasts.length
+    });
   }
   const rows=records.map(record=>{
     const issues=[];
@@ -1249,29 +1258,49 @@ function summarizeVisualPrecheck(records){
     const viewBase=view?viewMedians.get(record.titlePath+'|'+view):null;
     const viewRatio=viewBase&&viewBase.count>=8&&viewBase.score>0&&m?
       m.sharpness/viewBase.score:null;
-    const viewContext=viewRatio===null?'Échantillon insuffisant pour cette position':
+    const appearance=appearanceMedians.get(record.titlePath);
+    const focusRatio=Number.isFinite(m?.normalizedSharpness)&&appearance?.focus>0?
+      m.normalizedSharpness/appearance.focus:null;
+    const contrastRatio=Number.isFinite(m?.regionalContrast)&&appearance?.contrast>0?
+      m.regionalContrast/appearance.contrast:null;
+    const viewContext=viewRatio===null?'Comparaison par rang indisponible':
       viewRatio<0.45?'Indice également faible parmi les vues n° '+view:
       'Différence de contenu ou de mise en page possible pour la vue n° '+view;
-    if(record.error)return {...record,issues,status:'NON ANALYSÉ',view,viewRatio:null,viewContext:''};
-    if(!m||!m.verifiable)return {...record,issues,status:'NON VÉRIFIABLE',view,viewRatio:null,viewContext:''};
-    if(m.rotation90Suspect)issues.push('Orientation inhabituelle (rotation de 90° possible, à confirmer)');
-    if(m.skewDegrees!==null&&Math.abs(m.skewDegrees)>=2.5&&m.skewConfidence>=1.14)
-      issues.push('Inclinaison probable : '+m.skewDegrees.toFixed(1)+'° (indice '+m.skewConfidence.toFixed(2)+')');
-    const base=medians.get(record.titlePath);
-    if(base&&base.count>=8&&base.score>2&&m.sharpness<base.score*0.32){
-      issues.push('Indice de netteté faible par rapport au titre ('+
-        Math.round(m.sharpness/base.score*100)+' % de la médiane). '+viewContext+
-        (viewRatio===null?'.':' ('+Math.round(viewRatio*100)+' % de la médiane de cette position).'));
+    if(record.error)return {...record,issues,status:'NON ANALYSÉ',view,viewRatio:null,focusRatio:null,contrastRatio:null,signalKind:''};
+    if(!m||!m.verifiable)return {...record,issues,status:'NON VÉRIFIABLE',view,viewRatio:null,focusRatio:null,contrastRatio:null,signalKind:''};
+    let signalKind='';
+    if(m.rotation90Suspect){
+      issues.push('Orientation inhabituelle (rotation de 90° possible, à confirmer)');
+      signalKind='Orientation à vérifier';
     }
+    if(m.skewDegrees!==null&&Math.abs(m.skewDegrees)>=2.5&&m.skewConfidence>=1.14){
+      issues.push('Inclinaison probable : '+m.skewDegrees.toFixed(1)+'° (indice '+m.skewConfidence.toFixed(2)+')');
+      if(!signalKind)signalKind='Inclinaison à vérifier';
+    }
+    const base=medians.get(record.titlePath);
+    const rawLow=!!(base&&base.count>=8&&base.score>2&&m.sharpness<base.score*0.32);
+    const normalizedLow=focusRatio!==null&&focusRatio<0.42&&m.regionalContrast>=18;
+    if(normalizedLow){
+      issues.push('Contours moins définis après prise en compte du contraste : flou possible, à examiner (indice corrigé '+Math.round(focusRatio*100)+' % de la médiane du titre).');
+      if(!signalKind)signalKind='Contours atténués (flou possible)';
+    }else if(rawLow){
+      const pale=contrastRatio!==null&&contrastRatio<0.78&&focusRatio!==null&&focusRatio>=0.60;
+      issues.push(pale?
+        'Contraste local faible, mais contours relativement préservés : impression pâle ou document d’origine peu lisible possible, à confirmer visuellement.':
+        'Netteté brute inférieure au reste du titre : différence de contenu, d’encrage ou flou à départager visuellement.');
+      if(!signalKind)signalKind=pale?'Contraste faible / origine à vérifier':'Netteté atypique / cause indéterminée';
+    }
+    if(rawLow||normalizedLow)
+      issues.push(viewContext+(viewRatio===null?'.':' ('+Math.round(viewRatio*100)+' % de la médiane de cette position).'));
     return {...record,issues,status:issues.length?'À VÉRIFIER':'AUCUN INDICE DÉTECTÉ',
-      view,viewRatio,viewContext};
+      view,viewRatio,focusRatio,contrastRatio,signalKind};
   });
   return {records:rows,total:rows.length,analyzed:valid.length,
     suspects:rows.filter(r=>r.status==='À VÉRIFIER').length,
     unverifiable:rows.filter(r=>r.status==='NON VÉRIFIABLE').length,
     unreadable:rows.filter(r=>r.status==='NON ANALYSÉ').length,
     skewEstimated:valid.filter(r=>r.metrics.skewDegrees!==null).length,
-    medians,viewMedians};
+    medians,viewMedians,appearanceMedians};
 }
 function visualPrecheckHtml(result){
   if(!result)return '';
