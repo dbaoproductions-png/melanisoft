@@ -1146,8 +1146,10 @@ function analyzeVisualGray(gray,w,h){
       if(score>best){best=score;bestAngle=angle;}
     }
     skewConfidence=zero>0?best/zero:0;
-    // Un maximum en bord de plage est trop ambigu pour être interprété.
-    if(Math.abs(bestAngle)<4.9)skewDegrees=bestAngle;
+    // Une ligne détectée à 0° avec un score identique à la référence
+    // n'est pas une mesure de 0° : c'est une inclinaison indéterminée.
+    // Les images réelles du Télégramme donnaient 401 fois 0° / confiance 1.
+    if(Math.abs(bestAngle)<4.9 && skewConfidence>=1.14)skewDegrees=bestAngle;
   }
   return {verifiable:true,sharpness,edgeStrength,inkRatio,orientationRatio,
     rotation90Suspect,skewDegrees,skewConfidence};
@@ -1176,9 +1178,22 @@ async function readVisualJpegGray(file){
     canvas.width=0;canvas.height=0;
   }
 }
+function visualViewNumber(path){
+  const m=String(path||'').match(/_(\d{4})\.(?:jpg|jpeg)$/i);
+  return m?m[1]:'';
+}
 function summarizeVisualPrecheck(records){
   const valid=records.filter(r=>r.metrics&&r.metrics.verifiable);
-  const medians=new Map();
+  const medians=new Map(),byView=new Map();
+  for(const record of valid){
+    const view=visualViewNumber(record.path);
+    if(!view)continue;
+    const key=record.titlePath+'|'+view;
+    if(!byView.has(key))byView.set(key,[]);
+    byView.get(key).push(record.metrics.sharpness);
+  }
+  const viewMedians=new Map([...byView].map(([key,scores])=>
+    [key,{score:median(scores),count:scores.length}]));
   for(const key of new Set(valid.map(r=>r.titlePath))){
     const scores=valid.filter(r=>r.titlePath===key).map(r=>r.metrics.sharpness);
     medians.set(key,{score:median(scores),count:scores.length});
@@ -1186,21 +1201,33 @@ function summarizeVisualPrecheck(records){
   const rows=records.map(record=>{
     const issues=[];
     const m=record.metrics;
-    if(record.error)return {...record,issues,status:'NON ANALYSÉ'};
-    if(!m||!m.verifiable)return {...record,issues,status:'NON VÉRIFIABLE'};
+    const view=visualViewNumber(record.path);
+    const viewBase=view?viewMedians.get(record.titlePath+'|'+view):null;
+    const viewRatio=viewBase&&viewBase.count>=8&&viewBase.score>0&&m?
+      m.sharpness/viewBase.score:null;
+    const viewContext=viewRatio===null?'Échantillon insuffisant pour cette position':
+      viewRatio<0.45?'Indice également faible parmi les vues n° '+view:
+      'Différence de contenu ou de mise en page possible pour la vue n° '+view;
+    if(record.error)return {...record,issues,status:'NON ANALYSÉ',view,viewRatio:null,viewContext:''};
+    if(!m||!m.verifiable)return {...record,issues,status:'NON VÉRIFIABLE',view,viewRatio:null,viewContext:''};
     if(m.rotation90Suspect)issues.push('Orientation inhabituelle (rotation de 90° possible, à confirmer)');
     if(m.skewDegrees!==null&&Math.abs(m.skewDegrees)>=2.5&&m.skewConfidence>=1.14)
       issues.push('Inclinaison probable : '+m.skewDegrees.toFixed(1)+'° (indice '+m.skewConfidence.toFixed(2)+')');
     const base=medians.get(record.titlePath);
-    if(base&&base.count>=8&&base.score>2&&m.sharpness<base.score*0.32)
-      issues.push('Netteté atypiquement faible pour ce titre (environ '+Math.round(m.sharpness/base.score*100)+' % de la médiane)');
-    return {...record,issues,status:issues.length?'À VÉRIFIER':'AUCUN INDICE DÉTECTÉ'};
+    if(base&&base.count>=8&&base.score>2&&m.sharpness<base.score*0.32){
+      issues.push('Indice de netteté faible par rapport au titre ('+
+        Math.round(m.sharpness/base.score*100)+' % de la médiane). '+viewContext+
+        (viewRatio===null?'.':' ('+Math.round(viewRatio*100)+' % de la médiane de cette position).'));
+    }
+    return {...record,issues,status:issues.length?'À VÉRIFIER':'AUCUN INDICE DÉTECTÉ',
+      view,viewRatio,viewContext};
   });
   return {records:rows,total:rows.length,analyzed:valid.length,
     suspects:rows.filter(r=>r.status==='À VÉRIFIER').length,
     unverifiable:rows.filter(r=>r.status==='NON VÉRIFIABLE').length,
     unreadable:rows.filter(r=>r.status==='NON ANALYSÉ').length,
-    medians};
+    skewEstimated:valid.filter(r=>r.metrics.skewDegrees!==null).length,
+    medians,viewMedians};
 }
 function visualPrecheckHtml(result){
   if(!result)return '';
@@ -1208,7 +1235,7 @@ function visualPrecheckHtml(result){
   const capped=shown.slice(0,150);
   return '<p><strong>'+result.total+' JPEG parcourus</strong> · '+result.analyzed+' analysables · '+
     result.suspects+' à vérifier · '+result.unverifiable+' non vérifiables · '+result.unreadable+
-    ' non décodés. Les autres JPEG ne présentent pas d’indice selon ce prototype ; ce n’est pas un verdict de conformité.</p>'+
+    ' non décodés · inclinaison estimable sur '+result.skewEstimated+' JPEG. Les autres JPEG ne présentent pas d’indice selon ce prototype ; ce n’est pas un verdict de conformité.</p>'+
     (capped.length?'<table><tr><th>Fichier</th><th>État</th><th>Indice / motif</th></tr>'+
     capped.map(r=>'<tr><td>'+esc(r.path)+'</td><td>'+esc(r.status)+'</td><td>'+
       esc(r.issues.join(' ; ')||r.error||r.metrics?.reason||'')+'</td></tr>').join('')+'</table>':
@@ -1281,10 +1308,12 @@ $('runVisualPrecheck').onclick=async()=>{
 };
 $('exportVisualPrecheck').onclick=()=>{
   if(!lastVisualPrecheck)return;
-  const header=['Fichier','Titre','État','Indices à vérifier','Inclinaison estimée (°)','Indice inclinaison','Indice orientation','Netteté','Motif absence mesure'];
+  const header=['Fichier','Titre','État','Indices à vérifier','Inclinaison estimée (°)','Indice inclinaison','Indice orientation','Netteté','Motif absence mesure','N° de vue','Ratio netteté / médiane même n° (%)','Interprétation de la position','Inclinaison mesurable'];
   const values=lastVisualPrecheck.records.map(r=>[r.path,r.titlePath,r.status,r.issues.join(' ; '),
     r.metrics?.skewDegrees??'',r.metrics?.skewConfidence??'',r.metrics?.orientationRatio??'',
-    r.metrics?.sharpness??'',r.error||r.metrics?.reason||'']);
+    r.metrics?.sharpness??'',r.error||r.metrics?.reason||'',r.view||'',
+    r.viewRatio!==null&&r.viewRatio!==undefined?Math.round(r.viewRatio*100):'',
+    r.viewContext||'',r.metrics?.skewDegrees!==null&&r.metrics?.skewDegrees!==undefined?'Oui':'Non']);
   const csvCell=v=>{
     let text=String(v??'');
     if(/^[=+\-@\t\r]/.test(text))text="'"+text; // Formules CSV non exécutables dans Excel.
