@@ -1097,6 +1097,50 @@ async function analyzeJpegHistogram(file){
 }
 // Précontrôle local exploratoire, distinct des contrôles ISO et de l'ALÉA.
 // Les trois indices sont des signaux de tri : aucun ne prouve une non-conformité.
+// Contraste local robuste (36 régions) : le Laplacien brut diminue lorsque
+// l'impression est pâle, même si les contours ne sont pas flous. Le rapport
+// Laplacien/contraste² est plus stable lors d'un simple affaiblissement du trait.
+// Valeurs exploratoires : ni certificat d'origine ni verdict de réception.
+function visualContrastMetrics(gray,w,h,sharpness){
+  if(!gray||w<64||h<64||gray.length!==w*h||!Number.isFinite(sharpness))
+    return {regionalContrast:null,contrastVariation:null,normalizedSharpness:null,regions:0};
+  const x0=Math.ceil(w*0.06),x1=Math.floor(w*0.94);
+  const y0=Math.ceil(h*0.06),y1=Math.floor(h*0.94);
+  const contrasts=[];
+  for(let iy=0;iy<6;iy++){
+    const ya=Math.floor(y0+(y1-y0)*iy/6);
+    const yb=Math.floor(y0+(y1-y0)*(iy+1)/6);
+    for(let ix=0;ix<6;ix++){
+      const xa=Math.floor(x0+(x1-x0)*ix/6);
+      const xb=Math.floor(x0+(x1-x0)*(ix+1)/6);
+      const bins=new Uint32Array(256);
+      let n=0;
+      for(let y=ya;y<yb;y+=2)for(let x=xa;x<xb;x+=2){
+        bins[gray[y*w+x]]++;n++;
+      }
+      if(n<24)continue;
+      let acc=0,low=-1,high=255;
+      const q05=Math.ceil(0.05*n),q95=Math.ceil(0.95*n);
+      for(let i=0;i<256;i++){
+        acc+=bins[i];
+        if(low<0&&acc>=q05)low=i;
+        if(acc>=q95){high=i;break;}
+      }
+      contrasts.push(Math.max(0,high-low));
+    }
+  }
+  if(contrasts.length<12)return {regionalContrast:null,contrastVariation:null,normalizedSharpness:null,regions:contrasts.length};
+  contrasts.sort((a,b)=>a-b);
+  const at=p=>contrasts[Math.min(contrasts.length-1,Math.floor((contrasts.length-1)*p))];
+  const regionalContrast=at(0.75);
+  const typical=at(0.5);
+  const contrastVariation=(at(0.75)-at(0.25))/Math.max(12,typical);
+  return {
+    regionalContrast,contrastVariation,
+    normalizedSharpness:sharpness*10000/Math.max(12,regionalContrast)**2,
+    regions:contrasts.length
+  };
+}
 function analyzeVisualGray(gray,w,h){
   if(!gray || !Number.isInteger(w)||!Number.isInteger(h)||w<64||h<64||gray.length!==w*h)
     return {verifiable:false,reason:'Image trop petite ou pixels indisponibles'};
@@ -1152,7 +1196,7 @@ function analyzeVisualGray(gray,w,h){
     if(Math.abs(bestAngle)<4.9 && skewConfidence>=1.14)skewDegrees=bestAngle;
   }
   return {verifiable:true,sharpness,edgeStrength,inkRatio,orientationRatio,
-    rotation90Suspect,skewDegrees,skewConfidence};
+    rotation90Suspect,skewDegrees,skewConfidence,...visualContrastMetrics(gray,w,h,sharpness)};
 }
 async function readVisualJpegGray(file){
   if(typeof createImageBitmap!=='function')throw new Error('Décodage des JPEG indisponible dans ce navigateur');
