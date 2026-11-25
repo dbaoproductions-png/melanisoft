@@ -93,6 +93,17 @@
         </div>
         <p id="status" class="small"></p><progress id="prog" value="0" max="100" style="display:none"></progress>
         <div class="field" style="margin-top:14px">
+          <strong>Prototype : précontrôle visuel des JPEG</strong>
+          <p class="small">Analyse locale facultative de tous les JPEG : orientation potentiellement inhabituelle, inclinaison probable et netteté relative au titre. Ces indices ne constituent jamais une non-conformité ISO et ne remplissent pas l’ALÉA. Sans OCR, une page retournée à 180° ne peut pas être détectée de façon fiable.</p>
+          <div class="actions">
+            <button id="runVisualPrecheck" disabled>Analyser les JPEG de la livraison</button>
+            <button id="cancelVisualPrecheck" disabled type="button">Arrêter le précontrôle</button>
+            <button id="exportVisualPrecheck" disabled type="button">Exporter le précontrôle (CSV)</button>
+          </div>
+          <p id="visualPrecheckStatus" class="small" aria-live="polite">Lancer d’abord l’analyse de la livraison.</p>
+          <div id="visualPrecheckResults"></div>
+        </div>
+        <div class="field" style="margin-top:14px">
           <strong>Retour du contrôle visuel ALÉA</strong>
           <p class="small">Après l'export, saisir « Conforme » ou « NC » dans chacune des huit colonnes I à P pour chaque vue. La colonne Q décrit les défauts de l'original sans supprimer les NC déjà saisies. Renseigner le contrôleur, puis importer le même fichier XLSX : l'identifiant du tirage sera vérifié. Une feuille incomplète ne permet pas de conclure.</p>
           <label for="visualReviewer"><span>Contrôleur ayant examiné l'échantillon</span></label>
@@ -154,10 +165,11 @@ const GallicaQCState = {
   alea: { rows: [] },
   report: { html: '', aleaHtml: '' },
   metadata: { lastAudit: null },
-  visualReview: { lastImport: null, sampleId: '' }
+  visualReview: { lastImport: null, sampleId: '' },
+  visualPrecheck: { lastRun: null }
 };
 
-let anomalies=[], files=[], reportHtml='', aleaHtml='', aleaRows=[], recoCandidates=[], validatedReco='', lastIsoPlan=null, lastRecoRead=null, lastRecurrenceSummary=null, lastMetadataAudit=null, lastVisualReview=null, lastSampleId='', lastAnalyzedRows=[];
+let anomalies=[], files=[], reportHtml='', aleaHtml='', aleaRows=[], recoCandidates=[], validatedReco='', lastIsoPlan=null, lastRecoRead=null, lastRecurrenceSummary=null, lastMetadataAudit=null, lastVisualReview=null, lastVisualPrecheck=null, visualPrecheckToken=0, lastSampleId='', lastAnalyzedRows=[];
 const MelanisoftPerformance = {
   heartbeatEvery: 200,
   async yieldToBrowser(message){
@@ -186,6 +198,7 @@ function syncGallicaQCState(){
   GallicaQCState.metadata.lastAudit=lastMetadataAudit;
   GallicaQCState.visualReview.lastImport=lastVisualReview;
   GallicaQCState.visualReview.sampleId=lastSampleId;
+  GallicaQCState.visualPrecheck.lastRun=lastVisualPrecheck;
   GallicaQCState.report.html=reportHtml;
   GallicaQCState.report.aleaHtml=aleaHtml;
 }
@@ -778,7 +791,7 @@ function compareJpegTiffRows(jpegRows,tiffRows){
 }
 function populateReco(){
   files=[...$('folder').files]; validatedReco=''; $('recoStatus').textContent=''; lastIsoPlan=null; updateIsoPreview(null);
-  resetVisualReview(); lastSampleId=''; lastAnalyzedRows=[];
+  resetVisualReview(); resetVisualPrecheck(); lastSampleId=''; lastAnalyzedRows=[];
   recoCandidates=files.filter(f=>['.xls','.xlsx','.csv'].includes(ext(f.name))).map(f=>f.webkitRelativePath);
   const box=$('recoBox'), sel=$('recoSelect'); sel.innerHTML='';
   if(recoCandidates.length){
@@ -1893,7 +1906,7 @@ function exhaustivitySummaryHtml(){
 }
 
 
-$('run').onclick=async()=>{try{$('exportAleaExcel').disabled=true; $('exportHtml').disabled=true; $('exportAttentionExcel').disabled=true; files=[...$('folder').files]; updateControl1Label(); const C=cfg(); const c3=controls.find(c=>c.id===3); if(c3)c3.name='Arborescence des dossiers conforme ('+C.consult+' / '+C.conserv+')'; anomalies=[]; lastRecurrenceSummary=null; lastMetadataAudit=null; lastSampleId=''; lastAnalyzedRows=[]; resetVisualReview(); updateRecurrencePreview(null); controls.forEach(c=>{c.status='NON VÉRIFIÉ';c.count=0}); lastExhaustivitySummary=null; updateControl1Label(); $('prog').style.display='block'; $('status').textContent='Analyse en cours...';
+$('run').onclick=async()=>{try{resetVisualPrecheck(); $('exportAleaExcel').disabled=true; $('exportHtml').disabled=true; $('exportAttentionExcel').disabled=true; files=[...$('folder').files]; updateControl1Label(); const C=cfg(); const c3=controls.find(c=>c.id===3); if(c3)c3.name='Arborescence des dossiers conforme ('+C.consult+' / '+C.conserv+')'; anomalies=[]; lastRecurrenceSummary=null; lastMetadataAudit=null; lastSampleId=''; lastAnalyzedRows=[]; resetVisualReview(); updateRecurrencePreview(null); controls.forEach(c=>{c.status='NON VÉRIFIÉ';c.count=0}); lastExhaustivitySummary=null; updateControl1Label(); $('prog').style.display='block'; $('status').textContent='Analyse en cours...';
 setC(1,files.length?'OK':'ERREUR'); setC(2,files.length?'OK':'ERREUR',files.length); if(!files.length)return;
 const rows=files.map(f=>{let parts=f.webkitRelativePath.split('/');return {file:f,path:f.webkitRelativePath,name:f.name,parts,ext:ext(f.name),size:f.size,parsed:parseName(f.name)}});
 await MelanisoftPerformance.yieldToBrowser('Inventaire des fichiers terminé. Classement en cours...');
@@ -2138,7 +2151,7 @@ if(!metadataSample.length)[43,44,51,52,53].forEach(id=>setC(id,'NON VÉRIFIABLE'
 if(!technicalJpegCount)[41,42].forEach(id=>setC(id,'NON APPLICABLE',0));
 if(!technicalTiffCount)[45,46].forEach(id=>setC(id,'NON APPLICABLE',0));
 setC(50,'OK');
-lastAnalyzedRows=rows; render(rows, sample); $('importVisualReview').disabled=!sample.length; $('exportAttentionExcel').disabled=false; $('exportHtml').disabled=false;  $('exportAleaExcel').disabled=false; $('prog').style.display='none'; $('status').textContent='Contrôle terminé.';}catch(e){$('prog').style.display='none'; $('status').innerHTML='<span class=err>Erreur pendant le contrôle : '+esc(e && (e.message||e))+'</span>'; console.error(e);}}
+lastAnalyzedRows=rows; render(rows, sample); $('runVisualPrecheck').disabled=!jpeg.length; $('visualPrecheckStatus').textContent=jpeg.length?'Prêt à analyser '+jpeg.length+' JPEG. Le contrôle ISO reste distinct.':'Aucun JPEG exploitable.'; $('importVisualReview').disabled=!sample.length; $('exportAttentionExcel').disabled=false; $('exportHtml').disabled=false;  $('exportAleaExcel').disabled=false; $('prog').style.display='none'; $('status').textContent='Contrôle terminé.';}catch(e){$('prog').style.display='none'; $('status').innerHTML='<span class=err>Erreur pendant le contrôle : '+esc(e && (e.message||e))+'</span>'; console.error(e);}}
 
 function controlChapter(id){
   // Les chapitres sont désormais calculés à partir du numéro affiché,
