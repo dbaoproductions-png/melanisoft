@@ -543,6 +543,36 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   assert.ok(position1&&position1.viewRatio!==null);
   assert.match(html,/Inclinaison mesurable/);
   assert.match(html,/Ratio netteté \/ médiane même n°/);
+  // Le modèle d'une vue publicitaire (rang 0009) ne doit pas être comparé
+  // aux pages de texte (rang 0001) pour décider d'un flou possible.
+  const visualMetric=(sharp,contrast)=>({...uprightResult,sharpness:sharp,
+    regionalContrast:contrast,normalizedSharpness:sharp*10000/(contrast*contrast)});
+  const positionBatch=[
+    ...Array.from({length:12},(_,i)=>({path:'Titre/JPEG/1900'+String(i).padStart(4,'0')+'_0001.jpg',
+      titlePath:'Titre',metrics:visualMetric(800,70)})),
+    ...Array.from({length:9},(_,i)=>({path:'Titre/JPEG/1900'+String(i).padStart(4,'0')+'_0009.jpg',
+      titlePath:'Titre',metrics:visualMetric(300,35)})),
+    {path:'Titre/JPEG/19000009_0009.jpg',titlePath:'Titre',metrics:visualMetric(192,34)}
+  ];
+  const similarPages=api.summarizeVisualPrecheck(positionBatch);
+  const paleLeaf=similarPages.records.find(r=>r.path==='Titre/JPEG/19000009_0009.jpg');
+  assert.ok(paleLeaf);
+  assert.equal(paleLeaf.status,'À VÉRIFIER'); // l'écart brut est conservé
+  assert.match(paleLeaf.referenceLabel,/vues n° 0009/);
+  assert.ok(paleLeaf.focusRatio>0.6);
+  assert.ok(!paleLeaf.issues.some(x=>/flou possible/i.test(x)));
+  // La même vue de rang 0009 artificiellement floutée doit être signalée
+  // si le score corrigé du contraste décroche aussi.
+  const blurryPage=positionBatch.map(r=>({...r}));
+  blurryPage[blurryPage.length-1]={...blurryPage[blurryPage.length-1],
+    metrics:visualMetric(192,55)};
+  const blurredLeaf=api.summarizeVisualPrecheck(blurryPage).records.find(r=>r.path==='Titre/JPEG/19000009_0009.jpg');
+  assert.ok(blurredLeaf.issues.some(x=>/flou possible/i.test(x)));
+  assert.ok(blurredLeaf.focusRatio<0.42);
+  assert.match(html,/Contraste régional \(0-255\)/);
+  assert.match(html,/Indice de contours corrigé du contraste/);
+  assert.match(html,/Base de comparaison/);
+  assert.match(html,/Ces indices ne constituent jamais une non-conformité ISO/);
   assert.match(html,/précontrôle visuel des JPEG/);
   assert.match(html,/Ces indices ne constituent jamais une non-conformité ISO/);
   assert.match(html,/La rotation de 180° ne peut pas être détectée de manière fiable sans OCR/);
