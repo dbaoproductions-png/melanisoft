@@ -455,6 +455,8 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   const uprightResult=api.analyzeVisualGray(upright.gray,upright.w,upright.h);
   assert.equal(uprightResult.verifiable,true);
   assert.equal(uprightResult.rotation90Suspect,false);
+  assert.equal(uprightResult.skewDegrees,null); // Une mesure non probante ne vaut PAS 0°.
+  assert.equal(uprightResult.skewConfidence,1);
   const turned=syntheticTextPage({turn90:true});
   const turnedResult=api.analyzeVisualGray(turned.gray,turned.w,turned.h);
   assert.equal(turnedResult.verifiable,true);
@@ -484,11 +486,33 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   assert.equal(visualSummary.suspects,3);
   assert.equal(visualSummary.unverifiable,1);
   assert.equal(visualSummary.unreadable,1);
+  assert.ok(visualSummary.skewEstimated>=1&&visualSummary.skewEstimated<visualSummary.total);
   assert.ok(visualSummary.records.find(x=>x.path.endsWith('blurry.jpg')).issues.some(x=>/Netteté/.test(x)));
   assert.ok(visualSummary.records.find(x=>x.path.endsWith('turned.jpg')).issues.some(x=>/90°/.test(x)));
   assert.ok(visualSummary.records.find(x=>x.path.endsWith('tilted.jpg')).issues.some(x=>/Inclinaison/.test(x)));
   assert.ok(!visualSummary.records.find(x=>x.path.endsWith('crisp_0.jpg')).issues.length);
   assert.match(api.visualPrecheckHtml(visualSummary),/15 JPEG parcourus/);
+  assert.match(api.visualPrecheckHtml(visualSummary),/inclinaison estimable sur/);
+  // Les vues peu détaillées peuvent avoir un profil propre selon leur rang.
+  // Une alerte par rapport au titre n'est pas effacée, mais contextualisée.
+  const metricsWithScore=score=>({...uprightResult,sharpness:score});
+  const contextual=[
+    ...Array.from({length:12},(_,i)=>({path:'Lot/Titre/JPEG/1900'+String(i).padStart(4,'0')+'_0001.jpg',
+      titlePath:'Lot/Titre',metrics:metricsWithScore(800)})),
+    ...Array.from({length:10},(_,i)=>({path:'Lot/Titre/JPEG/1900'+String(i).padStart(4,'0')+'_0009.jpg',
+      titlePath:'Lot/Titre',metrics:metricsWithScore(i===0?192:300)}))
+  ];
+  const byPosition=api.summarizeVisualPrecheck(contextual);
+  const position9=byPosition.records.find(r=>r.path.includes('19000000_0009.jpg'));
+  assert.ok(position9);
+  assert.equal(position9.status,'À VÉRIFIER');
+  assert.equal(position9.view,'0009');
+  assert.ok(position9.viewRatio>0.60&&position9.viewRatio<0.7);
+  assert.match(position9.issues.join(' '),/Différence de contenu ou de mise en page possible/);
+  const position1=byPosition.records.find(r=>r.path.includes('_0001.jpg'));
+  assert.ok(position1&&position1.viewRatio!==null);
+  assert.match(html,/Inclinaison mesurable/);
+  assert.match(html,/Ratio netteté \/ médiane même n°/);
   assert.match(html,/précontrôle visuel des JPEG/);
   assert.match(html,/Ces indices ne constituent jamais une non-conformité ISO/);
   assert.match(html,/La rotation de 180° ne peut pas être détectée de manière fiable sans OCR/);
