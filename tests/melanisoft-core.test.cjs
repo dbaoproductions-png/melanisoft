@@ -93,6 +93,9 @@ vm.runInContext(`
     readJpegMeta,
     readJpegTechnicalMetadata,
     readTiffMeta,
+    analyzeVisualGray,
+    summarizeVisualPrecheck,
+    visualPrecheckHtml,
     recoRowsToMap,
     appendXlsxRowAtExcelNumber,
     logicalFasciculeKey,
@@ -410,6 +413,86 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   assert.ok(!Array.from(api.getAnomalies()).some(a =>
     a.control === 44 && a.path === visualTiff.path));
   api.clearAnomalies();
+
+  // Détection exploratoire de signaux visuels sur pixels synthétiques.
+  // Aucun de ces signaux n'entre dans le résultat ISO ou le tableau ALÉA.
+  function syntheticTextPage({w=240,h=320,turn90=false,skew=0,blur=false,blank=false}={}){
+    const gray=new Uint8Array(w*h).fill(238);
+    if(!blank){
+      const theta=skew*Math.PI/180;
+      if(turn90){
+        for(let x=28;x<w-20;x+=17)for(let y=24;y<h-22;y++){
+          for(let thick=-1;thick<=1;thick++){
+            const px=x+thick;
+            gray[y*w+px]=32;
+          }
+        }
+      } else {
+        for(let y=28;y<h-18;y+=18){
+          for(let x=24;x<w-22;x++){
+            const base=y+Math.tan(theta)*(x-w/2);
+            for(let t=-1;t<=1;t++){
+              const yy=Math.round(base)+t;
+              if(yy>=0&&yy<h)gray[yy*w+x]=32;
+            }
+          }
+        }
+      }
+    }
+    if(!blur)return {w,h,gray};
+    const smooth=new Uint8Array(gray.length);
+    for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+      let total=0,n=0;
+      for(let oy=-3;oy<=3;oy++)for(let ox=-3;ox<=3;ox++){
+        const xx=Math.max(0,Math.min(w-1,x+ox)),yy=Math.max(0,Math.min(h-1,y+oy));
+        total+=gray[yy*w+xx];n++;
+      }
+      smooth[y*w+x]=Math.round(total/n);
+    }
+    return {w,h,gray:smooth};
+  }
+  const upright=syntheticTextPage();
+  const uprightResult=api.analyzeVisualGray(upright.gray,upright.w,upright.h);
+  assert.equal(uprightResult.verifiable,true);
+  assert.equal(uprightResult.rotation90Suspect,false);
+  const turned=syntheticTextPage({turn90:true});
+  const turnedResult=api.analyzeVisualGray(turned.gray,turned.w,turned.h);
+  assert.equal(turnedResult.verifiable,true);
+  assert.equal(turnedResult.rotation90Suspect,true);
+  const tilted=syntheticTextPage({skew:3.5});
+  const tiltedResult=api.analyzeVisualGray(tilted.gray,tilted.w,tilted.h);
+  assert.equal(tiltedResult.verifiable,true);
+  assert.ok(Math.abs(tiltedResult.skewDegrees-3.5)<=1,
+    'inclinaison de 3,5° : '+tiltedResult.skewDegrees);
+  assert.ok(tiltedResult.skewConfidence>=1.14);
+  const blurry=syntheticTextPage({blur:true});
+  const blurryResult=api.analyzeVisualGray(blurry.gray,blurry.w,blurry.h);
+  assert.ok(blurryResult.sharpness<uprightResult.sharpness*0.32);
+  const empty=syntheticTextPage({blank:true});
+  assert.equal(api.analyzeVisualGray(empty.gray,empty.w,empty.h).verifiable,false);
+  assert.equal(api.analyzeVisualGray(null,240,320).verifiable,false);
+  const samples=[
+    ...Array.from({length:10},(_,i)=>({path:'Lot/Titre/JPEG/crisp_'+i+'.jpg',titlePath:'Lot/Titre',metrics:uprightResult})),
+    {path:'Lot/Titre/JPEG/blurry.jpg',titlePath:'Lot/Titre',metrics:blurryResult},
+    {path:'Lot/Titre/JPEG/turned.jpg',titlePath:'Lot/Titre',metrics:turnedResult},
+    {path:'Lot/Titre/JPEG/tilted.jpg',titlePath:'Lot/Titre',metrics:tiltedResult},
+    {path:'Lot/Titre/JPEG/blank.jpg',titlePath:'Lot/Titre',metrics:api.analyzeVisualGray(empty.gray,empty.w,empty.h)},
+    {path:'Lot/Titre/JPEG/broken.jpg',titlePath:'Lot/Titre',error:'Décodage impossible'}
+  ];
+  const visualSummary=api.summarizeVisualPrecheck(samples);
+  assert.equal(visualSummary.total,samples.length);
+  assert.equal(visualSummary.suspects,3);
+  assert.equal(visualSummary.unverifiable,1);
+  assert.equal(visualSummary.unreadable,1);
+  assert.ok(visualSummary.records.find(x=>x.path.endsWith('blurry.jpg')).issues.some(x=>/Netteté/.test(x)));
+  assert.ok(visualSummary.records.find(x=>x.path.endsWith('turned.jpg')).issues.some(x=>/90°/.test(x)));
+  assert.ok(visualSummary.records.find(x=>x.path.endsWith('tilted.jpg')).issues.some(x=>/Inclinaison/.test(x)));
+  assert.ok(!visualSummary.records.find(x=>x.path.endsWith('crisp_0.jpg')).issues.length);
+  assert.match(api.visualPrecheckHtml(visualSummary),/15 JPEG parcourus/);
+  assert.match(html,/précontrôle visuel des JPEG/);
+  assert.match(html,/Ces indices ne constituent jamais une non-conformité ISO/);
+  assert.match(html,/La rotation de 180° ne peut pas être détectée de manière fiable sans OCR/);
+  assert.match(html,/Exporter le précontrôle \(CSV\)/);
 
   // Retour ALÉA : huit colonnes obligatoires, identification stricte du tirage,
   // une unité non conforme par vue, décision séparée par titre.
