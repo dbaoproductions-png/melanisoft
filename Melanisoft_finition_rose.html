@@ -1416,7 +1416,7 @@ function visualPrecheckHtml(result){
     result.suspects+' à vérifier · '+result.unverifiable+' non vérifiables · '+result.unreadable+
     ' non décodés · inclinaison estimable sur '+result.skewEstimated+' JPEG.</p>'+
     '<p><strong>Cadrage, mode relié :</strong> '+result.framingMeasured+' contours estimés · '+
-    result.framingReview+' bord(s) de page à examiner · '+result.framingUnknown+
+    result.framingReview+' image(s) avec un bord non isolé · '+result.framingUnknown+
     ' mesures impossibles. Les marges sont indicatives, sans seuil fixe en millimètres et sans verdict de conformité.</p>'+
     (capped.length?'<table><tr><th>Fichier</th><th>État</th><th>Cadrage (mode relié)</th><th>Interprétation</th><th>Indice / motif</th></tr>'+
     capped.map(r=>'<tr><td>'+esc(r.path)+'</td><td>'+esc(r.status)+'</td><td>'+esc(r.framingStatus||'NON MESURÉ')+'</td><td>'+esc(r.signalKind||'—')+'</td><td>'+
@@ -2711,7 +2711,7 @@ function buildReportMetierHtml(rows){
       lastVisualPrecheck.suspects+' à vérifier, '+lastVisualPrecheck.unverifiable+' non vérifiables et '+
       lastVisualPrecheck.unreadable+' non décodés. Durée : '+(lastVisualPrecheck.durationMs/1000).toFixed(1)+' s. Cadrage BnF mode relié : '+
       lastVisualPrecheck.framingMeasured+' mesures possibles, '+lastVisualPrecheck.framingReview+
-      ' bord(s) à examiner et '+lastVisualPrecheck.framingUnknown+
+      ' images avec un bord non isolé et '+lastVisualPrecheck.framingUnknown+
       ' vérification(s) impossible(s). Pas de marge fixe pour le mode relié. Les indices ne préjugent pas de la conformité ISO ; le CSV contient les détails.</p></div>':''}
     ${buildRecoObservationsHtml()}
     <div class="report-section"><h3>Suites à donner</h3><div class="recommendations">${recos.map(r=>`<div class="recommendation"><strong>${esc(r.title)}</strong><span>${esc(r.text)}</span></div>`).join('')}</div></div>
@@ -3101,7 +3101,7 @@ function buildReportTxt(){
       lastVisualPrecheck.unreadable+' non décodés.');
     push('Durée : '+(lastVisualPrecheck.durationMs/1000).toFixed(1)+' s. Aucun résultat ne modifie les alertes officielles ou la décision ISO.');
     push('Cadrage (mode relié, règle BnF 7) : '+lastVisualPrecheck.framingMeasured+' images dont les bords sont estimables, '+
-      lastVisualPrecheck.framingReview+' bord(s) à examiner, '+lastVisualPrecheck.framingUnknown+
+      lastVisualPrecheck.framingReview+' images avec un bord non isolé, '+lastVisualPrecheck.framingUnknown+
       ' sans séparation papier/fond suffisante. Aucune marge fixe du mode pièce appliquée.');
     push('Détails image par image : fichier CSV « Melanisoft_precontrole_JPEG.csv ».');
     blank();
