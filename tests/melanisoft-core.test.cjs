@@ -8,6 +8,24 @@ const { TextDecoder, TextEncoder } = require('node:util');
 
 const htmlPath = path.join(__dirname, '..', 'Melanisoft_finition_rose.html');
 const html = fs.readFileSync(htmlPath, 'utf8');
+// Garde-fous : un contrôle non réalisé ne doit jamais se déclarer conforme.
+assert.ok(html.includes("controls.forEach(c=>{c.status='NON VÉRIFIÉ';c.count=0})"));
+assert.ok(html.includes("setC(34,recoViewCounts.status!=='ok'||!recoViewCounts.entries?.length?'NON VÉRIFIABLE'"));
+assert.ok(html.includes("setC(36,recoViewCounts.status!=='ok'?'NON VÉRIFIABLE'"));
+assert.ok(html.includes("add('ALERTE',30.5,r.path,'Histogramme non analysé"));
+assert.ok(html.includes("add('INFO',30.5,r.path,'Histogramme TIFF non vérifiable dans ce navigateur"));
+assert.ok(html.includes("histogramTiffUndecoded>0)add('ALERTE',30.5"));
+assert.ok(!html.includes("add('INFO',30.5,r.path,'Histogramme non analysé"));
+assert.ok(!html.includes("add('INFO',30.5,r.path,'Histogramme TIFF non analysé"));
+
+// Contrôles 34, 35 et 52 : des données insuffisantes ne produisent pas un faux OK.
+assert.ok(html.includes("recoViewCounts.status!=='ok'||!recoViewCounts.entries?.length?'NON VÉRIFIABLE'"));
+assert.ok(html.includes("else problems.push('identité du fascicule non identifiable"));
+assert.ok(html.includes("if(manualExpected===null || prestExpected===null)problems.push('comparaison récolement initial / prestataire non vérifiable"));
+assert.ok(html.includes("setC(35,!fascEntries.length?'NON VÉRIFIABLE'"));
+assert.ok(html.includes("[30.5,47].forEach(id=>setC(id,'NON VÉRIFIABLE',0))"));
+assert.ok(html.includes("[43,44,51,52,53].forEach(id=>setC(id,'NON VÉRIFIABLE',0))"));
+
 const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
 assert.ok(scriptMatch, 'Le script principal doit être présent dans le HTML.');
 
@@ -67,16 +85,43 @@ vm.runInContext(`
     iso2859Plan,
     buildIsoSampleByTitle,
     buildTechnicalSampleRows,
+    buildMetadataSampleRows,
+    inspectMetadataSampleRows,
+    iptcConformityIssues,
     compareJpegTiffRows,
     parseName,
     readJpegMeta,
     readJpegTechnicalMetadata,
     readTiffMeta,
+    analyzeVisualGray,
+    analyzeRelieFramingFromRgba,
+    classifyRelieFramingRecords,
+    relieFramingMargin,
+    visualContrastMetrics,
+    summarizeVisualPrecheck,
+    visualPrecheckHtml,
     recoRowsToMap,
+    appendXlsxRowAtExcelNumber,
+    logicalFasciculeKey,
     buildDiskLookup,
     buildExhaustivityAudit,
+    buildDecision,
     buildAleaExcel,
-    setAleaRows(rows) { aleaRows = rows; }
+    buildAttentionExcel,
+    consolidatedAnomalies,
+    technicalDetailModel,
+    technicalDetailHtml,
+    topAnomalies,
+    recoObservationForLine,
+    recoObservationsList,
+    setRecoRead(result) { lastRecoRead = result; },
+    setAnomalies(items) { anomalies = items; },
+    visualHeaders: VISUAL_REVIEW_HEADERS,
+    assessVisualReviewRows,
+    setSampleId(id) { lastSampleId = id; },
+    setAleaRows(rows) { aleaRows = rows; },
+    clearAnomalies() { anomalies = []; },
+    getAnomalies() { return anomalies; }
   };
 `, context);
 const api = context.__api;
@@ -117,15 +162,15 @@ function iptcDataset(dataset, text) {
 }
 const iptcUtf8Charset = [0x1c, 0x01, 90, 0x00, 0x03, 0x1b, 0x25, 0x47];
 
-function syntheticJpeg() {
+function syntheticJpeg(sourceValue = 'Archives municipales de Sète', dpiValue = 400) {
   const jfif = new Uint8Array(14);
-  jfif.set([0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x01, 0x01, 0x90, 0x01, 0x90], 0);
+  jfif.set([0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x01, (dpiValue >>> 8) & 255, dpiValue & 255, (dpiValue >>> 8) & 255, dpiValue & 255], 0);
   const exif = [...new TextEncoder().encode('Exif\0\0')];
   const app13 = [
     ...new TextEncoder().encode('Photoshop 3.0\0'),
     ...iptcUtf8Charset,
     ...iptcDataset(105, '16 PER'),
-    ...iptcDataset(115, 'Archives municipales de Sète'),
+    ...iptcDataset(115, sourceValue),
   ];
   const profile = new Uint8Array(128);
   profile.set(new TextEncoder().encode('RGB '), 16);
@@ -147,9 +192,9 @@ function syntheticJpeg() {
   ];
 }
 
-function syntheticTiff() {
+function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   const headline = [...iptcUtf8Charset, ...iptcDataset(105, '16 PER')];
-  const source = iptcDataset(115, 'Archives municipales de Sète');
+  const source = iptcDataset(115, sourceValue);
   const iptc = Uint8Array.from([...headline, ...source]);
   const icc = new Uint8Array(128);
   icc.set(new TextEncoder().encode('RGB '), 16);
@@ -196,6 +241,13 @@ function syntheticTiff() {
 }
 
 (async () => {
+  // Référence chiffrée du guide Occitanie Livre & Lecture, juillet 2025, p. 13-14.
+  const referencePlan = api.iso2859Plan(45000);
+  assert.equal(referencePlan.code, 'N');
+  assert.equal(referencePlan.sampleSize, 500);
+  assert.equal(referencePlan.accept, 10);
+  assert.equal(referencePlan.reject, 11);
+
   const titleAJpeg = Array.from({ length: 10 }, (_, i) => imageRow('Titre A', 'JPEG', i + 1));
   const titleATiff = Array.from({ length: 10 }, (_, i) => imageRow('Titre A', 'TIFF', i + 1));
   const titleAJpegWithoutTiff = imageRow('Titre A', 'JPEG', 11);
@@ -219,6 +271,524 @@ function syntheticTiff() {
     [...technical.map(row => row.path)],
     [titleATiff[0].path],
   );
+
+  // Une vue ISO selectionnee sur le TIFF declenche DEUX lectures de metadonnees.
+  // Un Source IPTC errone dans le JPEG doit etre detecte meme si son TIFF est sain.
+  const visualTiff = {
+    ...titleATiff[0],
+    parsed: api.parseName(titleATiff[0].name),
+    file: fileLike(syntheticTiff()),
+  };
+  const companionJpeg = {
+    ...titleAJpeg[0],
+    parsed: api.parseName(titleAJpeg[0].name),
+    file: fileLike(syntheticJpeg('Source IPTC incorrecte')),
+  };
+  const unrelatedJpeg = {
+    ...titleBJpeg[0],
+    parsed: api.parseName(titleBJpeg[0].name),
+    file: fileLike(syntheticJpeg()),
+  };
+  const metadataFiles = api.buildMetadataSampleRows(
+    [visualTiff],
+    [companionJpeg, unrelatedJpeg],
+    [visualTiff],
+  );
+  assert.equal(api.buildTechnicalSampleRows([visualTiff]).length, 1);
+  assert.equal(metadataFiles.length, 2);
+  assert.ok(metadataFiles.some(row => row.path === visualTiff.path));
+  assert.ok(metadataFiles.some(row => row.path === companionJpeg.path));
+  assert.ok(!metadataFiles.some(row => row.path === unrelatedJpeg.path));
+  const reference = {
+    row: 2,
+    establishment: 'Archives municipales de Sète',
+    coteTitle: '16 PER',
+  };
+  const metadataReco = {
+    status: 'ok',
+    map: new Map([['frb123456789_cote_20260101_0001', reference]]),
+    entries: [reference],
+  };
+  api.clearAnomalies();
+  const checked = await api.inspectMetadataSampleRows(metadataFiles, metadataReco);
+  assert.equal(checked.total, 2);
+  assert.equal(checked.jpeg, 1);
+  assert.equal(checked.tiff, 1);
+  assert.equal(checked.errors, 0);
+  const metadataAlerts = Array.from(api.getAnomalies());
+  assert.ok(metadataAlerts.some(a => a.control === 52
+    && a.path === companionJpeg.path && /Source non conforme/.test(a.msg)));
+  assert.ok(!metadataAlerts.some(a => a.path === visualTiff.path && a.control === 52));
+
+  // Validation explicite du service : la valeur IPTC Source requise est
+  // « Bibliothèque d'Etude et du Patrimoine de Toulouse » même si le
+  // récolement historique affiche « Bibliothèque municipale de Toulouse ».
+  const bepRecoEntry={row:7,establishment:'Bibliothèque municipale de Toulouse',coteTitle:'16 PER'};
+  const bepReco={status:'ok',map:new Map([['frb123456789_cote_20260101_0001',bepRecoEntry]]),entries:[bepRecoEntry]};
+  const bepSource="Bibliothèque d'Etude et du Patrimoine de Toulouse";
+  const bepJpeg={...companionJpeg,file:fileLike(syntheticJpeg(bepSource))};
+  const bepTiff={...visualTiff,file:fileLike(syntheticTiff(bepSource))};
+  api.clearAnomalies();
+  const bepAudit=await api.inspectMetadataSampleRows([bepJpeg,bepTiff],bepReco);
+  assert.equal(bepAudit.total,2);
+  assert.equal(bepAudit.errors,0);
+  assert.equal(bepAudit.approvedIptcSource,2);
+  assert.ok(bepAudit.approvedIptcSource<=bepAudit.total);
+  assert.ok(!Array.from(api.getAnomalies()).some(a=>a.control===52));
+  // Aucune autre valeur n'est autorisée silencieusement ; le nom générique
+  // du récolement n'est pas acceptable dans le fichier IPTC.
+  api.clearAnomalies();
+  const genericJpeg={...bepJpeg,file:fileLike(syntheticJpeg('Bibliothèque municipale de Toulouse'))};
+  const genericAudit=await api.inspectMetadataSampleRows([genericJpeg,bepTiff],bepReco);
+  assert.equal(genericAudit.approvedIptcSource,1);
+  assert.ok(Array.from(api.getAnomalies()).some(a=>a.control===52&&a.path===genericJpeg.path
+    && /Bibliothèque d'Etude et du Patrimoine de Toulouse/.test(a.msg)));
+  assert.ok(!Array.from(api.getAnomalies()).some(a=>a.control===52&&a.path===bepTiff.path));
+  // Une valeur étrangère est également signalée, sans neutraliser les
+  // vérifications des champs Headline, EXIF et ICC.
+  api.clearAnomalies();
+  const alienJpeg={...bepJpeg,file:fileLike(syntheticJpeg('Autre établissement'))};
+  const alienAudit=await api.inspectMetadataSampleRows([alienJpeg,bepTiff],bepReco);
+  assert.equal(alienAudit.approvedIptcSource,1);
+  assert.ok(Array.from(api.getAnomalies()).some(a=>a.control===52&&a.path===alienJpeg.path));
+  assert.ok(!Array.from(api.getAnomalies()).some(a=>a.control===52&&a.path===bepTiff.path));
+  api.clearAnomalies();
+  // Deux lectures du même chemin ne donnent pas deux validations d'IPTC.
+  const repeatedPaths=await api.inspectMetadataSampleRows([bepJpeg,bepJpeg,bepTiff],bepReco);
+  assert.equal(repeatedPaths.total,3);
+  assert.equal(repeatedPaths.approvedIptcSource,2);
+  // Deux analyses successives ne doivent jamais cumuler les décomptes.
+  const separateRun=await api.inspectMetadataSampleRows([bepTiff],bepReco);
+  assert.equal(separateRun.total,1);
+  assert.equal(separateRun.approvedIptcSource,1);
+  assert.equal(api.iptcConformityIssues({
+    iptcSource:true,iptcSourceValue:bepSource,iptcHeadline:true,iptcHeadlineValue:'16 PER'
+  },bepJpeg,bepReco).length,0);
+  assert.equal(separateRun.approvedIptcSource,1);
+  api.clearAnomalies();
+
+  // Le repli JPEG ne cree pas une deuxieme vue ISO ou un TIFF fictif.
+  const jpegOnly = {
+    ...titleAJpegWithoutTiff,
+    parsed: api.parseName(titleAJpegWithoutTiff.name),
+    file: fileLike(syntheticJpeg()),
+  };
+  const fallbackMetadata = api.buildMetadataSampleRows(
+    [jpegOnly], [jpegOnly, companionJpeg], [visualTiff],
+  );
+  assert.equal(fallbackMetadata.length, 1);
+  assert.equal(fallbackMetadata[0].path, jpegOnly.path);
+  assert.equal(api.buildMetadataSampleRows(
+    [visualTiff], [companionJpeg, companionJpeg], [visualTiff, visualTiff],
+  ).length, 2);
+
+  // Un JPEG corrompu ne masque pas la verification du TIFF correspondant.
+  api.clearAnomalies();
+  const brokenJpeg = { ...companionJpeg, file: fileLike([0, 1, 2]) };
+  const partial = await api.inspectMetadataSampleRows([brokenJpeg, visualTiff], metadataReco);
+  assert.equal(partial.errors, 1);
+  assert.equal(partial.tiff, 1);
+  assert.ok(Array.from(api.getAnomalies()).some(a => a.path === brokenJpeg.path && a.control === 52));
+  assert.ok(!Array.from(api.getAnomalies()).some(a => a.path === visualTiff.path && a.control === 52));
+  api.clearAnomalies();
+
+  // La defaillance de metadonnees peut concerner uniquement le TIFF.
+  const badTiff = { ...visualTiff, file: fileLike(syntheticTiff('Cote ou source TIFF incorrecte')) };
+  const reverseAudit = await api.inspectMetadataSampleRows(
+    [companionJpeg, badTiff], metadataReco,
+  );
+  assert.equal(reverseAudit.errors, 0);
+  assert.ok(Array.from(api.getAnomalies()).some(a =>
+    a.control === 52 && a.path === badTiff.path && /Source non conforme/.test(a.msg)));
+  // Le JPEG de ce scenario est egalement non conforme : on teste ci-dessous un JPEG sain.
+  api.clearAnomalies();
+  const healthyJpeg = { ...companionJpeg, file: fileLike(syntheticJpeg()) };
+  await api.inspectMetadataSampleRows([healthyJpeg, badTiff], metadataReco);
+  assert.ok(!Array.from(api.getAnomalies()).some(a => a.path === healthyJpeg.path && a.control === 52));
+  assert.ok(Array.from(api.getAnomalies()).some(a => a.path === badTiff.path && a.control === 52));
+
+  // Une resolution JPEG 300 DPI doit etre detectee si le TIFF associe est 400 DPI.
+  api.clearAnomalies();
+  const lowDpiJpeg = { ...companionJpeg, file: fileLike(syntheticJpeg('Archives municipales de Sète', 300)) };
+  const dpiAudit = await api.inspectMetadataSampleRows([lowDpiJpeg, visualTiff], metadataReco);
+  assert.equal(dpiAudit.errors, 0);
+  assert.ok(Array.from(api.getAnomalies()).some(a =>
+    a.control === 44 && a.path === lowDpiJpeg.path && /300/.test(a.msg)));
+  assert.ok(!Array.from(api.getAnomalies()).some(a =>
+    a.control === 44 && a.path === visualTiff.path));
+  api.clearAnomalies();
+
+  // Détection exploratoire de signaux visuels sur pixels synthétiques.
+  // Aucun de ces signaux n'entre dans le résultat ISO ou le tableau ALÉA.
+  function syntheticTextPage({w=240,h=320,turn90=false,skew=0,blur=false,blank=false}={}){
+    const gray=new Uint8Array(w*h).fill(238);
+    if(!blank){
+      const theta=skew*Math.PI/180;
+      if(turn90){
+        for(let x=28;x<w-20;x+=17)for(let y=24;y<h-22;y++){
+          for(let thick=-1;thick<=1;thick++){
+            const px=x+thick;
+            gray[y*w+px]=32;
+          }
+        }
+      } else {
+        for(let y=28;y<h-18;y+=18){
+          for(let x=24;x<w-22;x++){
+            const base=y+Math.tan(theta)*(x-w/2);
+            for(let t=-1;t<=1;t++){
+              const yy=Math.round(base)+t;
+              if(yy>=0&&yy<h)gray[yy*w+x]=32;
+            }
+          }
+        }
+      }
+    }
+    if(!blur)return {w,h,gray};
+    const smooth=new Uint8Array(gray.length);
+    for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+      let total=0,n=0;
+      for(let oy=-3;oy<=3;oy++)for(let ox=-3;ox<=3;ox++){
+        const xx=Math.max(0,Math.min(w-1,x+ox)),yy=Math.max(0,Math.min(h-1,y+oy));
+        total+=gray[yy*w+xx];n++;
+      }
+      smooth[y*w+x]=Math.round(total/n);
+    }
+    return {w,h,gray:smooth};
+  }
+  const upright=syntheticTextPage();
+  const uprightResult=api.analyzeVisualGray(upright.gray,upright.w,upright.h);
+  assert.equal(uprightResult.verifiable,true);
+  assert.equal(uprightResult.rotation90Suspect,false);
+  assert.equal(uprightResult.skewDegrees,null); // Une mesure non probante ne vaut PAS 0°.
+  assert.equal(uprightResult.skewConfidence,1);
+  const turned=syntheticTextPage({turn90:true});
+  const turnedResult=api.analyzeVisualGray(turned.gray,turned.w,turned.h);
+  assert.equal(turnedResult.verifiable,true);
+  assert.equal(turnedResult.rotation90Suspect,true);
+  const tilted=syntheticTextPage({skew:3.5});
+  const tiltedResult=api.analyzeVisualGray(tilted.gray,tilted.w,tilted.h);
+  assert.equal(tiltedResult.verifiable,true);
+  assert.ok(Math.abs(tiltedResult.skewDegrees-3.5)<=1,
+    'inclinaison de 3,5° : '+tiltedResult.skewDegrees);
+  assert.ok(tiltedResult.skewConfidence>=1.14);
+  const blurry=syntheticTextPage({blur:true});
+  const blurryResult=api.analyzeVisualGray(blurry.gray,blurry.w,blurry.h);
+  assert.ok(blurryResult.sharpness<uprightResult.sharpness*0.32);
+  // Une impression moins dense conserve son rapport netteté/contraste²,
+  // contrairement à un vrai floutage. Aucun des cas ne prouve l'origine du défaut.
+  const paleGray=new Uint8Array(upright.gray.length);
+  for(let i=0;i<paleGray.length;i++)
+    paleGray[i]=Math.round(238-(238-upright.gray[i])*0.40);
+  const pale=api.analyzeVisualGray(paleGray,upright.w,upright.h);
+  const rawSharpness=api.visualContrastMetrics(upright.gray,upright.w,upright.h,uprightResult.sharpness);
+  // Mesure du Laplacien à la même position et au même pas de grille que le moteur.
+  function laplacianScore(gray,w,h){
+    const x0=Math.max(2,Math.ceil(w*0.06)),x1=Math.min(w-2,Math.floor(w*0.94));
+    const y0=Math.max(2,Math.ceil(h*0.06)),y1=Math.min(h-2,Math.floor(h*0.94));
+    const stride=Math.max(2,Math.ceil(Math.max(w,h)/270));
+    let lap=0,n=0;
+    for(let y=y0;y<y1;y+=stride)for(let x=x0;x<x1;x+=stride){
+      const k=y*w+x,sec=4*gray[k]-gray[k-1]-gray[k+1]-gray[k-w]-gray[k+w];
+      lap+=sec*sec/16;n++;
+    }
+    return lap/Math.max(1,n);
+  }
+  const paleMetrics=api.visualContrastMetrics(paleGray,upright.w,upright.h,
+    laplacianScore(paleGray,upright.w,upright.h));
+  assert.ok(rawSharpness.normalizedSharpness>0);
+  assert.ok(paleMetrics.regionalContrast<rawSharpness.regionalContrast);
+  assert.ok(Math.abs(paleMetrics.normalizedSharpness/rawSharpness.normalizedSharpness-1)<0.25,
+    'la netteté corrigée doit résister à l’encre pâle');
+  assert.ok(blurryResult.normalizedSharpness<rawSharpness.normalizedSharpness*0.55,
+    'le vrai flou doit réduire l’indice corrigé');
+  assert.ok(paleMetrics.regions>=30);
+
+  const empty=syntheticTextPage({blank:true});
+  assert.equal(api.analyzeVisualGray(empty.gray,empty.w,empty.h).verifiable,false);
+  assert.equal(api.analyzeVisualGray(null,240,320).verifiable,false);
+  const samples=[
+    ...Array.from({length:10},(_,i)=>({path:'Lot/Titre/JPEG/crisp_'+i+'.jpg',titlePath:'Lot/Titre',metrics:uprightResult})),
+    {path:'Lot/Titre/JPEG/blurry.jpg',titlePath:'Lot/Titre',metrics:blurryResult},
+    {path:'Lot/Titre/JPEG/turned.jpg',titlePath:'Lot/Titre',metrics:turnedResult},
+    {path:'Lot/Titre/JPEG/tilted.jpg',titlePath:'Lot/Titre',metrics:tiltedResult},
+    {path:'Lot/Titre/JPEG/blank.jpg',titlePath:'Lot/Titre',metrics:api.analyzeVisualGray(empty.gray,empty.w,empty.h)},
+    {path:'Lot/Titre/JPEG/broken.jpg',titlePath:'Lot/Titre',error:'Décodage impossible'}
+  ];
+  const visualSummary=api.summarizeVisualPrecheck(samples);
+  assert.equal(visualSummary.total,samples.length);
+  assert.equal(visualSummary.suspects,3);
+  assert.equal(visualSummary.unverifiable,1);
+  assert.equal(visualSummary.unreadable,1);
+  assert.ok(visualSummary.skewEstimated>=1&&visualSummary.skewEstimated<visualSummary.total);
+  assert.ok(visualSummary.records.find(x=>x.path.endsWith('blurry.jpg')).issues.some(x=>/flou possible|netteté/i.test(x)));
+  assert.ok(visualSummary.records.find(x=>x.path.endsWith('turned.jpg')).issues.some(x=>/90°/.test(x)));
+  assert.ok(visualSummary.records.find(x=>x.path.endsWith('tilted.jpg')).issues.some(x=>/Inclinaison/.test(x)));
+  assert.ok(!visualSummary.records.find(x=>x.path.endsWith('crisp_0.jpg')).issues.length);
+  assert.match(api.visualPrecheckHtml(visualSummary),/15 JPEG parcourus/);
+  assert.match(api.visualPrecheckHtml(visualSummary),/inclinaison estimable sur/);
+  // Les vues peu détaillées peuvent avoir un profil propre selon leur rang.
+  // Une alerte par rapport au titre n'est pas effacée, mais contextualisée.
+  const metricsWithScore=score=>({...uprightResult,sharpness:score});
+  const contextual=[
+    ...Array.from({length:12},(_,i)=>({path:'Lot/Titre/JPEG/1900'+String(i).padStart(4,'0')+'_0001.jpg',
+      titlePath:'Lot/Titre',metrics:metricsWithScore(800)})),
+    ...Array.from({length:10},(_,i)=>({path:'Lot/Titre/JPEG/1900'+String(i).padStart(4,'0')+'_0009.jpg',
+      titlePath:'Lot/Titre',metrics:metricsWithScore(i===0?192:300)}))
+  ];
+  const byPosition=api.summarizeVisualPrecheck(contextual);
+  const position9=byPosition.records.find(r=>r.path.includes('19000000_0009.jpg'));
+  assert.ok(position9);
+  assert.equal(position9.status,'À VÉRIFIER');
+  assert.equal(position9.view,'0009');
+  assert.match(position9.viewContext,/vue n° 0009/);
+  assert.equal(byPosition.records.find(r=>r.path.includes('_0001.jpg')).viewContext,'');
+  assert.ok(position9.viewRatio>0.60&&position9.viewRatio<0.7);
+  assert.match(position9.issues.join(' '),/Différence de contenu ou de mise en page possible/);
+  const position1=byPosition.records.find(r=>r.path.includes('_0001.jpg'));
+  assert.ok(position1&&position1.viewRatio!==null);
+  assert.match(html,/Inclinaison mesurable/);
+  assert.match(html,/Ratio netteté \/ médiane même n°/);
+  // Le modèle d'une vue publicitaire (rang 0009) ne doit pas être comparé
+  // aux pages de texte (rang 0001) pour décider d'un flou possible.
+  const visualMetric=(sharp,contrast)=>({...uprightResult,sharpness:sharp,
+    regionalContrast:contrast,normalizedSharpness:sharp*10000/(contrast*contrast)});
+  const positionBatch=[
+    ...Array.from({length:12},(_,i)=>({path:'Titre/JPEG/1900'+String(i).padStart(4,'0')+'_0001.jpg',
+      titlePath:'Titre',metrics:visualMetric(800,70)})),
+    ...Array.from({length:9},(_,i)=>({path:'Titre/JPEG/1900'+String(i).padStart(4,'0')+'_0009.jpg',
+      titlePath:'Titre',metrics:visualMetric(300,35)})),
+    {path:'Titre/JPEG/19000009_0009.jpg',titlePath:'Titre',metrics:visualMetric(192,34)}
+  ];
+  const similarPages=api.summarizeVisualPrecheck(positionBatch);
+  const paleLeaf=similarPages.records.find(r=>r.path==='Titre/JPEG/19000009_0009.jpg');
+  assert.ok(paleLeaf);
+  assert.equal(paleLeaf.status,'À VÉRIFIER'); // l'écart brut est conservé
+  assert.match(paleLeaf.referenceLabel,/vues n° 0009/);
+  assert.ok(paleLeaf.focusRatio>0.6);
+  assert.ok(!paleLeaf.issues.some(x=>/flou possible/i.test(x)));
+  // La même vue de rang 0009 artificiellement floutée doit être signalée
+  // si le score corrigé du contraste décroche aussi.
+  const blurryPage=positionBatch.map(r=>({...r}));
+  blurryPage[blurryPage.length-1]={...blurryPage[blurryPage.length-1],
+    metrics:visualMetric(192,55)};
+  const blurredLeaf=api.summarizeVisualPrecheck(blurryPage).records.find(r=>r.path==='Titre/JPEG/19000009_0009.jpg');
+  assert.ok(blurredLeaf.issues.some(x=>/flou possible/i.test(x)));
+  assert.ok(blurredLeaf.focusRatio<0.42);
+  assert.match(html,/Contraste régional \(0-255\)/);
+  assert.match(html,/Indice de contours corrigé du contraste/);
+  assert.match(html,/Base de comparaison/);
+  assert.match(html,/Indice corrigé \/ médiane de référence \(%\)/);
+  assert.match(html,/viewContext:issues.length\?viewContext:''/);
+  assert.match(html,/Ces indices ne constituent jamais une non-conformité ISO/);
+  assert.match(html,/précontrôle visuel des JPEG/);
+  assert.match(html,/Ces indices ne constituent jamais une non-conformité ISO/);
+  assert.match(html,/La rotation de 180° ne peut pas être détectée de manière fiable sans OCR/);
+  assert.match(html,/Exporter le précontrôle \(CSV\)/);
+
+  // BnF mode relié, règle 7 : repérage chromatique des bords du papier.
+  // Les données RGB sont artificielles : aucune image d'archive publiée.
+  function framingFixture({w=240,h=320,left=18,top=18,right=222,bottom=302,paper=[218,185,146]}={}){
+    const rgba=new Uint8Array(w*h*4);
+    for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+      const k=(y*w+x)*4,inside=x>=left&&x<right&&y>=top&&y<bottom;
+      const col=inside?paper:[235,235,235];
+      rgba[k]=col[0];rgba[k+1]=col[1];rgba[k+2]=col[2];rgba[k+3]=255;
+    }
+    return {rgba,w,h};
+  }
+  const inset=framingFixture();
+  const insetFrame=api.analyzeRelieFramingFromRgba(inset.rgba,inset.w,inset.h);
+  assert.equal(insetFrame.verifiable,true);
+  assert.equal(insetFrame.touching.length,0);
+  assert.ok(insetFrame.gapPercent.gauche>=5&&insetFrame.gapPercent.gauche<=10);
+  assert.ok(insetFrame.gapPercent.droite>=5&&insetFrame.gapPercent.droite<=10);
+  const gutter=framingFixture({left:0});
+  const gutterFrame=api.analyzeRelieFramingFromRgba(gutter.rgba,gutter.w,gutter.h);
+  assert.equal(gutterFrame.verifiable,true);
+  assert.ok(gutterFrame.touching.includes('gauche'));
+  assert.match(gutterFrame.reason,/fond de cahier/);
+  const rightEdge=framingFixture({right:240});
+  const rightFrame=api.analyzeRelieFramingFromRgba(rightEdge.rgba,rightEdge.w,rightEdge.h);
+  assert.ok(rightFrame.touching.includes('droite'));
+  const paleNeutral=framingFixture({paper:[232,232,232]});
+  assert.equal(api.analyzeRelieFramingFromRgba(paleNeutral.rgba,paleNeutral.w,paleNeutral.h).verifiable,false);
+  assert.equal(api.analyzeRelieFramingFromRgba(null,240,320).verifiable,false);
+  const frameSummary=api.summarizeVisualPrecheck([
+    {path:'Titre/JPEG/19000101_0001.jpg',titlePath:'Titre',metrics:uprightResult,framing:insetFrame},
+    {path:'Titre/JPEG/19000101_0002.jpg',titlePath:'Titre',metrics:uprightResult,framing:gutterFrame},
+    {path:'Titre/JPEG/19000101_0003.jpg',titlePath:'Titre',metrics:uprightResult,
+      framing:api.analyzeRelieFramingFromRgba(paleNeutral.rgba,paleNeutral.w,paleNeutral.h)}
+  ]);
+  assert.equal(frameSummary.total,3);
+  assert.equal(frameSummary.framingMeasured,2);
+  assert.equal(frameSummary.framingReview,1);
+  assert.equal(frameSummary.framingUnknown,1);
+  assert.equal(frameSummary.suspects,0); // séparé des alertes visuelles et ISO
+  assert.match(api.visualPrecheckHtml(frameSummary),/Cadrage, mode relié/);
+  assert.match(api.visualPrecheckHtml(frameSummary),/RELIURE À CONFIRMER/);
+  assert.match(html,/Marge extérieure gauche \(%\)/);
+  assert.match(html,/Pas de marge fixe pour le mode relié/);
+  assert.match(html,/règle BnF 7/);
+
+  // Vues intérieures : 3 marges, jamais 4 ! Le côté relié alterne et
+  // doit être déduit des observations du titre, non supposé universel.
+  function boundRow(fasc,num,last,{unverifiable=false,allFour=false,wrongSide=false}={}){
+    const name='Titre/JPEG/1900/'+fasc+'/'+fasc+'_'+String(num).padStart(4,'0')+'.jpg';
+    const frame=unverifiable?api.analyzeRelieFramingFromRgba(paleNeutral.rgba,paleNeutral.w,paleNeutral.h):
+      (num===1||num===last||allFour)?insetFrame:
+      (num%2===0?wrongSide?gutterFrame:rightFrame:wrongSide?rightFrame:gutterFrame);
+    return {path:name,titlePath:'Titre',metrics:uprightResult,framing:frame};
+  }
+  const boundFixture=[
+    ...Array.from({length:12},(_,i)=>boundRow('19000101',i+1,12)),
+    ...Array.from({length:8},(_,i)=>boundRow('19000108',i+1,8))
+  ];
+  const boundSumm=api.summarizeVisualPrecheck(boundFixture);
+  assert.equal(boundSumm.total,20);
+  assert.equal(boundSumm.framingExpectedGutter,16);
+  assert.equal(boundSumm.framingEndPages,4);
+  assert.equal(boundSumm.framingReview,0);
+  assert.equal(boundSumm.framingUnknown,0);
+  assert.equal(boundSumm.suspects,0);
+  const bound2=boundSumm.records.find(r=>r.path.endsWith('_0002.jpg'));
+  assert.equal(bound2.framingStatus,'FOND DE CAHIER ATTENDU');
+  assert.equal(bound2.framingGutter,'droite');
+  assert.equal(bound2.framingExpectedMargins,3);
+  assert.equal(api.relieFramingMargin(bound2,'droite'),'');
+  assert.ok(api.relieFramingMargin(bound2,'gauche')>0);
+  const bound3=boundSumm.records.find(r=>r.path.endsWith('_0003.jpg'));
+  assert.equal(bound3.framingGutter,'gauche');
+  assert.equal(api.relieFramingMargin(bound3,'gauche'),'');
+  assert.equal(boundSumm.records.find(r=>r.path.endsWith('_0001.jpg')).framingExpectedMargins,4);
+  assert.equal(boundSumm.records.find(r=>r.path.endsWith('_0012.jpg')).framingExpectedMargins,4);
+
+  const altered=boundFixture.map(x=>({...x}));
+  altered.find(x=>x.path.endsWith('19000101_0004.jpg')).framing=insetFrame; // fond de cahier non détecté
+  altered.find(x=>x.path.endsWith('19000101_0005.jpg')).framing=rightFrame; // mauvais bord
+  altered.find(x=>x.path.endsWith('19000108_0008.jpg')).framing=rightFrame; // dernière vue : 4 bords attendus
+  altered.find(x=>x.path.endsWith('19000101_0006.jpg')).framing=
+    api.analyzeRelieFramingFromRgba(paleNeutral.rgba,paleNeutral.w,paleNeutral.h);
+  const alteredSummary=api.summarizeVisualPrecheck(altered);
+  assert.equal(alteredSummary.framingExpectedGutter,13);
+  assert.equal(alteredSummary.framingEndPages,3);
+  assert.equal(alteredSummary.framingReview,3);
+  assert.equal(alteredSummary.framingUnknown,1);
+  assert.equal(alteredSummary.records.find(r=>r.path.endsWith('19000101_0004.jpg')).framingStatus,'FOND DE CAHIER NON IDENTIFIÉ');
+  assert.equal(alteredSummary.records.find(r=>r.path.endsWith('19000101_0005.jpg')).framingStatus,'BORD EXTÉRIEUR À EXAMINER');
+  assert.equal(alteredSummary.records.find(r=>r.path.endsWith('19000108_0008.jpg')).framingStatus,'BORD EXTÉRIEUR À EXAMINER');
+  assert.match(api.visualPrecheckHtml(boundSumm),/trois marges et fond de cahier attendu/);
+  assert.match(api.visualPrecheckHtml(alteredSummary),/3 cadrages à examiner/);
+  assert.match(html,/Le fond de cahier n’est pas une marge manquante/);
+  assert.match(html,/Côté du fond de cahier/);
+  assert.match(html,/Nombre de marges extérieures attendues/);
+  assert.match(html,/Marge extérieure droite/);
+
+  // Régression de la distribution d'un récolement réel (comptages agrégés
+  // seulement : aucune métadonnée privée ou image fournie n'est publiée).
+  const unreadableFrame=api.analyzeRelieFramingFromRgba(paleNeutral.rgba,paleNeutral.w,paleNeutral.h);
+  const faithful401=[];
+  for(let titleNo=0;titleNo<40;titleNo++){
+    const pageCount=titleNo<20?12:titleNo<39?8:9;
+    const issue='T'+String(titleNo).padStart(2,'0');
+    for(let view=1;view<=pageCount;view++){
+      let framing;
+      if(view===1)framing=titleNo<4?unreadableFrame:insetFrame;
+      else if(view===pageCount)framing=pageCount===8?insetFrame:unreadableFrame;
+      else if(view===4&&titleNo<5)framing=unreadableFrame;
+      else if(view===4&&titleNo>=5&&titleNo<8)framing=insetFrame;
+      else if(view===8&&pageCount===9)framing=insetFrame;
+      else if(view===9&&pageCount===12&&titleNo<14)framing=unreadableFrame;
+      else framing=view%2===0?rightFrame:gutterFrame;
+      faithful401.push({path:'Titre/JPEG/'+issue+'/'+issue+'_'+String(view).padStart(4,'0')+'.jpg',
+        titlePath:'Titre',metrics:uprightResult,framing});
+    }
+  }
+  const rebuilt=api.summarizeVisualPrecheck(faithful401);
+  assert.equal(rebuilt.total,401);
+  assert.equal(rebuilt.framingMeasured,357);
+  assert.equal(rebuilt.framingExpectedGutter,298);
+  assert.equal(rebuilt.framingEndPages,55);
+  assert.equal(rebuilt.framingReview,4);
+  assert.equal(rebuilt.framingUnknown,44);
+  assert.equal(rebuilt.suspects,0);
+  assert.match(api.visualPrecheckHtml(rebuilt),/298 vues intérieures avec trois marges/);
+
+  // Un ordre de prise de vue inverse doit aussi pouvoir être déduit du lot :
+  // aucune hypothèse globale « paire = fond à droite ».
+  const reversed=Array.from({length:10},(_,i)=>{
+    const n=i+1,frame=(n===1||n===10)?insetFrame:
+      n%2===0?gutterFrame:rightFrame;
+    return {path:'Titre_inverse/JPEG/19000101_'+String(n).padStart(4,'0')+'.jpg',
+      titlePath:'Titre_inverse',metrics:uprightResult,framing:frame};
+  });
+  const reversedSummary=api.summarizeVisualPrecheck(reversed);
+  assert.equal(reversedSummary.framingExpectedGutter,8);
+  assert.equal(reversedSummary.framingReview,0);
+  assert.equal(reversedSummary.records[1].framingGutter,'gauche');
+  assert.equal(reversedSummary.records[2].framingGutter,'droite');
+
+  // Retour ALÉA : huit colonnes obligatoires, identification stricte du tirage,
+  // une unité non conforme par vue, décision séparée par titre.
+  function reviewRow(r,i,id='TIRAGE-TEST'){
+    return [i+1,r.isoTitle,r.isoLotSize,r.isoCode,`Ac ${r.isoAccept} / Re ${r.isoReject}`,
+      '',r.name,r.path,...Array(8).fill('Conforme'),'','',id];
+  }
+  const completeReturn=[api.visualHeaders,...iso.sample.map((r,i)=>reviewRow(r,i))];
+  const completeDecision=api.assessVisualReviewRows(completeReturn,iso.sample,iso.summary,'TIRAGE-TEST');
+  assert.equal(completeDecision.valid,true);
+  assert.equal(completeDecision.complete,true);
+  assert.equal(completeDecision.reviewed,iso.sample.length);
+  assert.ok(completeDecision.byTitle.every(p=>p.status==='ACCEPTATION STATISTIQUE'));
+  const multipleDefects=completeReturn.map(x=>[...x]);
+  multipleDefects[1][8]='NC';multipleDefects[1][9]='NC';
+  const multipleDecision=api.assessVisualReviewRows(multipleDefects,iso.sample,iso.summary,'TIRAGE-TEST');
+  assert.equal(multipleDecision.nonConforming,1); // deux criteres NC sur une seule vue
+  const markedTitle=iso.sample[0].isoTitlePath;
+  assert.equal(multipleDecision.byTitle.find(p=>p.titlePath===markedTitle).status,'REJET STATISTIQUE');
+  const incompleteReturn=completeReturn.map(x=>[...x]);
+  incompleteReturn[1][8]='';
+  const incompleteDecision=api.assessVisualReviewRows(incompleteReturn,iso.sample,iso.summary,'TIRAGE-TEST');
+  assert.equal(incompleteDecision.valid,true);
+  assert.equal(incompleteDecision.complete,false);
+  assert.equal(incompleteDecision.byTitle.find(p=>p.titlePath===markedTitle).status,'EN ATTENTE');
+  // Le texte en Q decrit l'original sans creer ni supprimer une non-conformite.
+  const originalNote=completeReturn.map(x=>[...x]);
+  originalNote[1][16]='Pli d’origine sur le document';
+  assert.equal(api.assessVisualReviewRows(originalNote,iso.sample,iso.summary,'TIRAGE-TEST').nonConforming,0);
+  originalNote[1][8]='NC';
+  assert.equal(api.assessVisualReviewRows(originalNote,iso.sample,iso.summary,'TIRAGE-TEST').nonConforming,1);
+  assert.equal(api.assessVisualReviewRows(null,iso.sample,iso.summary,'TIRAGE-TEST').valid,false);
+  assert.equal(api.assessVisualReviewRows(completeReturn,null,iso.summary,'TIRAGE-TEST').valid,false);
+  const staleReturn=completeReturn.map(x=>[...x]);staleReturn[1][18]='TIRAGE-PRECEDENT';
+  assert.equal(api.assessVisualReviewRows(staleReturn,iso.sample,iso.summary,'TIRAGE-TEST').valid,false);
+  const invalidValue=completeReturn.map(x=>[...x]);invalidValue[1][8]='OK'; // liste autorisee : Conforme / NC
+  assert.equal(api.assessVisualReviewRows(invalidValue,iso.sample,iso.summary,'TIRAGE-TEST').valid,false);
+  const missingRow=completeReturn.slice(0,-1);
+  assert.equal(api.assessVisualReviewRows(missingRow,iso.sample,iso.summary,'TIRAGE-TEST').valid,false);
+  const duplicateRow=[...completeReturn,[...completeReturn[1]]];
+  assert.equal(api.assessVisualReviewRows(duplicateRow,iso.sample,iso.summary,'TIRAGE-TEST').valid,false);
+  const tamperedTitle=completeReturn.map(x=>[...x]);tamperedTitle[1][1]='AUTRE TITRE';
+  assert.equal(api.assessVisualReviewRows(tamperedTitle,iso.sample,iso.summary,'TIRAGE-TEST').valid,false);
+  const foreignFile=completeReturn.map(x=>[...x]);foreignFile[1][7]+='-inconnu';
+  assert.equal(api.assessVisualReviewRows(foreignFile,iso.sample,iso.summary,'TIRAGE-TEST').valid,false);
+  const oldTemplate=completeReturn.map(x=>[...x]);oldTemplate[0].pop();
+  assert.equal(api.assessVisualReviewRows(oldTemplate,iso.sample,iso.summary,'TIRAGE-TEST').valid,false);
+  // Cas concret du guide : 45 000 vues, echantillon 500, Ac 10 / Re 11.
+  const highPlan={...api.iso2859Plan(45000),title:'Titre 45k',titlePath:'Lot/Titre 45k'};
+  const highSample=Array.from({length:500},(_,i)=>({
+    path:`Lot/Titre 45k/TIFF/2026/FICHIER_${i+1}.tif`,
+    name:`FICHIER_${i+1}.tif`,isoTitle:'Titre 45k',isoTitlePath:'Lot/Titre 45k',
+    isoLotSize:45000,isoCode:'N',isoAccept:10,isoReject:11
+  }));
+  const highRows=[api.visualHeaders,...highSample.map((r,i)=>reviewRow(r,i))];
+  for(let i=1;i<=10;i++)highRows[i][8]='NC';
+  const tenNC=api.assessVisualReviewRows(highRows,highSample,highPlan,'TIRAGE-TEST');
+  assert.equal(tenNC.byTitle[0].nonConforming,10);
+  assert.equal(tenNC.byTitle[0].status,'ACCEPTATION STATISTIQUE');
+  highRows[11][8]='NC';
+  const elevenNC=api.assessVisualReviewRows(highRows,highSample,highPlan,'TIRAGE-TEST');
+  assert.equal(elevenNC.byTitle[0].nonConforming,11);
+  assert.equal(elevenNC.byTitle[0].status,'REJET STATISTIQUE');
 
   const pairResult = api.compareJpegTiffRows(
     [titleAJpeg[0], imageRow('Titre B', 'JPEG', 1)],
@@ -247,11 +817,305 @@ function syntheticTiff() {
     ],
     ['2026', '1', '1', '10', '', '', '', '', '', ''],
   ];
+  // La décision finale ne peut jamais être verte avec un contrôle non vérifiable.
+  const decisionBase = { er: 0, errorCount: 0, al: 0, alertCount: 0, unverified: 1 };
+  assert.equal(api.buildDecision(decisionBase).level, 'warn');
+  assert.equal(api.buildDecision({ ...decisionBase, unverified: 0 }).level, 'ok');
+
+  // Une ligne de récolement datée incorrectement doit rester visible dans l'audit.
+  const ignoredRecoTable = [
+    ['Année début', 'Mois début', 'Jour début', 'Répertoire', 'Nbre de fichiers produits'],
+    ['2026', '13', '40', '', '10'],
+  ];
+  const ignoredReco = await api.recoRowsToMap(ignoredRecoTable);
+  assert.equal(ignoredReco.entries.length, 0);
+  assert.equal(ignoredReco.ignored.length, 1);
+
   const reco = await api.recoRowsToMap(recoTable);
   assert.equal(reco.status, 'ok');
   assert.equal(reco.entries.length, 1);
   assert.equal(reco.entries[0].date, '20260101');
   assert.equal(reco.entries[0].produced, null);
+
+  // Récolements OLL de deux générations : tests synthétiques sans publication
+  // des fichiers historiques fournis pour l'audit.
+  const oldHeaders=[
+    'Cote titre','Cote volume','Année','Mois','jour','Format hauteur',
+    'Format largeur simple page (en cm)','Nb de pages','Observations',
+    'Etat physique du document','Réf. Premier fichier numérique (JPEG)',
+    'Réf. Dernier fichier numérique (JPEG)',
+    'Réf. Premier fichier numérique (TIFF)',
+    'Réf. Dernier fichier numérique (TIFF)',
+    'Réf. Premier fichier numérique (TXT)','Réf. Dernier fichier numérique (TXT)',
+    'Réf. Premier fichier numérique (XML.Alto)',
+    'Réf. Dernier fichier numérique (XML.Alto)',
+    'Réf.fichier numérique (PDF)','Nbre de fichiers produits',
+    'Pages blanches','plioir','Nom support (dd)','Observations',
+    'Etat matériel avant restitution'
+  ];
+  function oldRow(annee,mois,jour,produced,jpegRef,tiffRef,note=''){
+    const x=Array(25).fill('');
+    x[2]=annee;x[3]=mois;x[4]=jour;x[7]='4';
+    x[10]=jpegRef;x[12]=tiffRef;x[19]=produced;x[23]=note;
+    return x;
+  }
+  const oldInstructions=oldHeaders.map(()=>'prestataire');
+  oldInstructions[2]='AAAA';oldInstructions[3]='MM';oldInstructions[4]='JJ';
+  const oldTotal=Array(25).fill('');oldTotal[19]='8';
+  const oldFooter=Array(25).fill('');oldFooter[7]='8';
+  const jpegRef='FRB315556101_P08_18720229_0001.jpg';
+  const tiffRef='FRB315556101_P08_18720229_0001.tif';
+  const oldReco=await api.recoRowsToMap([
+    oldHeaders,oldInstructions,oldTotal,
+    oldRow('1872','2','28','4','FRB315556101_P08_18720228_0001.jpg','FRB315556101_P08_18720228_0001.tif'),
+    oldRow('','','','4',jpegRef,tiffRef,'Ligne ajoutée'),
+    oldFooter
+  ]);
+  assert.equal(oldReco.status,'ok');
+  assert.equal(oldReco.entries.length,2);
+  assert.equal(oldReco.skipped.length,3);
+  assert.equal(oldReco.ignored.length,0);
+  assert.equal(oldReco.dateIssues.length,1);
+  assert.equal(oldReco.entries[1].date,'18720229');
+  assert.equal(oldReco.entries[1].observation,'Ligne ajoutée');
+  assert.equal(oldReco.headers.repertoire,-1);
+  assert.ok(oldReco.map.has('frb315556101_p08_18720229_0001'));
+
+  const modernHeaders=Array(35).fill('');
+  Object.assign(modernHeaders,{
+    6:'Etablissement de conservation',10:'Cote titre',
+    13:'Année début',14:'Mois début',15:'jour début',
+    16:'Année fin',17:'mois fin',18:'jour fin',
+    21:'Nb de pages',26:'Répertoire',
+    27:'Réf. 1er fichier numérique (JPEG)',
+    28:'Réf. 1er fichier numérique (TIFF)',
+    29:'Nbre de fichiers produits',33:'Observations'
+  });
+  const modernInstruction=modernHeaders.map(()=>'OBLIGATOIRE');
+  function modernRow(y,m,d,number=4,date='19060101',produced=number){
+    const x=Array(35).fill('');
+    x[13]=y;x[14]=m;x[15]=d;x[21]=number;
+    x[26]='FRB315556101_P032_'+date;
+    x[27]='FRB315556101_P032_'+date+'_0001.jpg';
+    x[28]='FRB315556101_P032_'+date+'_0001.tif';
+    x[29]=produced;
+    return x;
+  }
+  const modernSummary=Array(35).fill('');
+  modernSummary[13]='1904';modernSummary[14]='6';modernSummary[15]='1';
+  modernSummary[16]='1915';modernSummary[17]='1';modernSummary[18]='31';
+  modernSummary[21]='15314';modernSummary[29]='15577';
+  const modernFooter=Array(35).fill('');
+  modernFooter[21]='15314';modernFooter[29]='15577';
+  const combinedDay=modernRow('1906','1','2 et 3',4,'19060103');
+  const missingDate=modernRow('','','',4,'19060911');
+  const modernReco=await api.recoRowsToMap([
+    modernHeaders,modernInstruction,modernSummary,
+    modernRow('1906','1','1',4,'19060101'),
+    combinedDay,missingDate,modernFooter
+  ]);
+  assert.equal(modernReco.status,'ok');
+  assert.equal(modernReco.entries.length,3);
+  assert.equal(modernReco.skipped.length,3);
+  assert.equal(modernReco.ignored.length,0);
+  assert.equal(modernReco.dateIssues.length,2);
+  assert.equal(modernReco.entries[1].date,'19060103');
+  assert.equal(modernReco.entries[2].date,'19060911');
+  assert.equal(modernReco.entries[1].jour,'2 et 3');
+  assert.ok(!modernReco.entries.some(x=>x.date==='19060123'));
+  assert.equal(modernReco.entries.reduce((n,e)=>n+(e.produced||0),0),12);
+
+  // Les lacunes documentaires situees au milieu du tableau ne sont pas des totaux.
+  const missingIdentity=Array(35).fill('');
+  missingIdentity[21]='4';
+  const impossibleNoRef=Array(35).fill('');
+  impossibleNoRef[13]='1913';impossibleNoRef[14]='4';impossibleNoRef[15]='31';
+  impossibleNoRef[33]='ABS';
+  const internalMissing=await api.recoRowsToMap([
+    modernHeaders,modernInstruction,modernSummary,
+    modernRow('1913','4','29',4,'19130429'),
+    missingIdentity,
+    impossibleNoRef,
+    modernRow('1913','5','1',4,'19130501'),
+    modernFooter
+  ]);
+  assert.equal(internalMissing.entries.length,2);
+  assert.equal(internalMissing.ignored.length,2);
+  assert.equal(internalMissing.skipped.length,3);
+  assert.ok(internalMissing.ignored.some(x=>x.row===6 && x.rawDate==='1913/4/31'));
+  assert.ok(internalMissing.ignored.some(x=>x.row===5));
+
+  // Recette de régression du Supplément agricole du Télégramme (données de
+  // structure synthétiques inspirées du classeur, sans fichier privé dans GitHub).
+  const keptRows=[];
+  api.appendXlsxRowAtExcelNumber(keptRows,['Première ligne'],1);
+  api.appendXlsxRowAtExcelNumber(keptRows,['En-tête'],3);
+  assert.equal(keptRows.length,3);
+  assert.equal(keptRows[1].length,0); // Ligne 2 Excel blanche conservée.
+  const tHeader=[...modernHeaders];
+  tHeader[23]='Observations'; // observation de l'original AVANT prestation
+  const tHelp=tHeader.map(()=> '');
+  tHelp[13]='AAAA';tHelp[15]='JJ';tHelp[16]='AAAA (ne pas remplir si bulletinage)';
+  const tSummary=Array(35).fill('');
+  tSummary[6]='Bibliothèque municipale de Toulouse';
+  tSummary[9]='P015';
+  tSummary[13]=1900;tSummary[14]=5;tSummary[15]=27;
+  tSummary[16]=1901;tSummary[17]=3;tSummary[18]=3;
+  tSummary[21]=400;tSummary[29]=401;
+  const dates=[];
+  const first=new Date(Date.UTC(1900,4,27));
+  for(let i=0;i<41;i++){
+    const d=new Date(first.getTime()+i*7*86400000);
+    const ymd=d.toISOString().slice(0,10).replace(/-/g,'');
+    if(ymd!=='19001028')dates.push(ymd);
+  }
+  assert.equal(dates.length,40);
+  const tRows=[['Titre du périodique'],[],tHeader,modernInstruction,tHelp,tSummary];
+  dates.forEach((date,i)=>{
+    const a=modernRow(date.slice(0,4),String(Number(date.slice(4,6))),String(Number(date.slice(6,8))),i<20?12:8,date,i===39?9:(i<20?12:8));
+    a[9]='P015';a[5]='';a[21]=i<20?12:8;
+    if(i===39)a[23]='Feuille supplément en date du 3 mars';
+    tRows.push(a);
+  });
+  const tParsed=await api.recoRowsToMap(tRows);
+  assert.equal(tParsed.status,'ok');
+  assert.equal(tParsed.entries.length,40); // La synthèse n'est pas un 41e fascicule.
+  assert.equal(tParsed.skipped.length,3);
+  assert.equal(tParsed.ignored.length,0);
+  assert.equal(tParsed.entries[0].row,7); // Numéro de ligne Excel, pas position comprimée.
+  assert.equal(tParsed.entries[39].row,46);
+  assert.ok(tParsed.entries.every(r=>r.establishment==='Bibliothèque municipale de Toulouse'));
+  assert.equal(tParsed.entries.reduce((x,r)=>x+Number(r.nbPages),0),400);
+  assert.equal(tParsed.entries.reduce((x,r)=>x+r.produced,0),401);
+  assert.equal(tParsed.entries[39].originalObservation,'Feuille supplément en date du 3 mars');
+  api.setRecoRead(tParsed);
+  assert.match(api.recoObservationForLine(46), /Original : Feuille supplément en date du 3 mars/);
+  assert.ok(api.recoObservationsList(100).some(e=>e.row===46 && e.originalObservation));
+  // Un écart de 8/9 vues conserve sa justification documentaire en colonne H.
+  const detailRows=[{type:'ALERTE',types:'ALERTE',line:'46',
+    path:'FRB315556101_P015_19010303',nature:'nombre de vues à examiner',
+    details:'8 pages initiales, 9 fichiers produits',count:1}];
+  const xmlBytes=api.buildAttentionExcel(detailRows);
+  const tmpDetail=fs.mkdtempSync(path.join(os.tmpdir(),'melanisoft-attention-'));
+  const detailPath=path.join(tmpDetail,'attention.xlsx');
+  fs.writeFileSync(detailPath,xmlBytes);
+  const detailSheetXml=execFileSync('unzip',['-p',detailPath,'xl/worksheets/sheet1.xml'],{encoding:'utf8'});
+  assert.match(detailSheetXml,/Original : Feuille supplément en date du 3 mars/);
+  assert.match(detailSheetXml,/Observations du récolement/);
+  assert.match(detailSheetXml,/dimension ref="A1:J2"/);
+  assert.match(detailSheetXml,/hidden="1"/);
+  assert.match(detailSheetXml,/Détails techniques/);
+
+  // Les totaux par catégorie ne doivent PAS re-compter toutes les alertes
+  // d'un fascicule pour chacune des natures présentes dans ce même fascicule.
+  api.setAnomalies([
+    {type:'ALERTE',control:52,path:'Fascicule-X_0001.jpg',msg:'Champ IPTC Source non conforme'},
+    {type:'ALERTE',control:52,path:'Fascicule-X_0001.tif',msg:'Champ IPTC Source non conforme'},
+    {type:'ALERTE',control:34,path:'Fascicule-X',msg:'Diagnostic d’exhaustivité du fascicule : 8 pages ≠ 9 vues',line:46},
+    {type:'ALERTE',control:22.5,path:'Fascicule-Y',msg:'Périodicité hebdomadaire atypique : 14 jours'}
+  ]);
+  const byNature=Object.fromEntries(api.topAnomalies(10).map(a=>[a.control,a.count]));
+  assert.equal(byNature['métadonnées IPTC non conformes'],2);
+  assert.equal(byNature['incohérence récolement/prestataire'],1);
+  assert.equal(byNature['périodicité à vérifier'],1);
+  assert.equal(Object.values(byNature).reduce((n,x)=>n+x,0),4);
+  api.clearAnomalies();
+
+  // Six alertes métier -> trois lignes courtes, tout en conservant six
+  // références originales dans le volet de détails et l'annexe technique.
+  const fasc1901='FRB315556101_P015_19010303';
+  const fasc1900='FRB315556101_P015_19001104';
+  api.setAnomalies([
+    {type:'ALERTE',control:22.5,path:'Supplement_agricole_Telegramme/JPEG/1900/'+fasc1900,
+      msg:'Périodicité hebdomadaire atypique : 14 jours entre 19001021 et 19001104.'},
+    {type:'ALERTE',control:34,line:46,path:fasc1901,
+      msg:'Écart nombre de vues/pages : récolement manuel 8 ≠ prestataire 9.'},
+    {type:'ALERTE',control:35,path:'Supplement_agricole_Telegramme/JPEG/1901/'+fasc1901,
+      msg:'Le fascicule contient 9 vues documentaires, alors que la valeur la plus fréquente du lot est 12.'},
+    {type:'ALERTE',control:34,line:46,path:fasc1901,
+      msg:'La ligne de récolement n’est pas cohérente : récolement initial 8 ≠ saisie prestataire 9.'},
+    {type:'ALERTE',control:34,line:46,path:'Supplement_agricole_Telegramme/TIFF/1901/'+fasc1901,
+      msg:'Diagnostic d’exhaustivité du fascicule : récolement initial 8 vues ≠ prestataire 9 vues.'},
+    {type:'ALERTE',control:30.5,path:'',
+      msg:'50 TIFF de l’échantillon non décodés graphiquement par ce navigateur : histogrammes non vérifiables.'}
+  ]);
+  const compact=api.consolidatedAnomalies();
+  assert.equal(compact.length,3);
+  assert.equal(compact.reduce((n,r)=>n+r.count,0),6);
+  const cPeriod=compact.find(r=>r.topic==='Périodicité');
+  const cViews=compact.find(r=>r.topic==='Nombre de vues');
+  const cTiff=compact.find(r=>r.topic==='Histogramme TIFF');
+  assert.ok(cPeriod&&cViews&&cTiff);
+  assert.match(cPeriod.summary,/14 jours.*21\/10\/1900.*04\/11\/1900/);
+  assert.match(cPeriod.action,/parution/);
+  assert.equal(cViews.count,4);
+  assert.match(cViews.label,/03\/03\/1901/);
+  assert.match(cViews.summary,/9 vues.*8 pages/);
+  assert.match(cViews.action,/feuille supplémentaire/);
+  assert.doesNotMatch(cViews.summary,/référence :|Diagnostic d.exhaustivité|\s\|\s/i);
+  assert.match(cTiff.summary,/50 TIFF/);
+  assert.match(cTiff.action,/lecteur TIFF/);
+  assert.match(cViews.details,/Diagnostic d.exhaustivité/); // Aucune perte de détail.
+  const viewTechnical=api.technicalDetailModel(cViews);
+  assert.equal(viewTechnical.raw.length,4);
+  assert.equal(viewTechnical.sections.filter(x=>x.count>0).length,2); // 2 faits, pas 4 répétitions
+  assert.equal(viewTechnical.sections.find(x=>x.title==='Un écart de décompte').count,3);
+  assert.equal(viewTechnical.sections.find(x=>/Comparaison indicative/.test(x.title)).count,1);
+  assert.ok(viewTechnical.sections.some(x=>/Feuille supplément en date du 3 mars/.test(x.text)));
+  const technicalHtml=api.technicalDetailHtml(cViews);
+  assert.match(technicalHtml,/Détails : 2 constats · 4 signalements/);
+  assert.match(technicalHtml,/3 signalements concordants/);
+  assert.match(technicalHtml,/Comparer|Comparaison indicative/);
+  assert.match(technicalHtml,/Consulter les 4 signalements d’origine/);
+  assert.match(technicalHtml,/Diagnostic d’exhaustivité du fascicule/); // texte d'origine préservé
+  assert.match(technicalHtml,/Fichier ou dossier/);
+  const technicalSummary=technicalHtml.split('Consulter les 4 signalements d’origine')[0];
+  assert.ok(!technicalSummary.includes('Diagnostic d’exhaustivité du fascicule'));
+  // Un autre type de diagnostic 34 ne doit pas être fusionné en un faux écart de vues.
+  const unrelatedTechnical=api.technicalDetailModel({
+    path:'FRB123456789_COTE_20260101',line:'',
+    items:[{type:'ALERTE',control:34,path:'p.tif',msg:'Référence de fichier manquante au récolement.'}]
+  });
+  assert.ok(!unrelatedTechnical.sections.some(x=>x.title==='Un écart de décompte'));
+  // Contenu issu du disque : échappement obligatoire avant insertion dans innerHTML.
+  const escapedTechnical=api.technicalDetailHtml({
+    path:'<script>alert(1)</script>',items:[{control:34,msg:'<img src=x onerror=alert(1)>',path:'<a>'}]
+  });
+  assert.ok(!escapedTechnical.includes('<script>'));
+  assert.ok(!escapedTechnical.includes('<img src='));
+  assert.match(escapedTechnical,/&lt;img/);
+  const compactBytes=api.buildAttentionExcel();
+  const compactDir=fs.mkdtempSync(path.join(os.tmpdir(),'melanisoft-compact-'));
+  const compactPath=path.join(compactDir,'attention-compact.xlsx');
+  fs.writeFileSync(compactPath,compactBytes);
+  execFileSync('unzip',['-t',compactPath],{stdio:'pipe'});
+  const compactXml=execFileSync('unzip',['-p',compactPath,'xl/worksheets/sheet1.xml'],{encoding:'utf8'});
+  assert.match(compactXml,/dimension ref="A1:J4"/);
+  assert.match(compactXml,/À vérifier/);
+  assert.match(compactXml,/14 jours/);
+  assert.match(compactXml,/9 vues/);
+  assert.match(compactXml,/Détails techniques/);
+  assert.match(compactXml,/hidden="1"/);
+  assert.match(html,/technicalDetailHtml\(a\)/);
+  assert.match(html,/technical-findings/);
+  assert.match(html,/ANNEXE — RÉFÉRENCES TECHNIQUES DES POINTS D’ATTENTION/);
+  api.clearAnomalies();
+
+  assert.equal(new Set([api.logicalFasciculeKey(titleAJpeg[0]),api.logicalFasciculeKey(titleATiff[0])]).size,1);
+  assert.equal(new Set([api.logicalFasciculeKey(titleAJpeg[0]),api.logicalFasciculeKey(titleBJpeg[0])]).size,2);
+
+  // Une édition mentionnée sans image n'est pas une "synthèse" à effacer.
+  const secondEdition=modernRow('1890','12','28','4','18901228',null);
+  secondEdition[26]='';secondEdition[27]='';secondEdition[28]='';
+  secondEdition[29]='';secondEdition[33]='voir ligne du dessus';
+  const supplementary=await api.recoRowsToMap([
+    modernHeaders,modernInstruction,modernSummary,
+    modernRow('1890','12','28','4','18901228',8),
+    secondEdition
+  ]);
+  assert.equal(supplementary.entries.length,2);
+  assert.equal(supplementary.entries[1].observation,'voir ligne du dessus');
+  assert.equal(supplementary.entries[1].produced,null);
 
   const folderNamedFascicule = {
     name: 'image-mal-nommee.tif',
@@ -295,7 +1159,7 @@ function syntheticTiff() {
   assert.equal(exhaustivity.diagnostics.length, 2);
 
   const auditCall = html.indexOf('recordExhaustivityAudit(exhaustivityAudit)');
-  const auditStatus = html.indexOf("setC(34,anomalies.some(a=>a.control===34");
+  const auditStatus = html.indexOf("setC(34,recoViewCounts.status!=='ok'");
   assert.ok(auditCall >= 0 && auditStatus > auditCall);
 
   const jpeg = fileLike(syntheticJpeg());
@@ -329,6 +1193,7 @@ function syntheticTiff() {
     isoAccept: 0,
     isoReject: 1,
   };
+  api.setSampleId('TIRAGE-TEST');
   api.setAleaRows([workbookRow]);
   const workbookBytes = api.buildAleaExcel();
   assert.equal(workbookBytes[0], 0x50);
@@ -339,6 +1204,9 @@ function syntheticTiff() {
   execFileSync('unzip', ['-t', workbookPath], { stdio: 'pipe' });
   const sheetXml = execFileSync('unzip', ['-p', workbookPath, 'xl/worksheets/sheet1.xml'], { encoding: 'utf8' });
   assert.match(sheetXml, /Colorimétrie et rendu/);
+  assert.match(sheetXml, /ID de tirage/);
+  assert.match(sheetXml, /TIRAGE-TEST/);
+  assert.match(sheetXml, /dimension ref="A1:S2"/);
   assert.match(sheetXml, /Taille conforme à l’original \(100 %\)/);
   assert.match(sheetXml, /Date et numéro de fascicule/);
   assert.doesNotMatch(sheetXml, /Exemplarisation/i);
