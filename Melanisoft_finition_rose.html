@@ -1310,7 +1310,93 @@ function visualViewNumber(path){
   const m=String(path||'').match(/_(\d{4})\.(?:jpg|jpeg)$/i);
   return m?m[1]:'';
 }
+// MODE RELIÉ (règle métier confirmée) : une vue intérieure possède
+// normalement trois marges extérieures. Le quatrième côté est le fond
+// de cahier, qui ne doit jamais être évalué comme une marge absente.
+// Les premières/dernières vues d'un fascicule sont contrôlées à quatre bords.
+// Le sens de la reliure est DÉDUIT du lot, non imposé aux autres titres.
+function classifyRelieFramingRecords(records){
+  const maxByFascicule=new Map();
+  const keyOf=record=>String(record.path||'').replace(/[\/\\][^\/\\]*$/,'');
+  const viewOf=record=>Number(visualViewNumber(record.path));
+  for(const record of records){
+    const n=viewOf(record),key=keyOf(record);
+    if(Number.isInteger(n)&&n>0)maxByFascicule.set(key,Math.max(n,maxByFascicule.get(key)||0));
+  }
+  const roleOf=record=>{
+    const n=viewOf(record),max=maxByFascicule.get(keyOf(record));
+    if(!Number.isInteger(n)||n<=0||!max)return 'indéterminé';
+    if(n===1||n===max)return 'première/dernière';
+    return 'intérieure';
+  };
+  const votes=new Map();
+  for(const record of records){
+    if(roleOf(record)!=='intérieure'||!record.framing?.verifiable)continue;
+    const sides=record.framing.touching||[];
+    if(sides.length!==1||!['gauche','droite'].includes(sides[0]))continue;
+    const parity=viewOf(record)%2?'impair':'pair';
+    const title=String(record.titlePath||'');
+    if(!votes.has(title))votes.set(title,{pair:{gauche:0,droite:0},impair:{gauche:0,droite:0}});
+    votes.get(title)[parity][sides[0]]++;
+  }
+  const orientation=new Map();
+  for(const [title,tally] of votes){
+    function preferred(t){
+      const n=t.gauche+t.droite;
+      if(n<3)return null;
+      const side=t.gauche>t.droite?'gauche':'droite';
+      return Math.max(t.gauche,t.droite)/n>=.8?side:null;
+    }
+    const pair=preferred(tally.pair),impair=preferred(tally.impair);
+    if(pair&&impair&&pair!==impair)orientation.set(title,{pair,impair});
+  }
+  const results=new Map();
+  for(const record of records){
+    const role=roleOf(record),frame=record.framing;
+    const expectedMargins=role==='première/dernière'?4:role==='intérieure'?3:null;
+    const p=orientation.get(String(record.titlePath||''));
+    const gutter=role==='intérieure'&&p?(viewOf(record)%2?p.impair:p.pair):'';
+    const make=(status,reason)=>({
+      framingStatus:status,framingReason:reason,framingRole:role,
+      framingExpectedMargins:expectedMargins,framingGutter:gutter,
+      framingOrientationCalibrated:!!p
+    });
+    let value;
+    if(!frame)value=make('NON MESURÉ','Aucun pixel n’a été analysé pour le cadrage.');
+    else if(!frame.verifiable)value=make('NON VÉRIFIABLE',frame.reason||'Le papier ne peut pas être distingué du fond.');
+    else if(!expectedMargins)value=make('NON VÉRIFIABLE','Position de cette vue dans le fascicule non déterminée.');
+    else{
+      const sides=frame.touching||[];
+      if(role==='première/dernière'){
+        value=sides.length?make('BORD EXTÉRIEUR À EXAMINER',
+          'Première ou dernière vue : quatre bords attendus ; côté(s) non isolé(s) : '+sides.join(', ')+'.'):
+          make('QUATRE BORDS REPÉRÉS','Première ou dernière vue : quatre bords probablement visibles.');
+      }else if(!gutter){
+        value=make('RELIURE À CONFIRMER',
+          'Vue intérieure : trois marges extérieures attendues, mais le côté du fond de cahier ne peut pas être déduit de ce lot.');
+      }else if(sides.length===1&&sides[0]===gutter){
+        value=make('FOND DE CAHIER ATTENDU',
+          'Vue intérieure : trois marges extérieures détectables ; le côté '+gutter+' est le fond de cahier, pas une marge manquante.');
+      }else if(sides.length===0){
+        value=make('FOND DE CAHIER NON IDENTIFIÉ',
+          'Vue intérieure : quatre bords semblent isolés, alors que le fond de cahier attendu est à '+gutter+'. Vérifier la présentation sans conclure au rognage.');
+      }else{
+        const unexpected=sides.filter(side=>side!==gutter);
+        value=make('BORD EXTÉRIEUR À EXAMINER',
+          'Vue intérieure : fond de cahier attendu à '+gutter+
+          ', mais côté(s) extérieur(s) non isolé(s) : '+unexpected.join(', ')+'.');
+      }
+    }
+    results.set(record,value);
+  }
+  return results;
+}
+function relieFramingMargin(record,side){
+  if(record.framingRole==='intérieure'&&record.framingGutter===side)return '';
+  return record.framing?.gapPercent?.[side]??'';
+}
 function summarizeVisualPrecheck(records){
+  const framingByRecord=classifyRelieFramingRecords(records);
   const valid=records.filter(r=>r.metrics&&r.metrics.verifiable);
   const medians=new Map(),byView=new Map(),appearanceMedians=new Map(),byViewAppearance=new Map();
   for(const record of valid){
@@ -1348,9 +1434,8 @@ function summarizeVisualPrecheck(records){
     const issues=[];
     const m=record.metrics;
     const framing=record.framing||null;
-    const framingStatus=!framing?'NON MESURÉ':
-      !framing.verifiable?'NON VÉRIFIABLE':
-      framing.touching.length?'BORD À EXAMINER':'BORDS REPÉRÉS';
+    const framingContext=framingByRecord.get(record);
+    const framingStatus=framingContext.framingStatus;
     const view=visualViewNumber(record.path);
     const viewBase=view?viewMedians.get(record.titlePath+'|'+view):null;
     const viewRatio=viewBase&&viewBase.count>=8&&viewBase.score>0&&m?
@@ -1367,8 +1452,8 @@ function summarizeVisualPrecheck(records){
     const viewContext=viewRatio===null?'Comparaison par rang indisponible':
       viewRatio<0.45?'Indice également faible parmi les vues n° '+view:
       'Différence de contenu ou de mise en page possible pour la vue n° '+view;
-    if(record.error)return {...record,issues,status:'NON ANALYSÉ',view,viewRatio:null,focusRatio:null,contrastRatio:null,signalKind:'',referenceLabel:'',framingStatus};
-    if(!m||!m.verifiable)return {...record,issues,status:'NON VÉRIFIABLE',view,viewRatio:null,focusRatio:null,contrastRatio:null,signalKind:'',referenceLabel:'',framingStatus};
+    if(record.error)return {...record,issues,status:'NON ANALYSÉ',view,viewRatio:null,focusRatio:null,contrastRatio:null,signalKind:'',referenceLabel:'',framingStatus,...framingContext};
+    if(!m||!m.verifiable)return {...record,issues,status:'NON VÉRIFIABLE',view,viewRatio:null,focusRatio:null,contrastRatio:null,signalKind:'',referenceLabel:'',framingStatus,...framingContext};
     let signalKind='';
     if(m.rotation90Suspect){
       issues.push('Orientation inhabituelle (rotation de 90° possible, à confirmer)');
@@ -1394,7 +1479,7 @@ function summarizeVisualPrecheck(records){
     if(rawLow||normalizedLow)
       issues.push(viewContext+(viewRatio===null?'.':' ('+Math.round(viewRatio*100)+' % de la médiane de cette position).'));
     return {...record,issues,status:issues.length?'À VÉRIFIER':'AUCUN INDICE DÉTECTÉ',
-      view,viewRatio,focusRatio,contrastRatio,signalKind,referenceLabel,framingStatus,
+      view,viewRatio,focusRatio,contrastRatio,signalKind,referenceLabel,framingStatus,...framingContext,
       viewContext:issues.length?viewContext:''};
   });
   return {records:rows,total:rows.length,analyzed:valid.length,
@@ -1403,8 +1488,10 @@ function summarizeVisualPrecheck(records){
     unreadable:rows.filter(r=>r.status==='NON ANALYSÉ').length,
     skewEstimated:valid.filter(r=>r.metrics.skewDegrees!==null).length,
     framingMeasured:rows.filter(r=>r.framing?.verifiable).length,
-    framingReview:rows.filter(r=>r.framingStatus==='BORD À EXAMINER').length,
-    framingUnknown:rows.filter(r=>r.framingStatus==='NON VÉRIFIABLE').length,
+    framingExpectedGutter:rows.filter(r=>r.framingStatus==='FOND DE CAHIER ATTENDU').length,
+    framingEndPages:rows.filter(r=>r.framingStatus==='QUATRE BORDS REPÉRÉS').length,
+    framingReview:rows.filter(r=>['BORD EXTÉRIEUR À EXAMINER','FOND DE CAHIER NON IDENTIFIÉ','RELIURE À CONFIRMER'].includes(r.framingStatus)).length,
+    framingUnknown:rows.filter(r=>['NON VÉRIFIABLE','NON MESURÉ'].includes(r.framingStatus)).length,
     medians,viewMedians,appearanceMedians,viewAppearanceMedians};
 }
 function visualPrecheckHtml(result){
