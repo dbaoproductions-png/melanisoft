@@ -1198,6 +1198,90 @@ function analyzeVisualGray(gray,w,h){
   return {verifiable:true,sharpness,edgeStrength,inkRatio,orientationRatio,
     rotation90Suspect,skewDegrees,skewConfidence,...visualContrastMetrics(gray,w,h,sharpness)};
 }
+// BnF, référentiel documents opaques v3 (2014), règle 7, p.16 :
+// mode relié = reproduire intégralement le feuillet en dépassant ses bords
+// extérieurs ; aucune marge fixe 2 mm–1,5 cm n'est imposée ici (mode pièce).
+// Prototype : séparation chromatique papier/fond. Ne reconnaît PAS à coup sûr
+// les papiers blancs sur fond blanc ni le fond de cahier. Jamais une NC ISO.
+function analyzeRelieFramingFromRgba(rgba,w,h){
+  const unavailable=reason=>({verifiable:false,reason,touching:[],gapPercent:null,bounds:null});
+  if(!rgba||!Number.isInteger(w)||!Number.isInteger(h)||w<100||h<100||rgba.length!==w*h*4)
+    return unavailable('Dimensions ou pixels insuffisants');
+  const center=[],corners=[];
+  const step=Math.max(2,Math.floor(Math.min(w,h)/130));
+  const marginX=Math.max(8,Math.floor(w*.085)),marginY=Math.max(8,Math.floor(h*.085));
+  const inside=(v,low,high)=>v>=low&&v<high;
+  for(let y=0;y<h;y+=step)for(let x=0;x<w;x+=step){
+    const at=(y*w+x)*4;
+    const warm=rgba[at]-rgba[at+2];
+    if(inside(x,w*.2,w*.8)&&inside(y,h*.2,h*.8))center.push(warm);
+    if((x<marginX||x>=w-marginX)&&(y<marginY||y>=h-marginY))corners.push(warm);
+  }
+  if(center.length<100||corners.length<20)return unavailable('Référence chromatique insuffisante');
+  const quantile=(values,p)=>{
+    const sorted=values.sort((a,b)=>a-b);
+    return sorted[Math.max(0,Math.min(sorted.length-1,Math.floor((sorted.length-1)*p)))];
+  };
+  const paperWarm=quantile(center,.5),backgroundWarm=quantile(corners,.25);
+  const separation=paperWarm-backgroundWarm;
+  if(separation<18)return unavailable('Papier et fond trop proches en couleur ; limites non mesurables');
+  const threshold=backgroundWarm+Math.max(12,separation*.32);
+  const fracColumn=x=>{
+    let n=0,match=0;
+    for(let y=Math.floor(h*.12);y<Math.ceil(h*.88);y+=3){
+      const idx=(y*w+x)*4;
+      if(rgba[idx]-rgba[idx+2]>threshold)match++;
+      n++;
+    }
+    return match/Math.max(1,n);
+  };
+  const fracRow=y=>{
+    let n=0,match=0;
+    for(let x=Math.floor(w*.12);x<Math.ceil(w*.88);x+=3){
+      const idx=(y*w+x)*4;
+      if(rgba[idx]-rgba[idx+2]>threshold)match++;
+      n++;
+    }
+    return match/Math.max(1,n);
+  };
+  const longestRun=(length,measure)=>{
+    let bestStart=-1,bestEnd=-1,start=-1;
+    for(let k=0;k<=length;k++){
+      const hit=k<length&&measure(k)>.55;
+      if(hit){if(start<0)start=k;}
+      else if(start>=0){
+        if(k-start>bestEnd-bestStart+1){bestStart=start;bestEnd=k-1;}
+        start=-1;
+      }
+    }
+    return {start:bestStart,end:bestEnd,length:bestEnd-bestStart+1};
+  };
+  const horizontal=longestRun(w,fracColumn),vertical=longestRun(h,fracRow);
+  if(horizontal.length<w*.60||vertical.length<h*.60)
+    return unavailable('Contour du papier irrégulier ou mal isolé : mesure non fiable');
+  const gaps={
+    gauche:horizontal.start,droite:w-1-horizontal.end,
+    haut:vertical.start,bas:h-1-vertical.end
+  };
+  const gapPercent={
+    gauche:Math.round(1000*gaps.gauche/w)/10,
+    droite:Math.round(1000*gaps.droite/w)/10,
+    haut:Math.round(1000*gaps.haut/h)/10,
+    bas:Math.round(1000*gaps.bas/h)/10
+  };
+  const touching=Object.entries(gaps).filter(([side,v])=>
+    v<=Math.max(2,Math.round((side==='gauche'||side==='droite'?w:h)*.012)))
+    .map(([side])=>side);
+  return {
+    verifiable:true,bounds:{left:horizontal.start,right:horizontal.end,top:vertical.start,bottom:vertical.end},
+    gapPercent,touching,
+    separation:Math.round(separation),
+    reason:touching.length?
+      'Bord(s) non isolé(s) : '+touching.join(', ')+'. En mode relié, le fond de cahier peut justifier un cadrage serré ; vérifier visuellement.':
+      'Quatre bords probablement visibles. Cela ne démontre ni l’absence de rognage ni la conformité du cadrage.'
+  };
+}
+
 async function readVisualJpegGray(file){
   if(typeof createImageBitmap!=='function')throw new Error('Décodage des JPEG indisponible dans ce navigateur');
   const bitmap=await createImageBitmap(file);
@@ -1216,7 +1300,7 @@ async function readVisualJpegGray(file){
     const gray=new Uint8Array(w*h);
     for(let i=0,j=0;i<rgba.length;i+=4,j++)
       gray[j]=Math.round(0.2126*rgba[i]+0.7152*rgba[i+1]+0.0722*rgba[i+2]);
-    return {gray,w,h};
+    return {gray,w,h,framing:analyzeRelieFramingFromRgba(rgba,w,h)};
   }finally{
     bitmap.close?.();
     canvas.width=0;canvas.height=0;
@@ -1362,13 +1446,14 @@ $('runVisualPrecheck').onclick=async()=>{
     for(let i=0;i<jpeg.length;i++){
       if(token!==visualPrecheckToken||analysisId!==lastSampleId)return;
       const row=jpeg[i];
-      let metrics=null,error='';
+      let metrics=null,error='',framing=null;
       try{
         const pixels=await readVisualJpegGray(row.file);
         metrics=analyzeVisualGray(pixels.gray,pixels.w,pixels.h);
+        framing=pixels.framing;
       }catch(e){error=String(e?.message||e);}
       if(token!==visualPrecheckToken||analysisId!==lastSampleId)return;
-      records.push({path:row.path,titlePath:titlePathForRow(row),metrics,error});
+      records.push({path:row.path,titlePath:titlePathForRow(row),metrics,error,framing});
       if((i+1)%3===0||i+1===jpeg.length){
         $('visualPrecheckStatus').textContent='Précontrôle JPEG : '+(i+1)+' / '+jpeg.length+' images...';
         await MelanisoftPerformance.yieldToBrowser();
