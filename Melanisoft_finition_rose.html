@@ -2869,7 +2869,7 @@ function buildAleaHtml(rows,sample){
   const now=new Date().toLocaleString('fr-FR');
   const manualTasks=[
     'Page entière / double page : vérifier que la logique attendue est respectée : une page par vue, ou double page lorsque c’est justifié par le cahier des charges.',
-    'Cadrage : vérifier que la page n’est pas coupée, que les marges demandées sont respectées et que le fond de reliure ne parasite pas l’OCR.',
+    'Cadrage (mode relié) : sur les vues intérieures, contrôler les trois marges extérieures sans exiger une quatrième marge au fond de cahier ; sur les premières et dernières vues, vérifier les quatre bords. Examiner toute information coupée ou texte opposé parasite.',
     'Sens de lecture : vérifier que l’image respecte le sens de lecture de l’original.',
     'Redressement : vérifier visuellement que le texte ou la page n’est pas inclinée de manière gênante.',
     'Lisibilité : vérifier netteté, contraste réel et confort de lecture à 100 %, puis à 120 % en cas de doute.',
