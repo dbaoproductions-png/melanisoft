@@ -1497,17 +1497,19 @@ function summarizeVisualPrecheck(records){
 function visualPrecheckHtml(result){
   if(!result)return '';
   const shown=result.records.filter(r=>r.status!=='AUCUN INDICE DÉTECTÉ'||
-    r.framingStatus==='BORD À EXAMINER'||r.framingStatus==='NON VÉRIFIABLE');
+    ['BORD EXTÉRIEUR À EXAMINER','FOND DE CAHIER NON IDENTIFIÉ','RELIURE À CONFIRMER','NON VÉRIFIABLE','NON MESURÉ'].includes(r.framingStatus));
   const capped=shown.slice(0,150);
   return '<p><strong>'+result.total+' JPEG parcourus</strong> · '+result.analyzed+' analysables · '+
     result.suspects+' à vérifier · '+result.unverifiable+' non vérifiables · '+result.unreadable+
     ' non décodés · inclinaison estimable sur '+result.skewEstimated+' JPEG.</p>'+
-    '<p><strong>Cadrage, mode relié :</strong> '+result.framingMeasured+' contours estimés · '+
-    result.framingReview+' image(s) avec un bord non isolé · '+result.framingUnknown+
-    ' mesures impossibles. Les marges sont indicatives, sans seuil fixe en millimètres et sans verdict de conformité.</p>'+
+    '<p><strong>Cadrage, mode relié :</strong> '+result.framingExpectedGutter+
+    ' vues intérieures avec trois marges et fond de cahier attendu · '+
+    result.framingEndPages+' premières/dernières vues avec quatre bords repérés · '+
+    result.framingReview+' cadrages à examiner · '+result.framingUnknown+
+    ' mesures impossibles. Le fond de cahier n’est pas une marge manquante. Les mesures restent indicatives, sans marge fixe en millimètres et sans verdict de conformité.</p>'+
     (capped.length?'<table><tr><th>Fichier</th><th>État</th><th>Cadrage (mode relié)</th><th>Interprétation</th><th>Indice / motif</th></tr>'+
     capped.map(r=>'<tr><td>'+esc(r.path)+'</td><td>'+esc(r.status)+'</td><td>'+esc(r.framingStatus||'NON MESURÉ')+'</td><td>'+esc(r.signalKind||'—')+'</td><td>'+
-      esc([r.issues.join(' ; '),r.framingStatus==='BORD À EXAMINER'||r.framingStatus==='NON VÉRIFIABLE'?r.framing?.reason:'',
+      esc([r.issues.join(' ; '),['BORD EXTÉRIEUR À EXAMINER','FOND DE CAHIER NON IDENTIFIÉ','RELIURE À CONFIRMER','NON VÉRIFIABLE','NON MESURÉ'].includes(r.framingStatus)?r.framingReason:'',
       r.error||r.metrics?.reason||''].filter(Boolean).join(' ; '))+'</td></tr>').join('')+'</table>':
     '<p class="small">Aucun signalement particulier, sous réserve des limites des mesures.</p>')+
     (shown.length>150?'<p class="small">'+(shown.length-150)+' autre(s) résultat(s) figurent dans le CSV complet.</p>':'')+
@@ -1579,7 +1581,7 @@ $('runVisualPrecheck').onclick=async()=>{
 };
 $('exportVisualPrecheck').onclick=()=>{
   if(!lastVisualPrecheck)return;
-  const header=['Fichier','Titre','État','Indices à vérifier','Inclinaison estimée (°)','Indice inclinaison','Indice orientation','Netteté','Motif absence mesure','N° de vue','Ratio netteté / médiane même n° (%)','Interprétation de la position','Inclinaison mesurable','Contraste régional (0-255)','Variabilité du contraste','Indice de contours corrigé du contraste','Indice corrigé / médiane de référence (%)','Contraste / référence (%)','Interprétation du signal','Base de comparaison','Cadrage relié (indicatif)','Bords non isolés','Marge gauche (%)','Marge droite (%)','Marge haute (%)','Marge basse (%)','Limites du contrôle de cadrage'];
+  const header=['Fichier','Titre','État','Indices à vérifier','Inclinaison estimée (°)','Indice inclinaison','Indice orientation','Netteté','Motif absence mesure','N° de vue','Ratio netteté / médiane même n° (%)','Interprétation de la position','Inclinaison mesurable','Contraste régional (0-255)','Variabilité du contraste','Indice de contours corrigé du contraste','Indice corrigé / médiane de référence (%)','Contraste / référence (%)','Interprétation du signal','Base de comparaison','Cadrage relié (indicatif)','Bords au contact (mesure brute)','Marge extérieure gauche (%)','Marge extérieure droite (%)','Marge extérieure haute (%)','Marge extérieure basse (%)','Commentaire cadrage relié','Position dans le fascicule','Nombre de marges extérieures attendues','Côté du fond de cahier','Sens de reliure déduit du lot'];
   const values=lastVisualPrecheck.records.map(r=>[r.path,r.titlePath,r.status,r.issues.join(' ; '),
     r.metrics?.skewDegrees??'',r.metrics?.skewConfidence??'',r.metrics?.orientationRatio??'',
     r.metrics?.sharpness??'',r.error||r.metrics?.reason||'',r.view||'',
@@ -1589,9 +1591,11 @@ $('exportVisualPrecheck').onclick=()=>{
     r.focusRatio!==null&&r.focusRatio!==undefined?Math.round(r.focusRatio*100):'',
     r.contrastRatio!==null&&r.contrastRatio!==undefined?Math.round(r.contrastRatio*100):'',
     r.signalKind||'',r.referenceLabel||'',r.framingStatus||'NON MESURÉ',
-    (r.framing?.touching||[]).join(', '),r.framing?.gapPercent?.gauche??'',
-    r.framing?.gapPercent?.droite??'',r.framing?.gapPercent?.haut??'',
-    r.framing?.gapPercent?.bas??'',r.framing?.reason||'']);
+    (r.framing?.touching||[]).join(', '),relieFramingMargin(r,'gauche'),
+    relieFramingMargin(r,'droite'),relieFramingMargin(r,'haut'),
+    relieFramingMargin(r,'bas'),r.framingReason||'',
+    r.framingRole||'',r.framingExpectedMargins??'',r.framingGutter||'',
+    r.framingOrientationCalibrated?'Oui':'Non']);
   const csvCell=v=>{
     let text=String(v??'');
     if(/^[=+\-@\t\r]/.test(text))text="'"+text; // Formules CSV non exécutables dans Excel.
@@ -2797,9 +2801,10 @@ function buildReportMetierHtml(rows){
       lastVisualPrecheck.total+' JPEG parcourus, '+lastVisualPrecheck.analyzed+' analysables, '+
       lastVisualPrecheck.suspects+' à vérifier, '+lastVisualPrecheck.unverifiable+' non vérifiables et '+
       lastVisualPrecheck.unreadable+' non décodés. Durée : '+(lastVisualPrecheck.durationMs/1000).toFixed(1)+' s. Cadrage BnF mode relié : '+
-      lastVisualPrecheck.framingMeasured+' mesures possibles, '+lastVisualPrecheck.framingReview+
-      ' images avec un bord non isolé et '+lastVisualPrecheck.framingUnknown+
-      ' vérification(s) impossible(s). Pas de marge fixe pour le mode relié. Les indices ne préjugent pas de la conformité ISO ; le CSV contient les détails.</p></div>':''}
+      lastVisualPrecheck.framingExpectedGutter+' vues intérieures avec fond de cahier attendu (3 marges), '+
+      lastVisualPrecheck.framingEndPages+' premières/dernières vues avec 4 bords repérés, '+
+      lastVisualPrecheck.framingReview+' cadrages à examiner, '+lastVisualPrecheck.framingUnknown+
+      ' non vérifiables. Pas de marge fixe pour le mode relié. Les indices ne préjugent pas de la conformité ISO ; le CSV contient les détails.</p></div>':''}
     ${buildRecoObservationsHtml()}
     <div class="report-section"><h3>Suites à donner</h3><div class="recommendations">${recos.map(r=>`<div class="recommendation"><strong>${esc(r.title)}</strong><span>${esc(r.text)}</span></div>`).join('')}</div></div>
     <div class="report-section"><h3>Conclusion</h3><p>Les contrôles automatiques ont été réalisés sur la livraison sélectionnée. Les points signalés doivent être examinés par le contrôleur avant validation définitive. Le fichier ALÉA complète ce rapport par un contrôle visuel de l’échantillon.</p></div>`;
@@ -3187,9 +3192,11 @@ function buildReportTxt(){
       lastVisualPrecheck.suspects+' à vérifier ; '+lastVisualPrecheck.unverifiable+' non vérifiables ; '+
       lastVisualPrecheck.unreadable+' non décodés.');
     push('Durée : '+(lastVisualPrecheck.durationMs/1000).toFixed(1)+' s. Aucun résultat ne modifie les alertes officielles ou la décision ISO.');
-    push('Cadrage (mode relié, règle BnF 7) : '+lastVisualPrecheck.framingMeasured+' images dont les bords sont estimables, '+
-      lastVisualPrecheck.framingReview+' images avec un bord non isolé, '+lastVisualPrecheck.framingUnknown+
-      ' sans séparation papier/fond suffisante. Aucune marge fixe du mode pièce appliquée.');
+    push('Cadrage (mode relié, règle BnF 7) : '+lastVisualPrecheck.framingExpectedGutter+
+      ' vues intérieures avec 3 marges et fond de cahier attendu, '+lastVisualPrecheck.framingEndPages+
+      ' premières/dernières vues avec 4 bords repérés, '+lastVisualPrecheck.framingReview+
+      ' cadrages à examiner, '+lastVisualPrecheck.framingUnknown+
+      ' non vérifiables. Le fond de cahier n’est pas une marge manquante ; aucune marge fixe du mode pièce appliquée.');
     push('Détails image par image : fichier CSV « Melanisoft_precontrole_JPEG.csv ».');
     blank();
   }
