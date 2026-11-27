@@ -95,6 +95,8 @@ vm.runInContext(`
     readTiffMeta,
     analyzeVisualGray,
     analyzeRelieFramingFromRgba,
+    classifyRelieFramingRecords,
+    relieFramingMargin,
     visualContrastMetrics,
     summarizeVisualPrecheck,
     visualPrecheckHtml,
@@ -623,10 +625,63 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   assert.equal(frameSummary.framingUnknown,1);
   assert.equal(frameSummary.suspects,0); // séparé des alertes visuelles et ISO
   assert.match(api.visualPrecheckHtml(frameSummary),/Cadrage, mode relié/);
-  assert.match(api.visualPrecheckHtml(frameSummary),/BORD À EXAMINER/);
-  assert.match(html,/Marge gauche \(%\)/);
+  assert.match(api.visualPrecheckHtml(frameSummary),/RELIURE À CONFIRMER/);
+  assert.match(html,/Marge extérieure gauche \(%\)/);
   assert.match(html,/Pas de marge fixe pour le mode relié/);
   assert.match(html,/règle BnF 7/);
+
+  // Vues intérieures : 3 marges, jamais 4 ! Le côté relié alterne et
+  // doit être déduit des observations du titre, non supposé universel.
+  function boundRow(fasc,num,last,{unverifiable=false,allFour=false,wrongSide=false}={}){
+    const name='Titre/JPEG/1900/'+fasc+'/'+fasc+'_'+String(num).padStart(4,'0')+'.jpg';
+    const frame=unverifiable?api.analyzeRelieFramingFromRgba(paleNeutral.rgba,paleNeutral.w,paleNeutral.h):
+      (num===1||num===last||allFour)?insetFrame:
+      (num%2===0?wrongSide?gutterFrame:rightFrame:wrongSide?rightFrame:gutterFrame);
+    return {path:name,titlePath:'Titre',metrics:uprightResult,framing:frame};
+  }
+  const boundFixture=[
+    ...Array.from({length:12},(_,i)=>boundRow('19000101',i+1,12)),
+    ...Array.from({length:8},(_,i)=>boundRow('19000108',i+1,8))
+  ];
+  const boundSumm=api.summarizeVisualPrecheck(boundFixture);
+  assert.equal(boundSumm.total,20);
+  assert.equal(boundSumm.framingExpectedGutter,16);
+  assert.equal(boundSumm.framingEndPages,4);
+  assert.equal(boundSumm.framingReview,0);
+  assert.equal(boundSumm.framingUnknown,0);
+  assert.equal(boundSumm.suspects,0);
+  const bound2=boundSumm.records.find(r=>r.path.endsWith('_0002.jpg'));
+  assert.equal(bound2.framingStatus,'FOND DE CAHIER ATTENDU');
+  assert.equal(bound2.framingGutter,'droite');
+  assert.equal(bound2.framingExpectedMargins,3);
+  assert.equal(api.relieFramingMargin(bound2,'droite'),'');
+  assert.ok(api.relieFramingMargin(bound2,'gauche')>0);
+  const bound3=boundSumm.records.find(r=>r.path.endsWith('_0003.jpg'));
+  assert.equal(bound3.framingGutter,'gauche');
+  assert.equal(api.relieFramingMargin(bound3,'gauche'),'');
+  assert.equal(boundSumm.records.find(r=>r.path.endsWith('_0001.jpg')).framingExpectedMargins,4);
+  assert.equal(boundSumm.records.find(r=>r.path.endsWith('_0012.jpg')).framingExpectedMargins,4);
+
+  const altered=boundFixture.map(x=>({...x}));
+  altered.find(x=>x.path.endsWith('19000101_0004.jpg')).framing=insetFrame; // fond de cahier non détecté
+  altered.find(x=>x.path.endsWith('19000101_0005.jpg')).framing=rightFrame; // mauvais bord
+  altered.find(x=>x.path.endsWith('19000108_0008.jpg')).framing=rightFrame; // dernière vue : 4 bords attendus
+  altered.find(x=>x.path.endsWith('19000101_0006.jpg')).framing=
+    api.analyzeRelieFramingFromRgba(paleNeutral.rgba,paleNeutral.w,paleNeutral.h);
+  const alteredSummary=api.summarizeVisualPrecheck(altered);
+  assert.equal(alteredSummary.framingExpectedGutter,13);
+  assert.equal(alteredSummary.framingEndPages,3);
+  assert.equal(alteredSummary.framingReview,3);
+  assert.equal(alteredSummary.framingUnknown,1);
+  assert.equal(alteredSummary.records.find(r=>r.path.endsWith('19000101_0004.jpg')).framingStatus,'FOND DE CAHIER NON IDENTIFIÉ');
+  assert.equal(alteredSummary.records.find(r=>r.path.endsWith('19000101_0005.jpg')).framingStatus,'BORD EXTÉRIEUR À EXAMINER');
+  assert.equal(alteredSummary.records.find(r=>r.path.endsWith('19000108_0008.jpg')).framingStatus,'BORD EXTÉRIEUR À EXAMINER');
+  assert.match(api.visualPrecheckHtml(boundSumm),/trois marges et fond de cahier attendu/);
+  assert.match(api.visualPrecheckHtml(alteredSummary),/3 cadrages à examiner/);
+  assert.match(html,/Le fond de cahier n’est pas une marge manquante/);
+  assert.match(html,/Côté du fond de cahier/);
+  assert.match(html,/Nombre de marges extérieures attendues/);
+  assert.match(html,/Marge extérieure droite/);
 
   // Retour ALÉA : huit colonnes obligatoires, identification stricte du tirage,
   // une unité non conforme par vue, décision séparée par titre.
