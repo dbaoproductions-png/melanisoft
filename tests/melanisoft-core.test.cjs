@@ -94,6 +94,7 @@ vm.runInContext(`
     readJpegTechnicalMetadata,
     readTiffMeta,
     analyzeVisualGray,
+    analyzeRelieFramingFromRgba,
     visualContrastMetrics,
     summarizeVisualPrecheck,
     visualPrecheckHtml,
@@ -581,6 +582,51 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   assert.match(html,/Ces indices ne constituent jamais une non-conformité ISO/);
   assert.match(html,/La rotation de 180° ne peut pas être détectée de manière fiable sans OCR/);
   assert.match(html,/Exporter le précontrôle \(CSV\)/);
+
+  // BnF mode relié, règle 7 : repérage chromatique des bords du papier.
+  // Les données RGB sont artificielles : aucune image d'archive publiée.
+  function framingFixture({w=240,h=320,left=18,top=18,right=222,bottom=302,paper=[218,185,146]}={}){
+    const rgba=new Uint8Array(w*h*4);
+    for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+      const k=(y*w+x)*4,inside=x>=left&&x<right&&y>=top&&y<bottom;
+      const col=inside?paper:[235,235,235];
+      rgba[k]=col[0];rgba[k+1]=col[1];rgba[k+2]=col[2];rgba[k+3]=255;
+    }
+    return {rgba,w,h};
+  }
+  const inset=framingFixture();
+  const insetFrame=api.analyzeRelieFramingFromRgba(inset.rgba,inset.w,inset.h);
+  assert.equal(insetFrame.verifiable,true);
+  assert.equal(insetFrame.touching.length,0);
+  assert.ok(insetFrame.gapPercent.gauche>=5&&insetFrame.gapPercent.gauche<=10);
+  assert.ok(insetFrame.gapPercent.droite>=5&&insetFrame.gapPercent.droite<=10);
+  const gutter=framingFixture({left:0});
+  const gutterFrame=api.analyzeRelieFramingFromRgba(gutter.rgba,gutter.w,gutter.h);
+  assert.equal(gutterFrame.verifiable,true);
+  assert.ok(gutterFrame.touching.includes('gauche'));
+  assert.match(gutterFrame.reason,/fond de cahier/);
+  const rightEdge=framingFixture({right:240});
+  const rightFrame=api.analyzeRelieFramingFromRgba(rightEdge.rgba,rightEdge.w,rightEdge.h);
+  assert.ok(rightFrame.touching.includes('droite'));
+  const paleNeutral=framingFixture({paper:[232,232,232]});
+  assert.equal(api.analyzeRelieFramingFromRgba(paleNeutral.rgba,paleNeutral.w,paleNeutral.h).verifiable,false);
+  assert.equal(api.analyzeRelieFramingFromRgba(null,240,320).verifiable,false);
+  const frameSummary=api.summarizeVisualPrecheck([
+    {path:'Titre/JPEG/19000101_0001.jpg',titlePath:'Titre',metrics:uprightResult,framing:insetFrame},
+    {path:'Titre/JPEG/19000101_0002.jpg',titlePath:'Titre',metrics:uprightResult,framing:gutterFrame},
+    {path:'Titre/JPEG/19000101_0003.jpg',titlePath:'Titre',metrics:uprightResult,
+      framing:api.analyzeRelieFramingFromRgba(paleNeutral.rgba,paleNeutral.w,paleNeutral.h)}
+  ]);
+  assert.equal(frameSummary.total,3);
+  assert.equal(frameSummary.framingMeasured,2);
+  assert.equal(frameSummary.framingReview,1);
+  assert.equal(frameSummary.framingUnknown,1);
+  assert.equal(frameSummary.suspects,0); // séparé des alertes visuelles et ISO
+  assert.match(api.visualPrecheckHtml(frameSummary),/Cadrage, mode relié/);
+  assert.match(api.visualPrecheckHtml(frameSummary),/BORD À EXAMINER/);
+  assert.match(html,/Marge gauche \(%\)/);
+  assert.match(html,/Pas de marge fixe pour le mode relié/);
+  assert.match(html,/règle BnF 7/);
 
   // Retour ALÉA : huit colonnes obligatoires, identification stricte du tirage,
   // une unité non conforme par vue, décision séparée par titre.
