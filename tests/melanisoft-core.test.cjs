@@ -683,6 +683,50 @@ function syntheticTiff(sourceValue = 'Archives municipales de Sète') {
   assert.match(html,/Nombre de marges extérieures attendues/);
   assert.match(html,/Marge extérieure droite/);
 
+  // Régression de la distribution d'un récolement réel (comptages agrégés
+  // seulement : aucune métadonnée privée ou image fournie n'est publiée).
+  const unreadableFrame=api.analyzeRelieFramingFromRgba(paleNeutral.rgba,paleNeutral.w,paleNeutral.h);
+  const faithful401=[];
+  for(let titleNo=0;titleNo<40;titleNo++){
+    const pageCount=titleNo<20?12:titleNo<39?8:9;
+    const issue='T'+String(titleNo).padStart(2,'0');
+    for(let view=1;view<=pageCount;view++){
+      let framing;
+      if(view===1)framing=titleNo<4?unreadableFrame:insetFrame;
+      else if(view===pageCount)framing=pageCount===8?insetFrame:unreadableFrame;
+      else if(view===4&&titleNo<5)framing=unreadableFrame;
+      else if(view===4&&titleNo>=5&&titleNo<8)framing=insetFrame;
+      else if(view===8&&pageCount===9)framing=insetFrame;
+      else if(view===9&&pageCount===12&&titleNo<14)framing=unreadableFrame;
+      else framing=view%2===0?rightFrame:gutterFrame;
+      faithful401.push({path:'Titre/JPEG/'+issue+'/'+issue+'_'+String(view).padStart(4,'0')+'.jpg',
+        titlePath:'Titre',metrics:uprightResult,framing});
+    }
+  }
+  const rebuilt=api.summarizeVisualPrecheck(faithful401);
+  assert.equal(rebuilt.total,401);
+  assert.equal(rebuilt.framingMeasured,357);
+  assert.equal(rebuilt.framingExpectedGutter,298);
+  assert.equal(rebuilt.framingEndPages,55);
+  assert.equal(rebuilt.framingReview,4);
+  assert.equal(rebuilt.framingUnknown,44);
+  assert.equal(rebuilt.suspects,0);
+  assert.match(api.visualPrecheckHtml(rebuilt),/298 vues intérieures avec trois marges/);
+
+  // Un ordre de prise de vue inverse doit aussi pouvoir être déduit du lot :
+  // aucune hypothèse globale « paire = fond à droite ».
+  const reversed=Array.from({length:10},(_,i)=>{
+    const n=i+1,frame=(n===1||n===10)?insetFrame:
+      n%2===0?gutterFrame:rightFrame;
+    return {path:'Titre_inverse/JPEG/19000101_'+String(n).padStart(4,'0')+'.jpg',
+      titlePath:'Titre_inverse',metrics:uprightResult,framing:frame};
+  });
+  const reversedSummary=api.summarizeVisualPrecheck(reversed);
+  assert.equal(reversedSummary.framingExpectedGutter,8);
+  assert.equal(reversedSummary.framingReview,0);
+  assert.equal(reversedSummary.records[1].framingGutter,'gauche');
+  assert.equal(reversedSummary.records[2].framingGutter,'droite');
+
   // Retour ALÉA : huit colonnes obligatoires, identification stricte du tirage,
   // une unité non conforme par vue, décision séparée par titre.
   function reviewRow(r,i,id='TIRAGE-TEST'){
